@@ -1,0 +1,316 @@
+import { BaseObject, ElementObject, frameStats } from "./object";
+
+export interface DebugRenderer {
+  enable(containerElement: HTMLElement): void;
+  disable(): void;
+  renderFrame(
+    stats: frameStats,
+    engine: any,
+    objectTable: Record<string, BaseObject>,
+  ): void;
+  updateSize(width: number, height: number): void;
+}
+
+export class DebugRendererImpl implements DebugRenderer {
+  debugWindow: HTMLCanvasElement | null = null;
+  debugCtx: CanvasRenderingContext2D | null = null;
+
+  enable(containerElement: HTMLElement): void {
+    if (this.debugWindow) {
+      return; // Already enabled
+    }
+
+    this.debugWindow = document.createElement("canvas");
+    this.debugWindow.style.position = "absolute";
+    this.debugWindow.style.top = "0";
+    this.debugWindow.style.left = "0";
+    const containerRect = containerElement.getBoundingClientRect();
+    this.debugWindow.width = containerRect.width;
+    this.debugWindow.height = containerRect.height;
+    this.debugWindow.style.zIndex = "1000";
+    this.debugWindow.style.pointerEvents = "none";
+    containerElement.appendChild(this.debugWindow);
+    this.debugCtx = this.debugWindow.getContext("2d");
+  }
+
+  disable(): void {
+    if (this.debugWindow) {
+      this.debugWindow.remove();
+      this.debugWindow = null;
+      this.debugCtx = null;
+    }
+  }
+
+  updateSize(width: number, height: number): void {
+    if (this.debugWindow) {
+      this.debugWindow.width = width;
+      this.debugWindow.height = height;
+    }
+  }
+
+  renderFrame(
+    _stats: frameStats,
+    engine: any,
+    objectTable: Record<string, BaseObject>,
+  ): void {
+    if (this.debugWindow == null) {
+      return;
+    }
+    this.debugCtx?.clearRect(
+      0,
+      0,
+      this.debugWindow.width,
+      this.debugWindow.height,
+    );
+
+    this.renderDebugGrid(engine);
+
+    for (const object of Object.values(objectTable)) {
+      this.debugObjectBoundingBox(object, engine);
+    }
+
+    if (this.debugCtx == null) {
+      return;
+    }
+    for (const marker of Object.values(engine.debugMarkerList) as Array<{
+      gid: string;
+      id: string;
+      type: "point" | "rect" | "circle" | "text";
+      persistent: boolean;
+      color: string;
+      x: number;
+      y: number;
+      width?: number;
+      height?: number;
+      radius?: number;
+      text?: string;
+    }>) {
+      const [cameraX, cameraY] = engine.camera?.getCameraFromWorld(
+        marker.x,
+        marker.y,
+      ) ?? [0, 0];
+      if (marker.type == "point") {
+        this.debugCtx.beginPath();
+        this.debugCtx.fillStyle = marker.color;
+        this.debugCtx.arc(cameraX, cameraY, 5, 0, 2 * Math.PI);
+        this.debugCtx.fill();
+      } else if (marker.type == "rect") {
+        this.debugCtx.beginPath();
+        this.debugCtx.fillStyle = marker.color;
+        this.debugCtx.rect(cameraX, cameraY, marker.width!, marker.height!);
+        this.debugCtx.fill();
+      } else if (marker.type == "circle") {
+        this.debugCtx.beginPath();
+        this.debugCtx.fillStyle = marker.color;
+        this.debugCtx.arc(cameraX, cameraY, marker.radius!, 0, 2 * Math.PI);
+        this.debugCtx.fill();
+      } else if (marker.type == "text") {
+        this.debugCtx.fillStyle = marker.color;
+        this.debugCtx.fillText(marker.text!, cameraX, cameraY);
+      }
+    }
+
+    for (const id in engine.debugMarkerList) {
+      if (!engine.debugMarkerList[id].persistent) {
+        delete engine.debugMarkerList[id];
+      }
+    }
+  }
+
+  private debugObjectBoundingBox(object: BaseObject, engine: any) {
+    if (this.debugCtx == null) {
+      return;
+    }
+    // Draw a small box at the object's world position, with the object's GID as the text
+    this.debugCtx.beginPath();
+    this.debugCtx.fillStyle = "rgba(0, 0, 0, 0.5)";
+    const [cameraX, cameraY] = engine.camera?.getCameraFromWorld(
+      ...object.worldPosition,
+    ) ?? [0, 0];
+    this.debugCtx.rect(cameraX, cameraY, 20, 20);
+    this.debugCtx.fill();
+    this.debugCtx.fillStyle = "white";
+    this.debugCtx.fillText(object.gid, cameraX, cameraY + 10);
+
+    // If object has a dom, draw a rectangle around the object's width and height, with a 1px black border
+    if (object.hasOwnProperty("_dom")) {
+      let elementObject = object as ElementObject;
+
+      const colors = ["#FF0000A0", "#00FF00A0", "#0000FFA0"];
+      const stages = ["READ_1", "READ_2", "READ_3"];
+      for (let i = 0; i < 3; i++) {
+        const property = elementObject.getDomProperty(stages[i] as any);
+        this.debugCtx.stroke();
+        this.debugCtx.beginPath();
+        this.debugCtx.strokeStyle = colors[i];
+        this.debugCtx.lineWidth = 1;
+        const [domCameraX, domCameraY] = engine.camera?.getCameraFromWorld(
+          property.x,
+          property.y,
+        ) ?? [0, 0];
+        this.debugCtx.rect(
+          domCameraX,
+          domCameraY,
+          property.width,
+          property.height,
+        );
+        this.debugCtx.stroke();
+      }
+
+      // Black rectangle represents the object's transform property
+      this.debugCtx.beginPath();
+      this.debugCtx.strokeStyle = "black";
+      this.debugCtx.lineWidth = 1;
+      this.debugCtx.rect(
+        cameraX,
+        cameraY,
+        elementObject._dom.property.width,
+        elementObject._dom.property.height,
+      );
+    }
+
+    const COLLIDER_BLUE = "rgba(0, 0, 255, 0.5)";
+
+    for (let collisionObject of object._colliderList) {
+      this.debugCtx.beginPath();
+      this.debugCtx.strokeStyle = COLLIDER_BLUE;
+      this.debugCtx.lineWidth = 1;
+      const [colliderCameraX, colliderCameraY] =
+        engine.camera?.getCameraFromWorld(
+          object.transform.x + collisionObject.transform.x,
+          object.transform.y + collisionObject.transform.y,
+        ) ?? [0, 0];
+      if (collisionObject.type == "circle") {
+        this.debugCtx.arc(
+          colliderCameraX,
+          colliderCameraY,
+          (collisionObject as any).radius,
+          0,
+          2 * Math.PI,
+        );
+        this.debugCtx.stroke();
+      } else if (collisionObject.type == "rect") {
+        this.debugCtx.rect(
+          colliderCameraX,
+          colliderCameraY,
+          collisionObject.transform.width,
+          collisionObject.transform.height,
+        );
+        this.debugCtx.stroke();
+      } else if (collisionObject.type == "point") {
+        this.debugCtx.arc(colliderCameraX, colliderCameraY, 2, 0, 2 * Math.PI);
+        this.debugCtx.fillStyle = COLLIDER_BLUE;
+        this.debugCtx.fill();
+      }
+    }
+  }
+
+  private renderDebugGrid(engine: any) {
+    if (this.debugCtx == null) {
+      return;
+    }
+
+    const gridSize = 100; // Size of each grid cell in world coordinates
+    const camera = engine.camera;
+    if (!camera) return;
+
+    // Get the visible area in world coordinates
+    const [worldLeft, worldTop] = camera.getWorldFromCamera(0, 0);
+    const [worldRight, worldBottom] = camera.getWorldFromCamera(
+      this.debugWindow!.width,
+      this.debugWindow!.height,
+    );
+
+    // Calculate grid lines
+    const startX = Math.floor(worldLeft / gridSize) * gridSize;
+    const endX = Math.ceil(worldRight / gridSize) * gridSize;
+    const startY = Math.floor(worldTop / gridSize) * gridSize;
+    const endY = Math.ceil(worldBottom / gridSize) * gridSize;
+
+    // Draw grid lines
+    this.debugCtx.beginPath();
+    this.debugCtx.strokeStyle = "rgba(200, 200, 200, 0.3)";
+    this.debugCtx.lineWidth = 1;
+
+    // Draw vertical grid lines
+    for (let x = startX; x <= endX; x += gridSize) {
+      const [screenX1, screenY1] = camera.getCameraFromWorld(x, worldTop);
+      const [screenX2, screenY2] = camera.getCameraFromWorld(x, worldBottom);
+      this.debugCtx.moveTo(screenX1, screenY1);
+      this.debugCtx.lineTo(screenX2, screenY2);
+    }
+
+    // Draw horizontal grid lines
+    for (let y = startY; y <= endY; y += gridSize) {
+      const [screenX1, screenY1] = camera.getCameraFromWorld(worldLeft, y);
+      const [screenX2, screenY2] = camera.getCameraFromWorld(worldRight, y);
+      this.debugCtx.moveTo(screenX1, screenY1);
+      this.debugCtx.lineTo(screenX2, screenY2);
+    }
+
+    this.debugCtx.stroke();
+
+    // Draw X and Y axes
+    this.debugCtx.beginPath();
+    this.debugCtx.strokeStyle = "rgba(0, 0, 0, 0.8)";
+    this.debugCtx.lineWidth = 2;
+
+    // Find the visible portion of the axes
+    const xAxisVisible = startY <= 0 && endY >= 0;
+    const yAxisVisible = startX <= 0 && endX >= 0;
+
+    // X-axis
+    if (xAxisVisible) {
+      const [xAxisStartX, xAxisStartY] = camera.getCameraFromWorld(startX, 0);
+      const [xAxisEndX, xAxisEndY] = camera.getCameraFromWorld(endX, 0);
+      this.debugCtx.moveTo(xAxisStartX, xAxisStartY);
+      this.debugCtx.lineTo(xAxisEndX, xAxisEndY);
+    }
+
+    // Y-axis
+    if (yAxisVisible) {
+      const [yAxisStartX, yAxisStartY] = camera.getCameraFromWorld(0, startY);
+      const [yAxisEndX, yAxisEndY] = camera.getCameraFromWorld(0, endY);
+      this.debugCtx.moveTo(yAxisStartX, yAxisStartY);
+      this.debugCtx.lineTo(yAxisEndX, yAxisEndY);
+    }
+
+    this.debugCtx.stroke();
+
+    // Draw coordinate labels
+    this.debugCtx.fillStyle = "rgba(0, 0, 0, 0.8)";
+    this.debugCtx.font = "12px Arial";
+    this.debugCtx.textAlign = "center";
+
+    // X-axis labels
+    for (let x = startX; x <= endX; x += gridSize) {
+      if (x === 0) continue; // Skip 0 as it's the origin
+      const [screenX, screenY] = camera.getCameraFromWorld(x, 0);
+      // Only draw label if it's within the visible area
+      if (screenY >= 0 && screenY <= this.debugWindow!.height) {
+        this.debugCtx.fillText(x.toString(), screenX, screenY + 20);
+      }
+    }
+
+    // Y-axis labels
+    for (let y = startY; y <= endY; y += gridSize) {
+      if (y === 0) continue; // Skip 0 as it's the origin
+      const [screenX, screenY] = camera.getCameraFromWorld(0, y);
+      // Only draw label if it's within the visible area
+      if (screenX >= 0 && screenX <= this.debugWindow!.width) {
+        this.debugCtx.fillText(y.toString(), screenX - 20, screenY + 4);
+      }
+    }
+
+    // Draw origin label if it's visible
+    const [originX, originY] = camera.getCameraFromWorld(0, 0);
+    if (
+      originX >= 0 &&
+      originX <= this.debugWindow!.width &&
+      originY >= 0 &&
+      originY <= this.debugWindow!.height
+    ) {
+      this.debugCtx.fillText("(0,0)", originX + 20, originY - 10);
+    }
+  }
+}

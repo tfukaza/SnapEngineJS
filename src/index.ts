@@ -1,11 +1,11 @@
-import { SnapLine } from "./snapline";
+import { Engine } from "./snapline";
 import { ElementObject, BaseObject } from "./object";
 import { GlobalManager } from "./global";
 import {
-  cursorDownProp,
-  cursorMoveProp,
-  cursorUpProp,
-  cursorScrollProp,
+  pointerDownProp,
+  pointerMoveProp,
+  pointerUpProp,
+  mouseWheelProp,
 } from "./input";
 
 import { LineComponent } from "./asset/node_ui/line";
@@ -17,7 +17,7 @@ import { Background } from "./asset/background";
 import { CameraControl } from "./asset/cameraControl";
 
 export {
-  SnapLine,
+  Engine,
   BaseObject,
   ElementObject,
   LineComponent,
@@ -27,8 +27,8 @@ export {
   Background,
   CameraControl,
   GlobalManager,
-  type cursorDownProp,
-  type cursorMoveProp,
-  type cursorUpProp,
-  type cursorScrollProp,
+  type pointerDownProp,
+  type pointerMoveProp,
+  type pointerUpProp,
+  type mouseWheelProp,
 };

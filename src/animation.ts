@@ -1,5 +1,3 @@
-import { BaseObject, ElementObject } from "./object";
-
 type cssValue =
   | string
   | number
@@ -8,6 +6,25 @@ type cssValue =
   | null
   | undefined;
 export type keyframeList = Record<string, cssValue>;
+
+let animationFragment: HTMLDivElement | null = null;
+
+/**
+ * Gets or creates a hidden DOM element for animations that don't have a specific target.
+ *
+ * The Web Animations API requires a target element even for variable-only animations.
+ * This function lazily creates a hidden div that serves as a dummy target.
+ *
+ * @returns The animation fragment element
+ */
+function getAnimationFragment(): HTMLDivElement {
+  if (!animationFragment) {
+    animationFragment = document.createElement("div");
+    animationFragment.style.display = "none";
+    document.body.appendChild(animationFragment);
+  }
+  return animationFragment;
+}
 
 export interface keyframeProperty {
   offset?: (number | string)[];
@@ -18,7 +35,7 @@ export interface keyframeProperty {
   finish?: () => void;
 }
 
-interface AnimationInterface {
+export interface AnimationInterface {
   play(): void;
   pause(): void;
   cancel(): void;
@@ -26,12 +43,41 @@ interface AnimationInterface {
   calculateFrame(currentTime: number): boolean;
   currentTime: number;
   progress: number;
-  deleteOnFinish?: boolean;
   requestDelete: boolean;
 }
 
+/**
+ * Wrapper around the Web Animations API with support for custom variables.
+ *
+ * Provides keyframe-based animations for CSS properties and custom variables (prefixed with $).
+ * Custom variables are useful for animating non-CSS properties via the tick callback.
+ *
+ * Features:
+ * - CSS property animations
+ * - Custom variable animations (e.g., $value, $progress)
+ * - Per-keyframe easing functions
+ * - Callbacks on each frame and completion
+ *
+ * @example
+ * ```typescript
+ * // Animate CSS properties
+ * const anim = new AnimationObject(element,
+ *   { x: [0, 100], opacity: [1, 0] },
+ *   { duration: 1000, easing: 'ease-in-out' }
+ * );
+ *
+ * // Animate custom variables
+ * const anim = new AnimationObject(null,
+ *   { $value: [0, 100] },
+ *   {
+ *     duration: 1000,
+ *     tick: (vars) => console.log(vars.$value)
+ *   }
+ * );
+ * ```
+ */
 class AnimationObject implements AnimationInterface {
-  owner: BaseObject;
+  target: Element;
   keyframe: keyframeList;
   property: keyframeProperty;
 
@@ -43,20 +89,20 @@ class AnimationObject implements AnimationInterface {
   #duration: number[];
   #delay: number;
   #hasVariable: boolean;
-  #deleteOnFinish: boolean;
+  // #deleteOnFinish: boolean;
   requestDelete: boolean;
 
   constructor(
-    owner: BaseObject,
+    target: Element | null,
     keyframe: keyframeList,
     property: keyframeProperty,
   ) {
-    this.owner = owner;
+    this.target = target ?? getAnimationFragment();
     this.keyframe = keyframe;
     this.property = property;
 
     this.#animation = null;
-    this.#deleteOnFinish = true;
+    // this.#deleteOnFinish = true;
     if (!this.property.duration) {
       this.property.duration = 1000;
     }
@@ -64,7 +110,7 @@ class AnimationObject implements AnimationInterface {
       this.property.delay = 0;
     }
     let numKeys = 0;
-    for (const [key, value] of Object.entries(this.keyframe)) {
+    for (const [_, value] of Object.entries(this.keyframe)) {
       const len = Array.isArray(value) ? value.length : 1;
       numKeys = Math.max(numKeys, len);
     }
@@ -127,11 +173,6 @@ class AnimationObject implements AnimationInterface {
       cssKeyframe.offset = this.property.offset as number[];
     }
 
-    const target =
-      this.owner instanceof ElementObject
-        ? this.owner._dom.element
-        : this.owner.global.animationFragment;
-
     const animationProperty: KeyframeEffectOptions = {
       delay: this.#delay,
       fill: "both",
@@ -150,7 +191,7 @@ class AnimationObject implements AnimationInterface {
     }
 
     this.#animation = new Animation(
-      new KeyframeEffect(target, cssKeyframe, animationProperty),
+      new KeyframeEffect(this.target, cssKeyframe, animationProperty),
     );
     this.requestDelete = false;
     this.#animation.onfinish = () => {
@@ -179,7 +220,7 @@ class AnimationObject implements AnimationInterface {
           this.#offset[i] * this.property.duration! + this.property.delay!;
         const intervalEasing = this.#easing[i];
         const animation = new Animation(
-          new KeyframeEffect(target, intervalKeys, {
+          new KeyframeEffect(this.target, intervalKeys, {
             duration: intervalDuration,
             delay: intervalDelay,
             easing: intervalEasing,
@@ -223,7 +264,7 @@ class AnimationObject implements AnimationInterface {
     }
   }
 
-  calculateFrame(currentTime: number): boolean {
+  calculateFrame(_: number): boolean {
     const alpha = this.#animation!.effect!.getComputedTiming().progress;
     if (alpha == null) {
       return false;
@@ -276,8 +317,22 @@ class AnimationObject implements AnimationInterface {
   }
 }
 
+/**
+ * Container for managing multiple animations as a sequence.
+ *
+ * Allows grouping multiple AnimationObject instances to control them together.
+ * All animations in the sequence share the same playback state.
+ *
+ * @example
+ * ```typescript
+ * const sequence = new SequenceObject();
+ * sequence.add(new AnimationObject(elem1, { x: [0, 100] }, { duration: 1000 }));
+ * sequence.add(new AnimationObject(elem2, { y: [0, 100] }, { duration: 1000 }));
+ * sequence.play();
+ * ```
+ */
 class SequenceObject implements AnimationInterface {
-  animations: AnimationObject[];
+  animations: AnimationInterface[];
   startTime: number;
   endTime: number;
   expired: boolean;
@@ -291,7 +346,7 @@ class SequenceObject implements AnimationInterface {
     this.requestDelete = false;
   }
 
-  add(animation: AnimationObject) {
+  add(animation: AnimationInterface) {
     this.animations.push(animation);
   }
 

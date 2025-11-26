@@ -2,7 +2,7 @@
 // https://leanrada.com/
 
 import { GlobalManager } from "./global";
-import { BaseObject, DomEvent } from "./object";
+import { BaseObject } from "./object";
 import { getDomProperty } from "./util";
 import { InputControl } from "./input";
 import { EventProxyFactory } from "./util";
@@ -26,8 +26,6 @@ class EventCallback {
   _object: BaseObject;
   _collider: CollisionEvent;
   collider: CollisionEvent;
-  // _dom: DomEvent;
-  // dom: DomEvent;
 
   constructor(object: BaseObject) {
     this._object = object;
@@ -37,17 +35,29 @@ class EventCallback {
       onEndContact: null,
     };
     this.collider = EventProxyFactory(object, this._collider);
-    // this._dom = {
-    //   onCursorDown: null,
-    //   onCursorMove: null,
-    //   onCursorUp: null,
-    //   onCursorScroll: null,
-    //   onResize: null,
-    // };
-    // this.dom = EventProxyFactory(object, this._dom);
   }
 }
 
+/**
+ * Base class for all collision shapes.
+ *
+ * Provides collision detection, event callbacks, and position tracking relative to parent objects.
+ * Colliders are automatically registered with the global collision engine.
+ *
+ * Collision events:
+ * - `onCollide`: Called every frame while colliding
+ * - `onBeginContact`: Called once when collision starts
+ * - `onEndContact`: Called once when collision ends
+ *
+ * @example
+ * ```typescript
+ * const collider = new CircleCollider(global, object, 50);
+ * collider.event.collider.onBeginContact = (self, other) => {
+ *   console.log('Collision detected!');
+ * };
+ * object.addCollider(collider);
+ * ```
+ */
 class Collider {
   global: GlobalManager;
   parent: BaseObject;
@@ -117,10 +127,9 @@ class Collider {
 
   set element(element: HTMLElement) {
     this._element = element;
-    // this.inputEngine?.addCursorEventListener(this._element);
-    // if parent has the "dom" property, then submit fetch queue
     if (this.parent.hasOwnProperty("element")) {
-      this.parent.requestRead();
+      // Parent is an ElementObject with requestRead method
+      (this.parent as any).requestRead();
     } else {
       this.recalculate();
     }
@@ -130,7 +139,7 @@ class Collider {
     if (!this.element) {
       return;
     }
-    const property = getDomProperty(this.global, this.element);
+    const property = getDomProperty(this.parent.engine, this.element);
     this.transform.x = property.x - this.parent.transform.x;
     this.transform.y = property.y - this.parent.transform.y;
     this.transform.width = property.width;
@@ -140,6 +149,18 @@ class Collider {
   recalculate() {}
 }
 
+/**
+ * Rectangular collision shape.
+ *
+ * Defines an axis-aligned bounding box for collision detection.
+ * Dimensions are specified by width and height.
+ *
+ * @example
+ * ```typescript
+ * const rectCollider = new RectCollider(global, object, 0, 0, 100, 50);
+ * object.addCollider(rectCollider);
+ * ```
+ */
 class RectCollider extends Collider {
   constructor(
     global: GlobalManager,
@@ -155,6 +176,21 @@ class RectCollider extends Collider {
   }
 }
 
+/**
+ * Circular collision shape.
+ *
+ * Defines a circle for collision detection. The circle is centered at the collider's position
+ * with the specified radius.
+ *
+ * @example
+ * ```typescript
+ * const circleCollider = new CircleCollider(global, object, 0, 0, 25);
+ * circleCollider.event.collider.onBeginContact = (self, other) => {
+ *   console.log('Circle collision!');
+ * };
+ * object.addCollider(circleCollider);
+ * ```
+ */
 class CircleCollider extends Collider {
   radius: number;
   constructor(
@@ -169,6 +205,18 @@ class CircleCollider extends Collider {
   }
 }
 
+/**
+ * Point collision shape.
+ *
+ * Defines a single point for collision detection. Useful for precise hit detection
+ * or checking if a position overlaps with other colliders.
+ *
+ * @example
+ * ```typescript
+ * const pointCollider = new PointCollider(global, object, 10, 10);
+ * object.addCollider(pointCollider);
+ * ```
+ */
 class PointCollider extends Collider {
   constructor(
     global: GlobalManager,
@@ -186,6 +234,27 @@ interface SortedEntry {
   left: boolean;
 }
 
+/**
+ * Manages collision detection for all colliders in the scene.
+ *
+ * Uses a sweep-and-prune algorithm for efficient broad-phase collision detection.
+ * Supports multiple collision shapes (rectangle, circle, point) and triggers
+ * appropriate callbacks when collisions are detected.
+ *
+ * The engine automatically:
+ * - Tracks active collisions
+ * - Triggers onBeginContact when collisions start
+ * - Triggers onCollide every frame while colliding
+ * - Triggers onEndContact when collisions end
+ *
+ * @example
+ * ```typescript
+ * const collisionEngine = new CollisionEngine();
+ * // Add colliders via object.addCollider()
+ * // Call detectCollisions() each frame to check for collisions
+ * collisionEngine.detectCollisions();
+ * ```
+ */
 class CollisionEngine {
   objectTable: Record<symbol, Collider> = {};
   objectList: Collider[] = [];

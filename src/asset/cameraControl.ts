@@ -21,11 +21,11 @@ class CameraControl extends ElementObject {
   #prevCenterY: number = 0;
 
   constructor(
-    globals: GlobalManager,
+    engine: any,
     zoomLock: boolean = false,
     panLock: boolean = false,
   ) {
-    super(globals, null);
+    super(engine, null);
     this.zoomLock = zoomLock;
     this.panLock = panLock;
     this._mouseDownX = 0;
@@ -52,43 +52,43 @@ class CameraControl extends ElementObject {
     this.#prevCenterX = 0;
     this.#prevCenterY = 0;
 
-    this.global.snapline!.event.containerElementAssigned = () => {
+    this.engine.event.containerElementAssigned = () => {
       this.resizeObserver = new ResizeObserver(() => {
         this.updateCameraCenterPosition(this.#prevCenterX, this.#prevCenterY);
         this.paintCamera();
       });
-      this.resizeObserver.observe(this.global.containerElement!);
+      this.resizeObserver.observe(this.engine.containerElement!);
       this.resizeObserver.observe(window.document.body);
     };
   }
 
   paintCamera() {
-    this.global.camera?.updateCameraProperty();
-    this.global.camera?.updateCamera();
-    this.style.transform = this.global.camera?.canvasStyle as string;
+    this.engine.camera?.updateCameraProperty();
+    this.engine.camera?.updateCamera();
+    this.style.transform = this.engine.camera?.canvasStyle as string;
     this.requestTransform("WRITE_2");
   }
 
   updateCameraCenterPosition(x: number = 0, y: number = 0) {
-    this.global.camera?.setCameraCenterPosition(x, y);
-    const prev = this.global.camera?.getCameraCenterPosition();
+    this.engine.camera?.setCameraCenterPosition(x, y);
+    const prev = this.engine.camera?.getCameraCenterPosition();
     this.#prevCenterX = prev?.x || 0;
     this.#prevCenterY = prev?.y || 0;
     this.paintCamera();
   }
 
   setCameraPosition(x: number, y: number) {
-    this.global.camera?.setCameraPosition(x, y);
+    this.engine.camera?.setCameraPosition(x, y);
     this.paintCamera();
   }
 
   setCameraCenterPosition(x: number, y: number) {
-    this.global.camera?.setCameraCenterPosition(x, y);
+    this.engine.camera?.setCameraCenterPosition(x, y);
     this.paintCamera();
   }
 
   getCameraCenterPosition() {
-    return this.global.camera?.getCameraCenterPosition() || { x: 0, y: 0 };
+    return this.engine.camera?.getCameraCenterPosition() || { x: 0, y: 0 };
   }
 
   onCursorDown(prop: pointerDownProp) {
@@ -101,7 +101,7 @@ class CameraControl extends ElementObject {
     this._state = "panning";
     this._mouseDownX = prop.position.screenX;
     this._mouseDownY = prop.position.screenY;
-    this.global.camera?.handlePanStart();
+    this.engine.camera?.handlePanStart();
     prop.event.preventDefault();
   }
 
@@ -111,8 +111,8 @@ class CameraControl extends ElementObject {
     }
     const dx = prop.position.screenX - this._mouseDownX;
     const dy = prop.position.screenY - this._mouseDownY;
-    this.global.camera?.handlePanDrag(dx, dy);
-    this.style.transform = this.global.camera?.canvasStyle as string;
+    this.engine.camera?.handlePanDrag(dx, dy);
+    this.style.transform = this.engine.camera?.canvasStyle as string;
     this.requestTransform("WRITE_2");
   }
 
@@ -121,9 +121,9 @@ class CameraControl extends ElementObject {
       return;
     }
     this._state = "idle";
-    this.global.camera?.handlePanEnd();
-    this.style.transform = this.global.camera?.canvasStyle as string;
-    const prev = this.global.camera?.getCameraCenterPosition();
+    this.engine.camera?.handlePanEnd();
+    this.style.transform = this.engine.camera?.canvasStyle as string;
+    const prev = this.engine.camera?.getCameraCenterPosition();
     this.#prevCenterX = prev?.x || 0;
     this.#prevCenterY = prev?.y || 0;
     this.requestTransform("WRITE_2");
@@ -133,7 +133,7 @@ class CameraControl extends ElementObject {
     if (this.zoomLock) {
       return;
     }
-    let camera = this.global.camera!;
+    let camera = this.engine.camera!;
     if (
       prop.position.screenX < camera.containerOffsetX ||
       prop.position.screenX > camera.containerOffsetX + camera.cameraWidth ||
@@ -142,12 +142,12 @@ class CameraControl extends ElementObject {
     ) {
       return;
     }
-    this.global.camera?.handleScroll(
+    this.engine.camera?.handleScroll(
       prop.delta / 2000,
       prop.position.cameraX,
       prop.position.cameraY,
     );
-    this.style.transform = this.global.camera?.canvasStyle as string;
+    this.style.transform = this.engine.camera?.canvasStyle as string;
     this.requestTransform("WRITE_2");
     prop.event.preventDefault();
   }

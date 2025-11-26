@@ -177,6 +177,26 @@ export interface InputControlOption {
   };
 }
 
+/**
+ * Unified input handler that converts mouse and touch events into a consistent format.
+ *
+ * Provides:
+ * - Pointer events (works for both mouse and touch)
+ * - Gesture recognition (drag, pinch)
+ * - Coordinate transformation (screen, camera, world space)
+ * - Event propagation to global input system
+ *
+ * Events are automatically bound to the owner object and propagated through
+ * the global input engine for centralized handling.
+ *
+ * @example
+ * ```typescript
+ * const input = new InputControl(global, false, object.gid);
+ * input.event.pointerDown = (props) => {
+ *   console.log('Pointer at', props.position.x, props.position.y);
+ * };
+ * ```
+ */
 class InputControl {
   /**
    * Functions as a middleware that converts mouse and touch events into a unified event format.
@@ -193,7 +213,7 @@ class InputControl {
   _uuid: Symbol;
   _ownerGID: string | null;
 
-  #debugObject: BaseObject; 
+  #debugObject: BaseObject;
 
   #dragMemberList: InputControl[];
 
@@ -331,7 +351,13 @@ class InputControl {
       start: coordinates,
       button: e.buttons,
     });
-    this.#debugObject.addDebugPoint(coordinates.x, coordinates.y, "red", true, "pointerDown");
+    this.#debugObject.addDebugPoint(
+      coordinates.x,
+      coordinates.y,
+      "red",
+      true,
+      "pointerDown",
+    );
     if (this.globalGestureDict[e.pointerId]) {
       this.globalGestureDict[e.pointerId].memberList.push(this);
     } else {
@@ -633,6 +659,26 @@ interface pinchGesture {
   distance: number;
 }
 
+/**
+ * Global input event manager for the entire engine instance.
+ *
+ * Manages:
+ * - Document-level event listeners
+ * - Global event subscription system
+ * - Pointer tracking across all objects
+ * - Gesture coordination (drag and pinch)
+ *
+ * Objects can subscribe to global input events to receive updates regardless of
+ * which element the user interacts with. This is useful for camera controls,
+ * global drag-and-drop, and other system-level interactions.
+ *
+ * @example
+ * ```typescript
+ * const globalInput = new GlobalInputControl(global);
+ * // Objects subscribe via: engine.enableCameraControl()
+ * // or object.event.global.pointerMove = (props) => { ... }
+ * ```
+ */
 class GlobalInputControl {
   #document: Document;
   global: GlobalManager | null;
