@@ -19,7 +19,7 @@ import { TransformProperty } from "./object";
  */
 function getDomProperty(engine: any, dom: HTMLElement) {
   const rect = dom.getBoundingClientRect();
-  if (engine.camera == null) {
+  if (engine == null || engine.camera == null) {
     return {
       height: rect.height,
       width: rect.width,

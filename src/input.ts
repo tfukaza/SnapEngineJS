@@ -217,12 +217,20 @@ class InputControl {
 
   #dragMemberList: InputControl[];
 
+  engine: any;
+
   constructor(
-    global: GlobalManager | null,
+    engineOrGlobal: any,
     isGlobal: boolean = true,
     ownerGID: string | null = null,
   ) {
-    this.global = global;
+    if (engineOrGlobal.global) {
+      this.engine = engineOrGlobal;
+      this.global = engineOrGlobal.global;
+    } else {
+      this.global = engineOrGlobal;
+      this.engine = null;
+    }
     this._element = null;
     this._isGlobal = isGlobal;
     this._sortedTouchArray = [];
@@ -286,7 +294,7 @@ class InputControl {
   // }
 
   getCoordinates(screenX: number, screenY: number) {
-    if (this.global == null) {
+    if (this.engine == null || this.engine.camera == null) {
       return {
         x: screenX,
         y: screenY,
@@ -296,11 +304,11 @@ class InputControl {
         screenY,
       };
     }
-    const [cameraX, cameraY] = this.global.camera!.getCameraFromScreen(
+    const [cameraX, cameraY] = this.engine.camera!.getCameraFromScreen(
       screenX,
       screenY,
     );
-    const [worldX, worldY] = this.global.camera!.getWorldFromCamera(
+    const [worldX, worldY] = this.engine.camera!.getWorldFromCamera(
       cameraX,
       cameraY,
     );

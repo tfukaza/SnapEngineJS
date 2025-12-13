@@ -2,14 +2,14 @@
   import { onMount, getContext, onDestroy } from "svelte";
   import { ItemContainer } from "../../../../../../src/asset/drag_and_drop/container";
   import { ItemObject } from "../../../../../../src/asset/drag_and_drop/item";
-  import type { SnapLine } from "../../../../../../src/index";
+  import type { Engine } from "../../../../../../src/index";
   import "../../../app.scss";
 
   let { children }: { children: any } = $props();
-  const engine: SnapLine = getContext("engine");
+  const engine: Engine = getContext("engine");
   const itemContainer: ItemContainer = getContext("itemContainer");
 
-  let itemObject: ItemObject = new ItemObject(engine.global, null);
+  let itemObject: ItemObject = new ItemObject(engine, null);
 
   onMount(() => {
     itemContainer.addItem(itemObject);

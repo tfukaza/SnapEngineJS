@@ -1,4 +1,3 @@
-import { GlobalManager } from "../../global";
 import { BaseObject, ElementObject } from "../../object";
 import { pointerDownProp, pointerMoveProp, pointerUpProp } from "../../input";
 import { RectCollider, Collider } from "../../collision";
@@ -9,8 +8,8 @@ class RectSelectComponent extends ElementObject {
   _mouseDownX: number;
   _mouseDownY: number;
   _selectHitBox: Collider;
-  constructor(globals: GlobalManager, parent: BaseObject | null) {
-    super(globals, parent);
+  constructor(engine: any, parent: BaseObject | null) {
+    super(engine, parent);
 
     this._state = "none";
     this._mouseDownX = 0;
@@ -20,7 +19,7 @@ class RectSelectComponent extends ElementObject {
     this.event.global.pointerMove = this.onGlobalCursorMove;
     this.event.global.pointerUp = this.onGlobalCursorUp;
 
-    this._selectHitBox = new RectCollider(globals, this, 0, 0, 0, 0);
+    this._selectHitBox = new RectCollider(engine, this, 0, 0, 0, 0);
     this._selectHitBox.transform.x = 0;
     this._selectHitBox.transform.y = 0;
     this._selectHitBox.event.collider.onCollide = this.onCollideNode;

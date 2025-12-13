@@ -43,11 +43,11 @@ class ConnectorComponent extends ElementObject {
   #connectorCallback: ConnectorCallback | null = null;
 
   constructor(
-    global: GlobalManager,
+    engine: any,
     parent: NodeComponent,
     config: ConnectorConfig = {},
   ) {
-    super(global, parent as unknown as BaseObject);
+    super(engine, parent as unknown as BaseObject);
 
     this.#prop = {};
     this.#outgoingLines = [];
@@ -56,10 +56,10 @@ class ConnectorComponent extends ElementObject {
     this.#name = config.name || this.gid || "";
     this.event.input.pointerDown = this.onCursorDown;
 
-    this.#hitCircle = new CircleCollider(global, this, 0, 0, 30);
+    this.#hitCircle = new CircleCollider(engine, this, 0, 0, 30);
     this.addCollider(this.#hitCircle);
 
-    this.#mouseHitBox = new PointCollider(global, this, 0, 0);
+    this.#mouseHitBox = new PointCollider(engine, this, 0, 0);
     this.addCollider(this.#mouseHitBox);
 
     this.#targetConnector = null;

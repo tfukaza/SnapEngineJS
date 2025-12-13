@@ -1,4 +1,3 @@
-import { GlobalManager } from "../global";
 import {
   pointerDownProp,
   pointerMoveProp,
@@ -116,7 +115,7 @@ class CameraControl extends ElementObject {
     this.requestTransform("WRITE_2");
   }
 
-  onCursorUp(prop: pointerUpProp) {
+  onCursorUp(_prop: pointerUpProp) {
     if (this._state != "panning") {
       return;
     }

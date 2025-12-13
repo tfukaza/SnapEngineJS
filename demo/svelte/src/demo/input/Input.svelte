@@ -1,19 +1,16 @@
 <script lang="ts">
-  
-  import Canvas from "../../lib2/Canvas.svelte";
   import Mouse from "./Mouse.svelte";
   import Drag from "./Drag.svelte";
 </script>
   
-<Canvas id="input">
+<div class="input-demos">
   <Mouse />
   <Drag />
-</Canvas>
+</div>
   
 <style lang="scss">
-  :global(#snap-canvas) {
+  .input-demos {
     width: 100%;
     height: 100%;
   }
-
 </style>

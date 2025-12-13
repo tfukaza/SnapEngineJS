@@ -1,4 +1,4 @@
-import { BaseObject, frameStats } from "../../object";
+import { BaseObject } from "../../object";
 import { ConnectorComponent } from "./connector";
 import { ElementObject } from "../../object";
 import { LineComponent } from "./line";
@@ -10,7 +10,6 @@ import {
   dragEndProp,
 } from "../../input";
 import { RectCollider } from "../../collision";
-import { GlobalManager } from "../../global";
 
 export interface NodeConfig {
   lockPosition?: boolean;
@@ -34,12 +33,8 @@ class NodeComponent extends ElementObject {
   _mouseDownY: number;
   _hasMoved: boolean;
 
-  constructor(
-    global: GlobalManager,
-    parent: BaseObject | null,
-    config: NodeConfig = {},
-  ) {
-    super(global, parent);
+  constructor(engine: any, parent: BaseObject | null, config: NodeConfig = {}) {
+    super(engine, parent);
     this._config = config;
 
     this._connectors = {};
@@ -204,7 +199,7 @@ class NodeComponent extends ElementObject {
     this.updateNodeLines();
   }
 
-  onUp(prop: pointerUpProp) {
+  onUp(_prop: pointerUpProp) {
     if (this._hasMoved == false) {
       for (const node of this.global.data.select ?? []) {
         node.setSelected(false);

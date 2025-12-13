@@ -1,7 +1,7 @@
 <script lang="ts">
   import Select from "./../../../../../svelte/src/lib/node_ui/Select.svelte";
   // import Background from "./../../../../../svelte/src/lib/canvas/Background.svelte";
-  import { NodeComponent, SnapLine } from "../../../../../../src/index";
+  import { NodeComponent, Engine } from "../../../../../../src/index";
   import Math from "./Math.svelte";
   import Print from "./Print.svelte";
   import TextBox from "./TextBox.svelte";
@@ -9,13 +9,13 @@
   import type { ObjectData } from "./../../../../../svelte/src/lib/engine.svelte";
   import { CameraControl } from "./../../../../../../src/asset/cameraControl";
 
-  let engine: SnapLine = getContext("engine");
+  let engine: Engine = getContext("engine");
 
-  const textBox1 = new NodeComponent(engine.global, null);
-  const textBox2 = new NodeComponent(engine.global, null);
-  const textBox3 = new NodeComponent(engine.global, null);
-  const math1 = new NodeComponent(engine.global, null);
-  const print = new NodeComponent(engine.global, null);
+  const textBox1 = new NodeComponent(engine, null);
+  const textBox2 = new NodeComponent(engine, null);
+  const textBox3 = new NodeComponent(engine, null);
+  const math1 = new NodeComponent(engine, null);
+  const print = new NodeComponent(engine, null);
 
 
   let objects: ObjectData[] = $state([
@@ -81,20 +81,9 @@
     cameraControl.queueUpdate("WRITE_2").addCallback(() => {
       const cameraStart = cameraControl.getCameraCenterPosition();
       const cameraTarget = { x: 0, y: 0 };
-      cameraControl.animate(
-        { $t: [0, 1] },
-        {
-          duration: 1000,
-          easing: "ease-in-out",
-          tick: (values) => {
-            cameraControl.updateCameraCenterPosition(
-              cameraStart.x + (cameraTarget.x - cameraStart.x) * values.$t,
-              cameraStart.y + (cameraTarget.y - cameraStart.y) * values.$t
-            );
-          },
-        }
-      );
-      cameraControl.animation.play();
+      // Animation logic removed as animate method is not available on CameraControl
+      // Directly setting the camera position instead
+      cameraControl.updateCameraCenterPosition(cameraTarget.x, cameraTarget.y);
     });
   });
 </script>

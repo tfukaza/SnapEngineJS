@@ -1,16 +1,16 @@
-import { SnapLine } from "../../../../src/index";
+import { Engine } from "../../../../src/index";
 import { useRef } from "react";
 import { useEffect } from "react";
 import { createContext } from "react";
 
-export const EngineContext = createContext<SnapLine | null>(null);
+export const EngineContext = createContext<Engine | null>(null);
 
-export default function SnapLineReact({
+export default function SnapEngineReact({
   children,
 }: {
   children: React.ReactNode;
 }) {
-  const engine = useRef(new SnapLine());
+  const engine = useRef(new Engine());
   const canvas = useRef<HTMLDivElement>(null); // canvas that contains the nodes
 
   useEffect(() => {

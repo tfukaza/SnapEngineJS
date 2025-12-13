@@ -1,12 +1,12 @@
 <script lang="ts">
-  import type {SnapLine} from "../../../../index";
-  import { getContext, onMount } from "svelte";
+  import type {Engine} from "../../../../index";
+  import { getContext, onMount, onDestroy } from "svelte";
   import { ElementObject } from "../../../../../src/object";
   import Exhibit from "./Exhibit.svelte";
   import type { ExhibitProps } from "./Exhibit.svelte";
   
-  let engine:SnapLine = getContext("engine");
-  let object:ElementObject = new ElementObject(engine.global, null);
+  let engine:Engine = getContext("engine");
+  let object:ElementObject = new ElementObject(engine, null);
   let props:ExhibitProps = {};
 
   onMount(() => {
@@ -26,10 +26,17 @@
         easing: "ease-in-out",
       },
     );
-    props.play = () => object.animation.play();
-    props.pause = () => object.animation.pause();
-    props.reverse = () => object.animation.reverse();
-    props.cancel = () => object.animation.cancel();
+    props.play = () => object.animation?.play();
+    props.pause = () => object.animation?.pause();
+    props.reverse = () => object.animation?.reverse();
+    props.cancel = () => object.animation?.cancel();
+  });
+
+  onDestroy(() => {
+    if (object.animation) {
+      object.animation.cancel();
+    }
+    object.destroy();
   });
 </script>
 

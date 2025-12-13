@@ -159,9 +159,14 @@ export class BaseObject {
   _globalInput: InputEventCallback;
   globalInput: InputEventCallback;
 
-  constructor(engine: any, parent: BaseObject | null) {
-    this.engine = engine;
-    this.global = engine.global;
+  constructor(engineOrGlobal: any, parent: BaseObject | null) {
+    if (engineOrGlobal.global) {
+      this.engine = engineOrGlobal;
+      this.global = engineOrGlobal.global;
+    } else {
+      this.global = engineOrGlobal;
+      this.engine = null;
+    }
     this.gid = this.global.getGlobalId();
     this.global.objectTable[this.gid] = this;
     this.parent = parent;
@@ -237,24 +242,24 @@ export class BaseObject {
 
   get cameraPosition(): [number, number] {
     return (
-      this.engine.camera?.getCameraFromWorld(...this.worldPosition) ?? [0, 0]
+      this.engine?.camera?.getCameraFromWorld(...this.worldPosition) ?? [0, 0]
     );
   }
 
   set cameraPosition(position: [number, number]) {
-    this.worldPosition = this.engine.camera?.getWorldFromCamera(
+    this.worldPosition = this.engine?.camera?.getWorldFromCamera(
       ...position,
     ) ?? [0, 0];
   }
 
   get screenPosition(): [number, number] {
     return (
-      this.engine.camera?.getScreenFromCamera(...this.cameraPosition) ?? [0, 0]
+      this.engine?.camera?.getScreenFromCamera(...this.cameraPosition) ?? [0, 0]
     );
   }
 
   set screenPosition(position: [number, number]) {
-    this.cameraPosition = this.engine.camera?.getCameraFromScreen(
+    this.cameraPosition = this.engine?.camera?.getCameraFromScreen(
       ...position,
     ) ?? [0, 0];
   }
@@ -401,8 +406,55 @@ export class BaseObject {
     }
     this._animationList = [];
     this._animationList.push(animation);
-    this.engine.animationList.push(animation);
+    this.engine?.animationList.push(animation);
     return animation;
+  }
+
+  /**
+   * Convenience method to create and add an animation to this object.
+   *
+   * @param keyframe - The keyframe properties to animate
+   * @param property - Animation options (duration, easing, etc.)
+   * @returns The created animation
+   *
+   * @example
+   * ```typescript
+   * object.animate(
+   *   { transform: ["translate(0px, 0px)", "translate(100px, 0px)"] },
+   *   { duration: 1000, easing: "ease-in-out" }
+   * );
+   * ```
+   */
+  async animate(keyframe: Record<string, any>, property: any) {
+    const { AnimationObject } = await import("./animation");
+    const animation = new AnimationObject(
+      (this as unknown as ElementObject).element,
+      keyframe,
+      property,
+    );
+    return this.addAnimation(animation);
+  }
+
+  /**
+   * Convenience method to create and add a sequence of animations to this object.
+   *
+   * @param animations - Array of AnimationInterface objects to play as a sequence
+   * @returns The created sequence animation
+   *
+   * @example
+   * ```typescript
+   * const anim1 = new AnimationObject(object, { x: [0, 100] }, { duration: 1000 });
+   * const anim2 = new AnimationObject(object, { y: [0, 100] }, { duration: 1000 });
+   * object.animateSequence([anim1, anim2]);
+   * ```
+   */
+  async animateSequence(animations: AnimationInterface[]) {
+    const { SequenceObject } = await import("./animation");
+    const sequence = new SequenceObject();
+    for (const animation of animations) {
+      sequence.add(animation);
+    }
+    return this.addAnimation(sequence);
   }
 
   get animation() {
@@ -417,7 +469,7 @@ export class BaseObject {
 
   addCollider(collider: Collider) {
     this._colliderList.push(collider);
-    this.engine.collisionEngine?.addObject(collider);
+    this.engine?.collisionEngine?.addObject(collider);
   }
 
   addDebugPoint(
@@ -427,6 +479,7 @@ export class BaseObject {
     persistent: boolean = false,
     id: string = "",
   ) {
+    if (!this.engine) return;
     this.engine.debugMarkerList[`${this.gid}-${id}`] = {
       gid: this.gid,
       type: "point",
@@ -447,6 +500,7 @@ export class BaseObject {
     persistent: boolean = false,
     id: string = "",
   ) {
+    if (!this.engine) return;
     this.engine.debugMarkerList[`${this.gid}-${id}`] = {
       gid: this.gid,
       type: "rect",
@@ -468,6 +522,7 @@ export class BaseObject {
     persistent: boolean = false,
     id: string = "",
   ) {
+    if (!this.engine) return;
     this.engine.debugMarkerList[`${this.gid}-${id}`] = {
       gid: this.gid,
       type: "circle",
@@ -488,6 +543,7 @@ export class BaseObject {
     persistent: boolean = false,
     id: string = "",
   ) {
+    if (!this.engine) return;
     this.engine.debugMarkerList[`${this.gid}-${id}`] = {
       gid: this.gid,
       x,
@@ -501,10 +557,12 @@ export class BaseObject {
   }
 
   clearDebugMarker(id: string) {
+    if (!this.engine) return;
     delete this.engine.debugMarkerList[`${this.gid}-${id}`];
   }
 
   clearAllDebugMarkers() {
+    if (!this.engine) return;
     for (const marker of Object.values(this.engine.debugMarkerList) as Array<{
       gid: string;
       id: string;
@@ -562,14 +620,19 @@ export class DomElement {
   mutationObserver: MutationObserver | null = null;
 
   constructor(
-    engine: any,
+    engineOrGlobal: any,
     owner: ElementObject,
     dom: HTMLElement | null = null,
     insertMode: DomInsertMode = {},
     isFragment: boolean = false,
   ) {
-    this._engine = engine;
-    this._global = engine.global;
+    if (engineOrGlobal.global) {
+      this._engine = engineOrGlobal;
+      this._global = engineOrGlobal.global;
+    } else {
+      this._global = engineOrGlobal;
+      this._engine = null;
+    }
     this.element = dom;
     this.property = {
       x: 0,
@@ -773,6 +836,7 @@ export class DomElement {
     if (this.element) {
       this.element.remove();
     }
+    this.element = null;
   }
 }
 
@@ -873,7 +937,11 @@ export class ElementObject extends BaseObject {
       },
     });
 
-    this.inputEngine = new InputControl(this.global, false, this.gid);
+    this.inputEngine = new InputControl(
+      this.engine ?? this.global,
+      false,
+      this.gid,
+    );
   }
 
   destroy() {

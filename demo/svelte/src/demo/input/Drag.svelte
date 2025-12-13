@@ -1,5 +1,5 @@
 <script lang="ts">
-    import type {SnapLine} from "../../../../index";
+    import type {Engine} from "../../../../index";
     import {ElementObject} from "../../../../../src/object";
     import type {
         dragProp, 
@@ -14,7 +14,7 @@
     // import { GLOBAL_GID } from "../../../../../src/input";
     import { onMount, getContext } from "svelte";
 
-    let engine:SnapLine = getContext("engine");
+    let engine:Engine = getContext("engine");
 
     // let startPosition: any = $state([]);
     // let endPosition: any = $state([]);

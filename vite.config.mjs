@@ -8,13 +8,13 @@ export default defineConfig(({ command, mode }) => {
   if (mode === "development") {
     switch (framework) {
       case "vanilla":
-        // outputDir = "demo/vanilla/lib";
+        outputDir = "demo/vanilla/snapline";
         break;
       case "react":
-        // outputDir = "demo/react/src/lib";
+        outputDir = "demo/react/src/snapline";
         break;
       case "svelte":
-        // outputDir = "demo/vanilla/lib";
+        outputDir = "demo/svelte/src/snapline";
         break;
       case "test":
         break;

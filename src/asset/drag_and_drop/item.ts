@@ -1,5 +1,4 @@
 import { BaseObject, ElementObject } from "../../object";
-import { GlobalManager } from "../../global";
 import { ItemContainer } from "./container";
 import {
   dragStartProp,
@@ -22,8 +21,8 @@ export class ItemObject extends ElementObject {
 
   #prevContainer: ItemContainer | null = null;
 
-  constructor(global: GlobalManager, parent: BaseObject | null) {
-    super(global, parent);
+  constructor(engine: any, parent: BaseObject | null) {
+    super(engine, parent);
     this.event.input.dragStart = this.cursorDown;
     this.event.input.drag = this.cursorMove;
     this.event.input.dragEnd = this.cursorUp;
@@ -348,8 +347,12 @@ export class ItemObject extends ElementObject {
 
     this.debug_all_items();
 
-    let { rowList, closestRow, rowBoundaries, overshoot } =
-      this.getClosestRow(thisWorldY);
+    let {
+      rowList,
+      closestRow,
+      rowBoundaries: _rowBoundaries,
+      overshoot,
+    } = this.getClosestRow(thisWorldY);
     if (rowList.length == 0 || !closestRow) {
       return { dropIndex: 0, rowDropIndex: 0, closestRowIndex: 0 };
     }
@@ -489,7 +492,7 @@ export class ItemObject extends ElementObject {
     }
   }
 
-  cursorUp(prop: dragEndProp) {
+  cursorUp(_prop: dragEndProp) {
     if (this.container.dragItem !== this) {
       return;
     }

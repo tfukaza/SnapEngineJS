@@ -1,5 +1,4 @@
 import { BaseObject, ElementObject } from "../../object";
-import { GlobalManager } from "../../global";
 import { ItemObject } from "./item";
 
 export interface ItemContainerConfig {
@@ -16,11 +15,11 @@ export class ItemContainer extends ElementObject {
   #config: ItemContainerConfig;
 
   constructor(
-    global: GlobalManager,
+    engine: any,
     parent: BaseObject | null,
     config?: ItemContainerConfig,
   ) {
-    super(global, parent);
+    super(engine, parent);
     this.#config = config || {};
     this.#itemList = [];
     if (!this.#config.groupID) {
@@ -232,8 +231,11 @@ export class ItemContainer extends ElementObject {
         this.setItemRows(caller);
         this.updateItemIndexes();
         // Determine where the caller should be dropped
-        let { dropIndex, rowDropIndex, closestRowIndex } =
-          caller.determineDropIndex();
+        let {
+          dropIndex,
+          rowDropIndex,
+          closestRowIndex: _closestRowIndex,
+        } = caller.determineDropIndex();
         this.queueUpdate("WRITE_2", () => {
           // console.log("different row WRITE_2");
           this.addGhostItem(caller, dropIndex);

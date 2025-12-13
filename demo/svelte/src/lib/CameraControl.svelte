@@ -1,7 +1,7 @@
 <script lang="ts">
   import { onMount, getContext, setContext } from "svelte";
   import { CameraControl } from "../../../../src/asset/cameraControl";
-  import type { SnapLine } from "../../../../src/index";
+  import type { Engine } from "../../../../src/index";
 
   let {
     children,
@@ -14,8 +14,8 @@
   } = $props();
 
   let cameraControlElement: HTMLDivElement | null = null;
-  const engine: SnapLine = getContext("engine");
-  const cameraControl = new CameraControl(engine.global, zoomLock, panLock);
+  const engine: Engine = getContext("engine");
+  const cameraControl = new CameraControl(engine, zoomLock, panLock);
 
   setContext("cameraControl", cameraControl);
 

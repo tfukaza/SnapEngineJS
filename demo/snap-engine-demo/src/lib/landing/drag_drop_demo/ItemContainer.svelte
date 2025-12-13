@@ -3,12 +3,12 @@
   import type { ItemContainerConfig } from "../../../../../../src/asset/drag_and_drop/container";
 
   import { getContext, setContext, onMount } from "svelte";
-  import type { SnapLine } from "../../../../../../src/index";
+  import type { Engine } from "../../../../../../src/index";
 
   let { config, children }: { config: ItemContainerConfig; children: any } =
     $props();
-  const engine: SnapLine = getContext("engine");
-  let itemContainer: ItemContainer = new ItemContainer(engine.global, null, config);
+  const engine: Engine = getContext("engine");
+  let itemContainer: ItemContainer = new ItemContainer(engine, null, config);
 
   setContext("itemContainer", itemContainer);
 </script>

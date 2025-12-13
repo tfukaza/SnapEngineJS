@@ -1,9 +1,9 @@
 <script lang="ts">
-  import type {SnapLine} from "../../../../index";
-  import { getContext, onMount } from "svelte";
+  import type {Engine} from "../../../../index";
+  import { getContext, onMount, onDestroy } from "svelte";
   import { ElementObject } from "../../../../../src/object";
-  let engine:SnapLine = getContext("engine");
-  // let object:ElementObject = new ElementObject(engine.global, null);
+  let engine:Engine = getContext("engine");
+  // let object:ElementObject = new ElementObject(engine, null);
 
   interface Object {
     object: ElementObject;
@@ -18,7 +18,7 @@
   for (let i = 0; i < rows; i++) {
     for (let j = 0; j < columns; j++) {
       const object = {
-        object: new ElementObject(engine.global, null),
+        object: new ElementObject(engine, null),
         prevX: 0,
       };
       objects.push(object);
@@ -59,6 +59,15 @@
     }
     const end = performance.now();
     console.log(`Time taken to instantiate ${rows * columns} objects: ${end - start} milliseconds`);
+  });
+
+  onDestroy(() => {
+    for (const obj of objects) {
+      if (obj.object.animation) {
+        obj.object.animation.cancel();
+      }
+      obj.object.destroy();
+    }
   });
 </script>
     

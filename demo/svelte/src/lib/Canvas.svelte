@@ -13,7 +13,7 @@
 
   onMount(() => {
     engine.assignDom(canvas as HTMLElement);
-    engine.global.camera?.setCameraCenterPosition(0, 0);
+    engine.camera?.setCameraCenterPosition(0, 0);
   });
 
   export function enableDebug() {

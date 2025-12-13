@@ -1,11 +1,11 @@
 import React from "react";
-import { SnapLine } from "./lib/snapline.mjs";
+import { Engine } from "./snapline/snapline.mjs";
 import { useState } from "react";
 import { useRef } from "react";
 import { useEffect } from "react";
 
-export default function SnapLineReact({ ...props }) {
-  const snapLine = useRef(new SnapLine());
+export default function SnapEngineReact({ ...props }) {
+  const snapLine = useRef(new Engine());
   const slContainer = useRef(null); // div to contain the canvas
   const slCanvas = useRef(null); // canvas that contains the nodes
   const slBackground = useRef(null); // Background of the canvas

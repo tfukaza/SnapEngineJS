@@ -1,4 +1,3 @@
-import { GlobalManager } from "../../global";
 import { ElementObject, BaseObject } from "../../object";
 import { ConnectorComponent } from "./connector";
 
@@ -9,8 +8,8 @@ class LineComponent extends ElementObject {
   start: ConnectorComponent;
   target: ConnectorComponent | null;
 
-  constructor(globals: GlobalManager, parent: BaseObject) {
-    super(globals, parent);
+  constructor(engine: any, parent: BaseObject) {
+    super(engine, parent);
 
     this.endWorldX = 0;
     this.endWorldY = 0;

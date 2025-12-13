@@ -60,6 +60,7 @@ class EventCallback {
  */
 class Collider {
   global: GlobalManager;
+  engine: any;
   parent: BaseObject;
   type: "rect" | "circle" | "line" | "point" | "svg";
   uuid: symbol;
@@ -74,13 +75,14 @@ class Collider {
   _currentCollisions: Set<Collider>;
   _iterationCollisions: Set<Collider>;
   constructor(
-    global: GlobalManager,
+    engine: any,
     parent: BaseObject,
     type: "rect" | "circle" | "line" | "point" | "svg",
     localX: number,
     localY: number,
   ) {
-    this.global = global;
+    this.engine = engine;
+    this.global = engine.global;
     this.parent = parent;
     this.type = type;
     this.uuid = Symbol();
@@ -101,7 +103,7 @@ class Collider {
     this._iterationCollisions = new Set();
     this._currentCollisions = new Set();
     this.recalculate();
-    this.inputEngine = new InputControl(this.global);
+    this.inputEngine = new InputControl(this.engine);
   }
 
   get worldPosition(): [number, number] {

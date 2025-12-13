@@ -29,3 +29,11 @@ dist-ssr
 /playwright-report/
 /blob-report/
 /playwright/.cache/
+
+# Generated build files
+*.mjs
+*.umd.js
+
+# Exceptions
+!vite.config.mjs
+!demo.mjs
