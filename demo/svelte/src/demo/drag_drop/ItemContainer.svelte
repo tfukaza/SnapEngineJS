@@ -1,9 +1,9 @@
 <script lang="ts">
-  import { ItemContainer } from "../../../../../../src/asset/drag_and_drop/container";
-  import type { ItemContainerConfig } from "../../../../../../src/asset/drag_and_drop/container";
+  import { ItemContainer } from "../../../../../src/asset/drag_and_drop/container";
+  import type { ItemContainerConfig } from "../../../../../src/asset/drag_and_drop/container";
 
-  import { getContext, setContext, onMount } from "svelte";
-  import type { Engine } from "../../../../../../src/index";
+  import { getContext, setContext } from "svelte";
+  import type { Engine } from "../../../../index";
 
   let { config, children }: { config: ItemContainerConfig; children: any } =
     $props();

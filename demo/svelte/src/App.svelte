@@ -1,10 +1,8 @@
 <script lang="ts">
-  import Landing from "./welcome/Landing.svelte";
-
+  import Landing from "./Landing.svelte";
 </script>
 
-
-  <Landing />
+<Landing />
 
 <style lang="scss">
   :global(body) {

@@ -84,9 +84,9 @@
                 x: round(prop.position.x), 
                 y: round(prop.position.y),
             });
-            if (!pointerList[prop.event!.pointerId].memberList.find(member => member.name === caller)) {
-                pointerList[prop.event!.pointerId].memberList.push({name: caller, color: color});
-            };
+            // if (!pointerList[prop.event!.pointerId].memberList.find(member => member.name === caller)) {
+            //     pointerList[prop.event!.pointerId].memberList.push({name: caller, color: color});
+            // };
         } else {
             pointerList[prop.event!.pointerId] = {
                 pointerId: prop.event!.pointerId.toString(),
@@ -172,8 +172,27 @@
     }
 
 
-    let testDrag: HTMLDivElement | null = $state(null);
-    let testObject = new ElementObject(engine.global, null);
+    interface AreaConfig {
+        name: string;
+        color: string;
+        style: string;
+        element?: HTMLDivElement;
+        object?: ElementObject;
+    }
+
+    let areas: AreaConfig[] = [
+        { name: "Center", color: "#FF5733", style: "grid-area: 2 / 2 / 5 / 5;" },
+        { name: "TopLeft", color: "#33FF57", style: "grid-area: 1 / 1 / 2 / 3;" },
+        { name: "BottomRight", color: "#3357FF", style: "grid-area:3 / 5 / 6 / 6;" },
+        { name: "TopRight", color: "#F333FF", style: "grid-area: 1 / 4 / 2 / 6;" },
+        { name: "BottomLeft", color: "#FF33A8", style: "grid-area: 4 / 1 / 6 / 2;" },
+    ];
+
+    let nestedArea: AreaConfig = {
+        name: "Nested",
+        color: "#000000",
+        style: "width: 50%; height: 50%; display: flex; align-items: center; justify-content: center;",
+    };
 
     let canvas: HTMLCanvasElement | null = null;
     let ctx: CanvasRenderingContext2D | null = null;
@@ -263,6 +282,28 @@
 
     window.requestAnimationFrame(renderFrame);
 
+    function attachEvents(area: AreaConfig) {
+        if (!area.object) return;
+        area.object.event.input.dragStart = (prop: dragStartProp) => {
+            dragStart(prop, area.color, area.name);
+        }
+        area.object.event.input.drag = (prop: dragProp) => {
+            drag(prop);
+        }
+        area.object.event.input.dragEnd = (prop: dragEndProp) => {
+            dragEnd(prop);
+        }
+        area.object.event.input.pointerDown = (prop: pointerDownProp) => {
+            pointerDown(prop, area.color, area.name);
+        }
+        area.object.event.input.pointerUp = (prop: pointerUpProp) => {
+            pointerUp(prop);
+        }
+        area.object.event.input.pointerMove = (prop: pointerMoveProp) => {
+            pointerMove(prop, area.color, area.name);
+        }
+    }
+
     onMount(() => {
         if (engine.global.inputEngine) {
             engine.global.inputEngine.event.pointerDown = (prop: pointerDownProp) => {
@@ -295,38 +336,48 @@
         
         }
             
-        testObject.element = testDrag!;
-        testObject.event.input.dragStart = (prop: dragStartProp) => {
-            dragStart(prop, "#FF0000", "Test");
+        for (const area of areas) {
+            if (!area.element) continue;
+            area.object = new ElementObject(engine.global, null);
+            area.object.element = area.element;
+            attachEvents(area);
         }
-        testObject.event.input.drag = (prop: dragProp) => {
-            drag(prop);
-        }
-        testObject.event.input.dragEnd = (prop: dragEndProp) => {
-            dragEnd(prop);
-        }
-        testObject.event.input.pointerDown = (prop: pointerDownProp) => {
-            pointerDown(prop, "#FF0000", "Test");
-        }
-        testObject.event.input.pointerUp = (prop: pointerUpProp) => {
-            pointerUp(prop);
-        }
-        testObject.event.input.pointerMove = (prop: pointerMoveProp) => {
-            pointerMove(prop, "#FF0000", "Test");
+
+        if (nestedArea.element) {
+             const centerArea = areas.find(a => a.name === "Center");
+             nestedArea.object = new ElementObject(engine.global, centerArea?.object || null);
+             nestedArea.object.element = nestedArea.element;
+             attachEvents(nestedArea);
         }
 
         ctx = canvas!.getContext("2d");
+
+        canvas!.width = engine.containerElement!.clientWidth;
+        canvas!.height = engine.containerElement!.clientHeight;
+    
     });
 
-    engine.event.containerElementAssigned = (containerElement: HTMLElement) => {
-        canvas!.width = containerElement.clientWidth;
-        canvas!.height = containerElement.clientHeight;
-    }
+   
 </script>
 
 <canvas bind:this={canvas} class="canvas" ></canvas>
 
-<div bind:this={testDrag} class="test-drag" ></div>
+<div class="grid-container">
+    {#each areas as area}
+        <div bind:this={area.element} class="pointer-area slot" style={area.style}>
+            <p>{area.name}</p>
+            {#if area.name === 'Center'}
+                <div 
+                    bind:this={nestedArea.element} 
+                    class="pointer-area card" 
+                    style={nestedArea.style}
+                >
+                    <p>{nestedArea.name}</p>
+                </div>
+            {/if}
+        </div>
+    {/each}
+</div>
 
 {#each Object.values(pointerList) as pointer (pointer.pointerId)}
 <div style={`top: ${pointer.y}px; left: ${pointer.x}px;`} class="mouse-position-display">
@@ -346,7 +397,7 @@
 {/each} -->
 
 {#each Object.values(dragGesture) as gesture (gesture.pointerId)}
-    <div style={`top: ${gesture.startY}px; left: ${gesture.startX}px;`} class="drag-pin">
+    <div style={`top: ${gesture.startY}px; left: ${gesture.startX}px;`} class="drag-pin card">
         {#each gesture.memberList as member}
             <div class="drag-pin-member" style={`background-color: ${member.color};`}>
                 <p>{gesture.pointerId} - {member.name}</p>
@@ -358,7 +409,7 @@
         </div>
     </div>
     {#if gesture.endX && gesture.endY}
-        <div style={`top: ${gesture.endY}px; left: ${gesture.endX}px;`} class="drag-pin">
+        <div style={`top: ${gesture.endY}px; left: ${gesture.endX}px;`} class="drag-pin card">
             {#each gesture.memberList as member}
                 <div class="drag-pin-member" style={`background-color: ${member.color};`}>
                     <p>{gesture.pointerId} - {member.name}</p>
@@ -384,6 +435,8 @@
 
 
 <style lang="scss">
+    @import "../../../../app.scss";
+
      li {
         list-style-type: none;
     }
@@ -392,8 +445,7 @@
         line-height: 1;
         margin: 0;
         font-size: 12px;
-        font-family: 'IBM Plex Mono', monospace;
-        color: #000;
+        color: var(--color-text);
     }
 
     .canvas {
@@ -402,18 +454,43 @@
         left: 0;
         width: 100%;
         height: 100%;
-        z-index: 0;
+        z-index: 100;
+        pointer-events: none;
      
     }
 
-    .test-drag {
+    .grid-container {
         position: absolute;
-        top: 0;
-        left: 0;
-        width: 100px;
-        height: 100px;
-        background-color: #87878769;
+        top: 50%;
+        left: 50%;
+        transform: translate(-50%, -50%);
+        width: 50vw;
+        height: 50vh;
+        display: grid;
+        grid-template-columns: repeat(5, 1fr);
+        grid-template-rows: repeat(5, 1fr);
+        gap: var(--size-16);
+        padding: var(--size-16);
+        box-sizing: border-box;
+        pointer-events: none;
+    }
+
+    .pointer-area {
+        position: relative;
+        background-color: var(--color-background-tint);
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        pointer-events: auto;
         
+        p {
+            pointer-events: none;
+            user-select: none;
+            position: absolute;
+            top: var(--size-16);
+            left: var(--size-16);
+            opacity: 0.5;
+        }
     }
 
     .mouse-position-display {
@@ -436,24 +513,21 @@
 
     .drag-pin {
         position: absolute;
-        background-color: #ffffff;
-        border: 2px solid #000;
-        border-radius: 4px;
         pointer-events: none;
+        padding: 0;
+        overflow: hidden;
 
         .drag-pin-member {
-            // background-color: #000;
-            padding: 4px;
+            padding: var(--size-4);
            
             p {
                 font-size: 12px;
-                font-family: 'IBM Plex Mono', monospace;
                 color: #fff; 
             }
         }
 
         .drag-pin-body {
-            padding: 4px;
+            padding: var(--size-4);
             p {
                 font-size: 12px;
             }

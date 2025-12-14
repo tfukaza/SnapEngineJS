@@ -169,7 +169,7 @@ export class DebugRendererImpl implements DebugRenderer {
       );
     }
 
-    const COLLIDER_BLUE = "rgba(0, 0, 255, 0.5)";
+    const COLLIDER_BLUE = "rgba(0, 247, 255, 0.5)";
 
     for (let collisionObject of object._colliderList) {
       this.debugCtx.beginPath();
@@ -303,7 +303,7 @@ export class DebugRendererImpl implements DebugRenderer {
     }
 
     // Draw origin label if it's visible
-    const [originX, originY] = camera.getCameraFromWorld(0, 0);
+    const [originX, originY] = [0, 0]; //camera.getCameraFromWorld(0, 0);
     if (
       originX >= 0 &&
       originX <= this.debugWindow!.width &&

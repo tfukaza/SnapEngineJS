@@ -199,7 +199,6 @@ class AnimationObject implements AnimationInterface {
       this.finish();
       this.#animation!.cancel();
       this.requestDelete = true;
-      console.log("Animation finished");
     };
 
     // As of April 2025, there seems to be a bug in Chrome where
@@ -278,6 +277,9 @@ class AnimationObject implements AnimationInterface {
           currentKey = i;
           break;
         }
+      }
+      if (alpha >= 1.0) {
+        currentKey = this.#offset.length - 2;
       }
       let localAlpha = alpha;
       if (this.#easing.length > 1) {

@@ -13,23 +13,21 @@
   </div>
     
   <style lang="scss">
+    @import "../../../../app.scss";
+
     .gallery {
       width: 100%;
       height: 100%;
-      display: grid;
-      grid-template-columns: repeat(2, 1fr);
-      gap: 10px;
-      padding: 10px;
+      display: flex;
+      flex-wrap: wrap;
+      gap: var(--size-16);
+      justify-content: center;
+      align-content: center;
+      overflow-y: auto;
+      padding: var(--size-16);
       box-sizing: border-box;
     }
 
-    .gallery > :global(.exhibit) {
-      position: relative;
-      background-color: #f0f0f0;
-      border-radius: 16px;
-      overflow: hidden;
-      height: 300px;
-    }
-  
+
   </style>
   

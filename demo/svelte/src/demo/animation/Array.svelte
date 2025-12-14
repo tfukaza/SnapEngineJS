@@ -2,6 +2,7 @@
   import type {Engine} from "../../../../index";
   import { getContext, onMount, onDestroy } from "svelte";
   import { ElementObject } from "../../../../../src/object";
+  import { AnimationObject } from "../../../../../src/animation";
   let engine:Engine = getContext("engine");
   // let object:ElementObject = new ElementObject(engine, null);
 
@@ -35,7 +36,8 @@
     let i = 0;
     for (const object of objects) {
       i++;
-      object.object.animate(
+      const anim = new AnimationObject(
+        object.object.element,
         {
           // opacity: [0.5, 1, 0.5, 1],
           backgroundColor: ["red", "blue", "green", "black"],
@@ -47,15 +49,17 @@
           easing: ["ease-in-out", "linear", "ease-in-out"],
           offset: [0, 0.33, 0.66, 1.0],
           delay: 50 * i,
-          tick: (value) => {
+          tick: (value: any) => {
             object.object.element!.innerHTML = round(value.$x - object.prevX).toString();
             object.prevX = value.$x;
             // console.log("Tick", value);
             // object.object.dom.style.transform = `translate(${value.$x}px, 0px)`;
             // object.object.requestPostWrite();
           },
-        },
+        }
       );
+      object.object.addAnimation(anim);
+      anim.play();
     }
     const end = performance.now();
     console.log(`Time taken to instantiate ${rows * columns} objects: ${end - start} milliseconds`);

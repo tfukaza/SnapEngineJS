@@ -11,9 +11,11 @@
   const engine = getEngine(id);
   setContext("engine", engine);
 
+  engine.enableCollisionEngine();
+
   onMount(() => {
     engine.assignDom(canvas as HTMLElement);
-    engine.camera?.setCameraCenterPosition(0, 0);
+    engine.camera?.setCameraPosition(0, 0);
   });
 
   export function enableDebug() {

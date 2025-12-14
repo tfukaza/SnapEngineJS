@@ -1,9 +1,9 @@
 <script lang="ts">
   import { onMount, getContext, onDestroy } from "svelte";
-  import { ItemContainer } from "../../../../../../src/asset/drag_and_drop/container";
-  import { ItemObject } from "../../../../../../src/asset/drag_and_drop/item";
-  import type { Engine } from "../../../../../../src/index";
-  import "../../../app.scss";
+  import { ItemContainer } from "../../../../../src/asset/drag_and_drop/container";
+  import { ItemObject } from "../../../../../src/asset/drag_and_drop/item";
+  import type { Engine } from "../../../../../src/index";
+
 
   let { children }: { children: any } = $props();
   const engine: Engine = getContext("engine");

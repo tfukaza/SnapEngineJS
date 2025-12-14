@@ -232,21 +232,15 @@
 
   let menuItems = $state([
     {
-      index: 0,
       title: "UI Engine",
-      icon: "🎨",
       object: new MenuItem(engine, null, 0),
     },
     {
-      index: 1,
       title: "Node UI",
-      icon: "🎨",
       object: new MenuItem(engine, null, 1),
     },
     {
-      index: 2,
       title: "Drag & Drop",
-      icon: "🎨",
       object: new MenuItem(engine, null, 2),
     },
   ]);

@@ -10,7 +10,7 @@
 
 </script>
 
-<div class="exhibit" id="basic-animation">
+<div class="exhibit card" id="basic-animation">
   {@render children()}
   <div class="control-panel">
     <button onclick={() => props.play?.()}>Play</button>
@@ -21,35 +21,25 @@
 </div>
 
 <style lang="scss">
+  @import "../../../../app.scss";
+
   .exhibit {
-    position: absolute;
-    top: 50%;
-    left: 50%;
-    transform: translate(-50%, -50%);
+
     width: 400px;
     height: 300px;
-    background-color: #f0f0f0;
-    border-radius: 16px;
-    overflow: hidden;
+
   }
   .control-panel {
     position: absolute;
-    top: 8px;
-    left: 8px;
+    top: var(--size-12);
+    left: var(--size-12);
     display: flex;
-    gap: 4px;
+    gap: var(--size-12);
     z-index: 10;
+
+    button {
+      color: var(--color-text);
+    }
   }
-  .control-panel button {
-    padding: 4px 12px;
-    border: none;
-    border-radius: 4px;
-    background-color: #333;
-    color: white;
-    cursor: pointer;
-    font-size: 12px;
-  }
-  .control-panel button:hover {
-    background-color: #555;
-  }
+
 </style>

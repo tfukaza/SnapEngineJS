@@ -2,7 +2,7 @@
   import type {Engine} from "../../../../index";
   import { getContext, onMount, onDestroy } from "svelte";
   import { ElementObject } from "../../../../../src/object";
-  import { AnimationObject } from "../../../../../src/animation";
+  import { AnimationObject, SequenceObject } from "../../../../../src/animation";
   import Exhibit from "./Exhibit.svelte";
   import type { ExhibitProps } from "./Exhibit.svelte";
   
@@ -39,11 +39,16 @@
       easing: "linear",
     },
   );
-    object.animateSequence([sequence_1, sequence_2]);
-    props.play = () => object.animation?.play();
-    props.pause = () => object.animation?.pause();
-    props.reverse = () => object.animation?.reverse();
-    props.cancel = () => object.animation?.cancel();
+    const sequence = new SequenceObject();
+    sequence.add(sequence_1);
+    sequence.add(sequence_2);
+    object.addAnimation(sequence);
+    sequence.play();
+
+    props.play = () => sequence.play();
+    props.pause = () => sequence.pause();
+    props.reverse = () => sequence.reverse();
+    props.cancel = () => sequence.cancel();
   });
 
   onDestroy(() => {

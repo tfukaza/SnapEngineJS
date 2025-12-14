@@ -310,7 +310,7 @@ class Engine {
    * object.addAnimation(animation);
    * ```
    */
-  async enableAnimationEngine() {
+  enableAnimationEngine() {
     if (this.#animationProcessor) {
       return;
     }

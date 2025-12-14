@@ -16,8 +16,8 @@ class CameraControl extends ElementObject {
 
   resizeObserver: ResizeObserver | null = null;
 
-  #prevCenterX: number = 0;
-  #prevCenterY: number = 0;
+  #prevCameraX: number = 0;
+  #prevCameraY: number = 0;
 
   constructor(
     engine: any,
@@ -48,12 +48,12 @@ class CameraControl extends ElementObject {
 
     this.resizeObserver = null;
 
-    this.#prevCenterX = 0;
-    this.#prevCenterY = 0;
+    this.#prevCameraX = 0;
+    this.#prevCameraY = 0;
 
     this.engine.event.containerElementAssigned = () => {
       this.resizeObserver = new ResizeObserver(() => {
-        this.updateCameraCenterPosition(this.#prevCenterX, this.#prevCenterY);
+        this.setCameraPosition(this.#prevCameraX, this.#prevCameraY);
         this.paintCamera();
       });
       this.resizeObserver.observe(this.engine.containerElement!);
@@ -70,19 +70,22 @@ class CameraControl extends ElementObject {
 
   updateCameraCenterPosition(x: number = 0, y: number = 0) {
     this.engine.camera?.setCameraCenterPosition(x, y);
-    const prev = this.engine.camera?.getCameraCenterPosition();
-    this.#prevCenterX = prev?.x || 0;
-    this.#prevCenterY = prev?.y || 0;
+    this.#prevCameraX = this.engine.camera?.cameraPositionX || 0;
+    this.#prevCameraY = this.engine.camera?.cameraPositionY || 0;
     this.paintCamera();
   }
 
   setCameraPosition(x: number, y: number) {
     this.engine.camera?.setCameraPosition(x, y);
+    this.#prevCameraX = x;
+    this.#prevCameraY = y;
     this.paintCamera();
   }
 
   setCameraCenterPosition(x: number, y: number) {
     this.engine.camera?.setCameraCenterPosition(x, y);
+    this.#prevCameraX = this.engine.camera?.cameraPositionX || 0;
+    this.#prevCameraY = this.engine.camera?.cameraPositionY || 0;
     this.paintCamera();
   }
 
@@ -122,9 +125,8 @@ class CameraControl extends ElementObject {
     this._state = "idle";
     this.engine.camera?.handlePanEnd();
     this.style.transform = this.engine.camera?.canvasStyle as string;
-    const prev = this.engine.camera?.getCameraCenterPosition();
-    this.#prevCenterX = prev?.x || 0;
-    this.#prevCenterY = prev?.y || 0;
+    this.#prevCameraX = this.engine.camera?.cameraPositionX || 0;
+    this.#prevCameraY = this.engine.camera?.cameraPositionY || 0;
     this.requestTransform("WRITE_2");
   }
 
@@ -147,6 +149,8 @@ class CameraControl extends ElementObject {
       prop.position.cameraY,
     );
     this.style.transform = this.engine.camera?.canvasStyle as string;
+    this.#prevCameraX = this.engine.camera?.cameraPositionX || 0;
+    this.#prevCameraY = this.engine.camera?.cameraPositionY || 0;
     this.requestTransform("WRITE_2");
     prop.event.preventDefault();
   }

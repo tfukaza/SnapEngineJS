@@ -2,7 +2,7 @@
   import type {Engine} from "../../../../index";
   import { getContext, onMount, onDestroy } from "svelte";
   import { ElementObject } from "../../../../../src/object";
-  import { AnimationObject } from "../../../../../src/animation";
+  import { AnimationObject, SequenceObject } from "../../../../../src/animation";
   import Exhibit from "./Exhibit.svelte";
   import type { ExhibitProps } from "./Exhibit.svelte";
   
@@ -31,7 +31,9 @@
       duration: 4000,
       easing: ["ease-in-out", "ease-in-out", "ease-in-out", "ease-in-out"],
       tick: (value) => {
-        object.element!.innerHTML = `${value.$number}`;
+        if (object.element) {
+          object.element.innerHTML = `${Math.round(value.$number)}`;
+        }
       }
     },
   );
@@ -49,11 +51,16 @@
       easing: "linear",
     },
   );
-    object.animateSequence([sequence_1, sequence_2]);
-    props.play = () => object.animation?.play();
-    props.pause = () => object.animation?.pause();
-    props.reverse = () => object.animation?.reverse();
-    props.cancel = () => object.animation?.cancel();
+    const sequence = new SequenceObject();
+    sequence.add(sequence_1);
+    sequence.add(sequence_2);
+    object.addAnimation(sequence);
+    sequence.play();
+
+    props.play = () => sequence.play();
+    props.pause = () => sequence.pause();
+    props.reverse = () => sequence.reverse();
+    props.cancel = () => sequence.cancel();
   });
 
   onDestroy(() => {
@@ -75,6 +82,9 @@
 </Exhibit>
 
   <style lang="scss">
+
+    @import "../../../../app.scss";
+
     .circle {
       width: 32px;
       height: 32px;
@@ -83,8 +93,9 @@
     }
 
     input {
-      width: 100%;
-      margin-top: 20px;
+      width: calc(100% - var(--size-16) * 2);
+      position: absolute;
+      bottom: var(--size-16);
     }
   
   </style>

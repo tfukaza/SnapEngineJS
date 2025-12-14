@@ -89,6 +89,11 @@ class NodeComponent extends ElementObject {
     this.event.dom.onAssignDom = () => {
       this._hitBox.element = this.element!;
     };
+
+    // Initialize global select list if needed
+    if (!this.global.data.select) {
+      this.global.data.select = [];
+    }
   }
 
   setStartPositions() {
@@ -168,7 +173,6 @@ class NodeComponent extends ElementObject {
       return;
     }
     if (this._config.lockPosition) return;
-
     for (const node of this.global.data.select ?? []) {
       node.setDragPosition(prop);
     }
