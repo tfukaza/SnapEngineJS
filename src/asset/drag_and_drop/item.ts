@@ -107,6 +107,10 @@ export class ItemObject extends ElementObject {
     }
   }
 
+  get isColumn() {
+    return this.container.direction === "column";
+  }
+
   cursorDown(prop: dragStartProp) {
     this.container.readDom(false, "READ_2");
     this.container.saveDomPropertyToTransform("READ_2");
@@ -157,7 +161,9 @@ export class ItemObject extends ElementObject {
     }
     this.#currentRow = this.#rowIndex;
     let { rowList, closestRow, rowBoundaries, overshoot } = this.getClosestRow(
-      this.transform.y + property.height / 2,
+      this.isColumn
+        ? this.transform.x + property.width / 2
+        : this.transform.y + property.height / 2,
     );
     if (rowList.length == 0) {
       this.#currentRow = 0;
@@ -191,7 +197,7 @@ export class ItemObject extends ElementObject {
    * @param thisScreenY The screen Y position to check against.
    * @return An object containing the row list, the closest row, and the row boundaries.
    * */
-  getClosestRow(worldY: number) {
+  getClosestRow(worldPos: number) {
     let rowList = this.container.itemRows ?? [];
     if (rowList.length == 0) {
       return {
@@ -200,71 +206,123 @@ export class ItemObject extends ElementObject {
         rowBoundaries: [],
       };
     }
+    const isColumn = this.isColumn;
     // Draw a horizontal line through each row
     const colors = ["orange", "yellow", "green", "purple", "gray", "black"];
     for (let i = 0; i < rowList.length; i++) {
-      this.addDebugRect(
-        0,
-        rowList[i][0].transform.y + rowList[i][0]._domProperty[1].height / 2,
-        this._domProperty[1].width,
-        2,
-        i == this.#currentRow ? "#000000FF" : colors[i],
-        true,
-        `row-${i}`,
-      );
+      const item = rowList[i][0];
+      const prop = item._domProperty[1];
+      if (isColumn) {
+        this.addDebugRect(
+          item.transform.x + prop.width / 2,
+          0,
+          2,
+          this._domProperty[1].height,
+          i == this.#currentRow ? "#000000FF" : colors[i],
+          true,
+          `row-${i}`,
+        );
+      } else {
+        this.addDebugRect(
+          0,
+          item.transform.y + prop.height / 2,
+          this._domProperty[1].width,
+          2,
+          i == this.#currentRow ? "#000000FF" : colors[i],
+          true,
+          `row-${i}`,
+        );
+      }
     }
     // Use the first item in each row to find the top and bottom of the row
     let rowBoundaries = [];
     let cumulativeLength = 0;
     for (let i = 0; i < rowList.length; i++) {
       let row = rowList[i];
-      let top = row[0].transform.y ?? 0;
-      let bottom =
-        (row[row.length - 1].transform.y ?? 0) +
-        row[row.length - 1]._domProperty[1].height;
+      let start, end;
+      if (isColumn) {
+        start = row[0].transform.x ?? 0;
+        end =
+          (row[row.length - 1].transform.x ?? 0) +
+          row[row.length - 1]._domProperty[1].width;
+      } else {
+        start = row[0].transform.y ?? 0;
+        end =
+          (row[row.length - 1].transform.y ?? 0) +
+          row[row.length - 1]._domProperty[1].height;
+      }
       let length = row.length;
-      rowBoundaries.push({ top, bottom, index: i, length, cumulativeLength });
+      rowBoundaries.push({ start, end, index: i, length, cumulativeLength });
       cumulativeLength += length;
     }
     // Draw a debug rectangle indicating the height of each row
     for (const row of rowBoundaries) {
-      this.addDebugRect(
-        10,
-        row.top,
-        10,
-        row.bottom - row.top,
-        "red",
-        true,
-        `row-boundary-${row.index}`,
-      );
+      if (isColumn) {
+        this.addDebugRect(
+          row.start,
+          10,
+          row.end - row.start,
+          10,
+          "red",
+          true,
+          `row-boundary-${row.index}`,
+        );
+      } else {
+        this.addDebugRect(
+          10,
+          row.start,
+          10,
+          row.end - row.start,
+          "red",
+          true,
+          `row-boundary-${row.index}`,
+        );
+      }
     }
     // Draw a circle at thisScreenY
-    this.addDebugRect(10, worldY, 10, 10, "#000000FF", true, `worldY`);
+    if (isColumn) {
+      this.addDebugRect(worldPos, 10, 10, 10, "#000000FF", true, `worldPos`);
+    } else {
+      this.addDebugRect(10, worldPos, 10, 10, "#000000FF", true, `worldPos`);
+    }
 
     let closestRow = rowBoundaries.reduce((prev, curr) => {
-      return Math.abs((curr.bottom + curr.top) / 2 - worldY) <
-        Math.abs((prev.bottom + prev.top) / 2 - worldY)
+      return Math.abs((curr.end + curr.start) / 2 - worldPos) <
+        Math.abs((prev.end + prev.start) / 2 - worldPos)
         ? curr
         : prev;
     });
     // Draw a horizontal line for each item in the closest row
     for (const item of rowList[closestRow.index]) {
-      item.addDebugRect(
-        item.transform.x,
-        item.transform.y + item._domProperty[1].height / 2,
-        item._domProperty[1].width,
-        2,
-        "green",
-        true,
-        `item-${item.gid}`,
-      );
+      const prop = item._domProperty[1];
+      if (isColumn) {
+        item.addDebugRect(
+          item.transform.x + prop.width / 2,
+          item.transform.y,
+          2,
+          prop.height,
+          "green",
+          true,
+          `item-${item.gid}`,
+        );
+      } else {
+        item.addDebugRect(
+          item.transform.x,
+          item.transform.y + prop.height / 2,
+          prop.width,
+          2,
+          "green",
+          true,
+          `item-${item.gid}`,
+        );
+      }
     }
     let overshoot = "MIDDLE";
-    if (worldY < rowBoundaries[0].top - BUFFER) {
+    if (worldPos < rowBoundaries[0].start - BUFFER) {
       overshoot = "ABOVE";
     } else if (
-      worldY >
-      rowBoundaries[rowBoundaries.length - 1].bottom + BUFFER / (BUFFER + 1)
+      worldPos >
+      rowBoundaries[rowBoundaries.length - 1].end + BUFFER / (BUFFER + 1)
     ) {
       overshoot = "BELOW";
     }
@@ -276,7 +334,7 @@ export class ItemObject extends ElementObject {
     };
   }
 
-  findClosestItems(rowItemList: ItemObject[], thisWorldX: number) {
+  findClosestItems(rowItemList: ItemObject[], thisWorldPos: number) {
     if (!rowItemList || rowItemList.length == 0) {
       return {
         leftItem: undefined,
@@ -285,23 +343,57 @@ export class ItemObject extends ElementObject {
         rightItemLeft: undefined,
       };
     }
-    const sortedItemList = rowItemList.sort(
-      (a, b) =>
-        a.transform.x +
-        a._domProperty[1].width / 2 -
-        (b.transform.x + b._domProperty[1].width / 2),
-    );
-    let leftItem = sortedItemList.findLast(
-      (item) => item.transform.x + item._domProperty[1].width / 2 <= thisWorldX,
-    );
-    let rightItem = sortedItemList.find(
-      (item) => item.transform.x + item._domProperty[1].width / 2 >= thisWorldX,
-    );
+    const isColumn = this.isColumn;
+    const sortedItemList = rowItemList.sort((a, b) => {
+      if (isColumn) {
+        return (
+          a.transform.y +
+          a._domProperty[1].height / 2 -
+          (b.transform.y + b._domProperty[1].height / 2)
+        );
+      } else {
+        return (
+          a.transform.x +
+          a._domProperty[1].width / 2 -
+          (b.transform.x + b._domProperty[1].width / 2)
+        );
+      }
+    });
+    let leftItem = sortedItemList.findLast((item) => {
+      if (isColumn) {
+        return (
+          item.transform.y + item._domProperty[1].height / 2 <= thisWorldPos
+        );
+      } else {
+        return (
+          item.transform.x + item._domProperty[1].width / 2 <= thisWorldPos
+        );
+      }
+    });
+    let rightItem = sortedItemList.find((item) => {
+      if (isColumn) {
+        return (
+          item.transform.y + item._domProperty[1].height / 2 >= thisWorldPos
+        );
+      } else {
+        return (
+          item.transform.x + item._domProperty[1].width / 2 >= thisWorldPos
+        );
+      }
+    });
 
-    let leftItemRight = leftItem
-      ? leftItem.transform.x + leftItem._domProperty[1].width
-      : undefined;
-    let rightItemLeft = rightItem?.transform.x;
+    let leftItemRight, rightItemLeft;
+    if (isColumn) {
+      leftItemRight = leftItem
+        ? leftItem.transform.y + leftItem._domProperty[1].height
+        : undefined;
+      rightItemLeft = rightItem?.transform.y;
+    } else {
+      leftItemRight = leftItem
+        ? leftItem.transform.x + leftItem._domProperty[1].width
+        : undefined;
+      rightItemLeft = rightItem?.transform.x;
+    }
 
     return {
       leftItem,
@@ -347,97 +439,173 @@ export class ItemObject extends ElementObject {
 
     this.debug_all_items();
 
+    const isColumn = this.isColumn;
+    const primaryPos = isColumn ? thisWorldX : thisWorldY;
+    const secondaryPos = isColumn ? thisWorldY : thisWorldX;
+
     let {
       rowList,
       closestRow,
       rowBoundaries: _rowBoundaries,
       overshoot,
-    } = this.getClosestRow(thisWorldY);
+    } = this.getClosestRow(primaryPos);
     if (rowList.length == 0 || !closestRow) {
       return { dropIndex: 0, rowDropIndex: 0, closestRowIndex: 0 };
     }
     let closestRowIndex = closestRow.index;
     let cumulativeLength = closestRow.cumulativeLength;
     let { leftItem, rightItem, leftItemRight, rightItemLeft } =
-      this.findClosestItems(rowList[closestRowIndex], thisWorldX);
+      this.findClosestItems(rowList[closestRowIndex], secondaryPos);
 
     // Draw a tall vertical line to indicate the left border of the item
     if (leftItem) {
-      leftItem.addDebugRect(
-        leftItemRight ?? 0,
-        leftItem.transform.y,
-        2,
-        leftItem._domProperty[1].height,
-        "red",
-        true,
-        `leftItem-${leftItem.gid}`,
-      );
-      leftItem.addDebugRect(
-        (leftItemRight ?? 0) - leftItem._domProperty[1].width / 2 + BUFFER,
-        leftItem.transform.y,
-        2,
-        leftItem._domProperty[1].height,
-        "orange",
-        true,
-        `leftItem-buffer-${leftItem.gid}`,
-      );
+      const leftItemSize = isColumn
+        ? leftItem._domProperty[1].height
+        : leftItem._domProperty[1].width;
+      const leftBuffer = leftItemSize * 0.25;
+      if (isColumn) {
+        leftItem.addDebugRect(
+          leftItem.transform.x,
+          leftItemRight ?? 0,
+          leftItem._domProperty[1].width,
+          2,
+          "red",
+          true,
+          `leftItem-${leftItem.gid}`,
+        );
+        leftItem.addDebugRect(
+          leftItem.transform.x,
+          (leftItemRight ?? 0) - leftItemSize / 2 + leftBuffer,
+          leftItem._domProperty[1].width,
+          2,
+          "orange",
+          true,
+          `leftItem-buffer-${leftItem.gid}`,
+        );
+      } else {
+        leftItem.addDebugRect(
+          leftItemRight ?? 0,
+          leftItem.transform.y,
+          2,
+          leftItem._domProperty[1].height,
+          "red",
+          true,
+          `leftItem-${leftItem.gid}`,
+        );
+        leftItem.addDebugRect(
+          (leftItemRight ?? 0) - leftItemSize / 2 + leftBuffer,
+          leftItem.transform.y,
+          2,
+          leftItem._domProperty[1].height,
+          "orange",
+          true,
+          `leftItem-buffer-${leftItem.gid}`,
+        );
+      }
     }
 
     if (rightItem) {
-      rightItem.addDebugRect(
-        rightItemLeft ?? 0,
-        rightItem.transform.y,
-        2,
-        rightItem._domProperty[1].height,
-        "red",
-        true,
-        `rightItem-${rightItem.gid}`,
-      );
-      rightItem.addDebugRect(
-        (rightItemLeft ?? 0) + rightItem._domProperty[1].width / 2 - BUFFER,
-        rightItem.transform.y,
-        2,
-        rightItem._domProperty[1].height,
-        "orange",
-        true,
-        `rightItem-buffer-${rightItem.gid}`,
-      );
+      const rightItemSize = isColumn
+        ? rightItem._domProperty[1].height
+        : rightItem._domProperty[1].width;
+      const rightBuffer = rightItemSize * 0.25;
+      if (isColumn) {
+        rightItem.addDebugRect(
+          rightItem.transform.x,
+          rightItemLeft ?? 0,
+          rightItem._domProperty[1].width,
+          2,
+          "red",
+          true,
+          `rightItem-${rightItem.gid}`,
+        );
+        rightItem.addDebugRect(
+          rightItem.transform.x,
+          (rightItemLeft ?? 0) + rightItemSize / 2 - rightBuffer,
+          rightItem._domProperty[1].width,
+          2,
+          "orange",
+          true,
+          `rightItem-buffer-${rightItem.gid}`,
+        );
+      } else {
+        rightItem.addDebugRect(
+          rightItemLeft ?? 0,
+          rightItem.transform.y,
+          2,
+          rightItem._domProperty[1].height,
+          "red",
+          true,
+          `rightItem-${rightItem.gid}`,
+        );
+        rightItem.addDebugRect(
+          (rightItemLeft ?? 0) + rightItemSize / 2 - rightBuffer,
+          rightItem.transform.y,
+          2,
+          rightItem._domProperty[1].height,
+          "orange",
+          true,
+          `rightItem-buffer-${rightItem.gid}`,
+        );
+      }
     }
 
-    this.addDebugRect(
-      thisWorldX,
-      this.transform.y,
-      2,
-      this._domProperty[1].height,
-      "blue",
-      true,
-      `thisItem-${this.gid}`,
-    );
+    if (isColumn) {
+      this.addDebugRect(
+        this.transform.x,
+        thisWorldY,
+        this._domProperty[1].width,
+        2,
+        "blue",
+        true,
+        `thisItem-${this.gid}`,
+      );
+    } else {
+      this.addDebugRect(
+        thisWorldX,
+        this.transform.y,
+        2,
+        this._domProperty[1].height,
+        "blue",
+        true,
+        `thisItem-${this.gid}`,
+      );
+    }
 
     if (overshoot == "ABOVE") {
       rowDropIndex = 0;
     } else if (overshoot == "BELOW") {
       rowDropIndex = rowList[closestRowIndex].length;
     } else if (overshoot == "MIDDLE") {
+      const itemSize = isColumn
+        ? this._domProperty[1].height
+        : this._domProperty[1].width;
+      const leftItemSizeCalc = isColumn
+        ? leftItem?._domProperty[1].height ?? 0
+        : leftItem?._domProperty[1].width ?? 0;
+      const rightItemSizeCalc = isColumn
+        ? rightItem?._domProperty[1].height ?? 0
+        : rightItem?._domProperty[1].width ?? 0;
+      const leftBufferCalc = leftItemSizeCalc * 0.25;
+      const rightBufferCalc = rightItemSizeCalc * 0.25;
+
       if (
         leftItem &&
         leftItemRight &&
-        leftItemRight - leftItem._domProperty[1].width / 2 + BUFFER > thisWorldX
+        leftItemRight - leftItemSizeCalc / 2 + leftBufferCalc > secondaryPos
       ) {
         rowDropIndex = rowList[closestRowIndex].indexOf(leftItem);
       } else if (
         rightItem &&
         rightItemLeft &&
-        rightItemLeft + rightItem._domProperty[1].width / 2 - BUFFER <
-          thisWorldX
+        rightItemLeft + rightItemSizeCalc / 2 - rightBufferCalc < secondaryPos
       ) {
         rowDropIndex = rowList[closestRowIndex].indexOf(rightItem) + 1;
       } else if (
         rightItem &&
         leftItemRight &&
         rightItemLeft &&
-        Math.abs(rightItemLeft - leftItemRight) <
-          this._domProperty[1].width - BUFFER
+        Math.abs(rightItemLeft - leftItemRight) < itemSize * 0.75
       ) {
         // "Squeeze in" between the two items when moving to a new row
         rowDropIndex = rowList[closestRowIndex].indexOf(rightItem);
@@ -498,7 +666,6 @@ export class ItemObject extends ElementObject {
     }
     this.container.dragItem = null;
 
-    // this.event.global.drag = null;
     this.transformMode = "none";
     this.style = {
       cursor: "grab",

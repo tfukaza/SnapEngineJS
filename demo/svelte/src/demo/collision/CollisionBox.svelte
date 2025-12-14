@@ -3,9 +3,8 @@
   import { NodeComponent } from "../../../../../src/index";
   import { RectCollider } from "../../../../../src/collision";
   import type { Engine } from "../../../../../src/index";
-//   import type { dragStartProp, dragEndProp } from "../../../../../src/input";
 
-  let { title = "Box", initialX = 0, initialY = 0, width = 150, height = 150, color = "#f6f6f6" } = $props();
+  let { title = "Box", initialX = 0, initialY = 0, width = 150, height = 150} = $props();
 
   let element: HTMLElement;
   let engine: Engine = getContext("engine");
@@ -51,19 +50,6 @@
         element.style.borderColor = "black";
     };
 
-    // // Hook into drag events to update UI state
-    // // We preserve NodeComponent's handlers by calling them
-    // const originalDragStart = object.event.input.dragStart;
-    // object.event.input.dragStart = (prop: dragStartProp) => {
-    //     if (originalDragStart) originalDragStart.call(object, prop);
-    //     isDragging = true;
-    // };
-
-    // const originalDragEnd = object.event.input.dragEnd;
-    // object.event.input.dragEnd = (prop: dragEndProp) => {
-    //     if (originalDragEnd) originalDragEnd.call(object, prop);
-    //     isDragging = false;
-    // };
   });
 
   onDestroy(() => {
@@ -74,7 +60,7 @@
 <div
   bind:this={element}
   class="collision-box card {isDragging ? 'float' : ''}"
-  style="width: {width}px; height: {height}px; background-color: {color};"
+  style="width: {width}px; height: {height}px;"
 >
   <div class="box-header">
     <h1>{title}</h1>
@@ -95,7 +81,7 @@
     padding: 0;
     display: flex;
     flex-direction: column;
-    border: 2px solid black;
+    border: 0px solid black;
     transition: border-color 0.2s;
     overflow: hidden;
   }

@@ -1,15 +1,12 @@
 <script lang="ts">
   import Canvas from "./lib/Canvas.svelte";
-  import CameraControl from "./lib/CameraControl.svelte";
 
   // Animation demos
   import GalleryDemo from "./demo/animation/Gallery.svelte";
 
   // Input demos
   import DragDemo from "./demo/input/Drag.svelte";
-  import InputDemo from "./demo/input/Input.svelte";
-  import MouseDemo from "./demo/input/Mouse.svelte";
-
+  
   // New demos
   import NodeUIDemo from "./demo/node_ui_demo/NodeUIDemo.svelte";
   import DragDropDemo from "./demo/drag_drop/DragDropDemo.svelte";
@@ -24,8 +21,6 @@
     { label: "Welcome Background", value: "welcome" },
     { label: "Gallery", value: "gallery" },
     { label: "Drag", value: "drag" },
-    { label: "Input", value: "input" },
-    { label: "Mouse", value: "mouse" },
     { label: "Node UI", value: "node_ui" },
     { label: "Drag & Drop", value: "drag_drop" },
     { label: "Collision", value: "collision" },
@@ -69,12 +64,6 @@
         <GalleryDemo />
       {:else if selectedDemo === "drag"}
         <DragDemo />
-      {:else if selectedDemo === "input"}
-        <InputDemo />
-      {:else if selectedDemo === "mouse"}
-        <CameraControl>
-          <MouseDemo />
-        </CameraControl>
       {:else if selectedDemo === "node_ui"}
         <NodeUIDemo />
       {:else if selectedDemo === "drag_drop"}

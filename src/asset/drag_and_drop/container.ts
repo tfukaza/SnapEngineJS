@@ -146,17 +146,20 @@ export class ItemContainer extends ElementObject {
    */
   setItemRows(caller: ItemObject | null) {
     let rowList: ItemObject[][] = [];
-    let prevHeight = undefined;
+    let prevVal = undefined;
+    const isColumn = this.direction === "column";
     for (const item of this.#itemList) {
-      let row = Math.floor(item.transform.y ?? 0);
-      item.rowIndex = rowList.length;
+      let val = Math.floor(
+        isColumn ? item.transform.x ?? 0 : item.transform.y ?? 0,
+      );
       if (item == caller) {
         continue;
       }
-      if (row != prevHeight) {
+      if (val != prevVal) {
         rowList.push([]);
-        prevHeight = row;
+        prevVal = val;
       }
+      item.rowIndex = rowList.length - 1;
       rowList[rowList.length - 1].push(item);
     }
     this.#itemRows = rowList;

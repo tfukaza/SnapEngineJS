@@ -5,7 +5,7 @@
   import type { Engine } from "../../../../../src/index";
 
 
-  let { children }: { children: any } = $props();
+  let { children, style = "" }: { children: any; style?: string } = $props();
   const engine: Engine = getContext("engine");
   const itemContainer: ItemContainer = getContext("itemContainer");
 
@@ -20,30 +20,31 @@
   });
 </script>
 
-<div class="item-wrapper" bind:this={itemObject.element}>
-  <div class="card item">
+<div class="item-wrapper" bind:this={itemObject.element} {style}>
+  <div class="item">
     {@render children()}
   </div>
 </div>
 
 <style>
+  @import "../../../../app.scss";
   .item-wrapper {
     display: flex;
     flex-direction: column;
     align-items: center;
     justify-content: center;
-    padding: 0px var(--size-4);
+    padding: var(--size-4);
     box-sizing: border-box;
-    height: var(--item-height);
+
   }
 
   .item {
-    padding: 8px 12px;
+    padding: var(--size-4) var(--size-8);
+    background-color: var(--color-background-tint);
     box-sizing: border-box;
   }
 
-  .card {
-  }
+
 
   @media (max-width: 600px) and (min-width: 401px) {
     .item {
