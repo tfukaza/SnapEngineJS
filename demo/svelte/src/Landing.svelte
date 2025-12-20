@@ -11,6 +11,7 @@
   import NodeUIDemo from "./demo/node_ui_demo/NodeUIDemo.svelte";
   import DragDropDemo from "./demo/drag_drop/DragDropDemo.svelte";
   import CollisionDemo from "./demo/collision/CollisionDemo.svelte";
+  import CSSShowcase from "./demo/css_showcase/CSSShowcase.svelte";
 
   type DemoOption = {
     label: string;
@@ -19,6 +20,7 @@
 
   const demoOptions: DemoOption[] = [
     { label: "Welcome Background", value: "welcome" },
+    { label: "CSS Showcase", value: "css_showcase" },
     { label: "Gallery", value: "gallery" },
     { label: "Drag", value: "drag" },
     { label: "Node UI", value: "node_ui" },
@@ -60,6 +62,8 @@
     <Canvas id="welcome-canvas" bind:this={canvas}>
       {#if selectedDemo === "welcome"}
 
+      {:else if selectedDemo === "css_showcase"}
+        <CSSShowcase />
       {:else if selectedDemo === "gallery"}
         <GalleryDemo />
       {:else if selectedDemo === "drag"}
@@ -109,7 +113,6 @@
     padding: var(--size-8) var(--size-12);
     font-size: 14px;
     border-radius: var(--ui-radius);
-    border: 1px solid var(--color-background-dark);
     background-color: var(--color-background-tint);
     color: var(--color-text);
     cursor: pointer;
