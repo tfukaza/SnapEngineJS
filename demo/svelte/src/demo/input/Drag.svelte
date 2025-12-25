@@ -155,7 +155,7 @@
             y0: prop.start.pointerList[0].y, 
             x1: prop.start.pointerList[1].x, 
             y1: prop.start.pointerList[1].y, 
-            object: new ElementObject(engine.global, null)
+            object: new ElementObject(engine, null)
         }
     }
 
@@ -338,14 +338,14 @@
             
         for (const area of areas) {
             if (!area.element) continue;
-            area.object = new ElementObject(engine.global, null);
+            area.object = new ElementObject(engine, null);
             area.object.element = area.element;
             attachEvents(area);
         }
 
         if (nestedArea.element) {
              const centerArea = areas.find(a => a.name === "Center");
-             nestedArea.object = new ElementObject(engine.global, centerArea?.object || null);
+             nestedArea.object = new ElementObject(engine, centerArea?.object || null);
              nestedArea.object.element = nestedArea.element;
              attachEvents(nestedArea);
         }

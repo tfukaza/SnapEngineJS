@@ -1,14 +1,15 @@
 <script lang="ts">
   import { getContext, onMount, onDestroy } from "svelte";
-  import { NodeComponent } from "../../../../../src/index";
   import { RectCollider } from "../../../../../src/collision";
   import type { Engine } from "../../../../../src/index";
+  import type { ElementObject } from "../../../../../src/index";
+  import Drag from "../../lib/Drag.svelte";
 
   let { title = "Box", initialX = 0, initialY = 0, width = 150, height = 150} = $props();
 
   let element: HTMLElement;
   let engine: Engine = getContext("engine");
-  let object: NodeComponent;
+  let object: ElementObject | undefined = $state(undefined);
   let collider: RectCollider;
 
   let isDragging = $state(false);
@@ -24,15 +25,13 @@
         engine.global.data.select = [];
     }
 
-    object = new NodeComponent(engine, null);
-    object.element = element;
+    if (!object) {
+      console.debug("No object available");
+      return;
+    } else {
+      console.debug("Object available:", object);
+    }
     
-    // Set initial position
-    object.transform.x = initialX;
-    object.transform.y = initialY;
-    object.requestTransform();
-    object.requestWrite(); // Apply initial styles (position: absolute, etc.)
-
     // Add collider
     collider = new RectCollider(engine.global, object, 0, 0, width, height);
     object.addCollider(collider);
@@ -49,7 +48,6 @@
         addLog(`End: ${otherId}`);
         element.style.borderColor = "black";
     };
-
   });
 
   onDestroy(() => {
@@ -57,20 +55,28 @@
   });
 </script>
 
-<div
-  bind:this={element}
-  class="collision-box card {isDragging ? 'float' : ''}"
-  style="width: {width}px; height: {height}px;"
+<Drag 
+  {initialX} 
+  {initialY}
+  bind:object
+  onDragStart={() => isDragging = true}
+  onDragEnd={() => isDragging = false}
 >
-  <div class="box-header">
-    <h1>{title}</h1>
+  <div
+    bind:this={element}
+    class="collision-box card {isDragging ? 'float' : ''}"
+    style="width: {width}px; height: {height}px;"
+  >
+    <div class="box-header">
+      <h1>{title}</h1>
+    </div>
+    <div class="box-content">
+      {#each logs as log}
+          <p class="log-entry">{log}</p>
+      {/each}
+    </div>
   </div>
-  <div class="box-content">
-    {#each logs as log}
-        <p class="log-entry">{log}</p>
-    {/each}
-  </div>
-</div>
+</Drag>
 
 <style>
   .collision-box {

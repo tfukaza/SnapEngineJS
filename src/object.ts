@@ -469,7 +469,11 @@ export class BaseObject {
 
   addCollider(collider: Collider) {
     this._colliderList.push(collider);
-    this.engine?.collisionEngine?.addObject(collider);
+    if (!this.engine){
+      console.warn("Engine is not set, cannot add collider to collision engine");
+      return;
+    }
+    this.engine.collisionEngine?.addObject(collider);
   }
 
   addDebugPoint(
