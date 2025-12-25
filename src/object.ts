@@ -268,9 +268,15 @@ export class BaseObject {
    * Queues an update callback to be executed during a specific stage of the render pipeline.
    *
    * The SnapLine render pipeline has 6 stages:
-   * - READ_1, READ_2, READ_3: Read from DOM (causes reflow)
-   * - WRITE_1, WRITE_2, WRITE_3: Write to DOM (apply changes)
+   * - READ_1
+   * - WRITE_1
+   * - READ_2
+   * - WRITE_2
+   * - READ_3
+   * - WRITE_3
    *
+   * Read stages are for reading DOM properties (which may trigger reflows),
+   * while write stages are for applying changes to the DOM.
    * Batching reads and writes prevents layout thrashing and improves performance.
    *
    * @param stage - The render stage when the callback should execute (default: "READ_1")
@@ -412,6 +418,8 @@ export class BaseObject {
 
   /**
    * Convenience method to create and add an animation to this object.
+   * 
+   * @deprecated Use addAnimation with AnimationObject instead.
    *
    * @param keyframe - The keyframe properties to animate
    * @param property - Animation options (duration, easing, etc.)

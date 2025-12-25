@@ -1,5 +1,6 @@
 import { BaseObject, ElementObject } from "../../object";
 import { ItemObject } from "./item";
+import { AnimationObject } from "../../animation";
 
 export interface ItemContainerConfig {
   groupID?: string; // Containers belonging to the same group can drag and drop items between them.
@@ -208,6 +209,40 @@ export class ItemContainer extends ElementObject {
     }
   }
 
+  /**
+   * Animate items from their previous position to their current position using FLIP technique
+   */
+  async animateItems(fromStage: "READ_1" | "READ_2", toStage: "READ_2" | "READ_3") {
+    for (const item of this.#itemList) {
+      const prevPos = item.getDomProperty(fromStage);
+      const currPos = item.getDomProperty(toStage);
+      const dx = prevPos.x - currPos.x;
+      const dy = prevPos.y - currPos.y;
+      
+      console.log(`Item ${item.gid}: dx=${dx}, dy=${dy}`);
+      
+      // Only animate if there's significant movement
+      if (Math.abs(dx) >= 0.5 || Math.abs(dy) >= 0.5) {
+        const animation = new AnimationObject(
+          item.element,
+          {
+            transform: [
+              `translate3d(${dx}px, ${dy}px, 0px)`,
+              `translate3d(0px, 0px, 0px)`,
+            ],
+          },
+          {
+            duration: 100,
+            easing: "ease-out",
+          },
+        );
+        
+        await item.addAnimation(animation);
+        animation.play();
+      }
+    }
+  }
+
   addGhostBeforeItem(
     caller: ItemObject,
     itemIndex: number,
@@ -254,21 +289,36 @@ export class ItemContainer extends ElementObject {
         this.reorderItemList();
         this.setItemRows(caller);
         this.updateItemIndexes();
+        // Animate items from READ_2 to READ_3 positions
+        this.animateItems("READ_2", "READ_3");
       });
     } else {
+      // Same row
+      // Read the DOM positions before updating the ghost
+      this.queueUpdate("READ_1", () => {
+        for (const item of this.#itemList) {
+          item.readDom(false, "READ_1");
+        }
+      });
+      // Update the ghost position
       this.queueUpdate("WRITE_1", () => {
         this.removeGhostItem();
         this.addGhostItem(caller, itemIndex);
       });
+      // Read the DOM positions after updating the ghost
       this.queueUpdate("READ_2", () => {
+        this.reorderItemList();
+        this.setItemRows(caller);
+        this.updateItemIndexes();
         for (const item of this.#itemList) {
           item.readDom(false, "READ_2");
           item.saveDomPropertyToTransform("READ_2");
         }
-        this.reorderItemList();
-        this.setItemRows(caller);
-        this.updateItemIndexes();
+        // Animate items from READ_1 to READ_2 positions
+        this.animateItems("READ_1", "READ_2");
       });
+
+    
     }
   }
 

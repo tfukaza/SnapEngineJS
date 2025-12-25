@@ -31,30 +31,6 @@ export class ItemObject extends ElementObject {
     this.#prevContainer = null;
   }
 
-  animateZeroTransform() {
-    return;
-    // console.log(
-    //   "animateZeroTransform",
-    //   `${this.dom.prevProperty.x - this.dom.property.x}, ${this.dom.prevProperty.y - this.dom.property.y}`,
-    // );
-
-    // this.animate(
-    //   {
-    //     transform: [
-    //       `translate3d(${this.dom.prevProperty.x - this.dom.property.x}px, ${this.dom.prevProperty.y - this.dom.property.y}px, 0px)`,
-    //       `translate3d(${0}px, ${0}px, 0px)`,
-    //     ],
-    //   },
-    //   {
-    //     duration: 400,
-    //     easing: "ease-out",
-    //   },
-    // );
-    // this.animation.play();
-    // this.animation.onfinish = () => {
-    //   this.animation.cancel();
-    // };
-  }
 
   get container(): ItemContainer {
     if (!this.#containerObject) {
@@ -657,11 +633,17 @@ export class ItemObject extends ElementObject {
       this.container.addGhostBeforeItem(this, dropIndex, differentRow);
       this.#dropIndex = dropIndex;
       this.#rowDropIndex = rowDropIndex;
+
+      // const prevPosition = this.getDomProperty("READ_1");
+      // const currentPosition = this.getDomProperty("READ_2");
+      // console.debug("Prev pos:", prevPosition, "Current pos:", currentPosition);
     }
   }
 
   cursorUp(_prop: dragEndProp) {
+    console.debug("Cursor up on item:", this.gid);
     if (this.container.dragItem !== this) {
+      console.debug("Not the active drag item, ignoring.");
       return;
     }
     this.container.dragItem = null;
