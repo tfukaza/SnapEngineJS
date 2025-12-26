@@ -1,29 +1,37 @@
 <script lang="ts">
   import { onMount, setContext } from "svelte";
   import { getEngine } from "./engine.svelte";
+  import type { Engine } from "../../../../src/index";
 
   let {
     id,
     children,
-  }: { id: string; style?: Record<string, string>; children: any } = $props();
+    engine = $bindable<Engine | null>(null),
+  }: {
+    id: string;
+    style?: Record<string, string>;
+    children: any;
+    engine?: Engine | null;
+  } = $props();
   let canvas: HTMLDivElement | null = null;
 
-  const engine = getEngine(id);
-  setContext("engine", engine);
+  const resolvedEngine = (engine ?? getEngine(id)) as Engine;
+  engine = resolvedEngine;
+  setContext("engine", resolvedEngine);
 
-  engine.enableCollisionEngine();
+  resolvedEngine.enableCollisionEngine();
 
   onMount(() => {
-    engine.assignDom(canvas as HTMLElement);
-    engine.camera?.setCameraPosition(0, 0);
+    resolvedEngine.assignDom(canvas as HTMLElement);
+    resolvedEngine.camera?.setCameraPosition(0, 0);
   });
 
   export function enableDebug() {
-    engine.enableDebug();
+    resolvedEngine.enableDebug();
   }
 
   export function disableDebug() {
-    engine.disableDebug();
+    resolvedEngine.disableDebug();
   }
 </script>
 

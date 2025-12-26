@@ -1,7 +1,7 @@
 <script lang="ts">
   import Container from "./ItemContainer.svelte";
   import Item from "./Item.svelte";
-  import "../../../app.scss";
+  import "../../../../../app.scss";
   import { getContext, onMount } from "svelte";
   import { CameraControl } from "../../../../../../src/asset/cameraControl";
   import { AnimationObject } from "../../../../../../src/animation";
@@ -128,7 +128,7 @@
 </div>
 
 <style lang="scss">
-  @import "../../../app.scss";
+  @import "../../../../../app.scss";
 
   #drag-drop-demo {    
     --item-height: 45.5px;

@@ -5,7 +5,7 @@
   import type { Engine } from "../../../../../src/index";
 
 
-  let { children, style = "" }: { children: any; style?: string } = $props();
+  let { children, style = "", className = "" }: { children: any; style?: string; className?: string } = $props();
   const engine: Engine = getContext("engine");
   const itemContainer: ItemContainer = getContext("itemContainer");
 
@@ -20,7 +20,7 @@
   });
 </script>
 
-<div class="item-wrapper" bind:this={itemObject.element} {style}>
+<div class="item-wrapper {className}" bind:this={itemObject.element} {style}>
   <div class="item">
     {@render children()}
   </div>
@@ -39,9 +39,9 @@
   }
 
   .item {
-    padding: var(--size-4) var(--size-8);
+    /* padding: var(--size-4) var(--size-8);
     background-color: var(--color-background-tint);
-    box-sizing: border-box;
+    box-sizing: border-box; */
   }
 
 
