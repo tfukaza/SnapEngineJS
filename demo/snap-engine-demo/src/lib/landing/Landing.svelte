@@ -1,8 +1,10 @@
 <script lang="ts">
   import Canvas from "../../../../svelte/src/lib/Canvas.svelte";
   import CameraControl from "../../../../svelte/src/lib/CameraControl.svelte";
-  import FlipDotDisplay from "./components/FlipDotDisplay.svelte";
+  import ControlPanel from "./components/ControlPanel.svelte";
+  import CameraControlNodeDemo from "./components/CameraControlNodeDemo.svelte";
   import HorizontalDragDrop from "./components/HorizontalDragDrop.svelte";
+  import MultiRowDragDemo from "./components/MultiRowDragDemo.svelte";
   import VerticalDragDrop from "./components/VerticalDragDrop.svelte";
   import InputEngineDragDemo from "./components/InputEngineDragDemo.svelte";
   import AnimationControlDemo from "./components/AnimationControlDemo.svelte";
@@ -36,7 +38,7 @@
     
     <!-- Top row -->
     <div class="slot" style="grid-column: 1 / 3; grid-row: 1 / 3;">
-      <FlipDotDisplay />
+  <ControlPanel />
     </div>
     <div class="slot" style="grid-column: 3 / 6; grid-row: 1 / 2;">
       <HorizontalDragDrop />
@@ -44,8 +46,8 @@
     <div class="slot" style="grid-column: 6 / 7; grid-row: 1 / 2;">
       <p class="coming-soon">Demo coming soon</p>
     </div>
-    <div class="slot" style="grid-column: 7 / 9; grid-row: 1 / 3;">
-      <p class="coming-soon">Demo coming soon</p>
+    <div class="slot camera-control" style="grid-column: 7 / 9; grid-row: 1 / 3;">
+      <CameraControlNodeDemo />
     </div>
     
     <!-- Second row -->
@@ -67,8 +69,8 @@
     <!-- <div class="slot input-engine" style="grid-column: 7 / 9; grid-row: 3 / 5;">
       <InputEngineDragDemo />
     </div> -->
-    <div class="slot" style="grid-column: 7 / 9; grid-row: 3 / 5;">
-      <p class="coming-soon">Demo coming soon</p>
+    <div class="slot multi-row-drag" style="grid-column: 7 / 9; grid-row: 3 / 5;">
+      <MultiRowDragDemo />
     </div>
     
     <!-- Fourth row -->
