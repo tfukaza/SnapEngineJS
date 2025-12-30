@@ -14,7 +14,7 @@
     color: string;
     finishedAt?: number;
   }
-
+ 
   interface AreaTemplate {
     name: string;
     color: string;
@@ -27,17 +27,17 @@
   }
 
   const AREA_PRESETS: AreaTemplate[] = [
+
     { name: "North West", color: "#FE938C", gridArea: "1 / 1 / 2 / 2" },
-    { name: "North", color: "#F9C80E", gridArea: "1 / 2 / 2 / 3" },
-    { name: "North East", color: "#8EE3EF", gridArea: "1 / 3 / 2 / 4" },
+    { name: "North East", color: "#F9C80E", gridArea: "1 / 2 / 2 / 3" },
     { name: "South West", color: "#55C1FF", gridArea: "2 / 1 / 3 / 2" },
-    { name: "South", color: "#BFA4FF", gridArea: "2 / 2 / 3 / 3" },
-    { name: "South East", color: "#F49DFF", gridArea: "2 / 3 / 3 / 4" }
+    { name: "South East", color: "#BFA4FF", gridArea: "2 / 2 / 3 / 3" }
   ];
 
   let areas: AreaConfig[] = AREA_PRESETS.map((area) => ({ ...area }));
 
   let engine: Engine | null = $state(null);
+  let canvasComponent: Canvas | null = null;
   let demoInitialized = $state(false);
 
   let activeLines: Record<string, DragLine> = $state({});
@@ -45,10 +45,12 @@
 
   const FINISHED_LINE_LIFETIME = 4000;
   const MAX_FINISHED_LINES = 12;
+  const BACKGROUND_LINE_COLOR = "#111111";
 
   let cleanupTimer: number | null = null;
   let resizeObserver: ResizeObserver | null = null;
   let containerElement: HTMLDivElement | null = null;
+  let backgroundObject: ElementObject | null = null;
   let overlayWidth = $state(0);
   let overlayHeight = $state(0);
 
@@ -92,6 +94,37 @@
     delete activeLines[prop.pointerId];
   }
 
+  function isPointInsideAnyArea(screenX: number, screenY: number) {
+    for (const area of areas) {
+      const rect = area.element?.getBoundingClientRect();
+      if (!rect) continue;
+      if (
+        screenX >= rect.left &&
+        screenX <= rect.right &&
+        screenY >= rect.top &&
+        screenY <= rect.bottom
+      ) {
+        return true;
+      }
+    }
+    return false;
+  }
+
+  function handleBackgroundDragStart(prop: dragStartProp) {
+    if (isPointInsideAnyArea(prop.start.screenX, prop.start.screenY)) {
+      return;
+    }
+    const line: DragLine = {
+      id: prop.pointerId.toString(),
+      startX: round(prop.start.x),
+      startY: round(prop.start.y),
+      currentX: round(prop.start.x),
+      currentY: round(prop.start.y),
+      color: BACKGROUND_LINE_COLOR
+    };
+    activeLines[line.id] = line;
+  }
+
   function initializeDemo(currentEngine: Engine) {
     if (demoInitialized || !containerElement) return;
 
@@ -101,6 +134,12 @@
       area.object.element = area.element;
       attachArea(area);
     }
+
+    backgroundObject = new ElementObject(currentEngine, null);
+    backgroundObject.element = containerElement;
+    backgroundObject.event.input.dragStart = handleBackgroundDragStart;
+    backgroundObject.event.input.drag = handleDrag;
+    backgroundObject.event.input.dragEnd = handleDragEnd;
 
     setupResizeObserver();
     cleanupTimer = window.setInterval(pruneFinishedLines, 800);
@@ -153,11 +192,25 @@
         area.object = null;
       }
     }
+    if (backgroundObject) {
+      backgroundObject.event.input.dragStart = null;
+      backgroundObject.event.input.drag = null;
+      backgroundObject.event.input.dragEnd = null;
+      backgroundObject = null;
+    }
     demoInitialized = false;
   });
+
+  export function enableDebug() {
+    canvasComponent?.enableDebug();
+  }
+
+  export function disableDebug() {
+    canvasComponent?.disableDebug();
+  }
 </script>
 
-<Canvas id="input-engine-demo" bind:engine={engine}>
+<Canvas id="input-engine-demo" bind:engine={engine} bind:this={canvasComponent}>
   <div class="input-engine-demo card" bind:this={containerElement}>
     {#if overlayWidth && overlayHeight}
       <svg
@@ -196,12 +249,12 @@
     <div class="area-grid">
       {#each areas as area (area.name)}
         <div
-          class="area card"
-          style={`grid-area: ${area.gridArea}; border-color: ${area.color}; background-color: ${area.color}26;`}
+          class="area"
+          style={`grid-area: ${area.gridArea};`}
           bind:this={area.element}
         >
-          <div class="swatch" style={`background-color: ${area.color};`}></div>
-          <p>{area.name}</p>
+          <span class="color-dot" style={`background-color: ${area.color};`}></span>
+          <!-- <p>{area.name}</p> -->
         </div>
       {/each}
     </div>
@@ -214,6 +267,7 @@
     width: 100%;
     height: 100%;
     min-height: 100%;
+    padding: 0;
   }
 
   .line-overlay {
@@ -238,36 +292,43 @@
     width: 100%;
     height: 100%;
     display: grid;
-    grid-template-columns: repeat(3, 1fr);
+    grid-template-columns: repeat(2, 1fr);
     grid-template-rows: repeat(2, 1fr);
-    gap: 0.75rem;
-    padding: 1rem;
+    gap: clamp(1.25rem, 3vw, 2.5rem);
+    padding: clamp(1.5rem, 4vw, 3rem);
     box-sizing: border-box;
   }
 
   .area {
-    border: 1px solid transparent;
+    position: relative;
+    border: 1px solid rgba(0, 0, 0, 0.1);
     border-radius: calc(var(--ui-radius) - 2px);
     display: flex;
     align-items: center;
-    gap: 0.5rem;
-    padding: 0.5rem 0.75rem;
+    justify-content: center;
+    padding: clamp(0.75rem, 1.5vw, 1.25rem);
     cursor: pointer;
     user-select: none;
+    background: rgba(255, 255, 255, 0.9);
+
 
     p {
       margin: 0;
-      font-size: 0.85rem;
+      font-size: 0.9rem;
       font-weight: 600;
+      text-align: center;
+      line-height: 1.4;
     }
+  }
 
-    .swatch {
-      width: 0.85rem;
-      height: 0.85rem;
-      border-radius: 50%;
-      box-shadow: 0 0 0 2px rgba(0, 0, 0, 0.1);
-      flex-shrink: 0;
-    }
+  .color-dot {
+    position: absolute;
+    top: 0.75rem;
+    left: 0.75rem;
+    width: 0.6rem;
+    height: 0.6rem;
+    border-radius: 50%;
+
   }
 
 </style>

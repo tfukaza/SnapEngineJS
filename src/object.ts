@@ -41,13 +41,13 @@ class EventCallback {
     };
     this.global = new Proxy(this._global, {
       set: (_, prop: any, value: CallableFunction | null) => {
+        const globalInputEngine = this._object.global.getInputEngine(
+          this._object.engine,
+        );
         if (value == null) {
-          this._object.global.inputEngine?.unsubscribeGlobalCursorEvent(
-            prop,
-            this._object.gid,
-          );
+          globalInputEngine?.unsubscribeGlobalCursorEvent(prop, this._object.gid);
         } else {
-          this._object.global.inputEngine?.subscribeGlobalCursorEvent(
+          globalInputEngine?.subscribeGlobalCursorEvent(
             prop,
             this._object.gid,
             (value as any).bind(this._object),
@@ -168,7 +168,7 @@ export class BaseObject {
       this.engine = null;
     }
     this.gid = this.global.getGlobalId();
-    this.global.objectTable[this.gid] = this;
+    this.global.registerObject(this);
     this.parent = parent;
 
     this._colliderList = [];
@@ -212,10 +212,11 @@ export class BaseObject {
     };
     this.globalInput = new Proxy(this._globalInput, {
       set: (_, prop: any, value: CallableFunction | null) => {
+        const globalInputEngine = this.global.getInputEngine(this.engine);
         if (value == null) {
-          this.global.inputEngine?.unsubscribeGlobalCursorEvent(prop, this.gid);
+          globalInputEngine?.unsubscribeGlobalCursorEvent(prop, this.gid);
         } else {
-          this.global.inputEngine?.subscribeGlobalCursorEvent(
+          globalInputEngine?.subscribeGlobalCursorEvent(
             prop,
             this.gid,
             value.bind(this) as (prop: any) => void,
@@ -228,7 +229,7 @@ export class BaseObject {
 
   destroy() {
     // TODO: Remove colliders
-    delete this.global.objectTable[this.gid];
+    this.global.unregisterObject(this);
   }
 
   get worldPosition(): [number, number] {
@@ -242,7 +243,7 @@ export class BaseObject {
 
   get cameraPosition(): [number, number] {
     return (
-      this.engine?.camera?.getCameraFromWorld(...this.worldPosition) ?? [0, 0]
+      this.engine.camera?.getCameraFromWorld(...this.worldPosition) ?? [0, 0]
     );
   }
 
@@ -254,7 +255,7 @@ export class BaseObject {
 
   get screenPosition(): [number, number] {
     return (
-      this.engine?.camera?.getScreenFromCamera(...this.cameraPosition) ?? [0, 0]
+      this.engine.camera?.getScreenFromCamera(...this.cameraPosition) ?? [0, 0]
     );
   }
 
@@ -950,7 +951,7 @@ export class ElementObject extends BaseObject {
     });
 
     this.inputEngine = new InputControl(
-      this.engine ?? this.global,
+      this.engine,
       false,
       this.gid,
     );

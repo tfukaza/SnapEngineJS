@@ -1,168 +1,166 @@
 <script lang="ts">
-  import { onMount } from "svelte";
   import Canvas from "../../../../../svelte/src/lib/Canvas.svelte";
-  import CameraControl from "../../../../../svelte/src/lib/CameraControl.svelte";
-  import Node from "../../../../../svelte/src/lib/node_ui/Node.svelte";
-  import Connector from "../../../../../svelte/src/lib/node_ui/Connector.svelte";
-  import Line from "../../../../../svelte/src/lib/node_ui/Line.svelte";
+  import CameraControlComponent from "../../../../../svelte/src/lib/CameraControl.svelte";
+  import type { CameraControl as CameraControlApi } from "../../../../../../src/asset/cameraControl";
 
-  let nodeComponent: any = null;
-  let stage: HTMLDivElement | null = null;
-  let resizeObserver: ResizeObserver | null = null;
+  let cameraControl: CameraControlApi | null = null;
+  const ZOOM_STEP = 0.12;
+  let canvasComponent: Canvas | null = null;
 
-  function centerNode() {
-    const nodeObject = nodeComponent?.getNodeObject?.();
-    if (!stage || !nodeObject) return;
-
-    const { width, height } = stage.getBoundingClientRect();
-    const nodeWidth = 220;
-    const nodeHeight = 130;
-
-    nodeObject.worldPosition = [width / 2 - nodeWidth / 2, height / 2 - nodeHeight / 2];
-    nodeObject.requestTransform("WRITE_2");
+  function zoom(delta: number) {
+    if (!cameraControl) return;
+    cameraControl.zoomBy(delta);
   }
 
-  onMount(() => {
-    centerNode();
+  function zoomIn() {
+    zoom(ZOOM_STEP);
+  }
 
-    resizeObserver = new ResizeObserver(() => {
-      centerNode();
-    });
+  function zoomOut() {
+    zoom(-ZOOM_STEP);
+  }
 
-    if (stage) {
-      resizeObserver.observe(stage);
-    }
+  export function enableDebug() {
+    canvasComponent?.enableDebug();
+  }
 
-    return () => {
-      resizeObserver?.disconnect();
-    };
-  });
+  export function disableDebug() {
+    canvasComponent?.disableDebug();
+  }
 </script>
 
-<Canvas id="camera-control-node-demo">
-  <CameraControl>
-    <div class="camera-node-stage" bind:this={stage}>
-      <Node bind:this={nodeComponent} className="card node camera-node" LineSvelteComponent={Line}>
-        <div class="node-header">
-          <p class="eyebrow">placeholder</p>
-          <h3>Camera node</h3>
+<p class="panel-label">▼ Camera Pan and Zoom v0.1</p>
+<div id="camera-control-demo">
+  <Canvas id="camera-control-node-demo" bind:this={canvasComponent}>
+    <CameraControlComponent bind:cameraControl>
+      <div class="image-stage">
+        <div class="photo-credit">
+          <p>Photo by</p>
+          <a
+            href="https://unsplash.com/@molliesivaram"
+            target="_blank"
+            rel="noreferrer"
+          >
+            Mollie Sivaram
+          </a>
         </div>
-        <div class="node-body">
-          <div class="row input">
-            <div class="connector-wrapper">
-              <Connector name="input" maxConnectors={1} allowDragOut={false} />
-            </div>
-            <span>Input stream</span>
-          </div>
-          <div class="row output">
-            <span>Output stream</span>
-            <div class="connector-wrapper">
-              <Connector name="output" maxConnectors={-1} allowDragOut={true} />
-            </div>
-          </div>
-        </div>
-      </Node>
-
-      <div class="overlay">
-        <p>Drag the background to pan and scroll to zoom. Node stays interactive.</p>
+        <img
+          src="https://images.unsplash.com/photo-1557089289-57d5c9f4f0c4?q=80"
+          alt="Scenic landscape"
+          class="stage-image"
+          draggable="false"
+        />
       </div>
-    </div>
-  </CameraControl>
-</Canvas>
+    </CameraControlComponent>
+  </Canvas>
+  <div class="card zoom-controls" aria-label="Zoom controls">
+    <button
+      type="button"
+      class="zoom-button small"
+      on:click={zoomIn}
+      aria-label="Zoom in">+</button
+    >
+    <button
+      type="button"
+      class="zoom-button small"
+      on:click={zoomOut}
+      aria-label="Zoom out">−</button
+    >
+  </div>
+</div>
 
 <style lang="scss">
-  :global(#camera-control-node-demo #snap-camera-control) {
-    background: radial-gradient(circle at 20% 20%, rgba(255, 255, 255, 0.08), transparent 60%),
-      #080b14;
-    border-radius: calc(var(--ui-radius) - 4px);
-    border: 1px solid rgba(255, 255, 255, 0.08);
-  }
+  @import "../landing.scss";
 
-  .camera-node-stage {
+  #camera-control-demo {
     width: 100%;
     height: 100%;
+    display: grid;
+    grid-template-rows: 1fr auto;
+  }
+
+  .image-stage {
+    width: 512px;
+    height: 512px;
+    // width: 100%;
+    // height: 100%;
     position: relative;
     pointer-events: none;
-    color: white;
-    font-family: var(--font-sans, "Inter", "SF Pro Display", system-ui);
+    overflow: hidden;
+    border-radius: calc(var(--ui-radius, 18px) - 4px);
   }
 
-  :global(.camera-node-stage .node) {
-    pointer-events: auto;
-    width: 220px;
-    background: rgba(12, 14, 27, 0.9);
-    border: 1px solid rgba(255, 255, 255, 0.08);
-    border-radius: 0.85rem;
-    box-shadow: 0 10px 35px rgba(0, 0, 0, 0.4);
-    color: white;
-  }
-
-  .node-header {
-    padding: 0.85rem 1rem 0.25rem;
-  }
-
-  .eyebrow {
-    margin: 0 0 0.35rem;
-    text-transform: uppercase;
-    letter-spacing: 0.15em;
-    font-size: 0.65rem;
-    color: rgba(255, 255, 255, 0.55);
-  }
-
-  .node-header h3 {
-    margin: 0;
-    font-size: 1.05rem;
-  }
-
-  .node-body {
-    padding: 0.75rem 1rem 1rem;
-    display: flex;
-    flex-direction: column;
-    gap: 0.5rem;
-  }
-
-  .row {
-    display: flex;
-    align-items: center;
-    gap: 0.75rem;
-    font-size: 0.8rem;
-  }
-
-  .row.input {
-    justify-content: flex-start;
-  }
-
-  .row.output {
-    justify-content: flex-end;
-  }
-
-  .connector-wrapper {
-    width: 1.25rem;
-    height: 1.25rem;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-  }
-
-  :global(.camera-node-stage .connector) {
-    border: 1px solid rgba(255, 255, 255, 0.25);
-    background: rgba(255, 255, 255, 0.1);
-  }
-
-  .overlay {
+  .photo-credit {
     position: absolute;
-    bottom: 1rem;
-    left: 50%;
-    transform: translateX(-50%);
-    padding: 0.4rem 0.8rem;
+    top: 0.75rem;
+    left: 0.75rem;
+    z-index: 10;
+    padding: 0.25rem 0.5rem;
     border-radius: 999px;
-    background: rgba(5, 8, 15, 0.75);
-    border: 1px solid rgba(255, 255, 255, 0.08);
-    font-size: 0.7rem;
-    letter-spacing: 0.05em;
-    text-transform: uppercase;
-    text-align: center;
-    pointer-events: none;
-    backdrop-filter: blur(6px);
+    background: rgba(0, 0, 0, 0.55);
+    color: white;
+    font-size: 0.65rem;
+    display: inline-flex;
+    gap: 0.35rem;
+    align-items: center;
+    pointer-events: auto;
+    p {
+      color: white;
+    }
+    a {
+      color: white;
+      text-decoration: underline;
+    }
+  }
+
+  .stage-image {
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+    filter: saturate(0.9);
+  }
+
+  .zoom-controls {
+    // position: absolute;
+    // top: 1rem;
+    // right: 1rem;
+    // display: flex;
+    // flex-direction: column;
+    // gap: 0.35rem;
+    // pointer-events: auto;
+    padding: 8px 8px;
+    display: flex;
+    flex-direction: row-reverse;
+    gap: 4px;
+  }
+
+  .zoom-controls,
+  .zoom-controls::after,
+  .zoom-controls::before {
+        border-radius: 0px 0px var(--ui-radius) var(--ui-radius);
+  }
+
+  .zoom-button {
+    margin: 0px 4px;
+    // width: 2.25rem;
+    // height: 2.25rem;
+    // border-radius: 999px;
+    // border: 1px solid rgba(255, 255, 255, 0.15);
+    // background: rgba(8, 11, 20, 0.85);
+    // color: white;
+    // font-size: 1.25rem;
+    // line-height: 1;
+    // cursor: pointer;
+    // transition: border-color 0.2s ease, background 0.2s ease;
+    // box-shadow: 0 8px 20px rgba(0, 0, 0, 0.4);
+  }
+
+  .zoom-button:hover {
+    // border-color: rgba(255, 255, 255, 0.35);
+    // background: rgba(12, 15, 28, 0.9);
+  }
+
+  .zoom-button:active {
+    // transform: translateY(1px);
   }
 </style>

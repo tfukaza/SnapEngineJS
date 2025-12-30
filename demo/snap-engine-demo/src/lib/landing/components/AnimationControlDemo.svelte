@@ -7,43 +7,71 @@
 
   interface SliderPreset {
     id: string;
-    label: string;
-    color: string;
     phase: number;
   }
 
-  const SLIDERS: SliderPreset[] = [
-    { id: "alpha", label: "Alpha", color: "#f472b6", phase: 0 },
-    { id: "beta", label: "Beta", color: "#c084fc", phase: 0.12 },
-    { id: "gamma", label: "Gamma", color: "#60a5fa", phase: 0.24 },
-    { id: "delta", label: "Delta", color: "#34d399", phase: 0.36 },
-    { id: "epsilon", label: "Epsilon", color: "#facc15", phase: 0.48 }
-  ];
-
   const WAVE_DURATION = 6000;
+  const MIN_SLIDER_COUNT = 8;
+  const MAX_SLIDER_COUNT = 64;
+  const SLIDER_SLOT_WIDTH = 24;
+
+  let sliderCount = $state(16);
+  const sliderPresets = $derived.by((): SliderPreset[] => {
+    if (sliderCount <= 0) return [];
+    return Array.from({ length: sliderCount }, (_, index) => ({
+      id: `slider-${index}`,
+      phase: sliderCount > 0 ? index / sliderCount : 0,
+    }));
+  });
 
   let engine: Engine | null = $state(null);
-  let sliderRefs: (HTMLInputElement | null)[] = $state(
-    Array(SLIDERS.length).fill(null)
-  );
-  let sliderValues: number[] = $state(Array(SLIDERS.length).fill(0.5));
+  let canvasComponent: Canvas | null = null;
   let isPlaying = $state(true);
   let progress = $state(0);
+  const sliderValues = $derived.by(() => {
+    const normalized = normalizeProgress(progress);
+    return sliderPresets.map((slider) => {
+      const offset = normalizeProgress(normalized + slider.phase);
+      return 0.5 + 0.5 * Math.sin(2 * Math.PI * offset);
+    });
+  });
+  let sliderClusterRef: HTMLDivElement | null = $state(null);
+  let sliderClusterWidth = $state(0);
 
   let controllerObject: ElementObject | null = null;
   let controllerAnimation: AnimationObject | null = null;
 
-  function slidersReady() {
-    return sliderRefs.every((slider) => slider);
-  }
+  $effect(() => {
+    if (typeof window === "undefined") return;
+    if (!sliderClusterRef) return;
+
+    const observer = new ResizeObserver((entries) => {
+      const entry = entries[0];
+      if (entry) {
+        sliderClusterWidth = entry.contentRect.width;
+      }
+    });
+
+    observer.observe(sliderClusterRef);
+
+    return () => observer.disconnect();
+  });
 
   $effect(() => {
-    if (!engine || !slidersReady()) return;
+    if (sliderClusterWidth <= 0) return;
+    const available = Math.floor(sliderClusterWidth / SLIDER_SLOT_WIDTH);
+    const nextCount = clamp(available, MIN_SLIDER_COUNT, MAX_SLIDER_COUNT);
+    if (nextCount !== sliderCount) {
+      sliderCount = nextCount;
+    }
+  });
+
+  $effect(() => {
+    if (!engine || sliderPresets.length === 0) return;
     if (!controllerObject) {
       controllerObject = new ElementObject(engine, null);
     }
     if (!controllerAnimation) {
-      updateSliderValues(progress);
       startAnimation(progress);
     }
   });
@@ -55,9 +83,18 @@
     controllerObject = null;
   });
 
+  export function enableDebug() {
+    canvasComponent?.enableDebug();
+  }
+
+  export function disableDebug() {
+    canvasComponent?.disableDebug();
+  }
+
   function startAnimation(fromProgress = 0) {
-    if (!engine || !controllerObject || !slidersReady()) return;
+    if (!engine || !controllerObject || sliderPresets.length === 0) return;
     const normalized = normalizeProgress(fromProgress);
+    updateSliderValues(normalized);
     const remaining = Math.max(1 - normalized, 0);
     const duration = Math.max(remaining * WAVE_DURATION, 1);
 
@@ -91,17 +128,7 @@
   }
 
   function updateSliderValues(baseProgress: number) {
-    const normalized = normalizeProgress(baseProgress);
-    const nextValues = SLIDERS.map((slider, index) => {
-      const offset = normalizeProgress(normalized + slider.phase);
-      const wave = 0.5 + 0.5 * Math.sin(2 * Math.PI * offset);
-      if (sliderRefs[index]) {
-        sliderRefs[index]!.value = wave.toString();
-      }
-      return wave;
-    });
-    sliderValues = nextValues;
-    progress = normalized;
+    progress = normalizeProgress(baseProgress);
   }
 
   function togglePlayback() {
@@ -123,12 +150,17 @@
     if (Number.isNaN(nextProgress)) return;
 
     updateSliderValues(nextProgress);
-    if (!engine || !slidersReady()) return;
+    if (!engine || sliderPresets.length === 0) return;
 
     startAnimation(nextProgress);
     if (!isPlaying) {
       controllerAnimation?.pause();
     }
+  }
+
+  function clamp(value: number, min: number, max: number) {
+    if (Number.isNaN(value)) return min;
+    return Math.min(Math.max(value, min), max);
   }
 
   function normalizeProgress(value: number) {
@@ -138,54 +170,54 @@
 </script>
 
 <div class="animation-control-wrapper">
-  <Canvas id="animation-control" bind:engine={engine}>
+  <Canvas id="animation-control" bind:engine={engine} bind:this={canvasComponent}>
     <div class="animation-control card">
-      <div class="control-header">
-      <div class="control-text">
-        <p class="eyebrow">Wave controls</p>
-        <p class="status">{isPlaying ? "Playing" : "Paused"}</p>
-      </div>
-      <button type="button" class="playback-toggle" onclick={togglePlayback}>
-        {isPlaying ? "Pause" : "Play"}
-      </button>
-      </div>
 
-      <div class="slider-cluster">
-        {#each SLIDERS as slider, index (slider.id)}
-          <div class="slider-column">
+
+      <div class="slider-cluster" bind:this={sliderClusterRef}>
+        {#each sliderPresets as slider, index (slider.id)}
+          <!-- <div class="slider-column"> -->
             <input
               type="range"
               min="0"
               max="1"
               step="0.001"
               value={sliderValues[index]}
-              bind:this={sliderRefs[index]}
-              aria-label={`${slider.label} slider`}
+              aria-label={`Slider ${index + 1}`}
             />
-          </div>
+          <!-- </div> -->
         {/each}
-      </div>
-
-      <div class="timeline">
-        <label for="wave-timeline">Timeline</label>
-        <input
-          id="wave-timeline"
-          type="range"
-          min="0"
-          max="1"
-          step="0.001"
-          value={progress}
-          oninput={handleTimelineInput}
-        />
       </div>
     </div>
   </Canvas>
+  <div class="card timeline">
+    <input
+      id="wave-timeline"
+      type="range"
+      min="0"
+      max="1"
+      step="0.001"
+      value={progress}
+      oninput={handleTimelineInput}
+    />
+    <button type="button" class="playback-toggle small" onclick={togglePlayback}>
+      {isPlaying ? "Pause" : "Play"}
+    </button>
+  </div>
 </div>
 
 <style lang="scss">
+
+  .card {
+    padding: 4px;
+  }
+
   .animation-control-wrapper {
     width: 100%;
     height: 100%;
+    display: grid;
+    grid-template-rows: 1fr auto;
+    row-gap: 0;
   }
 
   .animation-control-wrapper :global(#snap-canvas) {
@@ -197,83 +229,51 @@
     width: 100%;
     height: 100%;
     box-sizing: border-box;
-    padding: 1rem;
-    display: flex;
-    flex-direction: column;
-    gap: 1rem;
-  }
-
-  .control-header {
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-    gap: 1rem;
-  }
-
-  .control-text {
-    display: flex;
-    flex-direction: column;
-    gap: 0.25rem;
-  }
-
-  .control-text .eyebrow {
-    margin: 0;
-    font-size: 0.75rem;
-    letter-spacing: 0.08em;
-    text-transform: uppercase;
-    color: var(--color-text-muted);
-  }
-
-  .control-text .status {
-    margin: 0;
-    font-weight: 600;
+    // padding: 1rem;
+  
   }
 
   .playback-toggle {
-    border: none;
-    border-radius: var(--ui-radius);
-    padding: 0.4rem 0.9rem;
+    // border: none;
+    // border-radius: var(--ui-radius);
+    // padding: 0.4rem 0.9rem;
     font-weight: 600;
     cursor: pointer;
-    background: var(--color-surface-accent, #111827);
-    color: var(--color-text-on-accent, #fff);
+    width: 80px;
+    // background: var(--color-surface-accent, #111827);
+    // color: var(--color-text-on-accent, #fff);
   }
 
   .slider-cluster {
-    flex: 1;
-    display: grid;
-    grid-template-columns: repeat(auto-fit, minmax(56px, 1fr));
-    gap: 0.75rem;
-    align-items: stretch;
-  }
-
-  .slider-column {
     display: flex;
-    justify-content: center;
+    gap: 4px;
     align-items: center;
+    justify-content: center;
     height: 100%;
+    // width: 100%;
+    overflow-x: auto;
+    padding: 0 0.5rem;
   }
 
-  .slider-column input[type="range"] {
-    // writing-mode: bt-lr;
-    // appearance: slider-vertical;
-    // -webkit-appearance: slider-vertical;
+  .slider-cluster input[type="range"] {
+    writing-mode: vertical-lr;
+    // width: 48px;
+    min-width: 12px;
+    height:40px;
+    // max-width: 48px;
+    // flex: 0 0 48px;
+    // flex-shrink: 0;
     // height: 100%;
-    // min-height: 140px;
-    // width: 100%;
+    border: 0px solid rgba(255, 255, 255, 0.033);
+    box-shadow: none;
+    background: var(--color-surface, #ebeae9);
   }
 
   .timeline {
+    // margin-top: 0.75rem;
     display: flex;
-    flex-direction: column;
-    gap: 0.35rem;
-  }
-
-  .timeline label {
-    font-size: 0.75rem;
-    text-transform: uppercase;
-    letter-spacing: 0.08em;
-    color: var(--color-text-muted);
+    align-items: center;
+    gap: 0.75rem;
   }
 
   .timeline input[type="range"] {

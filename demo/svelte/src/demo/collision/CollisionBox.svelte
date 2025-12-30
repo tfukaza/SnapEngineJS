@@ -5,7 +5,23 @@
   import type { ElementObject } from "../../../../../src/index";
   import Drag from "../../lib/Drag.svelte";
 
-  let { title = "Box", initialX = 0, initialY = 0, width = 150, height = 150} = $props();
+  let { 
+    title = "Box", 
+    initialX = 0, 
+    initialY = 0, 
+    width = 150, 
+    height = 150,
+    onCollisionBegin = null,
+    onCollisionEnd = null
+  } = $props<{
+    title?: string;
+    initialX?: number;
+    initialY?: number;
+    width?: number;
+    height?: number;
+    onCollisionBegin?: (() => void) | null;
+    onCollisionEnd?: (() => void) | null;
+  }>();
 
   let element: HTMLElement;
   let engine: Engine = getContext("engine");
@@ -21,8 +37,8 @@
 
   onMount(() => {
     // Ensure global select array exists
-    if (!engine.global.data.select) {
-        engine.global.data.select = [];
+    if (!engine.global?.data.select) {
+        engine.global!.data.select = [];
     }
 
     if (!object) {
@@ -33,7 +49,7 @@
     }
     
     // Add collider
-    collider = new RectCollider(engine.global, object, 0, 0, width, height);
+    collider = new RectCollider(engine, object, 0, 0, width, height);
     object.addCollider(collider);
 
     // Collision events
@@ -41,12 +57,14 @@
         const otherId = (other.parent as any).element?.querySelector('h1')?.innerText || other.parent.gid;
         addLog(`Begin: ${otherId}`);
         element.style.borderColor = "red";
+        onCollisionBegin?.();
     };
 
     collider.event.collider.onEndContact = (_, other) => {
         const otherId = (other.parent as any).element?.querySelector('h1')?.innerText || other.parent.gid;
         addLog(`End: ${otherId}`);
         element.style.borderColor = "black";
+        onCollisionEnd?.();
     };
   });
 

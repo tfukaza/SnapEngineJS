@@ -114,11 +114,24 @@ export class ItemContainer extends ElementObject {
     ] || []) {
       const container: ItemContainer = c as ItemContainer;
       const property = container.getDomProperty("READ_2");
-      const centerX = property.x + property.width / 2;
-      const centerY = property.y + property.height / 2;
-      const distance = Math.sqrt(
-        Math.pow(centerX - worldX, 2) + Math.pow(centerY - worldY, 2),
-      );
+      const left = property.x;
+      const right = property.x + property.width;
+      const top = property.y;
+      const bottom = property.y + property.height;
+
+      const dx =
+        worldX < left
+          ? left - worldX
+          : worldX > right
+            ? worldX - right
+            : 0;
+      const dy =
+        worldY < top
+          ? top - worldY
+          : worldY > bottom
+            ? worldY - bottom
+            : 0;
+      const distance = Math.sqrt(dx * dx + dy * dy);
 
       if (distance < closestDistance) {
         closestDistance = distance;
@@ -219,7 +232,7 @@ export class ItemContainer extends ElementObject {
       const dx = prevPos.x - currPos.x;
       const dy = prevPos.y - currPos.y;
       
-      console.log(`Item ${item.gid}: dx=${dx}, dy=${dy}`);
+      // console.log(`Item ${item.gid}: dx=${dx}, dy=${dy}`);
       
       // Only animate if there's significant movement
       if (Math.abs(dx) >= 0.5 || Math.abs(dy) >= 0.5) {

@@ -1,6 +1,5 @@
 <script lang="ts">
-  import Canvas from "../../../../svelte/src/lib/Canvas.svelte";
-  import CameraControl from "../../../../svelte/src/lib/CameraControl.svelte";
+  import type { Component, SvelteComponent } from "svelte";
   import ControlPanel from "./components/ControlPanel.svelte";
   import CameraControlNodeDemo from "./components/CameraControlNodeDemo.svelte";
   import HorizontalDragDrop from "./components/HorizontalDragDrop.svelte";
@@ -8,107 +7,281 @@
   import VerticalDragDrop from "./components/VerticalDragDrop.svelte";
   import InputEngineDragDemo from "./components/InputEngineDragDemo.svelte";
   import AnimationControlDemo from "./components/AnimationControlDemo.svelte";
+  import InputHandlingCard from "./components/highlights/InputHandlingCard.svelte";
+  import AnimationCard from "./components/highlights/AnimationCard.svelte";
+  import CameraControlCard from "./components/highlights/CameraControlCard.svelte";
+  import DomOptimizationCard from "./components/highlights/DomOptimizationCard.svelte";
+  import CollisionCard from "./components/highlights/CollisionCard.svelte";
+  import VisualDebuggerCard from "./components/highlights/VisualDebuggerCard.svelte";
 
-  // import Menu from "./Menu.svelte";
-  // import NodeUIDemo from "./node_ui_demo/NodeUIDemo.svelte";
-  // import DragDropDemo from "./drag_drop_demo/DragDropDemo.svelte";
-  // import Stub from "./Stub.svelte";
+  type DebuggableComponent = SvelteComponent & {
+    enableDebug?: () => void;
+    disableDebug?: () => void;
+  };
 
-  // let currentDemo = $state(0);
-  let debugEnabled = $state(false);
-  let canvas: Canvas | undefined;
+  type GridSlot = {
+    id: string;
+    label: string;
+    column: string;
+    row: string;
+    component?: Component;
+    className?: string;
+    placeholder?: string;
+    type?: "hero" | "slot";
+    supportsDebug?: boolean;
+    ref?: DebuggableComponent | null;
+  };
 
-  function toggleDebug() {
-    if (!canvas) return;
-    debugEnabled = !debugEnabled;
-    if (debugEnabled) {
-      canvas.enableDebug();
+  const gridSlots: GridSlot[] = [
+    {
+      id: "control-panel",
+      label: "Control Panel",
+      column: "1 / 3",
+      row: "1 / 3",
+      component: ControlPanel,
+      className: "control-panel"
+    },
+    {
+      id: "horizontal-drag",
+      label: "Horizontal Drag Drop",
+      column: "3 / 6",
+      row: "1 / 2",
+      component: HorizontalDragDrop,
+      supportsDebug: true
+    },
+    {
+      id: "top-coming-soon",
+      label: "Coming Soon",
+      column: "6 / 7",
+      row: "1 / 2",
+      placeholder: "Demo coming soon"
+    },
+    {
+      id: "camera-control",
+      label: "Camera Control",
+      column: "7 / 9",
+      row: "1 / 3",
+      component: CameraControlNodeDemo,
+      className: "camera-control",
+      supportsDebug: true
+    },
+    {
+      id: "second-row-left",
+      label: "Coming Soon",
+      column: "3 / 6",
+      row: "2 / 3",
+      placeholder: "Demo coming soon"
+    },
+    {
+      id: "second-row-right",
+      label: "Coming Soon",
+      column: "6 / 7",
+      row: "2 / 3",
+      placeholder: "Demo coming soon"
+    },
+    {
+      id: "third-row-left",
+      label: "Coming Soon",
+      column: "1 / 2",
+      row: "3 / 4",
+      placeholder: "Demo coming soon"
+    },
+    {
+      id: "vertical-drag",
+      label: "Vertical Drag Drop",
+      column: "2 / 3",
+      row: "3 / 5",
+      component: VerticalDragDrop,
+      className: "vertical-drag-and-drop",
+      supportsDebug: true
+    },
+    {
+      id: "hero",
+      label: "Hero",
+      column: "3 / 7",
+      row: "3 / 5",
+      type: "hero"
+    },
+    {
+      id: "multi-row-drag",
+      label: "Multi Row Drag",
+      column: "7 / 9",
+      row: "3 / 5",
+      component: MultiRowDragDemo,
+      className: "multi-row-drag",
+      supportsDebug: true
+    },
+    {
+      id: "fourth-row",
+      label: "Coming Soon",
+      column: "1 / 2",
+      row: "4 / 5",
+      placeholder: "Demo coming soon"
+    },
+    {
+      id: "fifth-row-left",
+      label: "Coming Soon",
+      column: "1 / 2",
+      row: "5 / 6",
+      placeholder: "Demo coming soon"
+    },
+    {
+      id: "input-engine",
+      label: "Input Engine",
+      column: "2 / 4",
+      row: "5 / 7",
+      component: InputEngineDragDemo,
+      className: "input-engine",
+      supportsDebug: true
+    },
+    {
+      id: "fifth-row-center",
+      label: "Coming Soon",
+      column: "4 / 7",
+      row: "5 / 6",
+      placeholder: "Demo coming soon"
+    },
+    {
+      id: "fifth-row-right-a",
+      label: "Coming Soon",
+      column: "7 / 8",
+      row: "5 / 6",
+      placeholder: "Demo coming soon"
+    },
+    {
+      id: "fifth-row-right-b",
+      label: "Coming Soon",
+      column: "8 / 9",
+      row: "5 / 6",
+      placeholder: "Demo coming soon"
+    },
+    {
+      id: "bottom-left",
+      label: "Coming Soon",
+      column: "1 / 2",
+      row: "6 / 7",
+      placeholder: "Demo coming soon"
+    },
+    {
+      id: "animation-control",
+      label: "Animation Control",
+      column: "4 / 7",
+      row: "6 / 7",
+      component: AnimationControlDemo,
+      className: "animation-control",
+      supportsDebug: true
+    },
+    {
+      id: "bottom-right",
+      label: "Coming Soon",
+      column: "7 / 9",
+      row: "6 / 7",
+      placeholder: "Demo coming soon"
+    }
+  ];
+
+  let debugStates: Record<string, boolean> = $state({});
+
+  function handleDebugToggle(slotId: string, enabled: boolean) {
+    const slot = gridSlots.find((item) => item.id === slotId);
+    if (!slot?.supportsDebug) {
+      return;
+    }
+    debugStates = { ...debugStates, [slotId]: enabled };
+    if (enabled) {
+      slot.ref?.enableDebug?.();
     } else {
-      canvas.disableDebug();
+      slot.ref?.disableDebug?.();
     }
   }
+
+  $effect(() => {
+    for (const slot of gridSlots) {
+      if (!slot.supportsDebug || !slot.ref) {
+        continue;
+      }
+      if (debugStates[slot.id]) {
+        slot.ref.enableDebug?.();
+      } else {
+        slot.ref.disableDebug?.();
+      }
+    }
+  });
 </script>
 
 <section class="page-width" id="landing" style="height: 80vh; position: relative">
   <div class="hero-grid">
-    <!-- Hero text in center -->
-    <div class="card hero-text" style="grid-column: 3 / 7; grid-row: 3 / 5;">
-      <h1>Interactivity<br> Engine<br> for the Web</h1>
+    {#each gridSlots as slot (slot.id)}
+      {#if slot.type === "hero"}
+        <div
+          class="card hero-text"
+          style={`grid-column: ${slot.column}; grid-row: ${slot.row};`}
+        >
+          <h1>Interactivity<br /> Engine<br /> for the Web</h1>
+        </div>
+      {:else}
+        <div
+          class={`slot ${slot.className ?? ""}`}
+          style={`grid-column: ${slot.column}; grid-row: ${slot.row};`}
+        >
+          {#if slot.id === "control-panel"}
+            <ControlPanel
+              slots={gridSlots}
+              debugStates={debugStates}
+              onToggleDebug={handleDebugToggle}
+            />
+          {:else if slot.component}
+            {@const DemoComponent = slot.component}
+            <DemoComponent bind:this={slot.ref} />
+          {:else}
+            <div class="card coming-soon"><p>{slot.placeholder ?? "Demo coming soon"}</p></div>
+          {/if}
+        </div>
+      {/if}
+    {/each}
+  </div>
+</section>
+
+<section class="page-width interactivity-explainer">
+  <div class="explainer-surface">
+    <h2 class="eyebrow">…what’s an “Interactivity Engine”?</h2>
+    <p class="subhead">It’s a collection of utilities for adding interactive elements to web apps.</p>
+
+    <div class="highlight-grid" aria-label="Core capabilities">
+      <InputHandlingCard />
+      <AnimationCard />
+      <CameraControlCard />
+      <DomOptimizationCard />
+      <CollisionCard />
+      <VisualDebuggerCard />
     </div>
-    
-    <!-- Top row -->
-    <div class="slot" style="grid-column: 1 / 3; grid-row: 1 / 3;">
-  <ControlPanel />
-    </div>
-    <div class="slot" style="grid-column: 3 / 6; grid-row: 1 / 2;">
-      <HorizontalDragDrop />
-    </div>
-    <div class="slot" style="grid-column: 6 / 7; grid-row: 1 / 2;">
-      <p class="coming-soon">Demo coming soon</p>
-    </div>
-    <div class="slot camera-control" style="grid-column: 7 / 9; grid-row: 1 / 3;">
-      <CameraControlNodeDemo />
-    </div>
-    
-    <!-- Second row -->
-    <div class="slot" style="grid-column: 3 / 6; grid-row: 2 / 3;">
-      <p class="coming-soon">Demo coming soon</p>
-    </div>
-    <div class="slot" style="grid-column: 6 / 7; grid-row: 2 / 3;">
-      <p class="coming-soon">Demo coming soon</p>
-    </div>
-    
-    <!-- Third row (left and right of hero) -->
-    <div class="slot" style="grid-column: 1 / 2; grid-row: 3 / 4;">
-      <p class="coming-soon">Demo coming soon</p>
-    </div>
-    <div class="slot vertical-drag-and-drop" style="grid-column: 2 / 3; grid-row: 3 / 5;">
-        <VerticalDragDrop />
-    </div>
-    <!-- Hero occupies 3-7, 3-5 -->
-    <!-- <div class="slot input-engine" style="grid-column: 7 / 9; grid-row: 3 / 5;">
-      <InputEngineDragDemo />
-    </div> -->
-    <div class="slot multi-row-drag" style="grid-column: 7 / 9; grid-row: 3 / 5;">
-      <MultiRowDragDemo />
-    </div>
-    
-    <!-- Fourth row -->
-    <div class="slot" style="grid-column: 1 / 2; grid-row: 4 / 5;">
-      <p class="coming-soon">Demo coming soon</p>
-    </div>
-    
-    <!-- Fifth row -->
-    <div class="slot" style="grid-column: 1 / 2; grid-row: 5 / 6;">
-      <p class="coming-soon">Demo coming soon</p>
-    </div>
-    <div class="slot input-engine" style="grid-column: 2 / 4; grid-row: 5 / 7;">
-      <InputEngineDragDemo />
-    </div>
-    <div class="slot" style="grid-column: 4 / 7; grid-row: 5 / 6;">
-      <p class="coming-soon">Demo coming soon</p>
-    </div>
-    <div class="slot" style="grid-column: 7 / 8; grid-row: 5 / 6;">
-      <p class="coming-soon">Demo coming soon</p>
-    </div>
-    <div class="slot" style="grid-column: 8 / 9; grid-row: 5 / 6;">
-      <p class="coming-soon">Demo coming soon</p>
-    </div>
-    
-    <!-- Bottom row -->
-    <div class="slot" style="grid-column: 1 / 2; grid-row: 6 / 7;">
-      <p class="coming-soon">Demo coming soon</p>
-    </div>
-    <div class="slot animation-control" style="grid-column: 4 / 7; grid-row: 6 / 7;">
-      <AnimationControlDemo />
-    </div>
-    <div class="slot" style="grid-column: 7 / 9; grid-row: 6 / 7;">
-      <p class="coming-soon">Demo coming soon</p>
+  </div>
+</section>
+
+<section class="page-width assets-showcase">
+  <div class="explainer-surface">
+    <h2 class="eyebrow">Assets</h2>
+    <p class="subhead">Projects built on top of SnapEngine.</p>
+
+    <div class="assets-grid">
+      <div class="asset-card">
+        <h3>SnapZap</h3>
+        <p>Zoom and pan any DOM element.</p>
+      </div>
+      <a href="/dropandsnap" class="asset-card">
+        <h3>DropAndSnap</h3>
+        <p>Sortable lists and items.</p>
+      </a>
+      <div class="asset-card">
+        <h3>SnapLine</h3>
+        <p>Node based UI.</p>
+      </div>
     </div>
   </div>
 </section>
 
 <style lang="scss">
+  @use "./landing.scss";
   #landing {
     // background-color: var(--color-background);
     // overflow: hidden;
@@ -132,6 +305,12 @@
     justify-content: center;
     text-align: center;
     z-index: 10;
+
+    h1 {
+      font-size: clamp(2.5rem, 4vw, 3rem);
+      line-height: 1.1;
+      margin: 0;
+    }
   }
 
   .slot {
@@ -156,5 +335,101 @@
     box-sizing: border-box;
     border-radius: calc(var(--ui-radius) - 2px);
   }
+
+  .interactivity-explainer {
+    margin-top: clamp(3rem, 6vw, 6rem);
+  }
+
+  .explainer-surface {
+    background: var(--color-background);
+    border-radius: var(--size-12);
+    padding: clamp(1.5rem, 4vw, 3rem);
+    // box-shadow: 0 20px 60px rgba(27, 16, 10, 0.08);
+    text-align: center;
+  }
+
+  .eyebrow {
+    font-size: clamp(1.5rem, 3vw, 2.25rem);
+    font-weight: 600;
+    margin-bottom: 0.5rem;
+    color: #3a2a22;
+  }
+
+  .subhead {
+    color: #5e4d44;
+    font-size: 1rem;
+    max-width: 32rem;
+    margin: 0 auto clamp(2rem, 4vw, 3rem);
+    line-height: 1.6;
+  }
+
+  .highlight-grid {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(180px, 1fr));
+    gap: 1.25rem;
+    margin-bottom: clamp(1.5rem, 3vw, 2.5rem);
+  }
+
+  .divider {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 1rem;
+    margin-bottom: clamp(2rem, 4vw, 3rem);
+    color: #7d6a5f;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+  }
+
+  .divider::before,
+  .divider::after {
+    content: "";
+    flex: 1;
+    height: 1px;
+    background: rgba(125, 106, 95, 0.4);
+  }
  
+  .assets-showcase {
+    margin-top: clamp(3rem, 6vw, 6rem);
+    margin-bottom: clamp(3rem, 6vw, 6rem);
+  }
+
+  .assets-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+    gap: 1.5rem;
+    text-align: left;
+    margin-top: 2rem;
+  }
+
+  .asset-card {
+    background: rgba(255, 255, 255, 0.4);
+    border: 1px solid rgba(125, 106, 95, 0.1);
+    border-radius: var(--size-4);
+    padding: 1.5rem;
+    transition: transform 0.2s ease, box-shadow 0.2s ease;
+    display: block;
+    text-decoration: none;
+    color: inherit;
+
+    &:hover {
+      transform: translateY(-2px);
+      box-shadow: 0 4px 12px rgba(0,0,0,0.05);
+      background: rgba(255, 255, 255, 0.6);
+    }
+
+    h3 {
+      margin: 0 0 0.5rem 0;
+      font-size: 1.25rem;
+      color: #3a2a22;
+    }
+
+    p {
+      margin: 0;
+      font-size: 0.95rem;
+      color: #5e4d44;
+      line-height: 1.5;
+    }
+  }
 </style>

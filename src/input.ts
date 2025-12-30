@@ -1,5 +1,6 @@
 import { GlobalManager } from "./global";
 import { BaseObject } from "./object";
+import { Engine } from "./snapline";
 import { EventProxyFactory } from "./util";
 
 export enum mouseButton {
@@ -191,7 +192,7 @@ export interface InputControlOption {
  *
  * @example
  * ```typescript
- * const input = new InputControl(global, false, object.gid);
+ * const input = new InputControl(engine, false, object.gid);
  * input.event.pointerDown = (props) => {
  *   console.log('Pointer at', props.position.x, props.position.y);
  * };
@@ -217,20 +218,19 @@ class InputControl {
 
   #dragMemberList: InputControl[];
 
+  #listenerControllers: AbortController[];
+
   engine: any;
 
   constructor(
-    engineOrGlobal: any,
+    engine: any,
     isGlobal: boolean = true,
     ownerGID: string | null = null,
   ) {
-    if (engineOrGlobal.global) {
-      this.engine = engineOrGlobal;
-      this.global = engineOrGlobal.global;
-    } else {
-      this.global = engineOrGlobal;
-      this.engine = null;
-    }
+
+    this.engine = engine;
+    this.global = engine.global;
+  
     this._element = null;
     this._isGlobal = isGlobal;
     this._sortedTouchArray = [];
@@ -238,6 +238,7 @@ class InputControl {
     this._ownerGID = ownerGID;
     this._localPointerDict = {};
     this.#dragMemberList = [];
+  this.#listenerControllers = [];
     this._event = {
       pointerDown: null,
       pointerMove: null,
@@ -260,11 +261,21 @@ class InputControl {
   }
 
   destroy() {
-    // TODO Use abort signal for a more controlled way to destroy the input engine
+    for (const controller of this.#listenerControllers) {
+      controller.abort();
+    }
+    this.#listenerControllers = [];
+    this._element = null;
+    this._sortedTouchArray = [];
+    this._sortedTouchDict = {};
+    this._localPointerDict = {};
   }
 
   get globalInputEngine() {
-    return this.global?.inputEngine;
+    if (!this.global) {
+      return null;
+    }
+    return this.global.getInputEngine(this.engine ?? null);
   }
 
   get globalPointerDict(): { [key: number]: pointerData } {
@@ -322,6 +333,39 @@ class InputControl {
     };
   }
 
+  #isPointerTracked(pointerId: number) {
+    return this.globalPointerDict[pointerId] != null;
+  }
+
+  #isEventWithinEngine(target: EventTarget | null) {
+    const container = this.engine?.containerElement;
+    if (container == null) {
+      return true;
+    }
+    if (!(target instanceof Node)) {
+      return false;
+    }
+    return container.contains(target);
+  }
+
+  #shouldHandlePointerEvent(
+    event: PointerEvent,
+    options: { allowHover?: boolean } = {},
+  ) {
+    const { allowHover = false } = options;
+    if (this.#isPointerTracked(event.pointerId)) {
+      return true;
+    }
+    if (allowHover) {
+      return this.#isEventWithinEngine(event.target);
+    }
+    return this.#isEventWithinEngine(event.target);
+  }
+
+  #shouldHandleWheelEvent(event: WheelEvent) {
+    return this.#isEventWithinEngine(event.target);
+  }
+
   /**
    * Called when the user pressed the mouse button.
    * This and all other pointer/gesture events automatically propagate to global input engine as well.
@@ -329,6 +373,9 @@ class InputControl {
    * @returns
    */
   onPointerDown(e: PointerEvent) {
+    if (!this.#isEventWithinEngine(e.target)) {
+      return;
+    }
     e.stopPropagation();
     const coordinates = this.getCoordinates(e.clientX, e.clientY);
     this.event.pointerDown?.({
@@ -383,6 +430,9 @@ class InputControl {
    * @param e
    */
   onPointerMove(e: PointerEvent) {
+    if (!this.#shouldHandlePointerEvent(e, { allowHover: true })) {
+      return;
+    }
     e.preventDefault();
     const coordinates = this.getCoordinates(e.clientX, e.clientY);
     // console.debug("onPointerMove", e.pointerId, coordinates);
@@ -413,6 +463,9 @@ class InputControl {
    * @param e
    */
   onPointerUp(e: PointerEvent) {
+    if (!this.#shouldHandlePointerEvent(e)) {
+      return;
+    }
     e.preventDefault();
     const coordinates = this.getCoordinates(e.clientX, e.clientY);
     console.debug("onPointerUp", e.pointerId, coordinates);
@@ -486,6 +539,9 @@ class InputControl {
    * @param e
    */
   onWheel(e: WheelEvent) {
+    if (!this.#shouldHandleWheelEvent(e)) {
+      return;
+    }
     const coordinates = this.getCoordinates(e.clientX, e.clientY);
     this.event.mouseWheel?.({
       event: e,
@@ -493,7 +549,7 @@ class InputControl {
       delta: e.deltaY,
       gid: this._isGlobal ? GLOBAL_GID : this._ownerGID,
     });
-    console.debug("onWheel", coordinates);
+    // console.debug("onWheel", coordinates);
     e.stopPropagation();
   }
 
@@ -529,6 +585,9 @@ class InputControl {
         // to avoid edge cases where the pointer leaves the DOM element while dragging,
         // which can happen if the user is dragging very quickly
         const gesture = this.globalGestureDict[pointer.id];
+        if (!gesture) {
+          continue;
+        }
         // console.info("drag gesture", gesture.memberList, this._isGlobal);
         // NOTE: The for loop is needed for non-touch devices.
         // It seems like that on touch devices, the pointerMove event continues working even after the cursor has
@@ -622,15 +681,18 @@ class InputControl {
     }
   }
 
-  addListener<T extends keyof InputEventCallback>(
-    dom: HTMLElement,
-    event: any,
-    callback: any,
+  addListener(
+    dom: HTMLElement | Document,
+    event: string,
+    callback: (...args: any[]) => void,
   ) {
-    dom.addEventListener(event, callback.bind(this));
+    const controller = new AbortController();
+    const boundCallback = callback.bind(this);
+    dom.addEventListener(event, boundCallback, { signal: controller.signal });
+    this.#listenerControllers.push(controller);
   }
 
-  addCursorEventListener(dom: HTMLElement) {
+  addCursorEventListener(dom: HTMLElement | Document) {
     this.addListener(dom, "pointerdown", this.onPointerDown);
     this.addListener(dom, "pointermove", this.onPointerMove);
     this.addListener(dom, "pointerup", this.onPointerUp);
@@ -682,7 +744,7 @@ interface pinchGesture {
  *
  * @example
  * ```typescript
- * const globalInput = new GlobalInputControl(global);
+ * const globalInput = new GlobalInputControl(global, engine);
  * // Objects subscribe via: engine.enableCameraControl()
  * // or object.event.global.pointerMove = (props) => { ... }
  * ```
@@ -690,6 +752,7 @@ interface pinchGesture {
 class GlobalInputControl {
   #document: Document;
   global: GlobalManager | null;
+  engine: any;
 
   _inputControl: InputControl;
   globalCallbacks: InputEventCallbackRecord;
@@ -699,12 +762,13 @@ class GlobalInputControl {
   _event: InputEventCallback;
   event: InputEventCallback;
 
-  constructor(global: GlobalManager | null = null) {
+  constructor(global: GlobalManager, engine: any) {
     this.global = global;
+    this.engine = engine;
     this.#document = document;
-    this._inputControl = new InputControl(this.global, true, null);
+    this._inputControl = new InputControl(engine, true, null);
     this._inputControl.addCursorEventListener(
-      this.#document as unknown as HTMLElement,
+      this.#document,
     );
 
     this.globalCallbacks = {
@@ -723,7 +787,7 @@ class GlobalInputControl {
     this._pointerDict = {}; // Dictionary of pointers for pointer events, indexed by the pointer identifier
     this._gestureDict = {}; // Dictionary of gestures for gesture events, indexed by the gesture identifier
 
-    for (const [key, callbackRecord] of Object.entries(this.globalCallbacks)) {
+    for (const [key] of Object.entries(this.globalCallbacks)) {
       this._inputControl.event[key as keyof InputEventCallback] = (
         prop: any,
       ) => {
@@ -753,7 +817,7 @@ class GlobalInputControl {
       pinchEnd: null,
     };
     this.event = new Proxy(this._event, {
-      set: (target, prop, value) => {
+      set: (_target, prop, value) => {
         if (value != null) {
           this.subscribeGlobalCursorEvent(
             prop as keyof InputEventCallback,
@@ -769,6 +833,24 @@ class GlobalInputControl {
         return true;
       },
     });
+  }
+
+  destroy() {
+    this._inputControl.destroy();
+    this.globalCallbacks = {
+      pointerDown: {},
+      pointerMove: {},
+      pointerUp: {},
+      mouseWheel: {},
+      dragStart: {},
+      drag: {},
+      dragEnd: {},
+      pinchStart: {},
+      pinch: {},
+      pinchEnd: {},
+    };
+    this._pointerDict = {};
+    this._gestureDict = {};
   }
 
   subscribeGlobalCursorEvent(

@@ -94,6 +94,9 @@ class Camera {
     }
 
     window.addEventListener("scroll", () => {
+      const rect = this.#containerDom.getBoundingClientRect();
+      this.#containerOffsetX = rect.left;
+      this.#containerOffsetY = rect.top;
       this.updateCamera();
     });
   }
@@ -169,6 +172,12 @@ class Camera {
     this.#containerOffsetY = containerRect.top;
     this.#cameraWidth = containerRect.width;
     this.#cameraHeight = containerRect.height;
+    // console.debug("Camera properties updated:", {
+    //   width: this.#cameraWidth,
+    //   height: this.#cameraHeight,
+    //   offsetX: this.#containerOffsetX,
+    //   offsetY: this.#containerOffsetY,
+    // });
   }
 
   /**

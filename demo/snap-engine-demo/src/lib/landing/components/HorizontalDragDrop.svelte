@@ -15,9 +15,19 @@
   ];
 
   const brailleChar = "⠿";
+
+  let canvasComponent: Canvas | null = null;
+
+  export function enableDebug() {
+    canvasComponent?.enableDebug();
+  }
+
+  export function disableDebug() {
+    canvasComponent?.disableDebug();
+  }
 </script>
 
-<Canvas id="horizontal-drag-drop-canvas">
+<Canvas id="horizontal-drag-drop-canvas" bind:this={canvasComponent}>
   <div class="horizontal-drag-drop">
     <Container config={{ direction: "row", groupID: "horizontal-landing" }}>
       {#each items as label (label)}
@@ -33,6 +43,9 @@
 </Canvas>
 
 <style lang="scss">
+
+  @import "../landing.scss";
+
   .horizontal-drag-drop {
     height: 100%;
   }
@@ -50,6 +63,7 @@
     height: 100%;
     width: 12.5%;
     box-shadow: none;
+    --ui-radius: 6px;
   }
 
   :global(.horizontal-drag-drop .item) {
@@ -74,9 +88,6 @@
     writing-mode: vertical-rl;
     text-orientation: mixed;
     margin: 0;
-    font-size: 0.6rem;
-    letter-spacing: 0.05em;
-    color: rgb(102, 99, 98);
   }
 
   .drag-dots {

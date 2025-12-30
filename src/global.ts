@@ -23,11 +23,14 @@ import { GlobalInputControl } from "./input";
  */
 class GlobalManager {
   private static instance: GlobalManager | null = null;
+  private static readonly GLOBAL_ENGINE_KEY = "__global__";
 
-  inputEngine: GlobalInputControl | null;
-  objectTable: Record<string, BaseObject>;
+  inputEngines: WeakMap<any, GlobalInputControl>;
+  objectTable: Record<string, Record<string, BaseObject>>;
   data: any;
   gid: number;
+  #engineIdCounter: number;
+  #engineIds: WeakMap<any, string>;
 
   // Shared render state across all engines
   currentStage:
@@ -49,10 +52,12 @@ class GlobalManager {
   engines: Set<any>;
 
   private constructor() {
-    this.objectTable = {};
-    this.inputEngine = new GlobalInputControl(this);
+  this.objectTable = {};
+  this.inputEngines = new WeakMap();
     this.data = {};
     this.gid = 0;
+    this.#engineIdCounter = 0;
+    this.#engineIds = new WeakMap();
 
     this.currentStage = "IDLE";
     this.read1Queue = {};
@@ -95,6 +100,8 @@ class GlobalManager {
    */
   registerEngine(engine: any): void {
     this.engines.add(engine);
+    this.#ensureEngineId(engine);
+    this.#ensureInputEngine(engine);
 
     // Start the global render loop if this is the first engine
     if (this.engines.size === 1) {
@@ -111,6 +118,16 @@ class GlobalManager {
    */
   unregisterEngine(engine: any): void {
     this.engines.delete(engine);
+
+    const inputEngine = this.inputEngines.get(engine);
+    inputEngine?.destroy();
+    this.inputEngines.delete(engine);
+
+    const engineId = this.#engineIds.get(engine);
+    if (engineId) {
+      delete this.objectTable[engineId];
+      this.#engineIds.delete(engine);
+    }
 
     // Stop the global render loop if no engines remain
     if (this.engines.size === 0) {
@@ -215,6 +232,102 @@ class GlobalManager {
   getGlobalId() {
     this.gid++;
     return this.gid.toString();
+  }
+
+  getInputEngine(engine: any | null): GlobalInputControl | null {
+    if (!engine) {
+      return null;
+    }
+    return this.inputEngines.get(engine) ?? this.#ensureInputEngine(engine);
+  }
+
+  getEngineId(engine: any | null): string | null {
+    if (!engine) {
+      return null;
+    }
+    return this.#engineIds.get(engine) ?? null;
+  }
+
+  getEngineObjectTable(
+    engine: any | null,
+    create: boolean = true,
+  ): Record<string, BaseObject> | null {
+    if (!engine) {
+      if (!create && !this.objectTable[GlobalManager.GLOBAL_ENGINE_KEY]) {
+        return null;
+      }
+      return this.#ensureGlobalObjectTable();
+    }
+
+    let engineId = this.#engineIds.get(engine);
+    if (!engineId) {
+      if (!create) {
+        return null;
+      }
+      engineId = this.#ensureEngineId(engine);
+    }
+
+    if (!this.objectTable[engineId]) {
+      if (!create) {
+        return null;
+      }
+      this.objectTable[engineId] = {};
+    }
+
+    return this.objectTable[engineId];
+  }
+
+  registerObject(object: BaseObject): void {
+    const table = this.getEngineObjectTable(object.engine ?? null, true);
+    if (table) {
+      table[object.gid] = object;
+    }
+  }
+
+  unregisterObject(object: BaseObject): void {
+    const table = this.getEngineObjectTable(object.engine ?? null, false);
+    if (!table) {
+      return;
+    }
+    delete table[object.gid];
+
+    if (Object.keys(table).length === 0) {
+      const key =
+        object.engine && this.#engineIds.get(object.engine)
+          ? this.#engineIds.get(object.engine)!
+          : GlobalManager.GLOBAL_ENGINE_KEY;
+      delete this.objectTable[key];
+    }
+  }
+
+  #ensureInputEngine(engine: any): GlobalInputControl {
+    let inputEngine = this.inputEngines.get(engine);
+    if (!inputEngine) {
+      inputEngine = new GlobalInputControl(this, engine);
+      this.inputEngines.set(engine, inputEngine);
+    }
+    return inputEngine;
+  }
+
+  #ensureEngineId(engine: any): string {
+    let engineId = this.#engineIds.get(engine);
+    if (!engineId) {
+      this.#engineIdCounter++;
+      engineId = `engine-${this.#engineIdCounter}`;
+      this.#engineIds.set(engine, engineId);
+    }
+    if (!this.objectTable[engineId]) {
+      this.objectTable[engineId] = {};
+    }
+    return engineId;
+  }
+
+  #ensureGlobalObjectTable(): Record<string, BaseObject> {
+    const key = GlobalManager.GLOBAL_ENGINE_KEY;
+    if (!this.objectTable[key]) {
+      this.objectTable[key] = {};
+    }
+    return this.objectTable[key];
   }
 }
 

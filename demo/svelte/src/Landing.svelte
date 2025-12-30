@@ -1,6 +1,4 @@
 <script lang="ts">
-  import Canvas from "./lib/Canvas.svelte";
-
   // Animation demos
   import GalleryDemo from "./demo/animation/Gallery.svelte";
 
@@ -30,16 +28,23 @@
 
   let selectedDemo = $state("welcome");
   let debugEnabled = $state(false);
-  let canvas: Canvas;
+  let dragDemoRef: DragDemo | null = $state(null);
 
-  function toggleDebug() {
-    debugEnabled = !debugEnabled;
-    if (debugEnabled) {
-      canvas.enableDebug();
-    } else {
-      canvas.disableDebug();
+  function toggleDebug(event: Event) {
+    if (selectedDemo !== "drag") {
+      return;
     }
+    const target = event.currentTarget as HTMLInputElement;
+    debugEnabled = target.checked;
+    dragDemoRef?.setDebug(debugEnabled);
   }
+
+  $effect(() => {
+    if (selectedDemo !== "drag" && debugEnabled) {
+      debugEnabled = false;
+      dragDemoRef?.setDebug(false);
+    }
+  });
 </script>
 
 <div class="landing-container">
@@ -51,31 +56,36 @@
       {/each}
     </select>
 
-    <label class="debug-toggle">
-      <input type="checkbox" onchange={toggleDebug} />
+    <label class="debug-toggle" class:disabled={selectedDemo !== "drag"}>
+      <input
+        type="checkbox"
+        onchange={toggleDebug}
+        checked={debugEnabled}
+        disabled={selectedDemo !== "drag"}
+      />
       <span></span>
       Debug Mode
     </label>
   </div>
 
   <div class="demo-content">
-    <Canvas id="welcome-canvas" bind:this={canvas}>
-      {#if selectedDemo === "welcome"}
-
-      {:else if selectedDemo === "css_showcase"}
-        <CSSShowcase />
-      {:else if selectedDemo === "gallery"}
-        <GalleryDemo />
-      {:else if selectedDemo === "drag"}
-        <DragDemo />
-      {:else if selectedDemo === "node_ui"}
-        <NodeUIDemo />
-      {:else if selectedDemo === "drag_drop"}
-        <DragDropDemo />
-      {:else if selectedDemo === "collision"}
-        <CollisionDemo />
-      {/if}
-    </Canvas>
+    {#if selectedDemo === "welcome"}
+      <div class="welcome-placeholder">
+        <p>Select a demo from the dropdown to begin.</p>
+      </div>
+    {:else if selectedDemo === "css_showcase"}
+      <CSSShowcase />
+    {:else if selectedDemo === "gallery"}
+      <GalleryDemo />
+    {:else if selectedDemo === "drag"}
+      <DragDemo bind:this={dragDemoRef} />
+    {:else if selectedDemo === "node_ui"}
+      <NodeUIDemo />
+    {:else if selectedDemo === "drag_drop"}
+      <DragDropDemo />
+    {:else if selectedDemo === "collision"}
+      <CollisionDemo />
+    {/if}
   </div>
 </div>
 
@@ -138,5 +148,21 @@
     flex: 1;
     overflow: hidden;
     background-color: var(--color-background-tint);
+    position: relative;
+  }
+
+  .welcome-placeholder {
+    width: 100%;
+    height: 100%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    color: var(--color-text-muted, var(--color-text));
+    opacity: 0.6;
+    font-size: 14px;
+  }
+
+  .debug-toggle.disabled {
+    opacity: 0.4;
   }
 </style>

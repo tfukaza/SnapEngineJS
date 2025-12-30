@@ -1,26 +1,29 @@
 <script lang="ts">
   import { onMount, getContext, setContext } from "svelte";
-  import { CameraControl } from "../../../../src/asset/cameraControl";
+  import { CameraControl as CameraControlObject } from "../../../../src/asset/cameraControl";
   import type { Engine } from "../../../../src/index";
 
   let {
     children,
     zoomLock,
     panLock,
+    cameraControl = $bindable<CameraControlObject | null>(null),
   }: {
     children: any;
     zoomLock?: boolean;
     panLock?: boolean;
+    cameraControl?: CameraControlObject | null;
   } = $props();
 
   let cameraControlElement: HTMLDivElement | null = null;
   const engine: Engine = getContext("engine");
-  const cameraControl = new CameraControl(engine, zoomLock, panLock);
+  const cameraControlInstance = new CameraControlObject(engine, zoomLock, panLock);
 
-  setContext("cameraControl", cameraControl);
+  cameraControl = cameraControlInstance;
+  setContext("cameraControl", cameraControlInstance);
 
   onMount(() => {
-    cameraControl.element = cameraControlElement as HTMLElement;
+    cameraControlInstance.element = cameraControlElement as HTMLElement;
   });
 </script>
 

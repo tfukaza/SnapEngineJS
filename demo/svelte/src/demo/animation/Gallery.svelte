@@ -1,16 +1,19 @@
 <script lang="ts">
+    import Canvas from "../../lib/Canvas.svelte";
     import Basic from "./Basic.svelte";
     import Variable from "./Variable.svelte";
     import Sequence from "./Sequence.svelte";
     import TimeControl from "./TimeControl.svelte";
   </script>
     
-  <div class="gallery">
-    <Basic />
-    <Variable />
-    <Sequence />
-    <TimeControl />
-  </div>
+  <Canvas id="gallery-demo-canvas">
+    <div class="gallery">
+      <Basic />
+      <Variable />
+      <Sequence />
+      <TimeControl />
+    </div>
+  </Canvas>
     
   <style lang="scss">
     @import "../../../../app.scss";

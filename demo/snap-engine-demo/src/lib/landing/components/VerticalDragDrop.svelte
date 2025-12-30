@@ -15,9 +15,19 @@
   ];
 
   const brailleChar = "⠿";
-</script>
 
-<Canvas id="vertical-drag-drop-canvas">
+  let canvasComponent: Canvas | null = null;
+
+  export function enableDebug() {
+    canvasComponent?.enableDebug();
+  }
+
+  export function disableDebug() {
+    canvasComponent?.disableDebug();
+  }
+</script>
+<p class="panel-label">▼ Vertical Drag v0.1</p>
+<Canvas id="vertical-drag-drop-canvas" bind:this={canvasComponent}>
   <div class="vertical-drag-drop">
     <Container config={{ direction: "column", groupID: "vertical-landing" }}>
       {#each items as label (label)}
@@ -33,6 +43,10 @@
 </Canvas>
 
 <style lang="scss">
+
+
+  @import "../landing.scss";
+
   .vertical-drag-drop {
     height: 100%;
   }
@@ -50,6 +64,7 @@
     width: 100%;
     height: 12.5%;
     box-shadow: none;
+    --ui-radius: 6px;
   }
 
   :global(.vertical-drag-drop .item) {
@@ -71,15 +86,7 @@
     gap: 0.5rem;
   }
 
-  :global(.vertical-drag-drop .item p) {
-    margin: 0;
-    font-size: 0.75rem;
-    letter-spacing: 0.03em;
-    color: rgb(102, 99, 98);
-  }
-
   .drag-dots {
-    font-family: "Menlo", "SFMono-Regular", Consolas, "Liberation Mono", monospace;
     font-size: 0.75rem;
     color: #9a9796;
     letter-spacing: 0.1em;

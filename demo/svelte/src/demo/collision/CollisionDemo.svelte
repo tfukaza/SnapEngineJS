@@ -1,21 +1,20 @@
 <script lang="ts">
-  import { getContext, onMount, onDestroy } from "svelte";
+  import Canvas from "../../lib/Canvas.svelte";
+  import { onMount, onDestroy } from "svelte";
   import CollisionBox from "./CollisionBox.svelte";
   import CollisionCircle from "./CollisionCircle.svelte";
   // import CollisionDot from "./CollisionDot.svelte";
   // import CollisionLine from "./CollisionLine.svelte";
   import { BaseObject } from "../../../../../src/object";
-  import { RectCollider } from "../../../../../src/collision";
   import type { Engine } from "../../../../../src/index";
 
-  let engine: Engine = getContext("engine");
+  let engine: Engine | null = $state(null);
   // engine.enableCollisionEngine();
   let boundaryObjects: BaseObject[] = [];
 
   // Boundary dimensions
   const BOUNDARY_WIDTH = 500;
   const BOUNDARY_HEIGHT = 400;
-  const WALL_THICKNESS = 20;
 
   // Calculate centered position
   let boundaryLeft = $state(0);
@@ -67,38 +66,40 @@
   });
 </script>
 
-<div id="collision-demo">
-  <CollisionCircle title="Circle E" initialX={boundaryLeft + 350} initialY={boundaryTop + 50} radius={40} />
-  <CollisionBox title="Box A" initialX={boundaryLeft + 50} initialY={boundaryTop + 50} />
-  <CollisionBox title="Box B" initialX={boundaryLeft + 200} initialY={boundaryTop + 100} />
-  <!-- <CollisionBox title="Box C" initialX={boundaryLeft + 100} initialY={boundaryTop + 200} />
-  <CollisionBox title="Box D" initialX={boundaryLeft + 300} initialY={boundaryTop + 200} /> -->
-  
-  
-  <!-- <CollisionCircle title="Circle F" initialX={boundaryLeft + 400} initialY={boundaryTop + 300} radius={35} /> -->
-  
-  <!-- Dot colliders (point with box and arrow) -->
-  <!-- <CollisionDot title="Dot G" initialX={boundaryLeft + 50} initialY={boundaryTop + 320} dotOffsetX={80} dotOffsetY={0} />
-  <CollisionDot title="Dot H" initialX={boundaryLeft + 250} initialY={boundaryTop + 20} dotOffsetX={60} dotOffsetY={40} />
-   -->
-  <!-- Line colliders (draggable endpoints) -->
-  <!-- <CollisionLine 
-    title="Line I" 
-    initialX1={boundaryLeft + 80} 
-    initialY1={boundaryTop + 150} 
-    initialX2={boundaryLeft + 180} 
-    initialY2={boundaryTop + 250} 
-  />
-  <CollisionLine 
-    title="Line J" 
-    initialX1={boundaryLeft + 300} 
-    initialY1={boundaryTop + 120} 
-    initialX2={boundaryLeft + 450} 
-    initialY2={boundaryTop + 180} 
-  /> -->
-  
-  <div class="slot boundary" style="left: {boundaryLeft}px; top: {boundaryTop}px;"></div>
-</div>
+<Canvas id="collision-demo-canvas" bind:engine={engine}>
+  <div id="collision-demo">
+    <CollisionCircle title="Circle E" initialX={boundaryLeft + 350} initialY={boundaryTop + 50} radius={40} />
+    <CollisionBox title="Box A" initialX={boundaryLeft + 50} initialY={boundaryTop + 50} />
+    <CollisionBox title="Box B" initialX={boundaryLeft + 200} initialY={boundaryTop + 100} />
+    <!-- <CollisionBox title="Box C" initialX={boundaryLeft + 100} initialY={boundaryTop + 200} />
+    <CollisionBox title="Box D" initialX={boundaryLeft + 300} initialY={boundaryTop + 200} /> -->
+    
+    
+    <!-- <CollisionCircle title="Circle F" initialX={boundaryLeft + 400} initialY={boundaryTop + 300} radius={35} /> -->
+    
+    <!-- Dot colliders (point with box and arrow) -->
+    <!-- <CollisionDot title="Dot G" initialX={boundaryLeft + 50} initialY={boundaryTop + 320} dotOffsetX={80} dotOffsetY={0} />
+    <CollisionDot title="Dot H" initialX={boundaryLeft + 250} initialY={boundaryTop + 20} dotOffsetX={60} dotOffsetY={40} />
+     -->
+    <!-- Line colliders (draggable endpoints) -->
+    <!-- <CollisionLine 
+      title="Line I" 
+      initialX1={boundaryLeft + 80} 
+      initialY1={boundaryTop + 150} 
+      initialX2={boundaryLeft + 180} 
+      initialY2={boundaryTop + 250} 
+    />
+    <CollisionLine 
+      title="Line J" 
+      initialX1={boundaryLeft + 300} 
+      initialY1={boundaryTop + 120} 
+      initialX2={boundaryLeft + 450} 
+      initialY2={boundaryTop + 180} 
+    /> -->
+    
+    <div class="slot boundary" style={`left: ${boundaryLeft}px; top: ${boundaryTop}px;`}></div>
+  </div>
+</Canvas>
 
 <style>
   @import "../../../../app.scss";

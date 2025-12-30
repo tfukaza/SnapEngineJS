@@ -1,12 +1,15 @@
 <script lang="ts">
+  import Canvas from "../../lib/Canvas.svelte";
   import SimpleNode from "./SimpleNode.svelte";
 </script>
 
-<div id="node-ui-demo">
-  <SimpleNode title="Node A" />
-  <SimpleNode title="Node B"  />
-  <SimpleNode title="Node C"  />
-</div>
+<Canvas id="node-ui-demo-canvas">
+  <div id="node-ui-demo">
+    <SimpleNode title="Node A" />
+    <SimpleNode title="Node B"  />
+    <SimpleNode title="Node C"  />
+  </div>
+</Canvas>
 
 <style>
     #node-ui-demo {

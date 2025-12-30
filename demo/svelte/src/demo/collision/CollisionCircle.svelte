@@ -5,7 +5,21 @@
   import type { ElementObject } from "../../../../../src/index";
   import Drag from "../../lib/Drag.svelte";
 
-  let { initialX = 0, initialY = 0, radius = 50 } = $props();
+  let { 
+    title = "Circle", 
+    initialX = 0, 
+    initialY = 0, 
+    radius = 50,
+    onCollisionBegin = null,
+    onCollisionEnd = null
+  } = $props<{
+    title?: string;
+    initialX?: number;
+    initialY?: number;
+    radius?: number;
+    onCollisionBegin?: (() => void) | null;
+    onCollisionEnd?: (() => void) | null;
+  }>();
 
   // Convert radius to width/height to match box
   let width = radius * 2;
@@ -20,23 +34,25 @@
 
   onMount(() => {
     // Ensure global select array exists
-    if (!engine.global.data.select) {
-        engine.global.data.select = [];
+    if (!engine.global?.data.select) {
+        engine.global!.data.select = [];
     }
 
     if (!object) return;
     
     // Add circle collider at center
-    collider = new CircleCollider(engine.global, object, radius, radius, radius);
+    collider = new CircleCollider(engine, object, radius, radius, radius);
     object.addCollider(collider);
 
     // Collision events
     collider.event.collider.onBeginContact = () => {
         element.style.borderColor = "red";
+        onCollisionBegin?.();
     };
 
     collider.event.collider.onEndContact = () => {
         element.style.borderColor = "black";
+        onCollisionEnd?.();
     };
   });
 
@@ -56,6 +72,7 @@
     bind:this={element}
     class="collision-box card {isDragging ? 'float' : ''}"
     style="width: {width}px; height: {height}px;"
+    aria-label={title}
   >
     <!-- Content removed to keep DOM size equal to collider size -->
   </div>

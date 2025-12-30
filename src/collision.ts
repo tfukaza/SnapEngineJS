@@ -6,6 +6,7 @@ import { BaseObject } from "./object";
 import { getDomProperty } from "./util";
 import { InputControl } from "./input";
 import { EventProxyFactory } from "./util";
+import { Engine } from "./snapline";
 
 interface CollisionEvent {
   onCollide: null | ((thisObject: Collider, otherObject: Collider) => void);
@@ -51,7 +52,7 @@ class EventCallback {
  *
  * @example
  * ```typescript
- * const collider = new CircleCollider(global, object, 50);
+ * const collider = new CircleCollider(engine, object, 50);
  * collider.event.collider.onBeginContact = (self, other) => {
  *   console.log('Collision detected!');
  * };
@@ -60,7 +61,7 @@ class EventCallback {
  */
 class Collider {
   global: GlobalManager;
-  engine: any;
+  engine: Engine;
   parent: BaseObject;
   type: "rect" | "circle" | "line" | "point" | "svg";
   uuid: symbol;
@@ -159,20 +160,20 @@ class Collider {
  *
  * @example
  * ```typescript
- * const rectCollider = new RectCollider(global, object, 0, 0, 100, 50);
+ * const rectCollider = new RectCollider(engine, object, 0, 0, 100, 50);
  * object.addCollider(rectCollider);
  * ```
  */
 class RectCollider extends Collider {
   constructor(
-    global: GlobalManager,
+    engine: Engine,
     parent: BaseObject,
     localX: number,
     localY: number,
     width: number,
     height: number,
   ) {
-    super(global, parent, "rect", localX, localY);
+    super(engine, parent, "rect", localX, localY);
     this.transform.width = width;
     this.transform.height = height;
   }
@@ -186,7 +187,7 @@ class RectCollider extends Collider {
  *
  * @example
  * ```typescript
- * const circleCollider = new CircleCollider(global, object, 0, 0, 25);
+ * const circleCollider = new CircleCollider(engine, object, 0, 0, 25);
  * circleCollider.event.collider.onBeginContact = (self, other) => {
  *   console.log('Circle collision!');
  * };
@@ -196,13 +197,13 @@ class RectCollider extends Collider {
 class CircleCollider extends Collider {
   radius: number;
   constructor(
-    global: GlobalManager,
+    engine: Engine,
     parent: BaseObject,
     localX: number,
     localY: number,
     radius: number,
   ) {
-    super(global, parent, "circle", localX, localY);
+    super(engine, parent, "circle", localX, localY);
     this.radius = radius;
   }
 }
@@ -221,12 +222,12 @@ class CircleCollider extends Collider {
  */
 class PointCollider extends Collider {
   constructor(
-    global: GlobalManager,
+    engine: Engine,
     parent: BaseObject,
     localX: number,
     localY: number,
   ) {
-    super(global, parent, "point", localX, localY);
+    super(engine, parent, "point", localX, localY);
   }
 }
 

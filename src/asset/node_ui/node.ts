@@ -53,7 +53,7 @@ class NodeComponent extends ElementObject {
     this.event.input.drag = this.onDrag;
     this.event.input.dragEnd = this.onDragEnd;
     this.event.input.pointerUp = this.onUp;
-    this._hitBox = new RectCollider(this.global, this, 0, 0, 0, 0);
+    this._hitBox = new RectCollider(this.engine, this, 0, 0, 0, 0);
     this.addCollider(this._hitBox);
 
     this._selected = false;

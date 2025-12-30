@@ -1,8 +1,10 @@
 <script lang="ts">
-  import Item from "./Item.svelte";
-  import Container from "./ItemContainer.svelte";
+    import Canvas from "../../lib/Canvas.svelte";
+    import Item from "./Item.svelte";
+    import Container from "./ItemContainer.svelte";
 </script>
 
+<Canvas id="drag-drop-demo-canvas">
 <div class="gallery">
     <!-- Vertical Column -->
     <div class="demo-box">
@@ -84,6 +86,7 @@
         </div>
     </div>
 </div>
+</Canvas>
 
 <style lang="scss">
     @import "../../../../app.scss";

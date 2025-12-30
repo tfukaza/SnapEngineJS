@@ -303,7 +303,11 @@ class AnimationObject implements AnimationInterface {
   }
 
   finish() {
-    this.#animation?.commitStyles();
+    try {
+      this.#animation?.commitStyles();
+    } catch (e) {
+      // Ignore error
+    }
   }
 
   set currentTime(time: number) {

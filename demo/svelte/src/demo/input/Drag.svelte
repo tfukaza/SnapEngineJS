@@ -1,4 +1,5 @@
 <script lang="ts">
+    import Canvas from "../../lib/Canvas.svelte";
     import type {Engine} from "../../../../index";
     import {ElementObject} from "../../../../../src/object";
     import type {
@@ -12,9 +13,10 @@
         pinchEndProp, 
         pointerMoveProp} from "../../../../../src/input";
     // import { GLOBAL_GID } from "../../../../../src/input";
-    import { onMount, getContext } from "svelte";
+    import { onMount, onDestroy } from "svelte";
 
-    let engine:Engine = getContext("engine");
+    let engine: Engine | null = $state(null);
+    let canvasComponent: Canvas | null = null;
 
     // let startPosition: any = $state([]);
     // let endPosition: any = $state([]);
@@ -149,6 +151,7 @@
 
 
     function pinchStart(prop: pinchStartProp) {
+        if (!engine) return;
         pinchMarker[prop.gestureID] = {
             id: prop.gestureID,
             x0: prop.start.pointerList[0].x,
@@ -194,10 +197,19 @@
         style: "width: 50%; height: 50%; display: flex; align-items: center; justify-content: center;",
     };
 
-    let canvas: HTMLCanvasElement | null = null;
+    let canvasWrapper: HTMLDivElement | null = null;
+    let pointerCanvas: HTMLCanvasElement | null = null;
     let ctx: CanvasRenderingContext2D | null = null;
     const dotRadius = 1;
     const dotFadeTime = 500;
+    let handleResize: (() => void) | null = null;
+
+    function updateCanvasSize() {
+        if (!pointerCanvas || !canvasWrapper) return;
+        const { width, height } = canvasWrapper.getBoundingClientRect();
+        pointerCanvas.width = width;
+        pointerCanvas.height = height;
+    }
 
     function drawCircle(
         x: number, y: number, 
@@ -240,7 +252,11 @@
     const memberOffset = 4;
 
     function renderFrame() {
-        ctx!.clearRect(0, 0, canvas!.width, canvas!.height);
+        if (!pointerCanvas || !ctx) {
+            window.requestAnimationFrame(renderFrame);
+            return;
+        }
+        ctx.clearRect(0, 0, pointerCanvas.width, pointerCanvas.height);
         for (const dot of pointerDots) {
             drawCircle(dot.x, dot.y, dotRadius, dot.color);
         }
@@ -280,8 +296,6 @@
 
     }
 
-    window.requestAnimationFrame(renderFrame);
-
     function attachEvents(area: AreaConfig) {
         if (!area.object) return;
         area.object.event.input.dragStart = (prop: dragStartProp) => {
@@ -305,35 +319,46 @@
     }
 
     onMount(() => {
-        if (engine.global.inputEngine) {
-            engine.global.inputEngine.event.pointerDown = (prop: pointerDownProp) => {
+        ctx = pointerCanvas?.getContext("2d") ?? null;
+        handleResize = () => updateCanvasSize();
+        handleResize();
+        window.addEventListener("resize", handleResize);
+        window.requestAnimationFrame(renderFrame);
+
+        if (!engine) {
+            console.warn("Engine not ready for Drag demo.");
+            return;
+        }
+
+        const globalInputEngine = engine.global.getInputEngine(engine);
+        if (globalInputEngine) {
+            globalInputEngine.event.pointerDown = (prop: pointerDownProp) => {
                 pointerDown(prop, "#000", "Global");
             };
-            engine.global.inputEngine.event.pointerUp = (prop: pointerUpProp) => {
+            globalInputEngine.event.pointerUp = (prop: pointerUpProp) => {
                 pointerUp(prop);
             };
-            engine.global.inputEngine.event.pointerMove = (prop: pointerMoveProp) => {
+            globalInputEngine.event.pointerMove = (prop: pointerMoveProp) => {
                 pointerMove(prop, "#000", "Global");
             };
-            engine.global.inputEngine.event.dragStart = (prop: any) => {
+            globalInputEngine.event.dragStart = (prop: any) => {
                 dragStart(prop, "#000", "Global");
             };
-            engine.global.inputEngine.event.drag = (prop: any) => {
+            globalInputEngine.event.drag = (prop: any) => {
                 drag(prop);
             };
-            engine.global.inputEngine.event.dragEnd = (prop: any) => {
+            globalInputEngine.event.dragEnd = (prop: any) => {
                 dragEnd(prop);
             };
-            engine.global.inputEngine.event.pinchStart = (prop: pinchStartProp) => {
+            globalInputEngine.event.pinchStart = (prop: pinchStartProp) => {
                 pinchStart(prop);
             };
-            engine.global.inputEngine.event.pinch = (prop: pinchProp) => {
+            globalInputEngine.event.pinch = (prop: pinchProp) => {
                 pinch(prop);
             };
-            engine.global.inputEngine.event.pinchEnd = (prop: pinchEndProp) => {
+            globalInputEngine.event.pinchEnd = (prop: pinchEndProp) => {
                 pinchEnd(prop);
             };
-        
         }
             
         for (const area of areas) {
@@ -349,88 +374,92 @@
              nestedArea.object.element = nestedArea.element;
              attachEvents(nestedArea);
         }
-
-        ctx = canvas!.getContext("2d");
-
-        canvas!.width = engine.containerElement!.clientWidth;
-        canvas!.height = engine.containerElement!.clientHeight;
     
     });
+
+    onDestroy(() => {
+        if (handleResize) {
+            window.removeEventListener("resize", handleResize);
+        }
+    });
+
+    export function setDebug(enabled: boolean) {
+        if (enabled) {
+            canvasComponent?.enableDebug();
+        } else {
+            canvasComponent?.disableDebug();
+        }
+    }
 
    
 </script>
 
-<canvas bind:this={canvas} class="canvas" ></canvas>
+<div class="drag-demo-wrapper" bind:this={canvasWrapper}>
+    <Canvas
+        id="drag-demo-canvas"
+        bind:this={canvasComponent}
+        bind:engine={engine}
+    >
+        <div class="drag-demo-surface">
+            <canvas bind:this={pointerCanvas} class="overlay-canvas"></canvas>
 
-<div class="grid-container">
-    {#each areas as area}
-        <div bind:this={area.element} class="pointer-area slot" style={area.style}>
-            <p>{area.name}</p>
-            {#if area.name === 'Center'}
-                <div 
-                    bind:this={nestedArea.element} 
-                    class="pointer-area card" 
-                    style={nestedArea.style}
-                >
-                    <p>{nestedArea.name}</p>
-                </div>
-            {/if}
-        </div>
-    {/each}
-</div>
-
-{#each Object.values(pointerList) as pointer (pointer.pointerId)}
-<div style={`top: ${pointer.y}px; left: ${pointer.x}px;`} class="mouse-position-display">
-   <ol>
-    <li>
-        <p>Pointer ID: {pointer.pointerId}</p>
-        <p>X: {pointer.x}</p>
-        <p>Y: {pointer.y}</p>
-        <p>Member List: {pointer.memberList.map(member => member.name).join(", ")}</p>
-    </li>
-   </ol>
-</div>
-{/each}
-<!-- {#each dots as dot}
-    <div style={`top: ${dot.y}px; left: ${dot.x}px;`} class="dot">
-    </div>
-{/each} -->
-
-{#each Object.values(dragGesture) as gesture (gesture.pointerId)}
-    <div style={`top: ${gesture.startY}px; left: ${gesture.startX}px;`} class="drag-pin card">
-        {#each gesture.memberList as member}
-            <div class="drag-pin-member" style={`background-color: ${member.color};`}>
-                <p>{gesture.pointerId} - {member.name}</p>
+            <div class="grid-container">
+                {#each areas as area}
+                    <div bind:this={area.element} class="pointer-area slot" style={area.style}>
+                        <p>{area.name}</p>
+                        {#if area.name === 'Center'}
+                            <div 
+                                bind:this={nestedArea.element} 
+                                class="pointer-area card" 
+                                style={nestedArea.style}
+                            >
+                                <p>{nestedArea.name}</p>
+                            </div>
+                        {/if}
+                    </div>
+                {/each}
             </div>
-        {/each}
-        <div class="drag-pin-body">
-            <p>Start: {gesture.startX}, {gesture.startY}</p>
-            <!-- <p>Member List: {gesture.memberList.join(", ")}</p> -->
-        </div>
-    </div>
-    {#if gesture.endX && gesture.endY}
-        <div style={`top: ${gesture.endY}px; left: ${gesture.endX}px;`} class="drag-pin card">
-            {#each gesture.memberList as member}
-                <div class="drag-pin-member" style={`background-color: ${member.color};`}>
-                    <p>{gesture.pointerId} - {member.name}</p>
-                </div>
+
+            {#each Object.values(pointerList) as pointer (pointer.pointerId)}
+            <div style={`top: ${pointer.y}px; left: ${pointer.x}px;`} class="mouse-position-display">
+               <ol>
+                <li>
+                    <p>Pointer ID: {pointer.pointerId}</p>
+                    <p>X: {pointer.x}</p>
+                    <p>Y: {pointer.y}</p>
+                    <p>Member List: {pointer.memberList.map(member => member.name).join(", ")}</p>
+                </li>
+               </ol>
+            </div>
             {/each}
-            <div class="drag-pin-body">
-                <p>End: {gesture.endX}, {gesture.endY}</p>
-            </div>
-        </div>
-    {/if}
-{/each}
 
-<!-- {#each Object.values(pinchMarker) as marker (marker.id)}
-    <svg   
-        width="1"
-        height="1"
-        style={`top: ${marker.y0}px; left: ${marker.x0}px; `} 
-        class="pinch-marker">
-        <line x1={0} y1={0} x2={marker.x1 - marker.x0} y2={marker.y1 - marker.y0}/>
-    </svg>
-{/each} -->
+            {#each Object.values(dragGesture) as gesture (gesture.pointerId)}
+                <div style={`top: ${gesture.startY}px; left: ${gesture.startX}px;`} class="drag-pin card">
+                    {#each gesture.memberList as member}
+                        <div class="drag-pin-member" style={`background-color: ${member.color};`}>
+                            <p>{gesture.pointerId} - {member.name}</p>
+                        </div>
+                    {/each}
+                    <div class="drag-pin-body">
+                        <p>Start: {gesture.startX}, {gesture.startY}</p>
+                    </div>
+                </div>
+                {#if gesture.endX && gesture.endY}
+                    <div style={`top: ${gesture.endY}px; left: ${gesture.endX}px;`} class="drag-pin card">
+                        {#each gesture.memberList as member}
+                            <div class="drag-pin-member" style={`background-color: ${member.color};`}>
+                                <p>{gesture.pointerId} - {member.name}</p>
+                            </div>
+                        {/each}
+                        <div class="drag-pin-body">
+                            <p>End: {gesture.endX}, {gesture.endY}</p>
+                        </div>
+                    </div>
+                {/if}
+            {/each}
+        </div>
+    </Canvas>
+</div>
 
 
 
@@ -448,24 +477,36 @@
         color: var(--color-text);
     }
 
-    .canvas {
+    .drag-demo-wrapper {
         position: absolute;
-        top: 0;
-        left: 0;
+        top: 50%;
+        left: 50%;
+        width: 80vw;
+        height: 80vh;
+        transform: translate(-50%, -50%);
+        overflow: hidden;
+    }
+
+    .drag-demo-surface {
+        position: relative;
+        width: 100%;
+        height: 100%;
+    }
+
+    .overlay-canvas {
+        position: absolute;
+        inset: 0;
         width: 100%;
         height: 100%;
         z-index: 100;
         pointer-events: none;
-     
     }
 
     .grid-container {
         position: absolute;
-        top: 50%;
-        left: 50%;
-        transform: translate(-50%, -50%);
-        width: 50vw;
-        height: 50vh;
+        inset: 0;
+        width: 100%;
+        height: 100%;
         display: grid;
         grid-template-columns: repeat(5, 1fr);
         grid-template-rows: repeat(5, 1fr);
@@ -494,9 +535,7 @@
     }
 
     .mouse-position-display {
-        position: fixed;
-        top: 0;
-        left: 0;
+        position: absolute;
         pointer-events: none;
        
     }
@@ -512,7 +551,7 @@
     }
 
     .drag-pin {
-        position: absolute;
+    position: absolute;
         pointer-events: none;
         padding: 0;
         overflow: hidden;

@@ -15,9 +15,10 @@
     //     }
     // }
     // onMount(() => {
-    //     if (engine.global.inputEngine) {
-    //         // engine.global.inputEngine._inputControl.event.pointerMove = updateMousePosition;
-    //         engine.global.inputEngine.subscribeGlobalCursorEvent("pointerMove", "100", updateMousePosition);
+    //     const globalInputEngine = engine.global.getInputEngine(engine);
+    //     if (globalInputEngine) {
+    //         // globalInputEngine._inputControl.event.pointerMove = updateMousePosition;
+    //         globalInputEngine.subscribeGlobalCursorEvent("pointerMove", "100", updateMousePosition);
     //     }
     // });
 

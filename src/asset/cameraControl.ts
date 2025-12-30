@@ -134,7 +134,7 @@ class CameraControl extends ElementObject {
     if (this.zoomLock) {
       return;
     }
-    let camera = this.engine.camera!;
+  const camera = this.engine.camera!;
     if (
       prop.position.screenX < camera.containerOffsetX ||
       prop.position.screenX > camera.containerOffsetX + camera.cameraWidth ||
@@ -143,16 +143,27 @@ class CameraControl extends ElementObject {
     ) {
       return;
     }
-    this.engine.camera?.handleScroll(
-      prop.delta / 2000,
-      prop.position.cameraX,
-      prop.position.cameraY,
-    );
-    this.style.transform = this.engine.camera?.canvasStyle as string;
-    this.#prevCameraX = this.engine.camera?.cameraPositionX || 0;
-    this.#prevCameraY = this.engine.camera?.cameraPositionY || 0;
-    this.requestTransform("WRITE_2");
+    this.zoomBy(prop.delta / 2000, prop.position.cameraX, prop.position.cameraY);
     prop.event.preventDefault();
+  }
+
+  zoomBy(deltaZoom: number, originX?: number, originY?: number) {
+    if (this.zoomLock) {
+      return;
+    }
+    const camera = this.engine.camera;
+    if (!camera) {
+      return;
+    }
+
+    const targetX = originX ?? camera.cameraWidth / 2;
+    const targetY = originY ?? camera.cameraHeight / 2;
+
+    camera.handleScroll(deltaZoom, targetX, targetY);
+    this.style.transform = camera.canvasStyle as string;
+    this.#prevCameraX = camera.cameraPositionX || 0;
+    this.#prevCameraY = camera.cameraPositionY || 0;
+    this.requestTransform("WRITE_2");
   }
 }
 

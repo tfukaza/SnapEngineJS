@@ -48,8 +48,8 @@ type AnimationProcessor = (timestamp: number) => void;
  */
 class Engine {
   engineConfig: EngineConfig;
-  #containerStyle: { [key: string]: string } = {};
-  global: GlobalManager;
+  // #containerStyle: { [key: string]: string } = {};
+  global: GlobalManager | null = null;
 
   // Engine-specific properties
   containerElement: HTMLElement | null = null;
@@ -88,9 +88,12 @@ class Engine {
   #animationProcessor: AnimationProcessor | null = null;
   #debugRenderer: DebugRenderer | null = null;
 
-  constructor(config: EngineConfig = {}) {
-    this.global = GlobalManager.getInstance();
-    this.global.registerEngine(this);
+  constructor(config: EngineConfig = {}, setGlobal: boolean = true) {
+    
+    if (setGlobal) {
+      this.global = GlobalManager.getInstance();
+      this.global.registerEngine(this);
+    } 
 
     this.cursor = {
       worldX: 0,
@@ -113,10 +116,10 @@ class Engine {
       ...config,
     };
 
-    this.#containerStyle = {
-      position: "relative",
-      overflow: "hidden",
-    };
+    // this.#containerStyle = {
+    //   position: "relative",
+    //   overflow: "hidden",
+    // };
 
     this._event = {
       containerElementAssigned: null,
@@ -203,9 +206,10 @@ class Engine {
   assignDom(containerDom: HTMLElement) {
     this.containerElement = containerDom;
     this.camera = new Camera(containerDom);
+    // this.camera.updateCameraProperty();
     this.event.containerElementAssigned?.(containerDom);
     this.#resizeObserver?.observe(containerDom);
-    // Note: Render loop is managed globally by GlobalManager
+  
   }
 
   #processQueue(stage: string, queue: Record<string, Map<string, queueEntry>>) {
@@ -272,7 +276,9 @@ class Engine {
     this.collisionEngine?.detectCollisions();
 
     const stats: frameStats = { timestamp };
-    this.#debugRenderer?.renderFrame(stats, this, this.global.objectTable);
+    const localObjectTable =
+      this.global!.getEngineObjectTable(this, false) ?? {};
+    this.#debugRenderer?.renderFrame(stats, this, localObjectTable);
   }
 
   /**
@@ -344,7 +350,7 @@ class Engine {
    */
   destroy() {
     // Unregister from global manager
-    this.global.unregisterEngine(this);
+    this.global!.unregisterEngine(this);
 
     // Clean up resize observer
     if (this.#resizeObserver && this.containerElement) {

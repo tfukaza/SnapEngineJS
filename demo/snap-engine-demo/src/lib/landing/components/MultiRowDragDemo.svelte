@@ -3,122 +3,169 @@
   import Item from "../../../../../svelte/src/demo/drag_drop/Item.svelte";
   import Container from "../../../../../svelte/src/demo/drag_drop/ItemContainer.svelte";
 
-  type Tile = {
-    label: string;
-    span: "span-1" | "span-2" | "span-3" | "span-4";
-    accent: string;
-    muted?: boolean;
-  };
-
-  const tiles: Tile[] = [
-    { label: "Physics", span: "span-1", accent: "#67e8f9" },
-    { label: "Nodes", span: "span-2", accent: "#fca5a5" },
-    { label: "Materials", span: "span-3", accent: "#c4b5fd" },
-    { label: "Constraints", span: "span-1", accent: "#fdba74" },
-    { label: "Automation", span: "span-2", accent: "#fef08a" },
-    { label: "Analytics", span: "span-1", accent: "#bbf7d0" },
-    { label: "Expressions", span: "span-4", accent: "#f9a8d4", muted: true },
-    { label: "Snapping", span: "span-1", accent: "#fde68a" },
-    { label: "IO", span: "span-1", accent: "#86efac" },
-    { label: "Debug", span: "span-2", accent: "#fcd34d" }
+  const hemisphereItems = [
+    { id: "alpha", left: "#f472b6", right: "#60a5fa" },
+    { id: "beta", left: "#34d399", right: "#facc15" },
+    { id: "gamma", left: "#c084fc", right: "#f97316" },
   ];
+
+  let canvasComponent: Canvas | null = null;
+
+  export function enableDebug() {
+    canvasComponent?.enableDebug();
+  }
+
+  export function disableDebug() {
+    canvasComponent?.disableDebug();
+  }
 </script>
 
-<Canvas id="multi-row-drag-demo">
-  <div class="multi-row-drag-demo">
-    <Container config={{ direction: "row", groupID: "multi-row-landing" }}>
-      {#each tiles as tile (tile.label)}
-        <Item className={`multi-row-item chip ${tile.span}`}>
-          <div class={`tile ${tile.muted ? "muted" : ""}`} style={`--accent: ${tile.accent}`}>
-            <span class="dot" aria-hidden="true"></span>
-            <span class="label">{tile.label}</span>
-          </div>
-        </Item>
-      {/each}
-    </Container>
+<Canvas id="multi-row-drag-demo" bind:this={canvasComponent}>
+  <div class="card multi-drop-demo">
+    <div class="areas-wrapper">
+      <div class="area slot top-area">
+        <Container config={{ direction: "row", groupID: "multi-row-landing" }}>
+          <p class="drop-placeholder">Drop here</p>
+        </Container>
+      </div>
+
+      <!-- <p class="drop-area-label">Available Parts </p> -->
+
+      <div class="area bottom-area">
+        <Container config={{ direction: "row", groupID: "multi-row-landing" }}>
+          {#each hemisphereItems as item (item.id)}
+            <Item className="rect-item card">
+              <div class="hemisphere-pill">
+                <span
+                  class="hemisphere left"
+                  style={`background: ${item.left};`}
+                ></span>
+                <span class="pill-body"></span>
+                <span
+                  class="hemisphere right"
+                  style={`background: ${item.right};`}
+                ></span>
+              </div>
+            </Item>
+          {/each}
+        </Container>
+      </div>
+    </div>
   </div>
 </Canvas>
 
 <style lang="scss">
-  .multi-row-drag-demo {
+  @import"../landing.scss";
+
+  .multi-drop-demo {
     width: 100%;
     height: 100%;
+    padding: 0.5rem 0.75rem;
+    box-sizing: border-box;
   }
 
-  :global(#multi-row-drag-demo .container) {
+  .areas-wrapper {
+    width: 100%;
+    height: 100%;
+    display: flex;
+    flex-direction: column;
+    gap: 0.5rem;
+  }
+
+  .area {
+    display: flex;
+    flex-direction: column;
+    gap: 0.45rem;
+    border-radius: 8px;
+  }
+
+  .top-area {
+    flex: 0 0 32px;
+    height: 32px;
+    max-height: 32px;
+    padding: 0;
+    background: transparent;
+    border: none;
+    overflow: hidden!important;
+  }
+
+  .bottom-area {
+    flex: 1 1 auto;
+    padding: 0.5rem 0.6rem;
+    border-radius: 8px;
+    border: 1px solid rgba(148, 163, 184, 0.4);
+    background: transparent;
+
+ 
+  }
+
+  .drop-area-label {
+
+
+    text-align: center;
+
+  }
+
+  .drop-placeholder {
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%);
+    // display: flex;
+    // align-items: center;
+    // justify-content: center;
+    // font-size: 0.7rem;
+    color: #a89aa0;
+  }
+
+  :global(.bottom-area .container) {
+    gap: 8px;
+  }
+
+  :global(.top-area .container) {
+    gap: 0px;
+  }
+
+  :global(.multi-drop-demo .container) {
+    flex: 1;
     display: flex;
     flex-wrap: wrap;
-    gap: 0;
+    // gap: 0.35rem;
     align-content: flex-start;
   }
 
-  :global(#multi-row-drag-demo .item-wrapper) {
-    box-shadow: none;
-    padding: 0.2rem;
+  :global(.multi-drop-demo .item-wrapper) {
+    height: 32px;
+    width: 32px;
   }
 
-  :global(.multi-row-item) {
-    flex: 1 1 12%;
-    min-width: 84px;
+  :global(.rect-item.card) {
+    box-shadow: 0px 4px 6px -1px rgba(0, 0, 0, 0.1), 0px 2px 4px -1px rgba(0, 0, 0, 0.06);
+    // width: 100%;
+    // height: 100%;
+    // display: flex;
+    // align-items: center;
+    // justify-content: center;
   }
 
-  :global(.multi-row-item.span-1) {
-    flex-basis: 15%;
-    min-width: 84px;
+
+  .hemisphere {
+    position: absolute;
+    top: 50%;
+    width: 9px;
+    height: 18px;
+    transform: translate(0, -50%);
   }
 
-  :global(.multi-row-item.span-2) {
-    flex-basis: 26%;
-    min-width: 120px;
+  .hemisphere.left {
+    left: 0;
+    border-radius: 0 999px 999px 0;
   }
 
-  :global(.multi-row-item.span-3) {
-    flex-basis: 38%;
-    min-width: 160px;
+  .hemisphere.right {
+    right: 0;
+    border-radius: 999px 0 0 999px;
   }
 
-  :global(.multi-row-item.span-4) {
-    flex-basis: 50%;
-    min-width: 200px;
-  }
 
-  :global(.multi-row-item.card) {
-    background: transparent;
-    border: none;
-    border-radius: 999px;
-  }
-
-  .tile {
-    display: inline-flex;
-    align-items: center;
-    gap: 0.35rem;
-    width: 100%;
-    min-height: 2.1rem;
-    padding: 0.3rem 0.75rem;
-    border-radius: 999px;
-    border: 1px solid rgba(255, 255, 255, 0.12);
-    background: rgba(10, 12, 24, 0.75);
-    color: rgba(255, 255, 255, 0.85);
-    font-size: 0.8rem;
-    letter-spacing: 0.05em;
-    pointer-events: none;
-  }
-
-  .tile.muted {
-    opacity: 0.7;
-  }
-
-  .dot {
-    width: 0.55rem;
-    height: 0.55rem;
-    border-radius: 50%;
-    background: var(--accent);
-    flex-shrink: 0;
-  }
-
-  .label {
-    white-space: nowrap;
-    overflow: hidden;
-    text-overflow: ellipsis;
-  }
 </style>
