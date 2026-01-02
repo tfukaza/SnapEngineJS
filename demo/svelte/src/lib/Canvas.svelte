@@ -7,11 +7,13 @@
     id,
     children,
     engine = $bindable<Engine | null>(null),
+    debug = false,
   }: {
     id: string;
     style?: Record<string, string>;
     children: any;
     engine?: Engine | null;
+    debug?: boolean;
   } = $props();
   let canvas: HTMLDivElement | null = null;
 
@@ -24,6 +26,9 @@
   onMount(() => {
     resolvedEngine.assignDom(canvas as HTMLElement);
     resolvedEngine.camera?.setCameraPosition(0, 0);
+    if (debug) {
+      resolvedEngine.enableDebug();
+    }
   });
 
   export function enableDebug() {

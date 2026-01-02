@@ -212,10 +212,17 @@ class Engine {
   
   }
 
-  #processQueue(stage: string, queue: Record<string, Map<string, queueEntry>>) {
+  #processQueue(stage: string, queue: Map<string, Map<string, queueEntry>>) {
     // Keep a set of all objects that have been processed
     let processedObjects: Set<BaseObject> = new Set();
-    for (const queueEntry of Object.values(queue)) {
+    for (const queueEntry of queue.values()) {
+      // Check if the object belongs to this engine
+      // All entries in the inner map belong to the same object (same GID)
+      const firstEntry = queueEntry.values().next().value;
+      if (!firstEntry || firstEntry.object.engine !== this) {
+        continue;
+      }
+
       for (const objectEntry of queueEntry.values()) {
         if (!objectEntry.callback) {
           continue;
@@ -252,7 +259,7 @@ class Engine {
    */
   _processStage(
     stage: string,
-    queue: Record<string, Map<string, queueEntry>>,
+    queue: Map<string, Map<string, queueEntry>>,
     _timestamp: number,
   ): void {
     this.#processQueue(stage, queue);

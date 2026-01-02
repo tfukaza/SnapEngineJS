@@ -328,10 +328,10 @@ export class BaseObject {
         queue = this.global.write3Queue;
         break;
     }
-    if (!queue[this.gid]) {
-      queue[this.gid] = new Map();
+    if (!queue.get(this.gid)) {
+      queue.set(this.gid, new Map());
     }
-    queue[this.gid].set(request.uuid, request);
+    queue.get(this.gid)!.set(request.uuid, request);
     return request;
   }
 
@@ -375,16 +375,6 @@ export class BaseObject {
     }
   }
 
-  // requestFLIP(
-  //   callback: null | (() => void) = null,
-  // ): [preReadEntry, writeEntry, readEntry, postWriteEntry] {
-  //   return [
-  //     this.requestPreRead(false, true),
-  //     this.requestWrite(callback?.bind(this)),
-  //     this.requestRead(true, false),
-  //     this.requestPostWrite(),
-  //   ];
-  // }
 
   /**
    * Add an animation to this object.
@@ -405,8 +395,8 @@ export class BaseObject {
    * await object.addAnimation(anim);
    * ```
    */
-  async addAnimation(animation: AnimationInterface) {
-    await this.engine?.enableAnimationEngine();
+  addAnimation(animation: AnimationInterface) {
+    this.engine?.enableAnimationEngine();
     // Cancel existing animations
     for (const existingAnimation of this._animationList) {
       existingAnimation.cancel();
@@ -512,6 +502,8 @@ export class BaseObject {
     color: string = "red",
     persistent: boolean = false,
     id: string = "",
+    filled: boolean = true,
+    lineWidth: number = 1,
   ) {
     if (!this.engine) return;
     this.engine.debugMarkerList[`${this.gid}-${id}`] = {
@@ -524,6 +516,8 @@ export class BaseObject {
       height,
       persistent,
       id: `${this.gid}-${id}`,
+      filled,
+      lineWidth,
     };
   }
 
@@ -966,6 +960,15 @@ export class ElementObject extends BaseObject {
   getDomProperty(stage: "READ_1" | "READ_2" | "READ_3" | null = null) {
     const index = stage == "READ_1" ? 0 : stage == "READ_2" ? 1 : 2;
     return this._domProperty[index];
+  }
+
+  copyDomProperty(
+    fromStage: "READ_1" | "READ_2" | "READ_3",
+    toStage: "READ_1" | "READ_2" | "READ_3",
+  ) {
+    const fromIndex = fromStage == "READ_1" ? 0 : fromStage == "READ_2" ? 1 : 2;
+    const toIndex = toStage == "READ_1" ? 0 : toStage == "READ_2" ? 1 : 2;
+    Object.assign(this._domProperty[toIndex], this._domProperty[fromIndex]);
   }
 
   /**

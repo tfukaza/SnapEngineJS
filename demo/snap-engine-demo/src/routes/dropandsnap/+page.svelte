@@ -37,8 +37,24 @@
     { id: "sw-6", text: "用途" }
   ];
 
+  const gridItems = Array.from({ length: 32 }, (_, i) => ({ 
+    id: `g-${i}`, 
+    text: `${i + 1}` + ".".repeat(Math.floor(Math.random() * 8))
+  }));
+
   let sentenceDropZone = $state<HTMLElement>();
   let sentenceResult = $state("");
+  let debug = $state(false);
+  let canvasComponent: Canvas | null = null;
+
+  function toggleDebug() {
+    debug = !debug;
+    if (debug) {
+      canvasComponent?.enableDebug();
+    } else {
+      canvasComponent?.disableDebug();
+    }
+  }
 
   function checkSentence() {
     if (!sentenceDropZone) return;
@@ -54,7 +70,12 @@
 </script>
 
 <div class="page">
-  <Canvas id="dropandsnap-canvas">
+  <div class="debug-toggle">
+    <button onclick={toggleDebug}>
+      {debug ? "Disable Debug" : "Enable Debug"}
+    </button>
+  </div>
+  <Canvas id="dropandsnap-canvas" bind:this={canvasComponent} {debug}>
     <div class="layout">
       <div class="hero-section">
         <div class="title-section slot">
@@ -122,7 +143,7 @@
           <div class="kanban-board">
             <div class="kanban-column card">
               <h4>To Do</h4>
-              <Container config={{ direction: "column", groupID: "kanban" }}>
+              <Container config={{ direction: "column", groupID: "kanban", name: "kanban-todo", onClickAction: { action: "moveTo", target: "kanban-done" } }}>
                 {#each kanbanTodo as { id, text, tag, desc } (id)}
                   <Item>
                     <div class="card kanban-card">
@@ -138,7 +159,7 @@
             </div>
             <div class="kanban-column card">
               <h4>Done</h4>
-              <Container config={{ direction: "column", groupID: "kanban" }}>
+              <Container config={{ direction: "column", groupID: "kanban", name: "kanban-done", onClickAction: { action: "moveTo", target: "kanban-todo" } }}>
                 {#each kanbanDone as { id, text, tag, desc } (id)}
                   <Item>
                     <div class="card kanban-card">
@@ -166,12 +187,12 @@
                 </div>
             </div>
             <div class="sentence-drop-zone" bind:this={sentenceDropZone}>
-               <Container config={{ direction: "row", groupID: "sentence" }}>
+               <Container config={{ direction: "row", groupID: "sentence", name: "sentence-target", onClickAction: { action: "moveTo", target: "sentence-source" } }}>
                   <div class="placeholder">Drop words here</div>
                </Container>
             </div>
             <div class="sentence-source-zone">
-               <Container config={{ direction: "row", groupID: "sentence" }}>
+               <Container config={{ direction: "row", groupID: "sentence", name: "sentence-source", onClickAction: { action: "moveTo", target: "sentence-target" } }}>
                   {#each sentenceWords as { id, text } (id)}
                     <Item>
                       <div class="card word-card sentence-word">{text}</div>
@@ -185,6 +206,21 @@
                     <span class="result" class:success={sentenceResult === "Correct!"}>{sentenceResult}</span>
                 {/if}
             </div>
+          </div>
+        </div>
+
+        <div class="example-container">
+          <h3>Multi-row Flex Layout</h3>
+          <div class="card grid-layout">
+            <Container config={{ direction: "row", groupID: "grid-layout" }}>
+              {#each gridItems as { id, text } (id)}
+                <Item style="padding: 0.15rem;">
+                  <div class="card grid-card">
+                    {text}
+                  </div>
+                </Item>
+              {/each}
+            </Container>
           </div>
         </div>
       </div>
@@ -202,6 +238,29 @@
     color: #3a2a22;
     overflow-y: auto;
     font-family: system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, 'Open Sans', 'Helvetica Neue', sans-serif;
+  }
+
+  .debug-toggle {
+    position: fixed;
+    top: 1rem;
+    right: 1rem;
+    z-index: 1000;
+  }
+
+  .debug-toggle button {
+    padding: 0.5rem 1rem;
+    background: rgba(58, 42, 34, 0.8);
+    color: white;
+    border: none;
+    border-radius: 4px;
+    cursor: pointer;
+    font-weight: 600;
+    font-family: inherit;
+    backdrop-filter: blur(4px);
+  }
+
+  .debug-toggle button:hover {
+    background: rgba(58, 42, 34, 1);
   }
 
   .layout {
@@ -628,6 +687,32 @@
   .tag.ops {
     background: #e3f2fd;
     color: #1565c0;
+  }
+
+  /* Grid Layout */
+  .grid-layout {
+    padding: 1rem;
+    background: #fafafa;
+  }
+
+  .grid-card {
+    min-height: 24px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    background: white;
+    font-weight: 600;
+    color: #5e4d44;
+    border: 1px solid rgba(0,0,0,0.05);
+    cursor: grab;
+    border-radius: 3px;
+    font-size: 0.75rem;
+    padding: 0.25rem 0.75rem;
+  }
+
+  .grid-card:active {
+    cursor: grabbing;
+    border-color: #3a2a22;
   }
 
   @media (max-width: 900px) {

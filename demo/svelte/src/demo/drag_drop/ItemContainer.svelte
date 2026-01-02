@@ -2,7 +2,7 @@
   import { ItemContainer } from "../../../../../src/asset/drag_and_drop/container";
   import type { ItemContainerConfig } from "../../../../../src/asset/drag_and_drop/container";
 
-  import { getContext, setContext } from "svelte";
+  import { getContext, setContext, onDestroy } from "svelte";
   import type { Engine } from "../../../../index";
 
   let { config, children }: { config: ItemContainerConfig; children: any } =
@@ -11,6 +11,10 @@
   let itemContainer: ItemContainer = new ItemContainer(engine, null, config);
 
   setContext("itemContainer", itemContainer);
+
+  onDestroy(() => {
+    itemContainer.destroy();
+  });
 </script>
 
 <div

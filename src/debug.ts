@@ -84,6 +84,8 @@ export class DebugRendererImpl implements DebugRenderer {
       height?: number;
       radius?: number;
       text?: string;
+      filled?: boolean;
+      lineWidth?: number;
     }>) {
       const [cameraX, cameraY] = engine.camera?.getCameraFromWorld(
         marker.x,
@@ -96,9 +98,20 @@ export class DebugRendererImpl implements DebugRenderer {
         this.debugCtx.fill();
       } else if (marker.type == "rect") {
         this.debugCtx.beginPath();
-        this.debugCtx.fillStyle = marker.color;
-        this.debugCtx.rect(cameraX, cameraY, marker.width!, marker.height!);
-        this.debugCtx.fill();
+        if (marker.filled !== false) {
+          this.debugCtx.fillStyle = marker.color;
+          this.debugCtx.rect(cameraX, cameraY, marker.width!, marker.height!);
+          this.debugCtx.fill();
+        } else {
+          this.debugCtx.strokeStyle = marker.color;
+          this.debugCtx.lineWidth = marker.lineWidth ?? 1;
+          this.debugCtx.strokeRect(
+            cameraX,
+            cameraY,
+            marker.width!,
+            marker.height!,
+          );
+        }
       } else if (marker.type == "circle") {
         this.debugCtx.beginPath();
         this.debugCtx.fillStyle = marker.color;
@@ -121,16 +134,10 @@ export class DebugRendererImpl implements DebugRenderer {
     if (this.debugCtx == null) {
       return;
     }
-    // Draw a small box at the object's world position, with the object's GID as the text
-    this.debugCtx.beginPath();
-    this.debugCtx.fillStyle = "rgba(0, 0, 0, 0.5)";
+    
     const [cameraX, cameraY] = engine.camera?.getCameraFromWorld(
       ...object.worldPosition,
     ) ?? [0, 0];
-    this.debugCtx.rect(cameraX, cameraY, 20, 20);
-    this.debugCtx.fill();
-    this.debugCtx.fillStyle = "white";
-    this.debugCtx.fillText(object.gid, cameraX, cameraY + 10);
 
     // If object has a dom, draw a rectangle around the object's width and height, with a 1px black border
     if (object.hasOwnProperty("_dom")) {

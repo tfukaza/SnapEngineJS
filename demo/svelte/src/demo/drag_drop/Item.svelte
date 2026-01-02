@@ -1,11 +1,12 @@
 <script lang="ts">
   import { onMount, getContext, onDestroy } from "svelte";
   import { ItemContainer } from "../../../../../src/asset/drag_and_drop/container";
+  import type { ClickAction } from "../../../../../src/asset/drag_and_drop/container";
   import { ItemObject } from "../../../../../src/asset/drag_and_drop/item";
   import type { Engine } from "../../../../../src/index";
 
 
-  let { children, style = "", className = "" }: { children: any; style?: string; className?: string } = $props();
+  let { children, style = "", className = "", onClickAction = null }: { children: any; style?: string; className?: string; onClickAction?: ClickAction | null } = $props();
   const engine: Engine = getContext("engine");
   const itemContainer: ItemContainer = getContext("itemContainer");
 
@@ -13,6 +14,15 @@
 
   onMount(() => {
     itemContainer.addItem(itemObject);
+    if (onClickAction) {
+      itemObject.onClickAction = onClickAction;
+    }
+  });
+
+  $effect(() => {
+    if (onClickAction) {
+      itemObject.onClickAction = onClickAction;
+    }
   });
 
   onDestroy(() => {

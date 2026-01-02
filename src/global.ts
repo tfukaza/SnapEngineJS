@@ -41,13 +41,12 @@ class GlobalManager {
     | "WRITE_2"
     | "READ_3"
     | "WRITE_3";
-  read1Queue: Record<string, Map<string, queueEntry>>;
-  write1Queue: Record<string, Map<string, queueEntry>>;
-  read2Queue: Record<string, Map<string, queueEntry>>;
-  write2Queue: Record<string, Map<string, queueEntry>>;
-  read3Queue: Record<string, Map<string, queueEntry>>;
-  write3Queue: Record<string, Map<string, queueEntry>>;
-
+  read1Queue: Map<string, Map<string, queueEntry>>;
+  write1Queue: Map<string, Map<string, queueEntry>>;
+  read2Queue: Map<string, Map<string, queueEntry>>;
+  write2Queue: Map<string, Map<string, queueEntry>>;
+  read3Queue: Map<string, Map<string, queueEntry>>;
+  write3Queue: Map<string, Map<string, queueEntry>>;
   // Registry of all engine instances
   engines: Set<any>;
 
@@ -60,12 +59,12 @@ class GlobalManager {
     this.#engineIds = new WeakMap();
 
     this.currentStage = "IDLE";
-    this.read1Queue = {};
-    this.write1Queue = {};
-    this.read2Queue = {};
-    this.write2Queue = {};
-    this.read3Queue = {};
-    this.write3Queue = {};
+    this.read1Queue = new Map();
+    this.write1Queue = new Map();
+    this.read2Queue = new Map();
+    this.write2Queue = new Map();
+    this.read3Queue = new Map();
+    this.write3Queue = new Map();
 
     this.engines = new Set();
   }
@@ -158,28 +157,28 @@ class GlobalManager {
       for (const engine of this.engines) {
         engine._processStage("READ_1", this.read1Queue, timestamp);
       }
-      this.read1Queue = {};
+      this.read1Queue = new Map();
 
       // WRITE_1 stage for all engines
       this.currentStage = "WRITE_1";
       for (const engine of this.engines) {
         engine._processStage("WRITE_1", this.write1Queue, timestamp);
       }
-      this.write1Queue = {};
+      this.write1Queue = new Map();
 
       // READ_2 stage for all engines
       this.currentStage = "READ_2";
       for (const engine of this.engines) {
         engine._processStage("READ_2", this.read2Queue, timestamp);
       }
-      this.read2Queue = {};
+      this.read2Queue = new Map();
 
       // WRITE_2 stage for all engines
       this.currentStage = "WRITE_2";
       for (const engine of this.engines) {
         engine._processStage("WRITE_2", this.write2Queue, timestamp);
       }
-      this.write2Queue = {};
+      this.write2Queue = new Map();
 
       // Animation processing for all engines
       for (const engine of this.engines) {
@@ -191,14 +190,14 @@ class GlobalManager {
       for (const engine of this.engines) {
         engine._processStage("READ_3", this.read3Queue, timestamp);
       }
-      this.read3Queue = {};
+      this.read3Queue = new Map();
 
       // WRITE_3 stage for all engines
       this.currentStage = "WRITE_3";
       for (const engine of this.engines) {
         engine._processStage("WRITE_3", this.write3Queue, timestamp);
       }
-      this.write3Queue = {};
+      this.write3Queue = new Map();
 
       this.currentStage = "IDLE";
 
