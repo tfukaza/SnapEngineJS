@@ -27,7 +27,7 @@
   }
 </script>
 
-<HighlightCardShell className="collision-card">
+<HighlightCardShell className="collision-card theme-secondary-1">
   <div class="card-heading">
     <div>
       <h3>Collision Detection</h3>
@@ -90,7 +90,7 @@
     transition: background 0.2s, transform 0.15s;
 
     &.active {
-      background: rgba(251, 85, 97, 0.15);
+      background: color-mix(in srgb, var(--color-secondary-1) 20%, transparent);
       transform: scale(1.05);
     }
   }
@@ -136,14 +136,22 @@
   }
 
   .box {
-    background: linear-gradient(135deg, rgba(123, 91, 242, 0.12), rgba(123, 91, 242, 0.04));
-    border: 2px solid rgba(123, 91, 242, 0.5);
+    background: linear-gradient(
+      135deg,
+      color-mix(in srgb, var(--color-secondary-5) 18%, transparent),
+      color-mix(in srgb, var(--color-secondary-5) 6%, transparent)
+    );
+    border: 2px solid color-mix(in srgb, var(--color-secondary-5) 55%, transparent);
     border-radius: 0.4rem;
   }
 
   .circle {
-    background: linear-gradient(135deg, rgba(255, 122, 24, 0.15), rgba(255, 122, 24, 0.05));
-    border: 2px solid rgba(255, 122, 24, 0.5);
+    background: linear-gradient(
+      135deg,
+      color-mix(in srgb, var(--color-secondary-4) 20%, transparent),
+      color-mix(in srgb, var(--color-secondary-4) 6%, transparent)
+    );
+    border: 2px solid color-mix(in srgb, var(--color-secondary-4) 55%, transparent);
     border-radius: 50%;
   }
 
@@ -162,8 +170,12 @@
 
   /* Override collision component styles for the card */
   :global(.collision-card .collision-box.card) {
-    border: 2px solid rgba(123, 91, 242, 0.5);
-    background: linear-gradient(135deg, rgba(123, 91, 242, 0.12), rgba(123, 91, 242, 0.04));
+    border: 2px solid color-mix(in srgb, var(--color-secondary-5) 55%, transparent);
+    background: linear-gradient(
+      135deg,
+      color-mix(in srgb, var(--color-secondary-5) 18%, transparent),
+      color-mix(in srgb, var(--color-secondary-5) 6%, transparent)
+    );
     box-shadow: none;
   }
 
@@ -176,7 +188,11 @@
   }
 
   :global(.collision-card .collision-box:not(.card)) {
-    border: 2px solid rgba(255, 122, 24, 0.5);
-    background: linear-gradient(135deg, rgba(255, 122, 24, 0.15), rgba(255, 122, 24, 0.05));
+    border: 2px solid color-mix(in srgb, var(--color-secondary-4) 55%, transparent);
+    background: linear-gradient(
+      135deg,
+      color-mix(in srgb, var(--color-secondary-4) 20%, transparent),
+      color-mix(in srgb, var(--color-secondary-4) 6%, transparent)
+    );
   }
 </style>

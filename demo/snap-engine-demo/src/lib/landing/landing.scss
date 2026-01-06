@@ -1,4 +1,5 @@
 :global(#landing) {
+    /* svelte-ignore css-unused-selector */
     p,
     label,
     span {
@@ -7,6 +8,7 @@
         line-height: 1.1;
     }
 
+    /* svelte-ignore css-unused-selector */
     p.panel-label,
     label.panel-label,
     span.panel-label {

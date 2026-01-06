@@ -17,6 +17,13 @@ body {
 :root {
   --color-primary: #e96b0a;
   --color-secondary: #1e2659;
+  --color-secondary-1: #f34336;
+  --color-secondary-2: #e8b72f;
+  --color-secondary-3: #84c122;
+  --color-secondary-4: #1982c4;
+  --color-secondary-5: #6a4c93;
+  --color-secondary-6: #f15bb5;
+  --color-secondary-7: #00bbf9;
   --color-accent: #4b403a;
   --color-background: #f6f5f4;
   --color-background-tint: #e7e3e2;
@@ -81,19 +88,16 @@ label {
   }
 }
 
-.page-width {
-  width: 90%;
-  max-width: 1200px;
+
+section {  
+  width: clamp(100px, 90%, 1200px);
   margin: 0 auto;
   box-sizing: border-box;
-}
 
-.page-column {
   display: grid;
-  grid-template-columns: repeat(12, 1fr);
   align-items: start;
   justify-content: center;
-  gap: var(--size-24);
+  gap: clamp(var(--size-24), 4vw, var(--size-48));
 
   &.two-column {
     grid-template-columns: repeat(2, 1fr);

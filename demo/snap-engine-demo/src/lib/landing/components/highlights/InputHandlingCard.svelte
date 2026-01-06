@@ -2,6 +2,7 @@
   import { onDestroy, onMount } from "svelte";
   import HighlightCardShell from "./HighlightCardShell.svelte";
   import Canvas from "../../../../../../svelte/src/lib/Canvas.svelte";
+  import SvgLine from "../../../SvgLine.svelte";
   import { ElementObject } from "../../../../../../../src/object";
   import type { Engine } from "../../../../../../../src/index";
   import type {
@@ -10,9 +11,11 @@
     pointerUpProp,
     dragStartProp,
     dragProp,
-    dragEndProp,
-    mouseWheelProp
+    dragEndProp
   } from "../../../../../../../src/input";
+  import mouseIconSvg from "../../../assets/icons/mouse.svg?raw";
+  import penIconSvg from "../../../assets/icons/vector-pen.svg?raw";
+  import handIconSvg from "../../../assets/icons/hand-index.svg?raw";
 
   type PanelId = "mouse" | "pen" | "touch";
 
@@ -29,9 +32,69 @@
   };
 
   const PANEL_PRESETS: PanelTemplate[] = [
-    { id: "mouse", label: "Mouse", helper: "Desktop cursor + wheel", accent: "#7b5bf2" },
-    { id: "pen", label: "Pen", helper: "Pressure + tilt aware", accent: "#ff7a18" },
-    { id: "touch", label: "Touch", helper: "Gestures + inertia", accent: "#10b981" }
+    { id: "mouse", label: "Mouse", helper: "Desktop cursor + wheel", accent: "var(--color-secondary-1)" },
+    { id: "pen", label: "Pen", helper: "Pressure + tilt aware", accent: "var(--color-secondary-4)" },
+    { id: "touch", label: "Touch", helper: "Gestures + inertia", accent: "var(--color-secondary-3)" }
+  ];
+
+  const PANEL_ICONS: Record<PanelId, string> = {
+    mouse: mouseIconSvg,
+    pen: penIconSvg,
+    touch: handIconSvg
+  };
+
+  type EventLine = {
+    id: PanelId;
+    x1: number;
+    y1: number;
+    x2: number;
+    y2: number;
+    x3: number;
+    y3: number;
+    x4: number;
+    y4: number;
+    stroke: string;
+  };
+
+  const EVENT_LINE_VIEWPORT = { minX: 0, minY: 0, width: 300, height: 140 } as const;
+
+  const EVENT_LINES: EventLine[] = [
+    {
+      id: "mouse",
+      x1: 30,
+      y1: 15,
+      x2: 30,
+      y2: 80,
+      x3: 150,
+      y3: 80,
+      x4: 150,
+      y4: 125,
+      stroke: "var(--color-secondary-7)"
+    },
+    {
+      id: "pen",
+      x1: 150,
+      y1: 15,
+      x2: 210,
+      y2: 35,
+      x3: 170,
+      y3: 90,
+      x4: 150,
+      y4: 125,
+      stroke: "var(--color-secondary-6)"
+    },
+    {
+      id: "touch",
+      x1: 270,
+      y1: 15,
+      x2: 270,
+      y2: 85,
+      x3: 150,
+      y3: 85,
+      x4: 150,
+      y4: 125,
+      stroke: "var(--color-secondary-3)"
+    }
   ];
 
   let panels: PanelInstance[] = PANEL_PRESETS.map((panel) => ({ ...panel, element: null, object: null }));
@@ -44,7 +107,6 @@
   let panelElementsVersion = $state(0);
   type EventKind = "pointerDown" | "pointerMove" | "pointerUp" | "dragStart" | "drag" | "dragEnd";
   let lastEvent = $state<string | null>(null);
-  let lastWheelEvent = $state<string | null>(null);
   let dragActive = $state(false);
 
   function clamp(value: number, min = 0, max = 1) {
@@ -71,7 +133,7 @@
     if (dragActive && kind === "pointerMove") {
       return;
     }
-    lastEvent = `${panel.label} ${kind} → x:${x.toFixed(1)} y:${y.toFixed(1)} btn:${button}`;
+    lastEvent = `${kind}(x = ${x.toFixed(1)}, y = ${y.toFixed(1)}, btn = ${button})`;
   }
 
   function handlePointerDown(panel: PanelInstance, prop: pointerDownProp) {
@@ -102,12 +164,6 @@
     recordEvent("dragEnd", panel, prop.button, prop.end.x, prop.end.y);
   }
 
-  function handleMouseWheel(panel: PanelInstance, prop: mouseWheelProp) {
-    if (panel.id !== "mouse") return;
-    const { position, event } = prop;
-    lastWheelEvent = `Wheel Δx:${event.deltaX.toFixed(0)} Δy:${event.deltaY.toFixed(0)} x:${position.x.toFixed(1)} y:${position.y.toFixed(1)}`;
-  }
-
   function attachPanel(panel: PanelInstance, currentEngine: Engine) {
     if (panel.object || !panel.element) return;
     panel.object = new ElementObject(currentEngine, null);
@@ -118,8 +174,6 @@
     panel.object.event.input.dragStart = (prop: dragStartProp) => handleDragStart(panel, prop);
     panel.object.event.input.drag = (prop: dragProp) => handleDrag(panel, prop);
     panel.object.event.input.dragEnd = (prop: dragEndProp) => handleDragEnd(panel, prop);
-    panel.object.event.input.mouseWheel =
-      panel.id === "mouse" ? (prop: mouseWheelProp) => handleMouseWheel(panel, prop) : null;
   }
 
   function initializeDemo(currentEngine: Engine) {
@@ -154,7 +208,6 @@
         panel.object.event.input.dragStart = null;
         panel.object.event.input.drag = null;
         panel.object.event.input.dragEnd = null;
-        panel.object.event.input.mouseWheel = null;
         panel.object = null;
       }
       panel.element = null;
@@ -173,7 +226,6 @@
           panel.object.event.input.dragStart = null;
           panel.object.event.input.drag = null;
           panel.object.event.input.dragEnd = null;
-          panel.object.event.input.mouseWheel = null;
           panel.object = null;
         }
         panel.element = null;
@@ -183,10 +235,10 @@
   }
 </script>
 
-<HighlightCardShell className="input-handling-card">
+<HighlightCardShell className="input-handling-card theme-secondary-5">
   <h3>Input Handling</h3>
   <p>
-    Common API for user input; no need to juggle mousedown, pointerdown, and touchstart.
+    Common API for multiple types of input devices.
   </p>
 
   <div class="pointer-demo-wrapper">
@@ -194,69 +246,55 @@
       <div class="pointer-surface">
         <div class="panel-grid" aria-label="Synced input devices">
           {#each panels as panel (panel.id)}
+          <div class="pointer-slot slot">
             <div
-              class={`pointer-panel ${panel.id} ${activePanel === panel.id ? "active" : ""}`}
+              class={`pointer-panel card ${panel.id} ${activePanel === panel.id ? "active" : ""}`}
               style={`--panel-accent: ${panel.accent};`}
               use:registerPanel={panel}
             >
               <header>
                 <span class="panel-label">{panel.label}</span>
-                <span class="panel-helper">{panel.helper}</span>
+                <!-- <span class="panel-helper">{panel.helper}</span> -->
               </header>
-
-              {#if panel.id === "mouse"}
-                <div class="wheel-log" aria-live="polite">
-                  {#if lastWheelEvent}
-                    <span>{lastWheelEvent}</span>
-                  {:else}
-                    <span class="empty">Scroll to surface wheel events.</span>
-                  {/if}
-                </div>
-              {/if}
 
               <div
                 class={`cursor ${isInteracting ? "live" : ""}`}
                 style={`left: ${pointer.x * 100}%; top: ${pointer.y * 100}%;`}
                 aria-hidden="true"
               >
-                {#if panel.id === "mouse"}
-                  <svg viewBox="0 0 32 32" role="img">
-                    <path
-                      d="M8 2v24l5.5-5.5 3.8 8 4.2-2-3.8-8H24z"
-                      fill="currentColor"
-                      stroke="white"
-                      stroke-width="1.5"
-                      stroke-linejoin="round"
-                    />
-                  </svg>
-                {:else if panel.id === "pen"}
-                  <svg viewBox="0 0 32 32" role="img">
-                    <path
-                      d="M6 25l3.5 3.5 8.5-4.5 8-16-4-4-16 8.5z"
-                      fill="white"
-                      stroke="currentColor"
-                      stroke-width="2"
-                      stroke-linejoin="round"
-                    />
-                    <path d="M21 5l4 4" stroke="currentColor" stroke-width="2" stroke-linecap="round" />
-                  </svg>
-                {:else}
-                  <svg viewBox="0 0 32 32" role="img">
-                    <path
-                      d="M14 4c-1.1 0-2 .9-2 2v10.5c0 .3-.2.5-.5.5s-.5-.2-.5-.5V11c0-1.1-.9-2-2-2s-2 .9-2 2v6.8c0 .3-.2.6-.5.7-.5.2-1-.1-1-.6V16c0-1.1-.9-2-2-2s-2 .9-2 2v5c0 3.9 2.3 7.5 5.8 9.1L14 32h6c4.4 0 8-3.6 8-8v-9c0-1.7-1.3-3-3-3-1.2 0-2.2.7-2.7 1.7-.4-.9-1.3-1.7-2.3-1.7-1 0-1.9.6-2.3 1.5V6c0-1.1-.9-2-2-2z"
-                      fill="currentColor"
-                    />
-                  </svg>
-                {/if}
+                <span class="cursor-icon" aria-hidden="true">
+                  {@html PANEL_ICONS[panel.id]}
+                </span>
               </div>
-            </div>
+            </div></div>
           {/each}
         </div>
-        <div class="event-panel" aria-live="polite">
-          <header>
-            <span>Input Engine stream</span>
-            <small>pointer / drag events</small>
-          </header>
+        <div class="event-arrows" aria-hidden="true">
+          {#each EVENT_LINES as line (line.id)}
+            <SvgLine
+              className={`event-line ${line.id}`}
+              x1={line.x1}
+              y1={line.y1}
+              x2={line.x2}
+              y2={line.y2}
+              x3={line.x3}
+              y3={line.y3}
+              x4={line.x4}
+              y4={line.y4}
+              stroke={line.stroke}
+              strokeWidth={2.75}
+              strokeLinecap="round"
+              strokeLinejoin="round"
+              padding={0}
+              cornerRadius={18}
+              viewport={EVENT_LINE_VIEWPORT}
+              ariaHidden={true}
+              ariaLabel={`${line.id} input event path`}
+            />
+          {/each}
+        </div>
+        <div class="card event-panel" aria-live="polite">
+         
           {#if lastEvent}
             <p class="event-line">{lastEvent}</p>
           {:else}
@@ -273,65 +311,40 @@
     margin-top: 1rem;
   }
 
+  :global(.pointer-demo-wrapper #snap-canvas) {
+    overflow: visible!important;
+  }
+
   .pointer-surface {
+    border: 1px solid #e6e3e2;
+    background-color: var(--color-background);
+    border-radius: var(--ui-radius);
     display: flex;
     flex-direction: column;
-    gap: 0.15rem;
+    gap: var(--size-12);
+    align-items: stretch;
+    padding: clamp(1rem, 2.5vw, 1.5rem);
   }
 
   .panel-grid {
     display: grid;
     grid-template-columns: repeat(3, minmax(0, 1fr));
-    gap: 0.15rem;
+    gap: var(--size-16);
+  }
+
+  .pointer-slot {
+    overflow: hidden;
   }
 
   .pointer-panel {
     position: relative;
     min-height: 150px;
     padding: 0.65rem;
-    border-radius: 0.65rem;
-    background: #f6f4f1;
+    border-radius: var(--ui-radius);
+    // background: #ffffff;
     border: 1px solid rgba(58, 42, 34, 0.14);
-    overflow: hidden;
+    // overflow: hidden;
     cursor: none;
-    box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.6);
-  }
-
-  .event-panel {
-    background: #f6f4f1;
-    border: 1px solid rgba(58, 42, 34, 0.14);
-    border-radius: 0.65rem;
-    padding: 0.75rem;
-    min-height: 110px;
-    display: flex;
-    flex-direction: column;
-    gap: 0.5rem;
-  }
-
-  .event-panel header {
-    display: flex;
-    justify-content: space-between;
-    align-items: baseline;
-    font-size: 0.8rem;
-    text-transform: uppercase;
-    letter-spacing: 0.08em;
-    color: rgba(58, 42, 34, 0.7);
-  }
-
-  .event-panel .event-line {
-    margin: 0;
-    font-family: "JetBrains Mono", "SFMono-Regular", Consolas, monospace;
-    font-size: 0.85rem;
-    color: #433832;
-    white-space: nowrap;
-    overflow: hidden;
-    text-overflow: ellipsis;
-  }
-
-  .event-panel .empty {
-    margin: 0;
-    font-size: 0.8rem;
-    color: rgba(58, 42, 34, 0.6);
   }
 
   .pointer-panel header {
@@ -346,7 +359,10 @@
 
   .panel-label {
     font-weight: 600;
-    color: var(--panel-accent);
+    color: #a3a1a0;
+    letter-spacing: 2px;
+    font-size: 0.7rem;
+    // color: var(--panel-accent);
   }
 
   .panel-helper {
@@ -354,58 +370,78 @@
     color: rgba(58, 42, 34, 0.65);
   }
 
-  .wheel-log {
-    position: absolute;
-    left: 0.65rem;
-    right: 0.65rem;
-    bottom: 0.65rem;
-    padding: 0.35rem 0.5rem;
-    border-radius: 0.45rem;
-    background: rgba(255, 255, 255, 0.85);
-    border: 1px solid rgba(58, 42, 34, 0.1);
-    font-size: 0.72rem;
-    font-family: "JetBrains Mono", "SFMono-Regular", Consolas, monospace;
-    color: #3a2a22;
-    display: flex;
-    justify-content: space-between;
-    gap: 0.25rem;
-    pointer-events: none;
-  }
-
-  .wheel-log .empty {
-    color: rgba(58, 42, 34, 0.6);
-  }
-
   .cursor {
-    --cursor-size: 36px;
     position: absolute;
-    width: var(--cursor-size);
-    height: var(--cursor-size);
-    border-radius: 999px;
-    border: 2px solid var(--panel-accent);
-    background: rgba(255, 255, 255, 0.95);
-    box-shadow: 0 10px 24px rgba(0, 0, 0, 0.12);
-    transform: translate(-50%, -50%) scale(0.88);
-    // transition: left 90ms ease, top 90ms ease, transform 160ms ease;
-    display: grid;
-    place-items: center;
+    transform: translate(-50%, -50%);
+    display: flex;
+    align-items: center;
+    justify-content: center;
     pointer-events: none;
     color: var(--panel-accent);
+    filter: drop-shadow(0 4px 12px rgba(0, 0, 0, 0.15));
   }
 
   .cursor.live {
-    transform: translate(-50%, -50%) scale(1);
+    transform: translate(-50%, -50%) scale(1.05);
   }
 
-  .cursor svg {
-    width: 18px;
-    height: 18px;
+  .cursor-icon {
+    display: block;
+    line-height: 0;
+  }
+
+  .cursor-icon :global(svg) {
+    width: 28px;
+    height: 28px;
+    display: block;
+  }
+
+  .event-arrows {
+    position: relative;
+    width: clamp(260px, 80%, 420px);
+    height: 90px;
+    align-self: center;
+    margin: -0.35rem 0 -0.25rem;
+    pointer-events: none;
+  }
+
+  .event-arrows :global(.event-line) {
+    position: absolute;
+    inset: 0;
+    width: 100%;
+    height: 100%;
+    opacity: 0.95;
+    filter: drop-shadow(0 3px 6px rgba(0, 0, 0, 0.08));
+  }
+
+  .event-panel {
+    align-self: center;
+    background: #fff;
+   
+  }
+
+  .event-panel .event-line {
+    margin: 0;
+    font-family: "JetBrains Mono", "SFMono-Regular", Consolas, monospace;
+    font-size: 0.85rem;
+    color: #433832;
+    white-space: nowrap;
+    max-width: clamp(220px, 60vw, 360px);
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+
+  .event-panel .empty {
+    margin: 0;
+    font-size: 0.8rem;
+    color: rgba(58, 42, 34, 0.6);
+    white-space: nowrap;
   }
 
   @media (max-width: 720px) {
     .panel-grid {
       grid-template-columns: repeat(auto-fit, minmax(130px, 1fr));
-      gap: 0.2rem;
+      gap: 0.4rem;
     }
 
     .pointer-panel {
@@ -413,12 +449,23 @@
       padding: 0.55rem;
     }
 
-    .event-panel {
-      padding: 0.6rem;
+    .event-arrows {
+      height: 70px;
+      width: 100%;
     }
 
-    .cursor {
-      --cursor-size: 30px;
+    .event-panel {
+      padding: 0.5rem 0.9rem;
+      flex-direction: column;
+      text-align: center;
+      gap: 0.35rem;
     }
+
+    .event-panel .event-line,
+    .event-panel .empty {
+      max-width: 100%;
+      white-space: normal;
+    }
+
   }
 </style>

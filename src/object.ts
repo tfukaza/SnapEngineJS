@@ -113,6 +113,8 @@ export interface frameStats {
   timestamp: number;
 }
 
+const animationOwnerMap = new WeakMap<AnimationInterface, BaseObject>();
+
 /**
  * Base class for all objects in the engine.
  *
@@ -229,6 +231,7 @@ export class BaseObject {
 
   destroy() {
     // TODO: Remove colliders
+    this.cancelAnimations();
     this.global.unregisterObject(this);
   }
 
@@ -395,16 +398,37 @@ export class BaseObject {
    * await object.addAnimation(anim);
    * ```
    */
-  addAnimation(animation: AnimationInterface) {
+  addAnimation(
+    animation: AnimationInterface,
+    options: { replaceExisting?: boolean } = {},
+  ) {
     this.engine?.enableAnimationEngine();
-    // Cancel existing animations
-    for (const existingAnimation of this._animationList) {
-      existingAnimation.cancel();
+
+    const replaceExisting = options.replaceExisting ?? true;
+
+    if (replaceExisting) {
+      this.cancelAnimations();
     }
-    this._animationList = [];
+
     this._animationList.push(animation);
+    animationOwnerMap.set(animation, this);
     this.engine?.animationList.push(animation);
     return animation;
+  }
+
+  cancelAnimations() {
+    for (const existingAnimation of [...this._animationList]) {
+      existingAnimation.requestDelete = true;
+      existingAnimation.cancel();
+      this.removeAnimationReference(existingAnimation);
+    }
+  }
+
+  removeAnimationReference(animation: AnimationInterface) {
+    this._animationList = this._animationList.filter(
+      (anim) => anim !== animation,
+    );
+    animationOwnerMap.delete(animation);
   }
 
   /**
@@ -431,7 +455,7 @@ export class BaseObject {
       keyframe,
       property,
     );
-    return this.addAnimation(animation);
+    return this.addAnimation(animation, { replaceExisting: true });
   }
 
   /**
@@ -453,11 +477,14 @@ export class BaseObject {
     for (const animation of animations) {
       sequence.add(animation);
     }
-    return this.addAnimation(sequence);
+    return this.addAnimation(sequence, { replaceExisting: true });
   }
 
   get animation() {
-    return this._animationList[0];
+    if (this._animationList.length === 0) {
+      return null;
+    }
+    return this._animationList[this._animationList.length - 1];
   }
 
   getCurrentStats(): frameStats {
@@ -588,6 +615,14 @@ export class BaseObject {
       }
     }
   }
+}
+
+export function detachAnimationFromOwner(animation: AnimationInterface) {
+  const owner = animationOwnerMap.get(animation);
+  if (!owner) {
+    return;
+  }
+  owner.removeAnimationReference(animation);
 }
 
 interface DomProperty extends TransformProperty {

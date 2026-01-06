@@ -33,6 +33,7 @@ export interface keyframeProperty {
   delay?: number;
   tick?: (value: Record<string, number>) => void;
   finish?: () => void;
+  persist?: boolean;
 }
 
 export interface AnimationInterface {
@@ -100,6 +101,8 @@ class AnimationObject implements AnimationInterface {
     this.target = target ?? getAnimationFragment();
     this.keyframe = keyframe;
     this.property = property;
+  const shouldPersist = this.property.persist ?? false;
+  this.property.persist = shouldPersist;
 
     this.#animation = null;
     // this.#deleteOnFinish = true;
@@ -116,8 +119,12 @@ class AnimationObject implements AnimationInterface {
     }
     if (!this.property.offset) {
       this.#offset = [];
-      for (let i = 0; i < numKeys; i++) {
-        this.#offset.push(i / (numKeys - 1));
+      if (numKeys <= 1) {
+        this.#offset.push(0);
+      } else {
+        for (let i = 0; i < numKeys; i++) {
+          this.#offset.push(i / (numKeys - 1));
+        }
       }
     } else {
       this.#offset = this.property.offset as number[];
@@ -129,6 +136,13 @@ class AnimationObject implements AnimationInterface {
         this.#easing = this.property.easing;
       } else {
         this.#easing = [this.property.easing];
+      }
+    }
+    const desiredEasingLength = Math.max(1, this.#offset.length - 1);
+    if (this.#easing.length < desiredEasingLength) {
+      const lastEasing = this.#easing[this.#easing.length - 1] ?? "linear";
+      while (this.#easing.length < desiredEasingLength) {
+        this.#easing.push(lastEasing);
       }
     }
     if (!this.property.duration) {
@@ -197,8 +211,12 @@ class AnimationObject implements AnimationInterface {
     this.#animation.onfinish = () => {
       this.property.finish?.();
       this.finish();
-      this.#animation!.cancel();
-      this.requestDelete = true;
+      if (shouldPersist) {
+        this.#animation?.pause();
+      } else {
+        this.#animation?.cancel();
+        this.requestDelete = true;
+      }
     };
 
     // As of April 2025, there seems to be a bug in Chrome where
@@ -226,6 +244,7 @@ class AnimationObject implements AnimationInterface {
             fill: "both",
           }),
         );
+        console.log("Created interval animation", intervalDuration, intervalDelay, intervalEasing, intervalKeys);
         animation.onfinish = () => {
           animation.cancel();
         };

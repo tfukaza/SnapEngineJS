@@ -14,6 +14,30 @@
     "Option 8"
   ];
 
+  const emojiPool = [
+    "✨",
+    "⚡️",
+    "🌈",
+    "🔥",
+    "🌀",
+    "🌟",
+    "💧",
+    "🍀",
+    "🎯",
+    "🧠",
+    "💡",
+    "🎵",
+    "🌊",
+    "🌸",
+    "🚀",
+    "🎲"
+  ];
+
+  const decoratedItems = items.map((label, index) => ({
+    label,
+    emoji: emojiPool[index % emojiPool.length]
+  }));
+
   const brailleChar = "⠿";
 
   let canvasComponent: Canvas | null = null;
@@ -30,11 +54,14 @@
 <Canvas id="vertical-drag-drop-canvas" bind:this={canvasComponent}>
   <div class="vertical-drag-drop">
     <Container config={{ direction: "column", groupID: "vertical-landing" }}>
-      {#each items as label (label)}
+      {#each decoratedItems as item (item.label)}
         <Item className="card">
           <div class="drag-item-content">
             <span class="drag-dots" aria-hidden="true">{brailleChar}</span>
-            <p>{label}</p>
+            <p>
+              <span class="item-emoji" aria-hidden="true">{item.emoji}</span>
+              {item.label}
+            </p>
           </div>
         </Item>
       {/each}
@@ -65,6 +92,7 @@
     height: 12.5%;
     box-shadow: none;
     --ui-radius: 6px;
+    padding: 0.25rem 0.5rem;
   }
 
   :global(.vertical-drag-drop .item) {
@@ -72,8 +100,9 @@
     flex-direction: row;
     align-items: center;
     justify-content: space-between;
+    width: 100%;
     height: 100%;
-    padding: 0.25rem 0.75rem;
+    // padding: 0.25rem 0.5rem;
     gap: 0.5rem;
   }
 
@@ -82,7 +111,7 @@
     display: flex;
     flex-direction: row;
     align-items: center;
-    justify-content: space-between;
+    // justify-content: space-between;
     gap: 0.5rem;
   }
 
@@ -90,5 +119,10 @@
     font-size: 0.75rem;
     color: #9a9796;
     letter-spacing: 0.1em;
+  }
+
+  .item-emoji {
+    margin-right: 0.35rem;
+    font-size: 1rem;
   }
 </style>

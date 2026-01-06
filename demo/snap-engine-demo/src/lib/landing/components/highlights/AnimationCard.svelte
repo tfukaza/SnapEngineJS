@@ -1,17 +1,24 @@
 <script lang="ts">
+  import { onDestroy } from "svelte";
   import HighlightCardShell from "./HighlightCardShell.svelte";
+  import Canvas from "../../../../../../svelte/src/lib/Canvas.svelte";
+  import { ElementObject } from "../../../../../../../src/object";
+  import { AnimationObject } from "../../../../../../../src/animation";
+  import type { Engine } from "../../../../../../../src/index";
 
   type Keyframe = {
     time: number;
     label?: string;
-    emphasis?: boolean;
   };
 
+  type TrackId = "rotate" | "scale" | "variable";
+
   type Track = {
+    id: TrackId;
     label: string;
     subtitle: string;
     type: "css" | "variable" | "sequence";
-  keyframes: Keyframe[];
+    keyframes: Keyframe[];
     range: {
       start: number;
       end: number;
@@ -19,139 +26,468 @@
   };
 
   const TOTAL_DURATION = 4; // seconds
+  const TOTAL_DURATION_MS = TOTAL_DURATION * 1000;
 
+  const INITIAL_TIME = 0;
   const timelineMarkers = [0, 1, 2, 3, 4];
-  let currentTime = $state(1.2);
+  let currentTime = $state(INITIAL_TIME);
+  const TRACK_IDS: TrackId[] = ["rotate", "scale", "variable"];
+  const KEYFRAME_TIMES = [0, 1.5, 3, TOTAL_DURATION];
+  const ROTATION_KEYFRAMES = [0, 135, 270, 360];
+  const SCALE_KEYFRAMES = [1, 1.5, 0.5, 1];
+  const VARIABLE_KEYFRAMES = [1, 100];
+
+  let counterValue = $state(VARIABLE_KEYFRAMES[0]);
+  let engine: Engine | null = $state(null);
+  let canvasComponent: Canvas | null = null;
+  let animatedSquareRef: HTMLDivElement | null = $state(null);
+  let squareObject: ElementObject | null = null;
+  let isPlaying = $state(true);
+  let trackControllers: Record<TrackId, AnimationObject | null> = {
+    rotate: null,
+    scale: null,
+    variable: null
+  };
+  let currentRotation = $state(0);
+  let currentScale = $state(1);
+  let squareTransform = $state(`rotate(0deg) scale(1)`);
+  // Hidden linear time track state
+  let playbackRaf: number | null = null;
+  let playbackStartMs = 0;
+  let playbackOffsetTime = INITIAL_TIME;
+  let isScrubbingTimeline = false;
+  let resumeAfterScrub = false;
 
   const TRACK_COLORS: Record<Track["type"], string> = {
-    css: "#7b5bf2",
-    variable: "#10b981",
-    sequence: "#ff7a18"
+    css: "var(--color-secondary-4)",
+    variable: "var(--color-secondary-3)",
+    sequence: "var(--color-secondary-1)"
   };
 
   const tracks: Track[] = [
     {
+      id: "rotate",
       label: "rotate",
       subtitle: "",
       type: "css",
       keyframes: [
         { time: 0, label: "0°" },
-        { time: 4, label: "360°", emphasis: true }
+        { time: 4, label: "360°" }
       ],
       range: { start: 0, end: 4 }
     },
     {
+      id: "scale",
       label: "scale",
       subtitle: "",
       type: "css",
       keyframes: [
         { time: 0, label: "1×" },
-        { time: 1.5, label: "1.5×", emphasis: true },
+        { time: 1.5, label: "1.5×" },
         { time: 3, label: "0.5×" },
         { time: 4, label: "1×" }
       ],
       range: { start: 0, end: 4 }
     },
     {
-      label: "energy var",
+      id: "variable",
+      label: "variable",
       subtitle: "",
       type: "variable",
       keyframes: [
         { time: 0, label: "1" },
-        { time: 4, label: "100", emphasis: true }
+        { time: 4, label: "100" }
       ],
       range: { start: 0, end: 4 }
     }
   ];
 
-  const toPercent = (time: number) => `${(time / TOTAL_DURATION) * 100}%`;
-  const clamp = (value: number, min: number, max: number) => Math.min(max, Math.max(min, value));
-  const lerp = (start: number, end: number, t: number) => start + (end - start) * t;
-  const easeInOut = (t: number) => 0.5 * (1 - Math.cos(Math.PI * t));
+  function clamp(value: number, min: number, max: number) {
+    return Math.min(max, Math.max(min, value));
+  }
 
-  const getRotation = (time: number) => {
-    const normalized = clamp(time, 0, TOTAL_DURATION) / TOTAL_DURATION;
-    return lerp(0, 360, normalized);
-  };
+  function toPercent(time: number) {
+    return `${(time / TOTAL_DURATION) * 100}%`;
+  }
 
-  const getScale = (time: number) => {
-    const clamped = clamp(time, 0, TOTAL_DURATION);
+  function updateRotationState(rotation: number) {
+    const clampedRotation = clamp(rotation, 0, 360);
+    currentRotation = clampedRotation;
+    squareTransform = `rotate(${currentRotation}deg) scale(${currentScale})`;
+  }
 
-    if (clamped <= 1.5) {
-      const eased = easeInOut(clamped / 1.5);
-      return lerp(1, 1.5, eased);
+  function updateScaleState(scale: number) {
+    currentScale = clamp(scale, 0.25, 2);
+    squareTransform = `rotate(${currentRotation}deg) scale(${currentScale})`;
+  }
+
+  $effect(() => {
+    if (!engine || !animatedSquareRef) {
+      return;
     }
 
-    if (clamped <= 3) {
-      const progress = (clamped - 1.5) / (3 - 1.5);
-      return lerp(1.5, 0.5, progress);
+    if (!squareObject) {
+      squareObject = new ElementObject(engine, null);
+      squareObject.element = animatedSquareRef;
     }
 
-    return 1; // snap back via step timing
-  };
+    ensureTrackAnimations();
+  });
 
-  const getCounterValue = (time: number) => {
-    const normalized = clamp(time, 0, TOTAL_DURATION) / TOTAL_DURATION;
-    const eased = easeInOut(normalized);
-    return Math.round(lerp(1, 100, eased));
-  };
+  onDestroy(() => {
+    stopPlaybackLoop();
+    cancelTrackAnimations();
+    squareObject?.destroy();
+    squareObject = null;
+  });
+
+  function startPlaybackLoop() {
+    if (typeof window === "undefined") {
+      return;
+    }
+
+    if (playbackRaf !== null) {
+      return;
+    }
+
+    playbackOffsetTime = currentTime;
+    playbackStartMs = performance.now();
+
+    const step = (now: number) => {
+      playbackRaf = null;
+      const elapsedSeconds = (now - playbackStartMs) / 1000;
+      const nextTime = playbackOffsetTime + elapsedSeconds;
+      currentTime = Math.min(nextTime, TOTAL_DURATION);
+
+      if (currentTime >= TOTAL_DURATION) {
+        stopPlaybackLoop();
+        return;
+      }
+
+      playbackRaf = requestAnimationFrame(step);
+    };
+
+    playbackRaf = requestAnimationFrame(step);
+  }
+
+  function stopPlaybackLoop() {
+    if (typeof window === "undefined") {
+      playbackOffsetTime = currentTime;
+      return;
+    }
+
+    if (playbackRaf !== null) {
+      cancelAnimationFrame(playbackRaf);
+      playbackRaf = null;
+    }
+    playbackOffsetTime = currentTime;
+  }
+
+  function handleTimelineInput(event: Event & { currentTarget: HTMLInputElement }) {
+    const nextTime = Number(event.currentTarget?.value ?? currentTime);
+    if (Number.isNaN(nextTime)) {
+      return;
+    }
+    const progress = clamp(nextTime / TOTAL_DURATION, 0, 1);
+    const triggeredScrubSession = !isScrubbingTimeline;
+    if (triggeredScrubSession) {
+      beginTimelineScrub();
+    }
+    setTrackProgress(progress);
+    if (triggeredScrubSession) {
+      endTimelineScrub();
+    }
+  }
+
+  function beginTimelineScrub() {
+    if (isScrubbingTimeline) {
+      return;
+    }
+    isScrubbingTimeline = true;
+    resumeAfterScrub = isPlaying;
+    if (isPlaying) {
+      isPlaying = false;
+      stopPlaybackLoop();
+      syncPlaybackState();
+      return;
+    }
+    stopPlaybackLoop();
+  }
+
+  function endTimelineScrub() {
+    if (!isScrubbingTimeline) {
+      return;
+    }
+    isScrubbingTimeline = false;
+    if (resumeAfterScrub) {
+      isPlaying = true;
+      startPlaybackLoop();
+      syncPlaybackState();
+    }
+    resumeAfterScrub = false;
+  }
+
+  function ensureTrackAnimations() {
+    if (!squareObject || !animatedSquareRef) {
+      return;
+    }
+
+    const builders: Record<TrackId, () => AnimationObject> = {
+      rotate: createRotationAnimation,
+      scale: createScaleAnimation,
+      variable: createVariableAnimation
+    };
+
+    for (const id of TRACK_IDS) {
+      if (trackControllers[id]) {
+        continue;
+      }
+
+      const animation = builders[id]();
+      animation.pause();
+      squareObject.addAnimation(animation, { replaceExisting: false });
+      animation.progress = currentTime / TOTAL_DURATION;
+      trackControllers = { ...trackControllers, [id]: animation };
+    }
+
+    syncPlaybackState();
+
+    if (isPlaying) {
+      startPlaybackLoop();
+    }
+  }
+
+  function createRotationAnimation() {
+    let controller: AnimationObject;
+    controller = new AnimationObject(
+      animatedSquareRef,
+      {
+        $rotation: ROTATION_KEYFRAMES
+      },
+      {
+        duration: TOTAL_DURATION_MS,
+        easing: "linear",
+        tick: (values: Record<string, number>) => {
+          if (typeof values.$rotation === "number") {
+            updateRotationState(values.$rotation);
+          }
+        },
+        finish: () => handleTrackFinish("rotate", controller)
+      }
+    );
+    return controller;
+  }
+
+  function createScaleAnimation() {
+    let controller: AnimationObject;
+    controller = new AnimationObject(
+      animatedSquareRef,
+      {
+        $scale: SCALE_KEYFRAMES
+      },
+      {
+        duration: TOTAL_DURATION_MS,
+        easing: [
+          "cubic-bezier(0.65, 0, 0.35, 1)",
+          "linear",
+          "steps(5, end)"
+        ],
+        tick: (values: Record<string, number>) => {
+          if (typeof values.$scale === "number") {
+            updateScaleState(values.$scale);
+          }
+        },
+        finish: () => handleTrackFinish("scale", controller)
+      }
+    );
+    return controller;
+  }
+
+  function createVariableAnimation() {
+    let controller: AnimationObject;
+    controller = new AnimationObject(
+      animatedSquareRef,
+      {
+        $variable: VARIABLE_KEYFRAMES,
+      },
+      {
+        duration: TOTAL_DURATION_MS,
+        easing: "ease-in-out",
+        tick: (values: Record<string, number>) => {
+          if (typeof values.$variable === "number") {
+            counterValue = Math.round(values.$variable);
+          }
+        },
+        finish: () => handleTrackFinish("variable", controller)
+      }
+    );
+    return controller;
+  }
+
+  function handleTrackFinish(trackId: TrackId, controller: AnimationObject) {
+    if (trackControllers[trackId] !== controller) {
+      return;
+    }
+    trackControllers = { ...trackControllers, [trackId]: null };
+    if (TRACK_IDS.every((id) => trackControllers[id] === null)) {
+      onAllTracksFinished();
+    }
+  }
+
+  function onAllTracksFinished() {
+    updateScaleState(SCALE_KEYFRAMES[SCALE_KEYFRAMES.length - 1]);
+    updateRotationState(ROTATION_KEYFRAMES[ROTATION_KEYFRAMES.length - 1]);
+    counterValue = VARIABLE_KEYFRAMES[VARIABLE_KEYFRAMES.length - 1];
+    currentTime = TOTAL_DURATION;
+    stopPlaybackLoop();
+
+    if (isPlaying) {
+      resetAnimationCycle();
+    }
+  }
+
+  function resetAnimationCycle() {
+    stopPlaybackLoop();
+    cancelTrackAnimations();
+    updateScaleState(SCALE_KEYFRAMES[0]);
+    updateRotationState(ROTATION_KEYFRAMES[0]);
+    counterValue = VARIABLE_KEYFRAMES[0];
+    currentTime = 0;
+    playbackOffsetTime = 0;
+    ensureTrackAnimations();
+    setTrackProgress(0);
+
+    if (isPlaying) {
+      startPlaybackLoop();
+      syncPlaybackState();
+    }
+  }
+
+  function cancelTrackAnimations() {
+    squareObject?.cancelAnimations();
+    trackControllers = {
+      rotate: null,
+      scale: null,
+      variable: null
+    };
+  }
+
+  function syncPlaybackState() {
+    for (const id of TRACK_IDS) {
+      const animation = trackControllers[id];
+      if (!animation) {
+        continue;
+      }
+      if (isPlaying) {
+        animation.play();
+      } else {
+        animation.pause();
+      }
+
+    }
+  }
+
+  function setTrackProgress(progress: number) {
+    for (const id of TRACK_IDS) {
+      const animation = trackControllers[id];
+      if (!animation) {
+        continue;
+      }
+      animation.pause();
+      animation.progress = progress;
+    }
+    const clampedProgress = clamp(progress, 0, 1);
+    currentTime = clampedProgress * TOTAL_DURATION;
+    playbackOffsetTime = currentTime;
+    syncPlaybackState();
+  }
+
+  function togglePlayback() {
+    isPlaying = !isPlaying;
+    if (isPlaying && currentTime >= TOTAL_DURATION - 0.01) {
+      resetAnimationCycle();
+      return;
+    }
+
+    ensureTrackAnimations();
+
+    if (isPlaying) {
+      startPlaybackLoop();
+    } else {
+      stopPlaybackLoop();
+    }
+
+    syncPlaybackState();
+  }
+
 </script>
 
-<HighlightCardShell className="animation-card">
+<HighlightCardShell className="animation-card theme-secondary-4">
   <div class="card-heading">
     <h3>Animation</h3>
     <p>WAAPI based animation engine that's lightweight and performant.</p>
   </div>
 
-  <div class="preview-area">
-    <div
-      class="animated-square"
-      style={`transform: rotate(${getRotation(currentTime)}deg) scale(${getScale(currentTime)});`}
-    >
-      <span class="value-readout">{getCounterValue(currentTime)}</span>
+  <Canvas id="highlight-animation" bind:engine={engine} bind:this={canvasComponent}>
+    <div class="slot preview-area">
+      <div
+        class="animated-square"
+        bind:this={animatedSquareRef}
+        style={`transform: ${squareTransform};`}
+      >
+        <span class="value-readout">{counterValue}</span>
+      </div>
+      <button class="playback-toggle" type="button" onclick={togglePlayback}>
+        {isPlaying ? "Pause" : "Play"}
+      </button>
     </div>
-  </div>
 
-  <div class="timeline grid-layout">
-    <div class="timeline-content">
-      <div class="timeline-slider">
-        <span></span>
-        <input
-          type="range"
-          min="0"
-          max={TOTAL_DURATION}
-          step="0.05"
-          bind:value={currentTime}
-          aria-label="Scrub animation time"
-        />
-      </div>
-      <div class="timeline-header">
-        <span></span>
-        {#each timelineMarkers as marker}
-          <span>{marker}s</span>
-        {/each}
-      </div>
-      <div class="tracks">
+    <div class="timeline grid-layout">
+      <div class="timeline-content">
+        <label class="timeline-label" for="animation-timeline-range">Time</label>
+        <div class="timeline-slider">
+          <input
+            id="animation-timeline-range"
+            type="range"
+            min="0"
+            max={TOTAL_DURATION}
+            step="0.01"
+            value={currentTime}
+            oninput={handleTimelineInput}
+            onpointerdown={beginTimelineScrub}
+            onpointerup={endTimelineScrub}
+            onpointerleave={endTimelineScrub}
+            onpointercancel={endTimelineScrub}
+            aria-label="Scrub animation time"
+          />
+        </div>
+
+        <span class="timeline-placeholder" aria-hidden="true"></span>
+        <div class="timeline-header">
+          {#each timelineMarkers as marker}
+            <span>{marker}s</span>
+          {/each}
+        </div>
+
         {#each tracks as track}
-          <div class={`track ${track.type}`}>
-            <div class="track-meta">
-              <span class="track-label">{track.label}</span>
-            </div>
-            <div class="track-lane" aria-hidden="true">
-              <span
-                class="range-bar"
-                style={`left: ${toPercent(track.range.start)}; width: calc(${toPercent(track.range.end)} - ${toPercent(track.range.start)}); --range-color: ${TRACK_COLORS[track.type]};`}
-              ></span>
+          <div class="track-meta">
+            <span class="track-label">{track.label}</span>
+          </div>
+          <div class={`track-lane ${track.type}`} aria-hidden="true">
+            <div
+              class="range-bar"
+              style={`left: ${toPercent(track.range.start)}; width: calc(${toPercent(track.range.end)} - ${toPercent(track.range.start)}); --range-color: ${TRACK_COLORS[track.type]};`}
+            >
               {#each track.keyframes as keyframe}
-                <span class={`keyframe-point ${keyframe.emphasis ? "emphasis" : ""}`} style={`left: ${toPercent(keyframe.time)}; background-color: ${TRACK_COLORS[track.type]};`}></span>
+                <span class="keyframe-point" style={`left: ${toPercent(keyframe.time)}; background-color: ${TRACK_COLORS[track.type]};`}></span>
               {/each}
-              <span class="playhead" style={`left: ${toPercent(currentTime)};`}></span>
             </div>
+            <span class="playhead" style={`left: ${toPercent(currentTime)};`}></span>
           </div>
         {/each}
       </div>
     </div>
-  </div>
+  </Canvas>
 </HighlightCardShell>
 
 <style lang="scss">
@@ -171,34 +507,38 @@
   }
 
   .preview-area {
-    height: 110px;
-    border-radius: 0.9rem;
-    background: #f0ebe6;
-    border: 1px solid rgba(58, 42, 34, 0.12);
-    display: flex;
-    align-items: center;
-    justify-content: center;
+    min-height: 200px;
+    // border-radius: 0.9rem;
+    // background: #f0ebe6;
+    // border: 1px solid rgba(58, 42, 34, 0.12);
+    // display: flex;
+    // flex-direction: column;
+    // align-items: center;
+    // justify-content: center;
+    // gap: 0.75rem;
+    // padding: 0.75rem;
   }
 
   .animated-square {
     width: 64px;
     height: 64px;
     border-radius: 0.6rem;
-    background: linear-gradient(135deg, #7b5bf2, #ff7a18);
-    box-shadow: 0 15px 35px rgba(0, 0, 0, 0.18);
+    background-color: #2f1f1a;
+    // box-shadow: 0 15px 35px color-mix(in srgb, var(--card-accent) 30%, rgba(0, 0, 0, 0.35));
     // transition: transform 0.2s ease, filter 0.2s ease;
     display: flex;
     align-items: center;
     justify-content: center;
-    color: #fffaf6;
     font-weight: 600;
     font-size: 1.15rem;
     font-variant-numeric: tabular-nums;
     letter-spacing: 0.05em;
+    transform: rotate(0deg) scale(1);
   }
 
   .value-readout {
-    filter: drop-shadow(0 4px 12px rgba(0, 0, 0, 0.18));
+    // filter: drop-shadow(0 4px 12px rgba(0, 0, 0, 0.18));
+    color: #fffaf6;
   }
 
   .timeline {
@@ -215,67 +555,67 @@
   }
 
   .timeline-content {
-    display: flex;
-    flex-direction: column;
-    gap: 0.75rem;
+    --timeline-label-width: 100px;
+    display: grid;
+    grid-template-columns: var(--timeline-label-width) minmax(0, 1fr);
+    row-gap: 0.4rem;
+    column-gap: 0.6rem;
+    align-items: center;
+  }
+
+  .timeline-label {
+    font-size: 0.7rem;
+    // letter-spacing: 0.08em;
+    text-transform: uppercase;
+    color: rgba(47, 31, 26, 0.55);
   }
 
   .timeline-slider {
-    display: grid;
-    grid-template-columns: 150px minmax(0, 1fr);
-    align-items: center;
-    column-gap: 0.6rem;
+    width: 100%;
   }
 
   .timeline-slider input[type="range"] {
     width: 100%;
-    accent-color: #2f1f1a;
+    accent-color: var(--card-accent, #2f1f1a);
+  }
+
+  .timeline-placeholder {
+    height: 1px;
+    width: 100%;
   }
 
   .timeline-header {
     display: grid;
-    grid-template-columns: 150px repeat(5, minmax(0, 1fr));
-    font-size: 0.65rem;
+    grid-template-columns: repeat(5, minmax(0, 1fr));
     letter-spacing: 0.08em;
     color: rgba(47, 31, 26, 0.55);
-    margin-bottom: 0.75rem;
     align-items: end;
+
+    span {
+      font-size: 0.7rem;
+    }
   }
 
   .timeline-header span {
     text-align: right;
   }
 
-  .tracks {
-    display: flex;
-    flex-direction: column;
-    gap: 0.65rem;
-  }
-
-  .track {
-    display: grid;
-    grid-template-columns: 150px 1fr;
-    gap: 0.6rem;
-    align-items: center;
-    color: rgba(47, 31, 26, 0.9);
-  }
-
   .track-meta {
     display: flex;
     flex-direction: column;
     gap: 0.15rem;
+    color: rgba(47, 31, 26, 0.9);
   }
 
   .track-label {
     font-size: 0.8rem;
-    letter-spacing: 0.05em;
-    text-transform: uppercase;
+    // letter-spacing: 0.05em;
+    // text-transform: uppercase;
   }
-
 
   .track-lane {
     position: relative;
-    height: 36px;
+    height: 20px;
     border-radius: 0.75rem;
     border: none;
     background: none;
@@ -283,14 +623,13 @@
   }
 
   .range-bar {
-    position: absolute;
-    top: 8px;
+    position: relative;
     height: 20px;
-    border-radius: 999px;
-    border: 1px solid var(--range-color, rgba(47, 31, 26, 0.4));
-    box-shadow: 0 6px 18px rgba(0, 0, 0, 0.08);
+    border-radius: 10px;
+    // border: 1px solid var(--range-color, rgba(47, 31, 26, 0.4));
+    // box-shadow: 0 6px 18px rgba(0, 0, 0, 0.08);
+    background-color: #e9e5e1;
     pointer-events: none;
-    background: none;
   }
 
   .keyframe-point {
@@ -298,15 +637,9 @@
     top: 50%;
     width: 10px;
     height: 10px;
-    border-radius: 50%;
-    transform: translate(-50%, -50%);
+    border-radius: 2px;
+    transform: translate(-50%, -50%) rotate(45deg);
     box-shadow: 0 2px 4px rgba(0, 0, 0, 0.12);
-  }
-
-  .keyframe-point.emphasis {
-    width: 14px;
-    height: 14px;
-    box-shadow: 0 0 0 3px rgba(0, 0, 0, 0.06);
   }
 
   .playhead {
@@ -319,19 +652,27 @@
     pointer-events: none;
   }
 
-  .track.css .track-lane {
-    background-color: rgba(123, 91, 242, 0.1);
-    border-color: rgba(123, 91, 242, 0.25);
-  }
+  .playback-toggle {
+    border: none;
+    border-radius: 999px;
+    padding: 0.4rem 1.25rem;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+    background: var(--card-accent);
+    color: #fffaf6;
+    cursor: pointer;
+    transition: transform 0.15s ease, box-shadow 0.15s ease;
 
-  .track.variable .track-lane {
-    background-color: rgba(16, 185, 129, 0.12);
-    border-color: rgba(16, 185, 129, 0.25);
-  }
+    &:hover {
+      transform: translateY(-1px);
+      box-shadow: 0 6px 18px color-mix(in srgb, var(--card-accent) 35%, rgba(0, 0, 0, 0.22));
+    }
 
-  .track.sequence .track-lane {
-    background-color: rgba(255, 122, 24, 0.12);
-    border-color: rgba(255, 122, 24, 0.25);
+    &:active {
+      transform: translateY(0);
+      box-shadow: none;
+    }
   }
 
   @media (max-width: 720px) {

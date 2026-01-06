@@ -17,12 +17,12 @@
   const zoomOut = () => zoom(-ZOOM_STEP);
 </script>
 
-<HighlightCardShell className="camera-control-card">
+<HighlightCardShell className="camera-control-card theme-secondary-7">
   <div class="camera-card">
     <div class="card-heading">
       <div>
         <h3>Camera Control</h3>
-        <p>Pan + zoom a node surface, just like the editor.</p>
+        <p>Control pan and zoom of any DOM element.</p>
       </div>
       <div class="zoom-controls" aria-label="Zoom controls">
         <button type="button" class="zoom-button" on:click={zoomIn} aria-label="Zoom in">
@@ -84,20 +84,20 @@
 
   .zoom-controls {
     display: inline-flex;
-    background: rgba(26, 20, 16, 0.85);
+    background: var(--card-accent, rgba(26, 20, 16, 0.85));
     border-radius: 999px;
     padding: 0.2rem;
     gap: 0.2rem;
-    box-shadow: 0 10px 30px rgba(0, 0, 0, 0.25);
+    box-shadow: 0 10px 30px color-mix(in srgb, var(--card-accent, #000) 45%, rgba(0, 0, 0, 0.25));
   }
 
   .zoom-button {
     width: 2rem;
     height: 2rem;
     border-radius: 999px;
-    border: 1px solid rgba(255, 255, 255, 0.2);
-    background: rgba(255, 255, 255, 0.08);
-    color: white;
+    border: 1px solid color-mix(in srgb, #ffffff 60%, var(--card-accent, rgba(26, 20, 16, 0.85)));
+    background: color-mix(in srgb, #ffffff 12%, var(--card-accent, rgba(26, 20, 16, 0.85)));
+    color: #ffffff;
     font-size: 1.2rem;
     line-height: 1;
     cursor: pointer;
@@ -105,8 +105,8 @@
   }
 
   .zoom-button:hover {
-    border-color: rgba(255, 255, 255, 0.45);
-    background: rgba(255, 255, 255, 0.15);
+    border-color: color-mix(in srgb, #ffffff 75%, var(--card-accent, rgba(26, 20, 16, 0.85)));
+    background: color-mix(in srgb, #ffffff 28%, var(--card-accent, rgba(26, 20, 16, 0.85)));
   }
 
   .camera-stage {

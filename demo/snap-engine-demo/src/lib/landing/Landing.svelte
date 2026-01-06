@@ -242,20 +242,19 @@
   </div>
 </section>
 
-<section class="page-width interactivity-explainer">
-  <div class="explainer-surface">
-    <h2 class="eyebrow">…what’s an “Interactivity Engine”?</h2>
-    <p class="subhead">It’s a collection of utilities for adding interactive elements to web apps.</p>
+<section class="two-column interactivity-explainer">
+<div class="interactivity-intro">
+  <h2>…what’s an “Interactivity Engine”?</h2>
+  <p>It’s a collection of utilities for adding interactive elements to web apps.</p>
+</div>
 
-    <div class="highlight-grid" aria-label="Core capabilities">
       <InputHandlingCard />
       <AnimationCard />
       <CameraControlCard />
       <DomOptimizationCard />
       <CollisionCard />
       <VisualDebuggerCard />
-    </div>
-  </div>
+
 </section>
 
 <section class="page-width assets-showcase">
@@ -340,9 +339,26 @@
     margin-top: clamp(3rem, 6vw, 6rem);
   }
 
+  .interactivity-intro {
+    grid-column: 1 / -1;
+    text-align: center;
+    // max-width: clamp(32rem, 80%, 48rem);
+    margin: clamp(20px, 20vh, 300px) auto;
+
+    h2 {
+      font-size: clamp(2rem, 4vw, 2.75rem);
+      margin-bottom: 0.75rem;
+    }
+
+    p {
+      font-size: 1rem;
+      line-height: 1.6;
+    }
+  }
+
   .explainer-surface {
-    background: var(--color-background);
-    border-radius: var(--size-12);
+    background: transparent;
+    border-radius: 0;
     padding: clamp(1.5rem, 4vw, 3rem);
     // box-shadow: 0 20px 60px rgba(27, 16, 10, 0.08);
     text-align: center;

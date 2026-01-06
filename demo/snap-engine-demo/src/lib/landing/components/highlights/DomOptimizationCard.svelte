@@ -361,7 +361,7 @@
   });
 </script>
 
-<HighlightCardShell className="dom-optimization-card">
+<HighlightCardShell className="dom-optimization-card theme-secondary-2">
   <div class="card-heading">
     <div>
       <h3>DOM Optimization</h3>
@@ -540,13 +540,13 @@
   }
 
   .operation-item.read .pill {
-    background: rgba(123, 91, 242, 0.15);
-    color: #6d4ae6;
+    background: color-mix(in srgb, var(--color-secondary-4) 20%, transparent);
+    color: var(--color-secondary-4);
   }
 
   .operation-item.write .pill {
-    background: rgba(255, 122, 24, 0.18);
-    color: #c75303;
+    background: color-mix(in srgb, var(--color-secondary-2) 20%, transparent);
+    color: var(--color-secondary-2);
   }
 
   .operation-item .op-label {
@@ -574,18 +574,26 @@
   }
 
   .timeline-block.read {
-    background: linear-gradient(135deg, rgba(123, 91, 242, 0.15), rgba(123, 91, 242, 0.05));
-    border-color: rgba(123, 91, 242, 0.4);
+    background: linear-gradient(
+      135deg,
+      color-mix(in srgb, var(--color-secondary-4) 20%, transparent),
+      color-mix(in srgb, var(--color-secondary-4) 6%, transparent)
+    );
+    border-color: color-mix(in srgb, var(--color-secondary-4) 45%, transparent);
   }
 
   .timeline-block.write {
-    background: linear-gradient(135deg, rgba(255, 122, 24, 0.2), rgba(255, 122, 24, 0.06));
-    border-color: rgba(255, 122, 24, 0.4);
+    background: linear-gradient(
+      135deg,
+      color-mix(in srgb, var(--color-secondary-2) 22%, transparent),
+      color-mix(in srgb, var(--color-secondary-2) 6%, transparent)
+    );
+    border-color: color-mix(in srgb, var(--color-secondary-2) 45%, transparent);
   }
 
   .timeline-block.reflow {
-    background: rgba(251, 85, 97, 0.15);
-    border-color: rgba(251, 85, 97, 0.5);
+    background: color-mix(in srgb, var(--color-secondary-1) 18%, transparent);
+    border-color: color-mix(in srgb, var(--color-secondary-1) 55%, transparent);
     height: auto;
     display: flex;
     align-items: center;
@@ -595,7 +603,7 @@
 
   .reflow-label {
     font-size: 0.55rem;
-    color: #d93036;
+    color: var(--color-secondary-1);
     font-weight: 600;
     text-transform: uppercase;
     letter-spacing: 0.05em;

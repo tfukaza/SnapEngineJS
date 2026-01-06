@@ -1,6 +1,12 @@
 import Camera from "./camera";
 import { GlobalManager } from "./global";
-import { BaseObject, ElementObject, frameStats, queueEntry } from "./object";
+import {
+  BaseObject,
+  ElementObject,
+  frameStats,
+  queueEntry,
+  detachAnimationFromOwner,
+} from "./object";
 import { EventProxyFactory } from "./util";
 import { CollisionEngine } from "./collision";
 import { AnimationInterface } from "./animation";
@@ -329,13 +335,16 @@ class Engine {
     }
 
     this.#animationProcessor = (timestamp: number) => {
-      let newAnimationList: AnimationInterface[] = [];
+      const newAnimationList: AnimationInterface[] = [];
       for (const animation of this.animationList) {
-        if (
-          (animation as any).calculateFrame(timestamp) == false &&
-          (animation as any).requestDelete == false
-        ) {
-          newAnimationList.push(animation as any);
+        const shouldKeep =
+          animation.calculateFrame(timestamp) === false &&
+          animation.requestDelete === false;
+
+        if (shouldKeep) {
+          newAnimationList.push(animation);
+        } else {
+          detachAnimationFromOwner(animation);
         }
       }
       this.animationList = newAnimationList;
