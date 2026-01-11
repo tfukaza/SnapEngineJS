@@ -20,6 +20,7 @@ export class ItemObject extends ElementObject {
   #rowIndex: number = 0;
   #currentRow: number = 0;
   #onClickAction: ClickAction | null = null;
+  #metadata: Record<string, unknown> = {};
 
   #prevContainer: ItemContainer | null = null;
 
@@ -31,6 +32,15 @@ export class ItemObject extends ElementObject {
     this.transformMode = "none";
     this.#containerObject = null;
     this.#prevContainer = null;
+    this.#metadata = {};
+  }
+
+  get metadata(): Record<string, unknown> {
+    return this.#metadata;
+  }
+
+  set metadata(value: Record<string, unknown>) {
+    this.#metadata = value;
   }
 
   get onClickAction() {

@@ -7,6 +7,13 @@
     import EmojiLine from "./EmojiLine.svelte";
     import { getEngine } from "../../../../../svelte/src/lib/engine.svelte";
 
+    export type EmojiWordConnection = {
+        emoji: string;
+        glyph: string;
+        word: string;
+        headline: string;
+    };
+
     type EmojiNode = {
         id: string;
         glyph: string;
@@ -22,6 +29,12 @@
         connectorName: string;
         node: NodeComponent;
     };
+
+    interface Props {
+        getConnections?: () => EmojiWordConnection[];
+    }
+
+    let { getConnections = $bindable() }: Props = $props();
 
     const engine = getEngine("emoji-word-connectors");
 
@@ -79,7 +92,39 @@
         node: new NodeComponent(engine, null, { lockPosition: true }),
     }));
 
-    const defaultConnections = [
+    // Expose API to get current connections
+    getConnections = (): EmojiWordConnection[] => {
+        const connections: EmojiWordConnection[] = [];
+        
+        for (const emojiNode of emojiNodes) {
+            const connector = emojiNode.node.getConnector(emojiNode.connectorName);
+            if (!connector) continue;
+            
+            // Check outgoing lines to find connected word nodes
+            for (const line of connector.outgoingLines) {
+                if (!line.target) continue;
+                
+                // Find which word node this target connector belongs to
+                const wordNode = wordNodes.find(w => {
+                    const wConnector = w.node.getConnector(w.connectorName);
+                    return wConnector === line.target;
+                });
+                
+                if (wordNode) {
+                    connections.push({
+                        emoji: emojiNode.id,
+                        glyph: emojiNode.glyph,
+                        word: wordNode.id,
+                        headline: wordNode.headline,
+                    });
+                }
+            }
+        }
+        
+        return connections;
+    };
+
+    const defaultConnections: { emoji: string; word: string }[] = [
         // { emoji: "emoji-fire", word: "word-interactivity" },
         // { emoji: "emoji-rocket", word: "word-engine" },
         // { emoji: "emoji-sparkles", word: "word-web" }

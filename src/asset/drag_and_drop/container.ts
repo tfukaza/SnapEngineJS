@@ -149,6 +149,14 @@ export class ItemContainer extends ElementObject {
     return this.#itemRows;
   }
 
+  /**
+   * Get metadata from all items currently in this container.
+   * @returns Array of metadata objects from each item in order
+   */
+  getItemsMetadata<T = Record<string, unknown>>(): T[] {
+    return this.#itemList.map((item) => item.metadata as T);
+  }
+
   set dragItem(item: ItemObject | null) {
     if (item !== this.#dragItem) {
       this.#lastClosestRowIndex = -1;

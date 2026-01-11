@@ -5,10 +5,11 @@
   import { getContext, setContext, onDestroy } from "svelte";
   import type { Engine } from "../../../../index";
 
-  let { config, children }: { config: ItemContainerConfig; children: any } =
+  let { config, children, container = $bindable() }: { config: ItemContainerConfig; children: any; container?: ItemContainer } =
     $props();
   const engine: Engine = getContext("engine");
   let itemContainer: ItemContainer = new ItemContainer(engine, null, config);
+  container = itemContainer;
 
   setContext("itemContainer", itemContainer);
 

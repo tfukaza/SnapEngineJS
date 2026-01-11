@@ -6,7 +6,7 @@
   import type { Engine } from "../../../../../src/index";
 
 
-  let { children, style = "", className = "", onClickAction = null }: { children: any; style?: string; className?: string; onClickAction?: ClickAction | null } = $props();
+  let { children, style = "", className = "", onClickAction = null, metadata = {} }: { children: any; style?: string; className?: string; onClickAction?: ClickAction | null; metadata?: Record<string, unknown> } = $props();
   const engine: Engine = getContext("engine");
   const itemContainer: ItemContainer = getContext("itemContainer");
 
@@ -17,12 +17,17 @@
     if (onClickAction) {
       itemObject.onClickAction = onClickAction;
     }
+    itemObject.metadata = metadata;
   });
 
   $effect(() => {
     if (onClickAction) {
       itemObject.onClickAction = onClickAction;
     }
+  });
+
+  $effect(() => {
+    itemObject.metadata = metadata;
   });
 
   onDestroy(() => {

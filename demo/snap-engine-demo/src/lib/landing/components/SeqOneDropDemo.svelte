@@ -2,6 +2,8 @@
   import Canvas from "../../../../../svelte/src/lib/Canvas.svelte";
   import Item from "../../../../../svelte/src/demo/drag_drop/Item.svelte";
   import Container from "../../../../../svelte/src/demo/drag_drop/ItemContainer.svelte";
+  import type { ItemContainer } from "../../../../../../src/asset/drag_and_drop/container";
+  import type { Engine } from "../../../../../../src/index";
 
   type SeqToken = {
     id: string;
@@ -9,20 +11,36 @@
     name: string;
   };
 
-  export let tokens: SeqToken[] = [];
+  interface Props {
+    tokens?: SeqToken[];
+    initialTopTokens?: SeqToken[];
+    topContainer?: ItemContainer;
+    engine?: Engine | null;
+  }
+
+  let { tokens = [], initialTopTokens = [], topContainer = $bindable(), engine = $bindable<Engine | null>(null) }: Props = $props();
 </script>
 
-<Canvas id="seq-drop-demo">
+<Canvas id="seq-drop-demo" bind:engine={engine}>
   <div class="mini-drop-demo">
     <div class="mini-drop-top slot">
-      <Container config={{ direction: "row", groupID: "seq-1-drop" }}>
+      <Container config={{ direction: "row", groupID: "seq-1-drop" }} bind:container={topContainer}>
+        {#each initialTopTokens as token (token.id)}
+          <Item className="color-token card" metadata={{ color: token.color, name: token.name, id: token.id }}>
+            <div
+              class="color-indicator"
+              style={`--token-color: ${token.color}`}
+              aria-label={token.name}
+            ></div>
+          </Item>
+        {/each}
         <p class="drop-placeholder" style="display: none">Drop colors here</p>
       </Container>
     </div>
     <div class="mini-drop-bottom">
       <Container config={{ direction: "row", groupID: "seq-1-drop" }}>
         {#each tokens as token (token.id)}
-          <Item className="color-token card">
+          <Item className="color-token card" metadata={{ color: token.color, name: token.name, id: token.id }}>
             <div
               class="color-indicator"
               style={`--token-color: ${token.color}`}

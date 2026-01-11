@@ -6,7 +6,7 @@
   import type { ElementObject } from "../../../../../../src/object";
   import type { CameraControl as CameraControlApi } from "../../../../../../src/asset/cameraControl";
 
-  type NodePoint = {
+  export type NodePoint = {
     id: string;
     label: string;
     x: number;
@@ -60,7 +60,17 @@
     return [origin, ...satellites];
   }
 
-  let nodes: NodePoint[] = generateInitialNodes();
+  interface Props {
+    getNodes?: () => NodePoint[];
+  }
+
+  let { getNodes = $bindable() }: Props = $props();
+
+  // Internal node state - owned by this component
+  let nodes: NodePoint[] = $state(generateInitialNodes());
+
+  // Expose API for parent to get nodes
+  getNodes = () => nodes;
 
   const connections: Connection[] = [
     { from: CENTER_NODE_ID, to: "node-1" },
@@ -78,7 +88,7 @@
   const ARROW_INSET = 20; // pixels short of target node center
 
   function findNode(id: string): NodePoint | undefined {
-    return nodes.find((node) => node.id === id);
+    return nodes?.find((node) => node.id === id);
   }
 
   function shortenedLine(
@@ -101,7 +111,7 @@
 
   function syncNodePosition(nodeId: string) {
     const object = nodeObjects[nodeId];
-    if (!object) return;
+    if (!object || !nodes) return;
 
     const rawX = object.transform.x;
     const rawY = object.transform.y;
