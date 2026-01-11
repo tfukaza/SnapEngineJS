@@ -146,7 +146,7 @@
 
   .demo-content {
     flex: 1;
-    overflow: hidden;
+
     background-color: var(--color-background-tint);
     position: relative;
   }

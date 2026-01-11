@@ -9,8 +9,7 @@
   let progressValue = $state(65);
 </script>
 
-<div class="css-showcase">
-  <div class="showcase-scroll">
+
     <section class="showcase-section">
       <h1>CSS Showcase</h1>
     </section>
@@ -18,7 +17,7 @@
     <!-- Typography Section -->
     <section class="showcase-section">
       <h2>Typography</h2>
-      <div class="card">
+      <div>
         <h1>Heading 1</h1>
         <h2>Heading 2</h2>
         <h3>Heading 3</h3>
@@ -37,13 +36,41 @@
     <section class="showcase-section">
       <h2>Color Palette</h2>
       <div class="color-grid">
-        <div class="color-swatch primary card">
+        <div class="color-swatch primary card ground">
           <span class="light">Primary</span>
           <code>#ff753a</code>
         </div>
         <div class="color-swatch secondary card">
           <span class="light">Secondary</span>
           <code>#1e2659</code>
+        </div>
+        <div class="color-swatch secondary-1 card">
+          <span class="light">Secondary 1</span>
+          <code>#f34336</code>
+        </div>
+        <div class="color-swatch secondary-2 card">
+          <span class="light">Secondary 2</span>
+          <code>#e8b72f</code>
+        </div>
+        <div class="color-swatch secondary-3 card">
+          <span class="light">Secondary 3</span>
+          <code>#84c122</code>
+        </div>
+        <div class="color-swatch secondary-4 card">
+          <span class="light">Secondary 4</span>
+          <code>#1982c4</code>
+        </div>
+        <div class="color-swatch secondary-5 card">
+          <span class="light">Secondary 5</span>
+          <code>#6a4c93</code>
+        </div>
+        <div class="color-swatch secondary-6 card">
+          <span class="light">Secondary 6</span>
+          <code>#f15bb5</code>
+        </div>
+        <div class="color-swatch secondary-7 card">
+          <span class="light">Secondary 7</span>
+          <code>#00bbf9</code>
         </div>
         <div class="color-swatch accent card  ">
           <span class="light">Accent</span>
@@ -64,10 +91,10 @@
       </div>
     </section>
 
-    <!-- Cards Section -->
+    <!-- Cards & Slots Section -->
     <section class="showcase-section">
-      <h2>Cards</h2>
-      <div class="page-column two-column">
+      <h2>Cards & Slots</h2>
+      <div class="card-slot-grid">
         <div class="card">
           <h3>Default Card</h3>
           <p>A standard card with subtle shadow and border effects.</p>
@@ -76,33 +103,26 @@
           <h3>Float Card</h3>
           <p>A floating card variant with enhanced shadow for elevation.</p>
         </div>
-      </div>
-    </section>
-
-    <!-- Slots Section -->
-    <section class="showcase-section">
-      <h2>Slots</h2>
-      <div class="page-column two-column slot-demo">
+           <div class="card ground">
+          <h3>Ground Card</h3>
+          <p>A ground card variant with subtle shadows to make it look as if 
+            it is a bump on the ground.
+          </p>
+        </div>
         <div class="slot">
           <div class="slot-content">
             <p>Slot Container</p>
             <span>Inset container for drop zones and recessed UI areas</span>
           </div>
         </div>
-        <div class="slot">
-          <div class="slot-content">
-            <div class="card" style="margin: var(--size-8);">
-              <p>Card inside a Slot</p>
-            </div>
-          </div>
-        </div>
+       
       </div>
     </section>
 
     <!-- Buttons Section -->
     <section class="showcase-section">
       <h2>Buttons</h2>
-      <div class="card">
+      <div class="">
         <div class="button-row">
           <button>Default Button</button>
           <button class="primary">Primary Button</button>
@@ -118,10 +138,10 @@
     </section>
 
     <!-- Form Elements Section -->
-    <section class="showcase-section">
-      <h2>Form Elements</h2>
+    <section class="showcase-section three-column">
+      <h2 style="grid-column: span 3;">Form Elements</h2>
       
-      <div class="page-column three-column">
+   
        
 
         <!-- Checkboxes -->
@@ -281,7 +301,7 @@
             <input type="number" id="disabled-number" value="100" disabled />
           </div>
         </div>
-      </div>
+
     </section>
 
     <!-- Tables Section -->
@@ -401,8 +421,7 @@
         </code>
       </div>
     </section>
-  </div>
-</div>
+
 
 <style lang="scss">
   @import "../../../../app.scss";
@@ -413,19 +432,11 @@
     position: relative;
   }
 
-  .showcase-scroll {
-    position: absolute;
-    inset: 0;
-    overflow-y: auto;
-    padding: var(--size-64) var(--size-32);
-    padding-top: calc(var(--size-64) + var(--size-48));
-    box-sizing: border-box;
-  }
+ 
 
   .showcase-section {
-    max-width: 900px;
-    margin: 0 auto var(--size-48);
-    position: relative;
+
+    margin-bottom: var(--size-48);
 
     > h2 {
       margin-bottom: var(--size-16);
@@ -472,6 +483,7 @@
   }
 
   .color-grid {
+    width: 100%;
     display: grid;
     grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
     gap: var(--size-16);
@@ -497,11 +509,39 @@
     }
 
     &.primary {
-      background-color: var(--color-primary);
+      --card-color: var(--color-primary);
       color: white;
     }
     &.secondary {
       background-color: var(--color-secondary);
+      color: white;
+    }
+    &.secondary-1 {
+      background-color: var(--color-secondary-1);
+      color: white;
+    }
+    &.secondary-2 {
+      background-color: var(--color-secondary-2);
+      color: white;
+    }
+    &.secondary-3 {
+      background-color: var(--color-secondary-3);
+      color: white;
+    }
+    &.secondary-4 {
+      background-color: var(--color-secondary-4);
+      color: white;
+    }
+    &.secondary-5 {
+      background-color: var(--color-secondary-5);
+      color: white;
+    }
+    &.secondary-6 {
+      background-color: var(--color-secondary-6);
+      color: white;
+    }
+    &.secondary-7 {
+      background-color: var(--color-secondary-7);
       color: white;
     }
     &.accent {
@@ -511,7 +551,6 @@
     &.background {
       background-color: var(--color-background);
       color: var(--color-text);
-      border: 1px solid var(--color-background-dark);
     }
     &.background-tint {
       background-color: var(--color-background-tint);
@@ -523,26 +562,33 @@
     }
   }
 
-  .slot-demo {
+  .card-slot-grid {
     display: grid;
-    grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+    grid-template-columns: repeat(2, minmax(0, 1fr));
     gap: var(--size-24);
+    align-items: stretch;
+  }
 
-    .slot {
-      min-height: 120px;
-      display: flex;
-      align-items: center;
-      justify-content: center;
+  @media (max-width: 800px) {
+    .card-slot-grid {
+      grid-template-columns: 1fr;
     }
+  }
 
-    .slot-content {
-      text-align: center;
-      padding: var(--size-16);
+  .card-slot-grid .slot {
+    min-height: 120px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+  }
 
-      span {
-        font-size: 12px;
-        color: var(--color-background-dark);
-      }
+  .card-slot-grid .slot-content {
+    text-align: center;
+    padding: var(--size-16);
+
+    span {
+      font-size: 12px;
+      color: var(--color-background-dark);
     }
   }
 

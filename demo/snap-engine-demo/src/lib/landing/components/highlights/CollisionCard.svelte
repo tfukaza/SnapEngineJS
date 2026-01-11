@@ -1,9 +1,9 @@
 <script lang="ts">
-  import HighlightCardShell from "./HighlightCardShell.svelte";
   import Canvas from "../../../../../../svelte/src/lib/Canvas.svelte";
   import CollisionBox from "../../../../../../svelte/src/demo/collision/CollisionBox.svelte";
   import CollisionCircle from "../../../../../../svelte/src/demo/collision/CollisionCircle.svelte";
   import type { Engine } from "../../../../../../../src/index";
+  import HighlightCardShell from "./HighlightCardShell.svelte";
 
   let engine: Engine | null = $state(null);
   let collisionCount = $state(0);
@@ -27,19 +27,14 @@
   }
 </script>
 
-<HighlightCardShell className="collision-card theme-secondary-1">
-  <div class="card-heading">
-    <div>
-      <h3>Collision Detection</h3>
-      <p>Built-in collision engine to detect overlaps and contacts.</p>
-    </div>
-    <div class="collision-counter" class:active={isColliding}>
-      <span class="count">{collisionCount}</span>
-      <span class="label">collisions</span>
-    </div>
-  </div>
+<HighlightCardShell
+  className="collision-card theme-secondary-1"
+  title="Collision Detection"
+  description="Built-in collision engine to detect overlaps and contacts."
+>
 
-  <div class="collision-demo-container">
+
+  <div class="collision-demo-container slot">
     <Canvas id="collision-card-canvas" bind:engine={engine}>
       <div class="collision-demo">
         <CollisionBox 
@@ -61,37 +56,29 @@
       </div>
     </Canvas>
   </div>
+    <div class="collision-counter card" class:active={isColliding}>
+    <span class="count">{collisionCount}</span>
+    <span class="label">collisions</span>
+  </div>
 </HighlightCardShell>
 
 <style lang="scss">
-  .card-heading {
-    display: flex;
-    justify-content: space-between;
-    gap: 1rem;
-    align-items: flex-start;
-  }
-
-  .card-heading h3 {
-    margin: 0;
-  }
-
-  .card-heading p {
-    margin: 0.25rem 0 0;
-    color: rgba(47, 31, 26, 0.7);
-  }
-
   .collision-counter {
     display: flex;
     flex-direction: column;
     align-items: center;
     padding: 0.4rem 0.7rem;
     border-radius: 0.5rem;
-    background: rgba(47, 31, 26, 0.06);
+    // background: rgba(47, 31, 26, 0.06);
     transition: background 0.2s, transform 0.15s;
+    position: absolute;
+    bottom: 1rem;
+    left: 50%;
+    transform: translateX(-50%);
 
     &.active {
-      background: color-mix(in srgb, var(--color-secondary-1) 20%, transparent);
-      transform: scale(1.05);
+      // background: color-mix(in srgb, var(--color-secondary-1) 20%, transparent);
+      transform: translateX(-50%) scale(1.05);
     }
   }
 
@@ -110,12 +97,15 @@
   }
 
   .collision-demo-container {
-    height: 140px;
-    border-radius: 0.7rem;
-    background: #f9f7f4;
-    box-shadow: inset 0 0 0 1px rgba(47, 31, 26, 0.12);
-    overflow: hidden;
-    position: relative;
+    height: 300px;
+    // background-color: var(--color-background-tint);
+    border-top-left-radius: 0;
+    border-top-right-radius: 0;
+    // border-radius: 0.7rem;
+    // background: #f9f7f4;
+    // box-shadow: inset 0 0 0 1px rgba(47, 31, 26, 0.12);
+    // overflow: hidden;
+    // position: relative;
   }
 
   .collision-demo {
@@ -157,7 +147,7 @@
 
   .hint {
     position: absolute;
-    bottom: 0.5rem;
+    top: 0.5rem;
     left: 50%;
     transform: translateX(-50%);
     margin: 0;

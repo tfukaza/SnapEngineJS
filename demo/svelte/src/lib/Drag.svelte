@@ -31,23 +31,31 @@
   let mouseDownX = 0;
   let mouseDownY = 0;
 
+  let thisInitialX = initialX;
+  let thisInitialY = initialY;
+
   onMount(() => {
     object = new ElementObject(engine, null);
-    object.element = element;
     
-    // Set initial position
-    object.transform.x = initialX;
-    object.transform.y = initialY;
-    
-    // Set up DOM transform mode
+    // Set up DOM transform mode BEFORE assigning element
     object.transformMode = "direct";
     object.style = {
       willChange: "transform",
       position: "absolute",
       transformOrigin: "top left",
     };
-    
-    object.requestWrite();
+
+    // Assign element (this triggers requestRead which would overwrite transform)
+    object.element = element;
+    console.log("Element assigned to drag object", initialX, initialY);
+    // Queue transform write AFTER read completes to apply initial position
+    object.queueUpdate("WRITE_1", () => {
+      if (!object) return;
+      object.transform.x = thisInitialX;
+      object.transform.y = thisInitialY;
+      console.log("Initial position set:", thisInitialX, thisInitialY);
+      object.writeTransform();
+    });
 
     // Drag event handlers
     object.event.input.dragStart = (prop: dragStartProp) => {

@@ -48,7 +48,7 @@
 		height: naturalHeight
 	};
 
-	$: viewBox = `${effectiveViewport.minX} ${effectiveViewport.minY} ${effectiveViewport.width} ${effectiveViewport.height}`;
+	$: viewBox = `${0} ${0} ${effectiveViewport.width} ${effectiveViewport.height}`;
 	$: points = pointList.map((point) => `${point.x},${point.y}`).join(" ");
 	$: roundedPath =
 		cornerRadius > 0 ? buildRoundedPath(pointList, cornerRadius) : null;

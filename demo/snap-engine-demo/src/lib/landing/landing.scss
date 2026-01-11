@@ -1,32 +1,5 @@
-:global(#landing) {
-    /* svelte-ignore css-unused-selector */
-    p,
-    label,
-    span {
-        font-size: 11px;
-        color: #716f6d;
-        line-height: 1.1;
-    }
-
-    /* svelte-ignore css-unused-selector */
-    p.panel-label,
-    label.panel-label,
-    span.panel-label {
-        font-size: 8px;
-        color: #969493;
-        line-height: 1.1;
-        position: absolute;
-        top: -12px;
-    }
-
-    .slot {
-        // overflow: visible !important;
-        position: relative;
-    }
-
-    .card {
-        box-shadow: none;
-    }
-}
-
-
+// :global(#landing) {
+//     .card {
+//         box-shadow: none;
+//     }
+// }

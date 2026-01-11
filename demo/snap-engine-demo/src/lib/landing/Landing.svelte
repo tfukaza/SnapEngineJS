@@ -1,244 +1,160 @@
 <script lang="ts">
-  import type { Component, SvelteComponent } from "svelte";
-  import ControlPanel from "./components/ControlPanel.svelte";
-  import CameraControlNodeDemo from "./components/CameraControlNodeDemo.svelte";
-  import HorizontalDragDrop from "./components/HorizontalDragDrop.svelte";
-  import MultiRowDragDemo from "./components/MultiRowDragDemo.svelte";
-  import VerticalDragDrop from "./components/VerticalDragDrop.svelte";
-  import InputEngineDragDemo from "./components/InputEngineDragDemo.svelte";
-  import AnimationControlDemo from "./components/AnimationControlDemo.svelte";
   import InputHandlingCard from "./components/highlights/InputHandlingCard.svelte";
   import AnimationCard from "./components/highlights/AnimationCard.svelte";
   import CameraControlCard from "./components/highlights/CameraControlCard.svelte";
   import DomOptimizationCard from "./components/highlights/DomOptimizationCard.svelte";
   import CollisionCard from "./components/highlights/CollisionCard.svelte";
   import VisualDebuggerCard from "./components/highlights/VisualDebuggerCard.svelte";
+  import Canvas from "../../../../svelte/src/lib/Canvas.svelte";
+  import Item from "../../../../svelte/src/demo/drag_drop/Item.svelte";
+  import Container from "../../../../svelte/src/demo/drag_drop/ItemContainer.svelte";
+  import EmojiWordConnector from "./components/EmojiWordConnector.svelte";
+  import SeqTwoPannable from "./components/SeqTwoPannable.svelte";
+  import SeqOneDropDemo from "./components/SeqOneDropDemo.svelte";
+  import SeqPanel from "./components/SeqPanel.svelte";
 
-  type DebuggableComponent = SvelteComponent & {
-    enableDebug?: () => void;
-    disableDebug?: () => void;
-  };
-
-  type GridSlot = {
-    id: string;
-    label: string;
-    column: string;
-    row: string;
-    component?: Component;
-    className?: string;
-    placeholder?: string;
-    type?: "hero" | "slot";
-    supportsDebug?: boolean;
-    ref?: DebuggableComponent | null;
-  };
-
-  const gridSlots: GridSlot[] = [
+  const dragItems = [
     {
-      id: "control-panel",
-      label: "Control Panel",
-      column: "1 / 3",
-      row: "1 / 3",
-      component: ControlPanel,
-      className: "control-panel"
+      id: "Card A",
+      label: "Animation Seq. 1",
+      color: "var(--color-secondary-1)",
+      description: "Cycle through different colors"
     },
     {
-      id: "horizontal-drag",
-      label: "Horizontal Drag Drop",
-      column: "3 / 6",
-      row: "1 / 2",
-      component: HorizontalDragDrop,
-      supportsDebug: true
+      id: "Card B",
+      label: "Animation Seq. 2",
+      color: "var(--color-secondary-2)",
+      description: "Scale up and down"
     },
     {
-      id: "top-coming-soon",
-      label: "Coming Soon",
-      column: "6 / 7",
-      row: "1 / 2",
-      placeholder: "Demo coming soon"
+      id: "Card C",
+      label: "Animation Seq. 3",
+      color: "var(--color-secondary-3)",
+      description: "Display emojis"
     },
     {
-      id: "camera-control",
-      label: "Camera Control",
-      column: "7 / 9",
-      row: "1 / 3",
-      component: CameraControlNodeDemo,
-      className: "camera-control",
-      supportsDebug: true
-    },
-    {
-      id: "second-row-left",
-      label: "Coming Soon",
-      column: "3 / 6",
-      row: "2 / 3",
-      placeholder: "Demo coming soon"
-    },
-    {
-      id: "second-row-right",
-      label: "Coming Soon",
-      column: "6 / 7",
-      row: "2 / 3",
-      placeholder: "Demo coming soon"
-    },
-    {
-      id: "third-row-left",
-      label: "Coming Soon",
-      column: "1 / 2",
-      row: "3 / 4",
-      placeholder: "Demo coming soon"
-    },
-    {
-      id: "vertical-drag",
-      label: "Vertical Drag Drop",
-      column: "2 / 3",
-      row: "3 / 5",
-      component: VerticalDragDrop,
-      className: "vertical-drag-and-drop",
-      supportsDebug: true
-    },
-    {
-      id: "hero",
-      label: "Hero",
-      column: "3 / 7",
-      row: "3 / 5",
-      type: "hero"
-    },
-    {
-      id: "multi-row-drag",
-      label: "Multi Row Drag",
-      column: "7 / 9",
-      row: "3 / 5",
-      component: MultiRowDragDemo,
-      className: "multi-row-drag",
-      supportsDebug: true
-    },
-    {
-      id: "fourth-row",
-      label: "Coming Soon",
-      column: "1 / 2",
-      row: "4 / 5",
-      placeholder: "Demo coming soon"
-    },
-    {
-      id: "fifth-row-left",
-      label: "Coming Soon",
-      column: "1 / 2",
-      row: "5 / 6",
-      placeholder: "Demo coming soon"
-    },
-    {
-      id: "input-engine",
-      label: "Input Engine",
-      column: "2 / 4",
-      row: "5 / 7",
-      component: InputEngineDragDemo,
-      className: "input-engine",
-      supportsDebug: true
-    },
-    {
-      id: "fifth-row-center",
-      label: "Coming Soon",
-      column: "4 / 7",
-      row: "5 / 6",
-      placeholder: "Demo coming soon"
-    },
-    {
-      id: "fifth-row-right-a",
-      label: "Coming Soon",
-      column: "7 / 8",
-      row: "5 / 6",
-      placeholder: "Demo coming soon"
-    },
-    {
-      id: "fifth-row-right-b",
-      label: "Coming Soon",
-      column: "8 / 9",
-      row: "5 / 6",
-      placeholder: "Demo coming soon"
-    },
-    {
-      id: "bottom-left",
-      label: "Coming Soon",
-      column: "1 / 2",
-      row: "6 / 7",
-      placeholder: "Demo coming soon"
-    },
-    {
-      id: "animation-control",
-      label: "Animation Control",
-      column: "4 / 7",
-      row: "6 / 7",
-      component: AnimationControlDemo,
-      className: "animation-control",
-      supportsDebug: true
-    },
-    {
-      id: "bottom-right",
-      label: "Coming Soon",
-      column: "7 / 9",
-      row: "6 / 7",
-      placeholder: "Demo coming soon"
+      id: "Card D",
+      label: "Animation Seq. 4",
+      color: "var(--color-secondary-4)",
+      description: "Move the object around"
     }
   ];
 
-  let debugStates: Record<string, boolean> = $state({});
+  const seqDropItems = [
+    { id: "seq-color-1", color: "var(--color-secondary-1)", name: "Coral" },
+    { id: "seq-color-2", color: "var(--color-secondary-2)", name: "Sunrise" },
+    { id: "seq-color-3", color: "var(--color-secondary-3)", name: "Mint" },
+    { id: "seq-color-4", color: "var(--color-secondary-4)", name: "Sky" },
+    { id: "seq-color-5", color: "var(--color-secondary-5)", name: "Lavender" }
+  ];
 
-  function handleDebugToggle(slotId: string, enabled: boolean) {
-    const slot = gridSlots.find((item) => item.id === slotId);
-    if (!slot?.supportsDebug) {
-      return;
-    }
-    debugStates = { ...debugStates, [slotId]: enabled };
-    if (enabled) {
-      slot.ref?.enableDebug?.();
-    } else {
-      slot.ref?.disableDebug?.();
-    }
-  }
-
-  $effect(() => {
-    for (const slot of gridSlots) {
-      if (!slot.supportsDebug || !slot.ref) {
-        continue;
-      }
-      if (debugStates[slot.id]) {
-        slot.ref.enableDebug?.();
-      } else {
-        slot.ref.disableDebug?.();
-      }
-    }
-  });
+  let seqFourPathWeight = 0.45;
+  let seqFourDrift = 0.65;
 </script>
 
 <section class="page-width" id="landing" style="height: 80vh; position: relative">
-  <div class="hero-grid">
-    {#each gridSlots as slot (slot.id)}
-      {#if slot.type === "hero"}
-        <div
-          class="card hero-text"
-          style={`grid-column: ${slot.column}; grid-row: ${slot.row};`}
-        >
-          <h1>Interactivity<br /> Engine<br /> for the Web</h1>
+  <div class="hero-layout">
+    <div class="hero-text">
+      <h1>Interactivity<br /> Engine<br /> for the Web</h1>
+    </div>
+    <div class="hero-card card ground">
+      <div class="hero-grid">
+        <!-- Top row -->
+        <div class="top-row">
+          <div class="top-left">
+            <div class="grid-item screen">
+              <div class="item-label">
+                <span class="label-dot" style="background: var(--color-secondary-5)"></span>
+                <span class="label-text">Preview</span>
+              </div>
+              <div class="preview-hero">
+                Interactivity<br />Engine<br />for the Web
+              </div>
+            </div>
+            <SeqPanel label="Sequence 1" accent="var(--color-secondary-1)" className="seq-1">
+              <SeqOneDropDemo tokens={seqDropItems} />
+            </SeqPanel>
+          </div>
+          <div class="top-right">
+            <SeqPanel label="Sequence 3" accent="var(--color-secondary-3)" className="seq-3" gridColumn="1 / 3" gridRow="1 / 2">
+              <div class="seq-3-board">
+                <EmojiWordConnector />
+              </div>
+            </SeqPanel>
+
+            <SeqPanel label="Sequence 2" accent="var(--color-secondary-2)" className="seq-2" gridColumn="1 / 2" gridRow="2 / 3">
+              <SeqTwoPannable />
+            </SeqPanel>
+            <SeqPanel label="Sequence 4" accent="var(--color-secondary-4)" className="seq-4">
+              <div class="seq-4-controls">
+                <label class="slider-control">
+                  <div class="control-header">
+                    <span>Path weight</span>
+                    <span class="control-value">{seqFourPathWeight.toFixed(2)}</span>
+                  </div>
+                  <input
+                    type="range"
+                    min="0"
+                    max="1"
+                    step="0.01"
+                    bind:value={seqFourPathWeight}
+                    aria-label="Adjust path weight"
+                  />
+                </label>
+                <label class="slider-control">
+                  <div class="control-header">
+                    <span>Drift</span>
+                    <span class="control-value">{seqFourDrift.toFixed(2)}</span>
+                  </div>
+                  <input
+                    type="range"
+                    min="0"
+                    max="1"
+                    step="0.01"
+                    bind:value={seqFourDrift}
+                    aria-label="Adjust drift"
+                  />
+                </label>
+              </div>
+            </SeqPanel>
+          </div>
         </div>
-      {:else}
-        <div
-          class={`slot ${slot.className ?? ""}`}
-          style={`grid-column: ${slot.column}; grid-row: ${slot.row};`}
-        >
-          {#if slot.id === "control-panel"}
-            <ControlPanel
-              slots={gridSlots}
-              debugStates={debugStates}
-              onToggleDebug={handleDebugToggle}
-            />
-          {:else if slot.component}
-            {@const DemoComponent = slot.component}
-            <DemoComponent bind:this={slot.ref} />
-          {:else}
-            <div class="card coming-soon"><p>{slot.placeholder ?? "Demo coming soon"}</p></div>
-          {/if}
+        <!-- Middle row - drag cards -->
+        <div class="middle-row slot">
+          <Canvas id="hero-drag-canvas">
+            <Container config={{ direction: "row", groupID: "hero-drag" }}>
+              {#each dragItems as item (item.id)}
+                <Item className="card">
+                  <div class="drag-card-content">
+                    <div class="item-label">
+                      <span class="label-dot" style="background: {item.color}"></span>
+                      <span class="label-text">{item.label}</span>
+                    </div>
+                    <p class="sequence-description">{item.description}</p>
+                  </div>
+                </Item>
+              {/each}
+            </Container>
+          </Canvas>
         </div>
-      {/if}
-    {/each}
+        <!-- Bottom row - slider -->
+        <div class="grid-item slider">
+
+          <input
+            id="wave-timeline"
+            type="range"
+            min="0"
+            max="1"
+            step="0.001"
+
+          />
+          <!-- <button type="button" class="playback-toggle small" >
+            Play
+          </button> -->
+    
+        </div>
+      </div>
+    </div>
   </div>
 </section>
 
@@ -281,29 +197,29 @@
 
 <style lang="scss">
   @use "./landing.scss";
+  @import url("https://fonts.googleapis.com/css2?family=Micro+5&display=swap");
   #landing {
-    // background-color: var(--color-background);
-    // overflow: hidden;
     border-radius: var(--size-12);
+    background-color: var(--color-background-tint);
   }
 
-  .hero-grid {
+  .hero-layout {
     width: 100%;
     height: 100%;
     display: grid;
-    grid-template-columns: repeat(8, 1fr);
-    grid-template-rows: repeat(6, 1fr);
-    gap: 1rem;
+    grid-template-columns: 1fr 1fr;
+    gap: 2rem;
+    align-items: center;
+    padding: 0px 50px;
+    box-sizing: border-box;
   }
 
   .hero-text {
-    grid-column: 3 / 7; 
-    grid-row: 3 / 5; 
     display: flex;
     align-items: center;
-    justify-content: center;
-    text-align: center;
-    z-index: 10;
+    justify-content: flex-start;
+    text-align: left;
+    padding-left: 2rem;
 
     h1 {
       font-size: clamp(2.5rem, 4vw, 3rem);
@@ -312,28 +228,206 @@
     }
   }
 
-  .slot {
-    padding: 1px;
-    overflow: hidden;
-  }
-
-  .coming-soon {
-    width: 100%;
-    height: 100%;
+  .hero-card {
+    height: 600px;
     display: flex;
     align-items: center;
     justify-content: center;
-    margin: 0;
-    font-size: 0.75rem;
-    color: #afa49c;
-    text-align: center;
+    box-sizing: border-box;
+    padding: var(--size-48);
   }
 
-  .card:not(.hero-text) {
-    height:100%;
-    box-sizing: border-box;
-    border-radius: calc(var(--ui-radius) - 2px);
+  .hero-grid {
+    width: 100%;
+    height: 100%;
+    display: flex;
+    flex-direction: column;
+    gap: 0.75rem;
   }
+
+  .top-row {
+    flex: 2;
+    display: grid;
+    grid-template-columns: 1fr 1.5fr;
+    gap: 0.75rem;
+  }
+
+  .top-left {
+    display: flex;
+    flex-direction: column;
+    gap: 0.75rem;
+
+    .grid-item.screen {
+      flex: 1;
+      background-color: #232427;
+      border-radius: 4px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      overflow: hidden;
+      position: relative;
+      padding: 1.5rem;
+      box-sizing: border-box;
+    }
+
+    .preview-hero {
+      font-family: "Micro 5", system-ui;
+      font-size: clamp(1rem, 1.5rem, 4rem);
+
+      color: #f5f5f5;
+      letter-spacing: 0.05em;
+      line-height: 0.9;
+    }
+  }
+
+  .top-right {
+    display: grid;
+    grid-template-columns: 1.5fr 1fr;
+    grid-template-rows: auto 1fr;
+    gap: 0.75rem;
+    
+    :global(.seq-2) {
+      grid-column: 1 / -1;
+    }
+  }
+
+  :global(.seq-1) {
+    display: flex;
+    flex-direction: column;
+    padding: 0.5rem;
+    box-sizing: border-box;
+  }
+
+  :global(.seq-4) {
+    padding: 0.75rem;
+    display: flex;
+    flex-direction: column;
+    gap: 0.5rem;
+  }
+
+  .seq-4-controls {
+    display: flex;
+    flex-direction: column;
+    gap: 0.65rem;
+  }
+
+  .slider-control {
+    display: flex;
+    flex-direction: column;
+    gap: 0.35rem;
+    font-size: 0.78rem;
+    letter-spacing: 0.04em;
+    text-transform: uppercase;
+    color: rgba(15, 23, 42, 0.75);
+  }
+
+  .slider-control input[type="range"] {
+    width: 100%;
+    accent-color: var(--color-secondary-4);
+  }
+
+  .control-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+  }
+
+  .control-value {
+    font-variant-numeric: tabular-nums;
+    font-size: 0.75rem;
+    color: rgba(15, 23, 42, 0.8);
+  }
+
+  .middle-row {
+    height: 70px;
+    background-color: var(--color-background-tint);
+  }
+
+  :global(.middle-row .container) {
+    display: flex;
+    flex-direction: row;
+    width: 100%;
+    height: 100%;
+    align-items: stretch;
+    filter: drop-shadow(2px 2px 4px rgba(28, 39, 56, 0.114));
+  }
+
+  :global(.middle-row .item-wrapper) {
+    height: 100%;
+    width: 25%;
+    box-shadow: none;
+    // --ui-radius: var(--size-4);
+    padding: 0;
+  }
+
+  :global(.middle-row .item) {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    height: 100%;
+    width:100%;
+    padding: 0;
+  }
+
+  .drag-card-content {
+    width: 100%;
+    height: 100%;
+    position: relative;
+    // display: flex;
+    // flex-direction: column;
+    // justify-content: flex-end;
+    // padding: 0.75rem;
+  }
+
+  .grid-item {
+    position: relative;
+  }
+
+  .item-label {
+    position: absolute;
+    top: 0.5rem;
+    left: 0.5rem;
+    display: flex;
+    align-items: center;
+    gap: 0.35rem;
+  }
+
+  .label-dot {
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+    flex-shrink: 0;
+  }
+
+  .label-text {
+    font-size: clamp(0.5rem, 2cqi, 0.75rem);
+    color: #8b8a89;
+    white-space: nowrap;
+  }
+
+  .grid-item, .drag-card-content {
+    container-type: inline-size;
+  }
+
+  .sequence-description {
+    font-size: clamp(0.6rem, 3cqi, 0.85rem);
+    color: #5a5654;
+    margin: 0;
+    margin-top: auto;
+  }
+
+  .slider {
+    flex: 0.5;
+    border-radius: var(--ui-radius);
+
+    input[type="range"] {
+      width: 100%;
+     
+    }
+  }
+
+  
 
   .interactivity-explainer {
     margin-top: clamp(3rem, 6vw, 6rem);
@@ -342,7 +436,6 @@
   .interactivity-intro {
     grid-column: 1 / -1;
     text-align: center;
-    // max-width: clamp(32rem, 80%, 48rem);
     margin: clamp(20px, 20vh, 300px) auto;
 
     h2 {
@@ -360,7 +453,6 @@
     background: transparent;
     border-radius: 0;
     padding: clamp(1.5rem, 4vw, 3rem);
-    // box-shadow: 0 20px 60px rgba(27, 16, 10, 0.08);
     text-align: center;
   }
 
@@ -377,33 +469,6 @@
     max-width: 32rem;
     margin: 0 auto clamp(2rem, 4vw, 3rem);
     line-height: 1.6;
-  }
-
-  .highlight-grid {
-    display: grid;
-    grid-template-columns: repeat(2, minmax(180px, 1fr));
-    gap: 1.25rem;
-    margin-bottom: clamp(1.5rem, 3vw, 2.5rem);
-  }
-
-  .divider {
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    gap: 1rem;
-    margin-bottom: clamp(2rem, 4vw, 3rem);
-    color: #7d6a5f;
-    font-weight: 600;
-    text-transform: uppercase;
-    letter-spacing: 0.08em;
-  }
-
-  .divider::before,
-  .divider::after {
-    content: "";
-    flex: 1;
-    height: 1px;
-    background: rgba(125, 106, 95, 0.4);
   }
  
   .assets-showcase {

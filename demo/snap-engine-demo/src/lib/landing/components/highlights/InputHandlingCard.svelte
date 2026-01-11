@@ -1,6 +1,5 @@
 <script lang="ts">
   import { onDestroy, onMount } from "svelte";
-  import HighlightCardShell from "./HighlightCardShell.svelte";
   import Canvas from "../../../../../../svelte/src/lib/Canvas.svelte";
   import SvgLine from "../../../SvgLine.svelte";
   import { ElementObject } from "../../../../../../../src/object";
@@ -11,11 +10,12 @@
     pointerUpProp,
     dragStartProp,
     dragProp,
-    dragEndProp
+    dragEndProp,
   } from "../../../../../../../src/input";
   import mouseIconSvg from "../../../assets/icons/mouse.svg?raw";
   import penIconSvg from "../../../assets/icons/vector-pen.svg?raw";
   import handIconSvg from "../../../assets/icons/hand-index.svg?raw";
+  import HighlightCardShell from "./HighlightCardShell.svelte";
 
   type PanelId = "mouse" | "pen" | "touch";
 
@@ -32,19 +32,50 @@
   };
 
   const PANEL_PRESETS: PanelTemplate[] = [
-    { id: "mouse", label: "Mouse", helper: "Desktop cursor + wheel", accent: "var(--color-secondary-1)" },
-    { id: "pen", label: "Pen", helper: "Pressure + tilt aware", accent: "var(--color-secondary-4)" },
-    { id: "touch", label: "Touch", helper: "Gestures + inertia", accent: "var(--color-secondary-3)" }
+    {
+      id: "mouse",
+      label: "Mouse",
+      helper: "Desktop cursor + wheel",
+      accent: "var(--color-secondary-1)",
+    },
+    {
+      id: "pen",
+      label: "Pen",
+      helper: "Pressure + tilt aware",
+      accent: "var(--color-secondary-4)",
+    },
+    {
+      id: "touch",
+      label: "Touch",
+      helper: "Gestures + inertia",
+      accent: "var(--color-secondary-3)",
+    },
   ];
 
   const PANEL_ICONS: Record<PanelId, string> = {
     mouse: mouseIconSvg,
     pen: penIconSvg,
-    touch: handIconSvg
+    touch: handIconSvg,
+  };
+
+  type Viewport = { minX: number; minY: number; width: number; height: number };
+
+  const EVENT_LINE_VIEWPORT_FALLBACK: Viewport = {
+    minX: 0,
+    minY: 0,
+    width: 300,
+    height: 140,
+  };
+
+  type EventLineConfig = {
+    id: PanelId;
+    fixedRatio: number;
+    fallbackRatio: number;
   };
 
   type EventLine = {
     id: PanelId;
+    stroke: string;
     x1: number;
     y1: number;
     x2: number;
@@ -53,51 +84,40 @@
     y3: number;
     x4: number;
     y4: number;
-    stroke: string;
   };
 
-  const EVENT_LINE_VIEWPORT = { minX: 0, minY: 0, width: 300, height: 140 } as const;
+  const EVENT_LINE_COLOR = "#AAAAAA";
 
-  const EVENT_LINES: EventLine[] = [
+  const EVENT_LINE_CONFIG: EventLineConfig[] = [
     {
       id: "mouse",
-      x1: 30,
-      y1: 15,
-      x2: 30,
-      y2: 80,
-      x3: 150,
-      y3: 80,
-      x4: 150,
-      y4: 125,
-      stroke: "var(--color-secondary-7)"
+      fixedRatio: 0.165,
+      fallbackRatio: 0.12,
     },
     {
       id: "pen",
-      x1: 150,
-      y1: 15,
-      x2: 210,
-      y2: 35,
-      x3: 170,
-      y3: 90,
-      x4: 150,
-      y4: 125,
-      stroke: "var(--color-secondary-6)"
+      fixedRatio: 0.5,
+      fallbackRatio: 0.5,
     },
     {
       id: "touch",
-      x1: 270,
-      y1: 15,
-      x2: 270,
-      y2: 85,
-      x3: 150,
-      y3: 85,
-      x4: 150,
-      y4: 125,
-      stroke: "var(--color-secondary-3)"
-    }
+      fixedRatio: 0.835,
+      fallbackRatio: 0.88,
+    },
   ];
 
-  let panels: PanelInstance[] = PANEL_PRESETS.map((panel) => ({ ...panel, element: null, object: null }));
+  let eventLineViewport = $state<Viewport>(EVENT_LINE_VIEWPORT_FALLBACK);
+  let eventLines = $state<EventLine[]>(createDefaultLines());
+  let eventArrowsRef: HTMLDivElement | null = null;
+  let eventPanelRef: HTMLDivElement | null = null;
+  let panelGridRef: HTMLDivElement | null = null;
+  let panelGridObserver: ResizeObserver | null = null;
+
+  let panels: PanelInstance[] = PANEL_PRESETS.map((panel) => ({
+    ...panel,
+    element: null,
+    object: null,
+  }));
   let engine: Engine | null = $state(null);
   let canvasComponent: Canvas | null = null;
   let pointer = $state({ x: 0.5, y: 0.5 });
@@ -105,26 +125,55 @@
   let isInteracting = $state(false);
   let demoInitialized = $state(false);
   let panelElementsVersion = $state(0);
-  type EventKind = "pointerDown" | "pointerMove" | "pointerUp" | "dragStart" | "drag" | "dragEnd";
+  type EventKind =
+    | "pointerDown"
+    | "pointerMove"
+    | "pointerUp"
+    | "dragStart"
+    | "drag"
+    | "dragEnd";
   let lastEvent = $state<string | null>(null);
   let dragActive = $state(false);
+  let linesGlowing = $state(false);
+  let glowTimeout: ReturnType<typeof setTimeout> | null = null;
 
   function clamp(value: number, min = 0, max = 1) {
     return Math.max(min, Math.min(max, value));
   }
 
-  function updatePointerFromScreen(panel: PanelInstance, screenX: number, screenY: number) {
+  function updatePointerFromScreen(
+    panel: PanelInstance,
+    screenX: number,
+    screenY: number,
+  ) {
     const rect = panel.element?.getBoundingClientRect();
     if (!rect) return;
     pointer = {
       x: clamp((screenX - rect.left) / rect.width),
-      y: clamp((screenY - rect.top) / rect.height)
+      y: clamp((screenY - rect.top) / rect.height),
     };
     activePanel = panel.id;
-    isInteracting = true;
+    // isInteracting = true;
   }
 
-  function recordEvent(kind: EventKind, panel: PanelInstance, button: number, x: number, y: number) {
+  function triggerLineGlow() {
+    linesGlowing = true;
+    if (glowTimeout) {
+      clearTimeout(glowTimeout);
+    }
+    glowTimeout = setTimeout(() => {
+      linesGlowing = false;
+      glowTimeout = null;
+    }, 200);
+  }
+
+  function recordEvent(
+    kind: EventKind,
+    panel: PanelInstance,
+    button: number,
+    x: number,
+    y: number,
+  ) {
     if (kind === "dragStart") {
       dragActive = true;
     } else if (kind === "dragEnd") {
@@ -134,22 +183,50 @@
       return;
     }
     lastEvent = `${kind}(x = ${x.toFixed(1)}, y = ${y.toFixed(1)}, btn = ${button})`;
+    triggerLineGlow();
   }
 
   function handlePointerDown(panel: PanelInstance, prop: pointerDownProp) {
-    updatePointerFromScreen(panel, prop.position.screenX, prop.position.screenY);
-    recordEvent("pointerDown", panel, prop.button, prop.position.x, prop.position.y);
+    isInteracting = true;
+    updatePointerFromScreen(
+      panel,
+      prop.position.screenX,
+      prop.position.screenY,
+    );
+    recordEvent(
+      "pointerDown",
+      panel,
+      prop.button,
+      prop.position.x,
+      prop.position.y,
+    );
   }
 
   function handlePointerMove(panel: PanelInstance, prop: pointerMoveProp) {
-    updatePointerFromScreen(panel, prop.position.screenX, prop.position.screenY);
-    recordEvent("pointerMove", panel, prop.button, prop.position.x, prop.position.y);
+    updatePointerFromScreen(
+      panel,
+      prop.position.screenX,
+      prop.position.screenY,
+    );
+    recordEvent(
+      "pointerMove",
+      panel,
+      prop.button,
+      prop.position.x,
+      prop.position.y,
+    );
   }
 
   function handlePointerUp(panel: PanelInstance, prop: pointerUpProp) {
     isInteracting = false;
     dragActive = false;
-    recordEvent("pointerUp", panel, prop.button, prop.position.x, prop.position.y);
+    recordEvent(
+      "pointerUp",
+      panel,
+      prop.button,
+      prop.position.x,
+      prop.position.y,
+    );
   }
 
   function handleDragStart(panel: PanelInstance, prop: dragStartProp) {
@@ -168,12 +245,17 @@
     if (panel.object || !panel.element) return;
     panel.object = new ElementObject(currentEngine, null);
     panel.object.element = panel.element;
-    panel.object.event.input.pointerDown = (prop: pointerDownProp) => handlePointerDown(panel, prop);
-    panel.object.event.input.pointerMove = (prop: pointerMoveProp) => handlePointerMove(panel, prop);
-    panel.object.event.input.pointerUp = (prop: pointerUpProp) => handlePointerUp(panel, prop);
-    panel.object.event.input.dragStart = (prop: dragStartProp) => handleDragStart(panel, prop);
+    panel.object.event.input.pointerDown = (prop: pointerDownProp) =>
+      handlePointerDown(panel, prop);
+    panel.object.event.input.pointerMove = (prop: pointerMoveProp) =>
+      handlePointerMove(panel, prop);
+    panel.object.event.input.pointerUp = (prop: pointerUpProp) =>
+      handlePointerUp(panel, prop);
+    panel.object.event.input.dragStart = (prop: dragStartProp) =>
+      handleDragStart(panel, prop);
     panel.object.event.input.drag = (prop: dragProp) => handleDrag(panel, prop);
-    panel.object.event.input.dragEnd = (prop: dragEndProp) => handleDragEnd(panel, prop);
+    panel.object.event.input.dragEnd = (prop: dragEndProp) =>
+      handleDragEnd(panel, prop);
   }
 
   function initializeDemo(currentEngine: Engine) {
@@ -212,6 +294,11 @@
       }
       panel.element = null;
     }
+    cleanupPanelGridObserver();
+    if (glowTimeout) {
+      clearTimeout(glowTimeout);
+      glowTimeout = null;
+    }
   });
 
   function registerPanel(node: HTMLElement, panel: PanelInstance) {
@@ -230,49 +317,208 @@
         }
         panel.element = null;
         panelElementsVersion += 1;
-      }
+      },
     };
   }
+
+  function buildLine(
+    config: EventLineConfig,
+    startRatio: number,
+    targetRatio: number,
+    viewport = eventLineViewport,
+  ): EventLine {
+    const width = Math.max(1, viewport.width);
+    const height = Math.max(1, viewport.height);
+    const startX = startRatio * width;
+    const targetX = targetRatio * width;
+    const elbowBase = height * 0.6;
+    const elbowY = clamp(elbowBase, 0, height);
+
+    return {
+      id: config.id,
+      stroke: EVENT_LINE_COLOR,
+      x1: startX,
+      y1: 0,
+      x2: startX,
+      y2: elbowY,
+      x3: targetX,
+      y3: elbowY,
+      x4: targetX,
+      y4: height,
+    };
+  }
+
+  function createDefaultLines(
+    targetRatio = 0.5,
+    viewport = EVENT_LINE_VIEWPORT_FALLBACK,
+  ) {
+    return EVENT_LINE_CONFIG.map((config) =>
+      buildLine(
+        config,
+        config.fixedRatio ?? config.fallbackRatio,
+        targetRatio,
+        viewport,
+      ),
+    );
+  }
+
+  function resolveStartRatio(
+    config: EventLineConfig,
+    arrowsRect: DOMRect,
+    panelGridRect?: DOMRect,
+  ) {
+    const fallback = config.fixedRatio ?? config.fallbackRatio;
+    if (!panelGridRect || !panelGridRect.width) {
+      return fallback;
+    }
+
+    const normalizedRatio = clamp(fallback, 0, 1);
+    const panelOffset = panelGridRect.left - arrowsRect.left;
+    const absoluteStartX = panelOffset + panelGridRect.width * normalizedRatio;
+    if (!arrowsRect.width) {
+      return fallback;
+    }
+    return clamp(absoluteStartX / arrowsRect.width, 0, 1);
+  }
+
+  function updateEventLines() {
+    if (typeof window === "undefined") {
+      eventLines = createDefaultLines();
+      return;
+    }
+
+    if (!eventArrowsRef) {
+      eventLineViewport = EVENT_LINE_VIEWPORT_FALLBACK;
+      eventLines = createDefaultLines();
+      return;
+    }
+
+    const arrowsRect = eventArrowsRef.getBoundingClientRect();
+    if (!arrowsRect.width || !arrowsRect.height) {
+      eventLineViewport = EVENT_LINE_VIEWPORT_FALLBACK;
+      eventLines = createDefaultLines();
+      return;
+    }
+
+    const viewport = {
+      minX: 0,
+      minY: 0,
+      width: arrowsRect.width,
+      height: arrowsRect.height,
+    } as const;
+    eventLineViewport = viewport;
+
+    const panelGridRect = panelGridRef?.getBoundingClientRect();
+    const eventPanelRect = eventPanelRef?.getBoundingClientRect();
+    const eventPanelCenter = eventPanelRect
+      ? eventPanelRect.left + eventPanelRect.width / 2
+      : arrowsRect.left + arrowsRect.width / 2;
+    const eventPanelRatio = clamp(
+      (eventPanelCenter - arrowsRect.left) / arrowsRect.width,
+    );
+
+    eventLines = EVENT_LINE_CONFIG.map((config) => {
+      const startRatio = resolveStartRatio(config, arrowsRect, panelGridRect);
+      return buildLine(config, startRatio, eventPanelRatio, viewport);
+    });
+  }
+
+  onMount(() => {
+    const handleResize = () => updateEventLines();
+    if (typeof window !== "undefined") {
+      window.addEventListener("resize", handleResize);
+    }
+    updateEventLines();
+
+    return () => {
+      if (typeof window !== "undefined") {
+        window.removeEventListener("resize", handleResize);
+      }
+    };
+  });
+
+  $effect(() => {
+    panelElementsVersion;
+    updateEventLines();
+  });
+
+  function cleanupPanelGridObserver() {
+    if (panelGridObserver) {
+      panelGridObserver.disconnect();
+      panelGridObserver = null;
+    }
+  }
+
+  $effect(() => {
+    eventArrowsRef;
+    eventPanelRef;
+    updateEventLines();
+  });
+
+  $effect(() => {
+    const node = panelGridRef;
+    cleanupPanelGridObserver();
+    if (!node || typeof ResizeObserver === "undefined") {
+      updateEventLines();
+      return;
+    }
+
+    const observer = new ResizeObserver(() => updateEventLines());
+    panelGridObserver = observer;
+    observer.observe(node);
+    updateEventLines();
+
+    return () => {
+      observer.disconnect();
+      if (panelGridObserver === observer) {
+        panelGridObserver = null;
+      }
+    };
+  });
 </script>
 
-<HighlightCardShell className="input-handling-card theme-secondary-5">
-  <h3>Input Handling</h3>
-  <p>
-    Common API for multiple types of input devices.
-  </p>
-
+<HighlightCardShell
+  className="input-handling-card theme-secondary-5"
+  title="Input Handling"
+  description="Common API for multiple types of input devices."
+>
   <div class="pointer-demo-wrapper">
-    <Canvas id="input-handling-sync" bind:engine={engine} bind:this={canvasComponent}>
+    <Canvas id="input-handling-sync" bind:engine bind:this={canvasComponent}>
       <div class="pointer-surface">
-        <div class="panel-grid" aria-label="Synced input devices">
+        <div
+          class="panel-grid"
+          aria-label="Synced input devices"
+          bind:this={panelGridRef}
+        >
           {#each panels as panel (panel.id)}
-          <div class="pointer-slot slot">
-            <div
-              class={`pointer-panel card ${panel.id} ${activePanel === panel.id ? "active" : ""}`}
-              style={`--panel-accent: ${panel.accent};`}
-              use:registerPanel={panel}
-            >
-              <header>
-                <span class="panel-label">{panel.label}</span>
-                <!-- <span class="panel-helper">{panel.helper}</span> -->
-              </header>
-
+            <div class="pointer-slot slot">
               <div
-                class={`cursor ${isInteracting ? "live" : ""}`}
-                style={`left: ${pointer.x * 100}%; top: ${pointer.y * 100}%;`}
-                aria-hidden="true"
+                class={`pointer-panel card ${panel.id} ${activePanel === panel.id ? "active" : ""}`}
+                style={`--panel-accent: ${panel.accent};`}
+                use:registerPanel={panel}
               >
-                <span class="cursor-icon" aria-hidden="true">
-                  {@html PANEL_ICONS[panel.id]}
-                </span>
+                <header>
+                  <span class="panel-label">{panel.label}</span>
+                  <!-- <span class="panel-helper">{panel.helper}</span> -->
+                </header>
+
+                <div
+                  class={`cursor ${isInteracting ? "live" : ""}`}
+                  style={`left: ${pointer.x * 100}%; top: ${pointer.y * 100}%;`}
+                  aria-hidden="true"
+                >
+                  <span class="cursor-icon" aria-hidden="true">
+                    {@html PANEL_ICONS[panel.id]}
+                  </span>
+                </div>
               </div>
-            </div></div>
+            </div>
           {/each}
         </div>
-        <div class="event-arrows" aria-hidden="true">
-          {#each EVENT_LINES as line (line.id)}
+        <div class="event-arrows" aria-hidden="true" bind:this={eventArrowsRef}>
+          {#each eventLines as line (line.id)}
             <SvgLine
-              className={`event-line ${line.id}`}
+              className={`event-line ${line.id} ${linesGlowing ? "glow" : ""}`}
               x1={line.x1}
               y1={line.y1}
               x2={line.x2}
@@ -282,19 +528,22 @@
               x4={line.x4}
               y4={line.y4}
               stroke={line.stroke}
-              strokeWidth={2.75}
+              strokeWidth={2}
               strokeLinecap="round"
               strokeLinejoin="round"
               padding={0}
               cornerRadius={18}
-              viewport={EVENT_LINE_VIEWPORT}
+              viewport={eventLineViewport}
               ariaHidden={true}
               ariaLabel={`${line.id} input event path`}
             />
           {/each}
         </div>
-        <div class="card event-panel" aria-live="polite">
-         
+        <div
+          class="card event-panel"
+          aria-live="polite"
+          bind:this={eventPanelRef}
+        >
           {#if lastEvent}
             <p class="event-line">{lastEvent}</p>
           {:else}
@@ -308,22 +557,22 @@
 
 <style lang="scss">
   .pointer-demo-wrapper {
-    margin-top: 1rem;
+    background-color: var(--color-background-tint);
+    // border: 1px solid #d6d3d2;
+    // border-radius: var(--ui-radius);
+    display: flex;
+    flex-direction: column;
+    gap: 0;
+    align-items: stretch;
+    padding: var(--size-48)
   }
 
   :global(.pointer-demo-wrapper #snap-canvas) {
-    overflow: visible!important;
+    overflow: visible !important;
   }
 
   .pointer-surface {
-    border: 1px solid #e6e3e2;
-    background-color: var(--color-background);
-    border-radius: var(--ui-radius);
-    display: flex;
-    flex-direction: column;
-    gap: var(--size-12);
-    align-items: stretch;
-    padding: clamp(1rem, 2.5vw, 1.5rem);
+
   }
 
   .panel-grid {
@@ -339,10 +588,10 @@
   .pointer-panel {
     position: relative;
     min-height: 150px;
-    padding: 0.65rem;
-    border-radius: var(--ui-radius);
-    // background: #ffffff;
-    border: 1px solid rgba(58, 42, 34, 0.14);
+    padding: var(--size-24);
+    // border-radius: var(--ui-radius);
+    background: #ffffff;
+    // border: 1px solid rgba(58, 42, 34, 0.14);
     // overflow: hidden;
     cursor: none;
   }
@@ -379,10 +628,10 @@
     pointer-events: none;
     color: var(--panel-accent);
     filter: drop-shadow(0 4px 12px rgba(0, 0, 0, 0.15));
-  }
-
-  .cursor.live {
-    transform: translate(-50%, -50%) scale(1.05);
+    
+    &.live {
+      transform: translate(-50%, -50%) scale(0.9);
+    }
   }
 
   .cursor-icon {
@@ -391,17 +640,18 @@
   }
 
   .cursor-icon :global(svg) {
-    width: 28px;
-    height: 28px;
+    width: 20px;
+    height: 20px;
     display: block;
   }
 
   .event-arrows {
     position: relative;
-    width: clamp(260px, 80%, 420px);
-    height: 90px;
-    align-self: center;
-    margin: -0.35rem 0 -0.25rem;
+    width: 100%;
+    max-width: 100%;
+    height: 80px;
+    align-self: stretch;
+    margin: 0;
     pointer-events: none;
   }
 
@@ -412,12 +662,20 @@
     height: 100%;
     opacity: 0.95;
     filter: drop-shadow(0 3px 6px rgba(0, 0, 0, 0.08));
+    transition:
+      filter 0.25s ease,
+      opacity 0.3s ease;
   }
+
+  // .event-arrows :global(.event-line.glow) {
+  //   filter: drop-shadow(0 0 8px rgba(0, 0, 0, 0.4))
+  //     drop-shadow(0 0 18px rgba(0, 0, 0, 0.25));
+  //   animation: event-line-glow 0.2s ease-out;
+  // }
 
   .event-panel {
     align-self: center;
     background: #fff;
-   
   }
 
   .event-panel .event-line {
@@ -436,6 +694,18 @@
     font-size: 0.8rem;
     color: rgba(58, 42, 34, 0.6);
     white-space: nowrap;
+  }
+
+  @keyframes event-line-glow {
+    0% {
+      opacity: 1;
+    }
+    30% {
+      opacity: 1;
+    }
+    100% {
+      opacity: 0.55;
+    }
   }
 
   @media (max-width: 720px) {
@@ -459,6 +729,7 @@
       flex-direction: column;
       text-align: center;
       gap: 0.35rem;
+      margin-top: 0.65rem;
     }
 
     .event-panel .event-line,
@@ -466,6 +737,5 @@
       max-width: 100%;
       white-space: normal;
     }
-
   }
 </style>

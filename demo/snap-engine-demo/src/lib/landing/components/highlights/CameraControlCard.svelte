@@ -1,8 +1,8 @@
 <script lang="ts">
-  import HighlightCardShell from "./HighlightCardShell.svelte";
   import Canvas from "../../../../../../svelte/src/lib/Canvas.svelte";
   import CameraControlComponent from "../../../../../../svelte/src/lib/CameraControl.svelte";
   import type { CameraControl as CameraControlApi } from "../../../../../../../src/asset/cameraControl";
+  import HighlightCardShell from "./HighlightCardShell.svelte";
 
   let cameraControl: CameraControlApi | null = null;
   let canvasComponent: Canvas | null = null;
@@ -17,26 +17,13 @@
   const zoomOut = () => zoom(-ZOOM_STEP);
 </script>
 
-<HighlightCardShell className="camera-control-card theme-secondary-7">
-  <div class="camera-card">
-    <div class="card-heading">
-      <div>
-        <h3>Camera Control</h3>
-        <p>Control pan and zoom of any DOM element.</p>
-      </div>
-      <div class="zoom-controls" aria-label="Zoom controls">
-        <button type="button" class="zoom-button" on:click={zoomIn} aria-label="Zoom in">
-          +
-        </button>
-        <button type="button" class="zoom-button" on:click={zoomOut} aria-label="Zoom out">
-          −
-        </button>
-      </div>
-    </div>
-
-    <div class="camera-stage">
-      <div class="canvas-wrapper">
-  <Canvas id="camera-control-highlight" bind:this={canvasComponent}>
+<HighlightCardShell
+  className="camera-control-card theme-secondary-7"
+  title="Camera Control"
+  description="Control pan and zoom of any DOM element."
+>
+  <div class="camera-card slot">
+        <Canvas id="camera-control-highlight" bind:this={canvasComponent}>
           <CameraControlComponent bind:cameraControl>
             <div class="image-stage">
               <div class="photo-credit">
@@ -54,67 +41,70 @@
             </div>
           </CameraControlComponent>
         </Canvas>
-      </div>
-    </div>
   </div>
+
+  <div class="zoom-controls card" aria-label="Zoom controls">
+    <button type="button" class="zoom-button" on:click={zoomIn} aria-label="Zoom in">
+      +
+    </button>
+    <button type="button" class="zoom-button" on:click={zoomOut} aria-label="Zoom out">
+      −
+    </button>
+  </div>
+
+
 </HighlightCardShell>
 
 <style lang="scss">
   .camera-card {
-    display: flex;
-    flex-direction: column;
-    gap: 0.65rem;
-  }
-
-  .card-heading {
-    display: flex;
-    align-items: flex-start;
-    justify-content: space-between;
-    gap: 0.75rem;
-  }
-
-  .card-heading h3 {
-    margin: 0;
-  }
-
-  .card-heading p {
-    margin: 0.25rem 0 0;
-    color: rgba(47, 31, 26, 0.7);
+    // display: flex;
+    // flex-direction: column;
+    background-color: var(--color-background);
+    height: 100%;
+    border-top-left-radius: 0;
+    border-top-right-radius: 0;
   }
 
   .zoom-controls {
     display: inline-flex;
-    background: var(--card-accent, rgba(26, 20, 16, 0.85));
-    border-radius: 999px;
-    padding: 0.2rem;
-    gap: 0.2rem;
-    box-shadow: 0 10px 30px color-mix(in srgb, var(--card-accent, #000) 45%, rgba(0, 0, 0, 0.25));
+    gap: var(--size-8);
+    position: absolute;
+    bottom: var(--size-24);
+    left: 50%;
+    transform: translateX(-50%);
+    background-color: #ffffff5e;
+    backdrop-filter: blur(2px);
+    padding: var(--size-8);
+
+    button {
+      --button-color: #ffffff75;
+    }
   }
 
-  .zoom-button {
-    width: 2rem;
-    height: 2rem;
-    border-radius: 999px;
-    border: 1px solid color-mix(in srgb, #ffffff 60%, var(--card-accent, rgba(26, 20, 16, 0.85)));
-    background: color-mix(in srgb, #ffffff 12%, var(--card-accent, rgba(26, 20, 16, 0.85)));
-    color: #ffffff;
-    font-size: 1.2rem;
-    line-height: 1;
-    cursor: pointer;
-    transition: border-color 0.2s ease, background 0.2s ease;
-  }
+  // .zoom-button {
+  //   width: 2rem;
+  //   height: 2rem;
+  //   border-radius: 999px;
+  //   border: 1px solid color-mix(in srgb, #ffffff 60%, var(--card-accent, rgba(26, 20, 16, 0.85)));
+  //   background: color-mix(in srgb, #ffffff 12%, var(--card-accent, rgba(26, 20, 16, 0.85)));
+  //   color: #ffffff;
+  //   font-size: 1.2rem;
+  //   line-height: 1;
+  //   cursor: pointer;
+  //   transition: border-color 0.2s ease, background 0.2s ease;
+  // }
 
-  .zoom-button:hover {
-    border-color: color-mix(in srgb, #ffffff 75%, var(--card-accent, rgba(26, 20, 16, 0.85)));
-    background: color-mix(in srgb, #ffffff 28%, var(--card-accent, rgba(26, 20, 16, 0.85)));
-  }
+  // .zoom-button:hover {
+  //   border-color: color-mix(in srgb, #ffffff 75%, var(--card-accent, rgba(26, 20, 16, 0.85)));
+  //   background: color-mix(in srgb, #ffffff 28%, var(--card-accent, rgba(26, 20, 16, 0.85)));
+  // }
 
   .camera-stage {
-    border-radius: 1rem;
-    overflow: hidden;
-    box-shadow: inset 0 0 0 1px rgba(47, 31, 26, 0.12);
-    background: radial-gradient(circle at top, rgba(255, 255, 255, 0.25), transparent 65%);
-    height: 320px;
+    // border-radius: 1rem;
+    // overflow: hidden;
+    // box-shadow: inset 0 0 0 1px rgba(47, 31, 26, 0.12);
+    // background: radial-gradient(circle at top, rgba(255, 255, 255, 0.25), transparent 65%);
+    // height: 320px;
   }
 
   .canvas-wrapper {
@@ -127,12 +117,17 @@
   }
 
   .image-stage {
-    width: 100%;
-    height: 100%;
+    width: 500px;
     position: relative;
     pointer-events: none;
     overflow: hidden;
     border-radius: calc(var(--ui-radius, 18px) - 4px);
+
+    img {
+      width: 100%;
+      height: 100%;
+      object-fit: cover;
+    }
   }
 
   .photo-credit {
@@ -155,12 +150,12 @@
     text-decoration: underline;
   }
 
-  .stage-image {
-    width: 100%;
-    height: 100%;
-    object-fit: cover;
-    filter: saturate(0.9);
-  }
+  // .stage-image {
+  //   width: 100%;
+  //   height: 100%;
+  //   object-fit: cover;
+  //   filter: saturate(0.9);
+  // }
 
   @media (max-width: 720px) {
     .zoom-controls {
