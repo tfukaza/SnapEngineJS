@@ -2,6 +2,7 @@
   import Canvas from "../../../../../svelte/src/lib/Canvas.svelte";
   import Item from "../../../../../svelte/src/demo/drag_drop/Item.svelte";
   import Container from "../../../../../svelte/src/demo/drag_drop/ItemContainer.svelte";
+  import { debugState } from "../debugState.svelte";
 
   const items = [
     "Option 1",
@@ -51,7 +52,7 @@
   }
 </script>
 <p class="panel-label">▼ Vertical Drag v0.1</p>
-<Canvas id="vertical-drag-drop-canvas" bind:this={canvasComponent}>
+<Canvas id="vertical-drag-drop-canvas" bind:this={canvasComponent} debug={debugState.enabled}>
   <div class="vertical-drag-drop">
     <Container config={{ direction: "column", groupID: "vertical-landing" }}>
       {#each decoratedItems as item (item.label)}

@@ -379,6 +379,95 @@ label:has(input[type="radio"]) {
   }
 }
 
+/* Toggle Switch Styles */
+label:has(input[type="checkbox"].toggle) {
+  input+span {
+    --toggle-width: 40px;
+    --toggle-height: 20px;
+    --toggle-knob-size: 16px;
+    --toggle-padding: 2px;
+    --specular-angle: 130deg;
+    --toggle-color: var(--color-primary);
+    --toggle-on-background: var(--color-primary);
+
+    width: var(--toggle-width);
+    height: var(--toggle-height);
+    border-radius: var(--toggle-height);
+    background-color: var(--color-background-tint);
+    box-shadow:
+      -6px -6px 8px 0px rgba(255, 255, 255, 0.162) inset,
+      2px 2px 6.1px -1px rgba(14, 26, 40, 0.31) inset,
+      -1px -1px 1px 0px rgba(73, 40, 49, 0.25),
+      1px 1px 1px 0px rgba(255, 255, 255, 0.25),
+      8px 8px 20px -7px rgba(40, 49, 73, 0.25) inset;
+    position: relative;
+    transition: background-color 0.15s ease;
+
+    &::before {
+      content: "";
+      position: absolute;
+      top: var(--toggle-padding);
+      left: var(--toggle-padding);
+      width: var(--toggle-knob-size);
+      height: var(--toggle-knob-size);
+      border-radius: 50%;
+      transform: none;
+      background: radial-gradient(
+          hsl(from var(--toggle-color) h calc(s + 5) calc(l + 15)) 0%,
+          hsl(from var(--toggle-color) h s calc(l + 10)) 50%,
+          hsl(from var(--toggle-color) h s l / 0) 58%,
+          hsl(from var(--toggle-color) h s l / 0) 65%,
+          hsl(from var(--toggle-color) h s calc(l - 5) / 0.4) 72%
+        ),
+        conic-gradient(
+          from var(--specular-angle) at center,
+          hsl(from var(--toggle-color) h calc(s + 20) calc(l + 5) / 0.1) 43%,
+          #fff 57%,
+          hsl(from var(--toggle-color) h calc(s + 20) calc(l + 5) / 0.1) 70%
+        ),
+        conic-gradient(
+          from 120deg at center,
+          hsl(from var(--toggle-color) h calc(s - 5) calc(l - 10)) 0%,
+          hsl(from var(--toggle-color) calc(h + 10) calc(s + 10) calc(l + 20)) 50%,
+          hsl(from var(--toggle-color) h calc(s - 5) calc(l - 10)) 100%
+        );
+      box-shadow:
+        2px 2px 2px 0px rgba(4, 14, 48, 0.096),
+        4px 4px 4px -3px rgba(7, 20, 53, 0.142),
+        6px 6px 6px -4px rgba(6, 21, 40, 0.422);
+      transition: left 0.15s ease, --specular-angle 0.15s ease, --toggle-color 0.15s ease;
+    }
+
+    &::after {
+      content: none;
+    }
+  }
+
+  input:checked+span {
+    background-color: var(--toggle-on-background);
+  }
+
+  input:checked+span {
+    &::before {
+      --specular-angle: 150deg;
+      // --toggle-color: var(--color-background-tint);
+      left: calc(var(--toggle-width) - var(--toggle-knob-size) - var(--toggle-padding));
+    }
+  }
+
+  &.small input+span {
+    --toggle-width: 32px;
+    --toggle-height: 16px;
+    --toggle-knob-size: 12px;
+  }
+
+  &.large input+span {
+    --toggle-width: 52px;
+    --toggle-height: 26px;
+    --toggle-knob-size: 22px;
+  }
+}
+
 input[type="range"] {
   --specular-angle: 130deg;
 

@@ -16,6 +16,7 @@
   import penIconSvg from "../../../assets/icons/vector-pen.svg?raw";
   import handIconSvg from "../../../assets/icons/hand-index.svg?raw";
   import HighlightCardShell from "./HighlightCardShell.svelte";
+  import { debugState } from "../../debugState.svelte";
 
   type PanelId = "mouse" | "pen" | "touch";
 
@@ -241,6 +242,13 @@
     recordEvent("dragEnd", panel, prop.button, prop.end.x, prop.end.y);
   }
 
+  function handlePointerLeave() {
+    // When cursor leaves the panels, move cursor to vertical center
+    pointer = { x: 0.5, y: 0.5 };
+    isInteracting = false;
+    activePanel = null;
+  }
+
   function attachPanel(panel: PanelInstance, currentEngine: Engine) {
     if (panel.object || !panel.element) return;
     panel.object = new ElementObject(currentEngine, null);
@@ -304,8 +312,14 @@
   function registerPanel(node: HTMLElement, panel: PanelInstance) {
     panel.element = node as HTMLDivElement;
     panelElementsVersion += 1;
+    
+    // Add pointerleave listener to handle cursor leaving the panel
+    const onPointerLeave = () => handlePointerLeave();
+    node.addEventListener("pointerleave", onPointerLeave);
+    
     return {
       destroy() {
+        node.removeEventListener("pointerleave", onPointerLeave);
         if (panel.object) {
           panel.object.event.input.pointerDown = null;
           panel.object.event.input.pointerMove = null;
@@ -483,7 +497,7 @@
   description="Common API for multiple types of input devices."
 >
   <div class="pointer-demo-wrapper">
-    <Canvas id="input-handling-sync" bind:engine bind:this={canvasComponent}>
+    <Canvas id="input-handling-sync" bind:engine bind:this={canvasComponent} debug={debugState.enabled}>
       <div class="pointer-surface">
         <div
           class="panel-grid"
@@ -540,7 +554,7 @@
           {/each}
         </div>
         <div
-          class="card event-panel"
+          class="card ground event-panel"
           aria-live="polite"
           bind:this={eventPanelRef}
         >
@@ -675,25 +689,19 @@
 
   .event-panel {
     align-self: center;
-    background: #fff;
-  }
+    // background: #fff;
+    --card-color: #181a1d;
 
-  .event-panel .event-line {
-    margin: 0;
-    font-family: "JetBrains Mono", "SFMono-Regular", Consolas, monospace;
-    font-size: 0.85rem;
-    color: #433832;
-    white-space: nowrap;
-    max-width: clamp(220px, 60vw, 360px);
-    overflow: hidden;
-    text-overflow: ellipsis;
-  }
-
-  .event-panel .empty {
-    margin: 0;
-    font-size: 0.8rem;
-    color: rgba(58, 42, 34, 0.6);
-    white-space: nowrap;
+    p {
+      margin: 0;
+      font-family: "Pixelify Sans", monospace;
+      font-size: 12px;
+      color: #ffffff;
+      white-space: nowrap;
+      max-width: clamp(220px, 60vw, 360px);
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
   }
 
   @keyframes event-line-glow {

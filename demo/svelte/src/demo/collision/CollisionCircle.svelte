@@ -31,6 +31,7 @@
   let collider: CircleCollider;
 
   let isDragging = $state(false);
+  let isColliding = $state(false);
 
   onMount(() => {
     // Ensure global select array exists
@@ -46,12 +47,12 @@
 
     // Collision events
     collider.event.collider.onBeginContact = () => {
-        element.style.borderColor = "red";
+    isColliding = true;
         onCollisionBegin?.();
     };
 
     collider.event.collider.onEndContact = () => {
-        element.style.borderColor = "black";
+    isColliding = false;
         onCollisionEnd?.();
     };
   });
@@ -70,7 +71,8 @@
 >
   <div
     bind:this={element}
-    class="collision-box card {isDragging ? 'float' : ''}"
+    class={`collision-box card ${isDragging ? 'float' : ''}`}
+    class:colliding={isColliding}
     style="width: {width}px; height: {height}px;"
     aria-label={title}
   >
@@ -89,7 +91,7 @@
     flex-direction: column;
     align-items: center;
     justify-content: center;
-    /* border: 2px solid black; */
+    border: 2px solid black;
     border-radius: 50%;
     transition: border-color 0.2s;
     overflow: hidden;
@@ -97,6 +99,10 @@
   
   .collision-box:active {
     cursor: grabbing;
+  }
+
+  .collision-box.colliding {
+    border-color: red;
   }
 </style>
 

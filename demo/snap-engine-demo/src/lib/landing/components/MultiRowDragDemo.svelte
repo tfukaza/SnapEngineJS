@@ -2,6 +2,7 @@
   import Canvas from "../../../../../svelte/src/lib/Canvas.svelte";
   import Item from "../../../../../svelte/src/demo/drag_drop/Item.svelte";
   import Container from "../../../../../svelte/src/demo/drag_drop/ItemContainer.svelte";
+  import { debugState } from "../debugState.svelte";
 
   type MathToken = {
     id: string;
@@ -89,7 +90,7 @@
   }
 </script>
 
-<Canvas id="multi-row-drag-demo" bind:this={canvasComponent}>
+<Canvas id="multi-row-drag-demo" bind:this={canvasComponent} debug={debugState.enabled}>
   <div class="card multi-drop-demo">
     <div class="areas-wrapper">
       <div class="top-row">

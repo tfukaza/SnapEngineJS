@@ -18,6 +18,7 @@
   import { AnimationObject, SequenceObject } from "../../../../../src/animation";
   import type { ItemContainer } from "../../../../../src/asset/drag_and_drop/container";
   import type { Engine } from "../../../../../src/index";
+  import { debugState } from "./debugState.svelte";
 
   const dragItems = [
     {
@@ -515,7 +516,7 @@
         <!-- Top row -->
         <div class="top-row">
           <div class="top-left">
-            <div class="grid-item screen">
+            <div class="grid-item screen card ground">
               <!-- <div class="item-label">
                 <span class="label-dot" style="background: var(--color-secondary-5)"></span>
                 <span class="label-text">Preview</span>
@@ -591,24 +592,6 @@
             </SeqPanel>
           </div>
         </div>
-        <!-- Middle row - drag cards -->
-        <!-- <div class="middle-row slot">
-          <Canvas id="hero-drag-canvas">
-            <Container config={{ direction: "row", groupID: "hero-drag" }}>
-              {#each dragItems as item (item.id)}
-                <Item className="card">
-                  <div class="drag-card-content">
-                    <div class="item-label">
-                      <span class="label-dot" style="background: {item.color}"></span>
-                      <span class="label-text">{item.label}</span>
-                    </div>
-                    <p class="sequence-description">{item.description}</p>
-                  </div>
-                </Item>
-              {/each}
-            </Container>
-          </Canvas>
-        </div> -->
         <!-- Bottom row - slider -->
         <div class="grid-item slider timeline-controls">
           <div class="timeline-row">
@@ -682,6 +665,8 @@
 <style lang="scss">
   @use "./landing.scss";
   @import url("https://fonts.googleapis.com/css2?family=Micro+5&display=swap");
+  @import url('https://fonts.googleapis.com/css2?family=Pixelify+Sans&display=swap');
+
   #landing {
     border-radius: var(--size-12);
     background-color: var(--color-background-tint);
@@ -743,8 +728,9 @@
 
     .grid-item.screen {
       flex: 1;
-      background-color: #26272d;
-      border-radius: 4px;
+      // background-color: #26272d;
+      --card-color: #26272d;
+      // border-radius: 4px;
       display: flex;
       align-items: center;
       justify-content: center;

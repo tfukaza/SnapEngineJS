@@ -4,6 +4,7 @@
   import { ElementObject } from "../../../../../../src/object";
   import { AnimationObject } from "../../../../../../src/animation";
   import type { Engine } from "../../../../../../src/index";
+  import { debugState } from "../debugState.svelte";
 
   interface SliderPreset {
     id: string;
@@ -170,7 +171,7 @@
 </script>
 
 <div class="animation-control-wrapper">
-  <Canvas id="animation-control" bind:engine={engine} bind:this={canvasComponent}>
+  <Canvas id="animation-control" bind:engine={engine} bind:this={canvasComponent} debug={debugState.enabled}>
     <div class="animation-control card">
 
 

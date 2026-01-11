@@ -5,6 +5,7 @@
   import Drag from "../../../../../svelte/src/lib/Drag.svelte";
   import type { ElementObject } from "../../../../../../src/object";
   import type { CameraControl as CameraControlApi } from "../../../../../../src/asset/cameraControl";
+  import { debugState } from "../debugState.svelte";
 
   export type NodePoint = {
     id: string;
@@ -144,7 +145,7 @@
 </script>
 
 <div class="seq-two-pannable slot">
-  <Canvas id="seq-two-pan-demo">
+  <Canvas id="seq-two-pan-demo" debug={debugState.enabled}>
     <CameraControlComponent bind:cameraControl>
       <!-- <div class="pan-stage"> -->
   <div class="pan-grid" aria-hidden="true"></div>
@@ -215,6 +216,8 @@
     width: 100%;
     border-radius: var(--ui-radius);
     overflow: hidden;
+    // background-color: var(--color-background-tint);
+    padding: 0;
   }
 
   :global(#seq-two-pan-demo) {
@@ -288,7 +291,7 @@
     transform: translate(-50%, -50%);
     width: 25px;
     height: 25px;
-    border-radius: 999px;
+    // border-radius: 999px;
     background: rgba(255, 255, 255, 0.92);
     padding: var(--size-4);
     // border: 2px solid var(--node-color, #818cf8);

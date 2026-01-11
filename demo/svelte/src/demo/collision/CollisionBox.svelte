@@ -29,6 +29,7 @@
   let collider: RectCollider;
 
   let isDragging = $state(false);
+  let isColliding = $state(false);
   let logs: string[] = $state([]);
 
   function addLog(message: string) {
@@ -56,14 +57,14 @@
     collider.event.collider.onBeginContact = (_, other) => {
         const otherId = (other.parent as any).element?.querySelector('h1')?.innerText || other.parent.gid;
         addLog(`Begin: ${otherId}`);
-        element.style.borderColor = "red";
+    isColliding = true;
         onCollisionBegin?.();
     };
 
     collider.event.collider.onEndContact = (_, other) => {
         const otherId = (other.parent as any).element?.querySelector('h1')?.innerText || other.parent.gid;
         addLog(`End: ${otherId}`);
-        element.style.borderColor = "black";
+    isColliding = false;
         onCollisionEnd?.();
     };
   });
@@ -82,7 +83,8 @@
 >
   <div
     bind:this={element}
-    class="collision-box card {isDragging ? 'float' : ''}"
+    class={`collision-box card ${isDragging ? 'float' : ''}`}
+    class:colliding={isColliding}
     style="width: {width}px; height: {height}px;"
   >
     <div class="box-header">
@@ -105,9 +107,13 @@
     padding: 0;
     display: flex;
     flex-direction: column;
-    border: 0px solid black;
+    border: 2px solid black;
     transition: border-color 0.2s;
     overflow: hidden;
+  }
+
+  .collision-box.colliding {
+    border-color: red;
   }
   
   .collision-box:active {

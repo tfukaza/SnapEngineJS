@@ -2,6 +2,7 @@
   import Canvas from "../../../../../svelte/src/lib/Canvas.svelte";
   import CameraControlComponent from "../../../../../svelte/src/lib/CameraControl.svelte";
   import type { CameraControl as CameraControlApi } from "../../../../../../src/asset/cameraControl";
+  import { debugState } from "../debugState.svelte";
 
   let cameraControl: CameraControlApi | null = null;
   const ZOOM_STEP = 0.12;
@@ -31,7 +32,7 @@
 
 <p class="panel-label">▼ Camera Pan and Zoom v0.1</p>
 <div id="camera-control-demo">
-  <Canvas id="camera-control-node-demo" bind:this={canvasComponent}>
+  <Canvas id="camera-control-node-demo" bind:this={canvasComponent} debug={debugState.enabled}>
     <CameraControlComponent bind:cameraControl>
       <div class="image-stage">
         <div class="photo-credit">

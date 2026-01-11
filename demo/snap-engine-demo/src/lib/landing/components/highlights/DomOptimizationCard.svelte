@@ -8,6 +8,7 @@
   } from "../../../../../../../src/index";
   import { AnimationObject } from "../../../../../../../src/animation";
   import HighlightCardShell from "./HighlightCardShell.svelte";
+  import { debugState } from "../../debugState.svelte";
 
   type OperationType = "read" | "write";
   type Operation = {
@@ -482,7 +483,7 @@
       <div class="timeline" bind:this={timelineContainer}>
         {#each timelineBlocks as block (block.id)}
           <div
-            class={`timeline-block ${block.type}`}
+            class={`timeline-block ${block.type === "reflow" ? "card" : ""} ${block.type}`}
             use:timelineBlockRef={block.id}
           >
             {#if block.type === "reflow"}
@@ -528,7 +529,8 @@
     position: relative;
     display: grid;
     grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
-    gap: 4rem;
+    row-gap: 2rem;
+    column-gap: 4rem;
     padding: var(--size-24);
     // border-radius: 0.7rem;
     background: var(--color-background-tint);
@@ -580,7 +582,7 @@
   }
 
   .operation-item.read .pill {
-    background: color-mix(in srgb, var(--color-secondary-4) 20%, transparent);
+    background: color-mix(in srgb, var(--color-secondary-3) 20%, transparent);
     color: var(--color-secondary-4);
   }
 
@@ -607,47 +609,39 @@
   }
 
   .timeline-block {
-    border-radius: 0.3rem;
-    background: white;
-    border: 1px solid rgba(47, 31, 26, 0.08);
+    border-radius: var(--ui-radius);
+    // background: white;
+    // border: 1px solid rgba(47, 31, 26, 0.08);
+    padding: 2px;
     height: 12px;
-  }
+    
+    &.read {
+      background: color-mix(in srgb, var(--color-secondary-3) 50%, transparent);
+    }
 
-  .timeline-block.read {
-    background: linear-gradient(
-      135deg,
-      color-mix(in srgb, var(--color-secondary-4) 20%, transparent),
-      color-mix(in srgb, var(--color-secondary-4) 6%, transparent)
-    );
-    border-color: color-mix(in srgb, var(--color-secondary-4) 45%, transparent);
-  }
+    &.write {
+      background: color-mix(in srgb, var(--color-secondary-2) 50%, transparent);
+    }
 
-  .timeline-block.write {
-    background: linear-gradient(
-      135deg,
-      color-mix(in srgb, var(--color-secondary-2) 22%, transparent),
-      color-mix(in srgb, var(--color-secondary-2) 6%, transparent)
-    );
-    border-color: color-mix(in srgb, var(--color-secondary-2) 45%, transparent);
-  }
+    &.reflow {
+      background-color: var(--color-secondary-1);
+      height: auto;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      padding: 0 10px;  
+      
+      .reflow-label {
+        font-size: 0.55rem;
+        color: #fff;
+        font-weight: 600;
+        text-transform: uppercase;
+        letter-spacing: 0.05em;
+      }
+    }
+}
 
-  .timeline-block.reflow {
-    background: color-mix(in srgb, var(--color-secondary-1) 18%, transparent);
-    border-color: color-mix(in srgb, var(--color-secondary-1) 55%, transparent);
-    height: auto;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    padding: 2px 0;
-  }
 
-  .reflow-label {
-    font-size: 0.55rem;
-    color: var(--color-secondary-1);
-    font-weight: 600;
-    text-transform: uppercase;
-    letter-spacing: 0.05em;
-  }
 
   .connector-layer {
     position: absolute;

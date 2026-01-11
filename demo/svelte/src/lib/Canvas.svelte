@@ -1,5 +1,6 @@
 <script lang="ts">
-  import { onMount, setContext } from "svelte";
+  import { onMount } from "svelte";
+  import { setContext } from "svelte";
   import { getEngine } from "./engine.svelte";
   import type { Engine } from "../../../../src/index";
 
@@ -26,8 +27,13 @@
   onMount(() => {
     resolvedEngine.assignDom(canvas as HTMLElement);
     resolvedEngine.camera?.setCameraPosition(0, 0);
+  });
+
+  $effect(() => {
     if (debug) {
       resolvedEngine.enableDebug();
+    } else {
+      resolvedEngine.disableDebug();
     }
   });
 

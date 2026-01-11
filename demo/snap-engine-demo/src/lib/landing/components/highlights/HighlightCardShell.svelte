@@ -11,7 +11,7 @@
   const hasHeadingAsideSlot = Boolean($$slots.headingAside);
 </script>
 
-<article class={`highlight-card ${className}`.trim()}>
+<article class={`${className}`.trim()}>
   <div class="card-heading">
     <div class="card-heading__text">
       {#if title}

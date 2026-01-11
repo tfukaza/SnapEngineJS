@@ -6,6 +6,7 @@
     import EmojiConnector from "./EmojiConnector.svelte";
     import EmojiLine from "./EmojiLine.svelte";
     import { getEngine } from "../../../../../svelte/src/lib/engine.svelte";
+    import { debugState } from "../debugState.svelte";
 
     export type EmojiWordConnection = {
         emoji: string;
@@ -173,7 +174,7 @@
 </script>
 
 <div class="emoji-word-connectors">
-    <Canvas id="emoji-word-canvas" {engine} debug={false}>
+    <Canvas id="emoji-word-canvas" {engine} debug={debugState.enabled}>
         <div class="emoji-column">
             {#each emojiNodes as item (item.id)}
                 <div class="emoji-chip">

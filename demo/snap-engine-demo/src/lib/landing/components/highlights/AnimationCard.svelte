@@ -5,6 +5,7 @@
   import { AnimationObject } from "../../../../../../../src/animation";
   import type { Engine } from "../../../../../../../src/index";
   import HighlightCardShell from "./HighlightCardShell.svelte";
+  import { debugState } from "../../debugState.svelte";
 
   type Keyframe = {
     time: number;
@@ -423,13 +424,14 @@
   title="Animation"
   description="WAAPI based animation engine that's lightweight and performant."
 >
-  <Canvas id="highlight-animation" bind:engine bind:this={canvasComponent}>
+  <Canvas id="highlight-animation" bind:engine bind:this={canvasComponent} debug={debugState.enabled}>
     <div class="animation-card">
       <div class="timeline grid-layout">
         <div class="timeline-content">
-          <label class="timeline-label" for="animation-timeline-range"
+          <!-- <label class="timeline-label" for="animation-timeline-range"
             >Time</label
-          >
+          > -->
+            <span/>
           <div class="timeline-slider">
             <input
               id="animation-timeline-range"
@@ -445,6 +447,7 @@
               onpointercancel={endTimelineScrub}
               aria-label="Scrub animation time"
             />
+            <span class="playhead" style={`left: calc(8px + (100% - 16px) * ${currentTime / TOTAL_DURATION});`}></span>
           </div>
 
           <span class="timeline-placeholder" aria-hidden="true"></span>
@@ -458,7 +461,7 @@
             <div class="track-meta">
               <span class="track-label">{track.label}</span>
             </div>
-            <div class={`track-lane ${track.type}`} aria-hidden="true">
+            <div class={`track-lane slot ${track.type}`} aria-hidden="true">
               <div
                 class="range-bar"
                 style={`left: ${toPercent(track.range.start)}; width: calc(${toPercent(track.range.end)} - ${toPercent(track.range.start)}); --range-color: ${TRACK_COLORS[track.type]};`}
@@ -470,8 +473,6 @@
                   ></span>
                 {/each}
               </div>
-              <span class="playhead" style={`left: ${toPercent(currentTime)};`}
-              ></span>
             </div>
           {/each}
         </div>
@@ -512,6 +513,8 @@
     display: flex;
     align-items: center;
     justify-content: center;
+    background-image: radial-gradient(circle, rgba(47, 31, 26, 0.15) 1px, transparent 1px);
+    background-size: 32px 32px;
   }
 
   .animated-square {
@@ -519,7 +522,7 @@
     height: 64px;
     border-radius: 0.6rem;
     background-color:var(--color-secondary-1);
-    // box-shadow: 0 15px 35px color-mix(in srgb, var(--card-accent) 30%, rgba(0, 0, 0, 0.35));
+    // box-shadow: 0 15px 35px color-mix(in srgb, red 30%, rgba(0, 0, 0, 0.35));
     // transition: transform 0.2s ease, filter 0.2s ease;
     display: flex;
     align-items: center;
@@ -529,10 +532,15 @@
     font-variant-numeric: tabular-nums;
     letter-spacing: 0.05em;
     transform: rotate(0deg) scale(1);
+
+
+    span {
+      font-family: 'Pixelify Sans', sans-serif;
+    }
   }
 
   .preview-square-container {
-    
+    filter: drop-shadow(6px 6px 5px rgba(24, 29, 42, 0.264));
   }
 
   .value-readout {
@@ -569,7 +577,9 @@
   }
 
   .timeline-slider {
-    width: 100%;
+    position: relative;
+    margin: 0 8px;
+    box-sizing: border-box;
   }
 
   .timeline-slider input[type="range"] {
@@ -578,17 +588,32 @@
     box-sizing: border-box;
   }
 
+  .timeline-slider .playhead {
+    position: absolute;
+    top: 100%;
+    width: 2px;
+    border-radius: 1px;
+    height: 100px;
+    background: rgb(255, 96, 43);
+    transform: translateX(-50%);
+    pointer-events: none;
+    box-shadow: 4px 4px 4px rgba(28, 38, 44, 0.151);
+    z-index: 1;
+  }
+
   .timeline-placeholder {
     height: 1px;
     width: 100%;
   }
 
   .timeline-header {
-    display: grid;
-    grid-template-columns: repeat(5, minmax(0, 1fr));
-    letter-spacing: 0.08em;
+    display: flex;
+    // grid-template-columns: repeat(5, minmax(0, 1fr));
+    // letter-spacing: 0.08em;
     color: rgba(47, 31, 26, 0.55);
-    align-items: end;
+    justify-content: space-between;
+    margin: 0 8px;
+    // align-items: end;
 
     span {
       font-size: 0.7rem;
@@ -615,24 +640,27 @@
   .track-lane {
     position: relative;
     height: 20px;
-    border-radius: 0.75rem;
+    border-radius: 10px;
+    background-color: var(--color-background-tint);
     border: none;
-    background: none;
+    // background: none;
+    padding: 0px 8px;
     margin: 0px 8px;
     // padding: 0px 4px;
     // box-sizing: border-box;
-    // overflow: hidden;
+    // overflow: hidden;  
+    .range-bar {
+      position: relative;
+      height: 20px;
+      border-radius: 10px;
+      // border: 1px solid var(--range-color, rgba(47, 31, 26, 0.4));
+      // box-shadow: 0 6px 18px rgba(0, 0, 0, 0.08);
+      // background-color: var(--color-background);
+      pointer-events: none;
+    }
   }
 
-  .range-bar {
-    position: relative;
-    height: 20px;
-    border-radius: 10px;
-    // border: 1px solid var(--range-color, rgba(47, 31, 26, 0.4));
-    // box-shadow: 0 6px 18px rgba(0, 0, 0, 0.08);
-    background-color: #e9e5e1;
-    pointer-events: none;
-  }
+
 
   .keyframe-point {
     position: absolute;
@@ -641,17 +669,7 @@
     height: 10px;
     border-radius: 2px;
     transform: translate(-50%, -50%) rotate(45deg);
-    box-shadow: 0 2px 4px rgba(0, 0, 0, 0.12);
-  }
-
-  .playhead {
-    position: absolute;
-    top: 0;
-    bottom: 0;
-    width: 2px;
-    background: rgba(47, 31, 26, 0.6);
-    transform: translateX(-50%);
-    pointer-events: none;
+    box-shadow: 2px 2px 2px rgba(10, 30, 53, 0.12);
   }
 
   .playback-toggle {

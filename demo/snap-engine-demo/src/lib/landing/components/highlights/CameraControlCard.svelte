@@ -3,6 +3,7 @@
   import CameraControlComponent from "../../../../../../svelte/src/lib/CameraControl.svelte";
   import type { CameraControl as CameraControlApi } from "../../../../../../../src/asset/cameraControl";
   import HighlightCardShell from "./HighlightCardShell.svelte";
+  import { debugState } from "../../debugState.svelte";
 
   let cameraControl: CameraControlApi | null = null;
   let canvasComponent: Canvas | null = null;
@@ -23,8 +24,9 @@
   description="Control pan and zoom of any DOM element."
 >
   <div class="camera-card slot">
-        <Canvas id="camera-control-highlight" bind:this={canvasComponent}>
+        <Canvas id="camera-control-highlight" bind:this={canvasComponent} debug={debugState.enabled}>
           <CameraControlComponent bind:cameraControl>
+            <div class="dot-grid-background"></div>
             <div class="image-stage">
               <div class="photo-credit">
                 <p>Photo by</p>
@@ -63,6 +65,19 @@
     height: 100%;
     border-top-left-radius: 0;
     border-top-right-radius: 0;
+    position: relative;
+  }
+
+  .dot-grid-background {
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    width: 1000px;
+    height: 1000px;
+    transform: translate(-50%, -50%);
+    background-image: radial-gradient(circle, rgba(47, 31, 26, 0.15) 1px, transparent 1px);
+    background-size: 16px 16px;
+    pointer-events: none;
   }
 
   .zoom-controls {

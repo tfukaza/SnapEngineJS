@@ -4,6 +4,7 @@
   import Container from "../../../../../svelte/src/demo/drag_drop/ItemContainer.svelte";
   import type { ItemContainer } from "../../../../../../src/asset/drag_and_drop/container";
   import type { Engine } from "../../../../../../src/index";
+  import { debugState } from "../debugState.svelte";
 
   type SeqToken = {
     id: string;
@@ -21,7 +22,7 @@
   let { tokens = [], initialTopTokens = [], topContainer = $bindable(), engine = $bindable<Engine | null>(null) }: Props = $props();
 </script>
 
-<Canvas id="seq-drop-demo" bind:engine={engine}>
+<Canvas id="seq-drop-demo" bind:engine={engine} debug={debugState.enabled}>
   <div class="mini-drop-demo">
     <div class="mini-drop-top slot">
       <Container config={{ direction: "row", groupID: "seq-1-drop" }} bind:container={topContainer}>

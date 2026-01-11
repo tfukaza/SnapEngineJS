@@ -4,18 +4,42 @@
   import CollisionCircle from "../../../../../../svelte/src/demo/collision/CollisionCircle.svelte";
   import type { Engine } from "../../../../../../../src/index";
   import HighlightCardShell from "./HighlightCardShell.svelte";
+  import { debugState } from "../../debugState.svelte";
 
   let engine: Engine | null = $state(null);
   let collisionCount = $state(0);
   let isColliding = $state(false);
 
-  // Position constants for the demo area
   const BOX_X = 30;
   const BOX_Y = 40;
-  const CIRCLE_X = 140;
-  const CIRCLE_Y = 35;
   const BOX_SIZE = 70;
-  const CIRCLE_RADIUS = 35;
+  const HERO_CIRCLE_X = 180;
+  const HERO_CIRCLE_Y = 55;
+  const HERO_CIRCLE_RADIUS = 35;
+
+  const GRID_DIMENSION = 16;
+  const CIRCLE_RADIUS = 8;
+  const CIRCLE_GAP = 6;
+  const STAGE_WIDTH = 360;
+  const STAGE_HEIGHT = 360;
+  const STEP = CIRCLE_RADIUS * 2 + CIRCLE_GAP;
+  const GRID_WIDTH = CIRCLE_RADIUS * 2 + (GRID_DIMENSION - 1) * STEP;
+  const GRID_HEIGHT = CIRCLE_RADIUS * 2 + (GRID_DIMENSION - 1) * STEP;
+  const GRID_MARGIN_X = (STAGE_WIDTH - GRID_WIDTH) / 2;
+  const GRID_MARGIN_Y = (STAGE_HEIGHT - GRID_HEIGHT) / 2;
+
+  const collisionCircles = Array.from(
+    { length: GRID_DIMENSION * GRID_DIMENSION },
+    (_, index) => {
+      const row = Math.floor(index / GRID_DIMENSION);
+      const col = index % GRID_DIMENSION;
+      return {
+        id: index,
+        initialX: GRID_MARGIN_X + col * STEP,
+        initialY: GRID_MARGIN_Y + row * STEP,
+      };
+    },
+  );
 
   function handleCollisionBegin() {
     collisionCount++;
@@ -35,24 +59,39 @@
 
 
   <div class="collision-demo-container slot">
-    <Canvas id="collision-card-canvas" bind:engine={engine}>
+    <div class="dot-grid-background"></div>
+    <Canvas id="collision-card-canvas" bind:engine={engine} debug={debugState.enabled}>
       <div class="collision-demo">
-        <CollisionBox 
-          title="Box" 
-          initialX={BOX_X} 
-          initialY={BOX_Y} 
-          width={BOX_SIZE} 
+       
+        <div class="collision-grid">
+          {#each collisionCircles as circle (circle.id)}
+            <CollisionCircle
+              title={`Circle ${circle.id + 1}`}
+              initialX={circle.initialX}
+              initialY={circle.initialY}
+              radius={CIRCLE_RADIUS}
+              onCollisionBegin={handleCollisionBegin}
+              onCollisionEnd={handleCollisionEnd}
+            />
+          {/each}
+        </div> <CollisionBox
+          title="Box"
+          initialX={BOX_X}
+          initialY={BOX_Y}
+          width={BOX_SIZE}
           height={BOX_SIZE}
           onCollisionBegin={handleCollisionBegin}
           onCollisionEnd={handleCollisionEnd}
         />
-        <CollisionCircle 
-          title="Circle" 
-          initialX={CIRCLE_X} 
-          initialY={CIRCLE_Y} 
-          radius={CIRCLE_RADIUS}
+        <CollisionCircle
+          title="Circle"
+          initialX={HERO_CIRCLE_X}
+          initialY={HERO_CIRCLE_Y}
+          radius={HERO_CIRCLE_RADIUS}
+          onCollisionBegin={handleCollisionBegin}
+          onCollisionEnd={handleCollisionEnd}
         />
-        <p class="hint">Drag shapes to collide</p>
+        <!-- <p class="hint">Hero objects + 256 live colliders — drag to disturb the grid</p> -->
       </div>
     </Canvas>
   </div>
@@ -97,52 +136,43 @@
   }
 
   .collision-demo-container {
-    height: 300px;
-    // background-color: var(--color-background-tint);
+    height: 360px;
     border-top-left-radius: 0;
     border-top-right-radius: 0;
-    // border-radius: 0.7rem;
-    // background: #f9f7f4;
-    // box-shadow: inset 0 0 0 1px rgba(47, 31, 26, 0.12);
-    // overflow: hidden;
-    // position: relative;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    overflow: hidden;
+    position: relative;
+
+    :global(#snap-canvas) {
+      width: 100%;  
+    }
+  }
+
+  .dot-grid-background {
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    width: 400%;
+    height: 400%;
+    transform: translate(-50%, -50%);
+    background-image: radial-gradient(circle, rgba(47, 31, 26, 0.15) 1px, transparent 1px);
+    background-size: 16px 16px;
+    pointer-events: none;
   }
 
   .collision-demo {
     position: relative;
-    width: 100%;
-    height: 100%;
+    margin: 0 auto;
   }
 
-  .collision-shape {
-    cursor: grab;
-    user-select: none;
-    touch-action: none;
-    transition: box-shadow 0.2s, border-color 0.2s;
+  .collision-grid {
+    pointer-events: none;
 
-    &:active {
-      cursor: grabbing;
+    :global(.collision-box) {
+      cursor: default;
     }
-  }
-
-  .box {
-    background: linear-gradient(
-      135deg,
-      color-mix(in srgb, var(--color-secondary-5) 18%, transparent),
-      color-mix(in srgb, var(--color-secondary-5) 6%, transparent)
-    );
-    border: 2px solid color-mix(in srgb, var(--color-secondary-5) 55%, transparent);
-    border-radius: 0.4rem;
-  }
-
-  .circle {
-    background: linear-gradient(
-      135deg,
-      color-mix(in srgb, var(--color-secondary-4) 20%, transparent),
-      color-mix(in srgb, var(--color-secondary-4) 6%, transparent)
-    );
-    border: 2px solid color-mix(in srgb, var(--color-secondary-4) 55%, transparent);
-    border-radius: 50%;
   }
 
   .hint {
@@ -158,15 +188,24 @@
     pointer-events: none;
   }
 
+  @media (max-width: 480px) {
+    .collision-demo-container {
+      height: 300px;
+    }
+
+    .collision-demo {
+      transform: scale(0.85);
+      transform-origin: center;
+    }
+  }
+
   /* Override collision component styles for the card */
   :global(.collision-card .collision-box.card) {
-    border: 2px solid color-mix(in srgb, var(--color-secondary-5) 55%, transparent);
-    background: linear-gradient(
-      135deg,
-      color-mix(in srgb, var(--color-secondary-5) 18%, transparent),
-      color-mix(in srgb, var(--color-secondary-5) 6%, transparent)
-    );
+    border: 1px solid #d3d3d3;
     box-shadow: none;
+  }
+  :global(.collision-card .collision-box.card.colliding) {
+    border-color: red;
   }
 
   :global(.collision-card .collision-box.card .box-header) {
@@ -177,12 +216,4 @@
     display: none;
   }
 
-  :global(.collision-card .collision-box:not(.card)) {
-    border: 2px solid color-mix(in srgb, var(--color-secondary-4) 55%, transparent);
-    background: linear-gradient(
-      135deg,
-      color-mix(in srgb, var(--color-secondary-4) 20%, transparent),
-      color-mix(in srgb, var(--color-secondary-4) 6%, transparent)
-    );
-  }
 </style>

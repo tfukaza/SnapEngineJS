@@ -4,6 +4,7 @@
   import { ElementObject } from "../../../../../../src/object";
   import type { Engine } from "../../../../../../src/index";
   import type { dragProp, dragStartProp, dragEndProp } from "../../../../../../src/input";
+  import { debugState } from "../debugState.svelte";
 
   interface DragLine {
     id: string;
@@ -210,7 +211,7 @@
   }
 </script>
 
-<Canvas id="input-engine-demo" bind:engine={engine} bind:this={canvasComponent}>
+<Canvas id="input-engine-demo" bind:engine={engine} bind:this={canvasComponent} debug={debugState.enabled}>
   <div class="input-engine-demo card" bind:this={containerElement}>
     {#if overlayWidth && overlayHeight}
       <svg
