@@ -4,14 +4,6 @@ body {
   margin: 0;
   padding: 0;
   background-color: #ffffff;
-
-  // touch-action: none;
-  // -webkit-touch-callout: none;
-  // -webkit-user-select: none;
-  // -khtml-user-select: none;
-  // -moz-user-select: none;
-  // -ms-user-select: none;
-  // user-select: none;
 }
 
 :root {
@@ -198,15 +190,21 @@ section {
 
 .slot {
   border-radius: var(--ui-radius);
-
-  background-color: var(--color-background);
-
   box-shadow:
     -6px -6px 8px 0px rgba(255, 255, 255, 0.162) inset,
     2px 2px 6.1px -1px rgba(14, 26, 40, 0.31) inset,
     -1px -1px 1px 0px rgba(73, 40, 49, 0.25),
     1px 1px 1px 0px rgba(255, 255, 255, 0.25),
     8px 8px 20px -7px rgba(40, 49, 73, 0.25) inset;
+
+  &.shallow {
+    box-shadow:
+      -2px -2px 4px 0px rgba(255, 255, 255, 0.162) inset,
+      1px 1px 3px -1px rgba(14, 26, 40, 0.31) inset,
+      -0.5px -0.5px 0.5px 0px rgba(73, 40, 49, 0.25),
+      0.5px 0.5px 0.5px 0px rgba(255, 255, 255, 0.25),
+      4px 4px 10px -7px rgba(40, 49, 73, 0.25) inset;
+  }
 }
 
 input[type="checkbox"],

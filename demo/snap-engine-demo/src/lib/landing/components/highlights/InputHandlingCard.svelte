@@ -586,7 +586,7 @@
   }
 
   .pointer-surface {
-
+    width: 100%;
   }
 
   .panel-grid {

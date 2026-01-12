@@ -16,6 +16,8 @@
   // Get color from source connector
   let strokeColor = $derived((line.start as any).lineColor || "var(--color-primary)");
 
+  let elbowX = $derived(dx / 2 + dy / 8);
+
   function renderLine() {
     const thisLine: LineComponent = line;
     x0 = thisLine.transform.x;
@@ -42,9 +44,9 @@
   <SvgLine
     x1={0}
     y1={0}
-    x2={dx / 2}
+    x2={elbowX}
     y2={0}
-    x3={dx/2}
+    x3={elbowX}
     y3={dy}
     x4={dx}
     y4={dy}
@@ -58,7 +60,7 @@
   .emoji-line-wrapper {
     z-index: 1000;
     transform:translateX(-5px) !important;
-    z-index: -1;
+    /* z-index: -1; */
   }
 
   .emoji-line-wrapper :global(svg) {
@@ -66,7 +68,7 @@
     position: absolute;
     transform: none !important;
     top: 50%;
-    z-index: -1;
+    /* z-index: -1; */
 
   }
 </style>

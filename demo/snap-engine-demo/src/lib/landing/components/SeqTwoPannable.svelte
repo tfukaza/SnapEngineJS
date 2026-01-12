@@ -144,7 +144,7 @@
   // });
 </script>
 
-<div class="seq-two-pannable slot">
+<div class="seq-two-pannable slot shallow">
   <Canvas id="seq-two-pan-demo" debug={debugState.enabled}>
     <CameraControlComponent bind:cameraControl>
       <!-- <div class="pan-stage"> -->
@@ -216,7 +216,7 @@
     width: 100%;
     border-radius: var(--ui-radius);
     overflow: hidden;
-    // background-color: var(--color-background-tint);
+    background-color: var(--color-background-tint);
     padding: 0;
   }
 
@@ -292,7 +292,7 @@
     width: 25px;
     height: 25px;
     // border-radius: 999px;
-    background: rgba(255, 255, 255, 0.92);
+    background: rgb(255, 255, 255);
     padding: var(--size-4);
     // border: 2px solid var(--node-color, #818cf8);
     // box-shadow: 0 8px 18px rgba(15, 23, 42, 0.18);
@@ -326,10 +326,14 @@
   .pan-node.origin {
     width: 28px;
     height: 28px;
-    background: rgba(15, 23, 42, 0.9);
+    background: rgb(15, 23, 42);
     color: #fff;
     box-shadow: 0 6px 16px rgba(0, 0, 0, 0.25);
     pointer-events: none;
+
+    span {
+      color: #fff;
+    }
   }
 
   .pan-lines line {

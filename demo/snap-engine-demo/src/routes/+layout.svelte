@@ -25,6 +25,28 @@
 </nav>
 {@render children()}
 
+<footer class="app-footer">
+  <div class="footer-content">
+    <div class="footer-brand">
+      <span class="brand-name">SnapEngine</span>
+      <span class="copyright">© {new Date().getFullYear()}</span>
+    </div>
+    <div class="footer-sections">
+      <div class="footer-collumn">
+        <h4>Project</h4>
+        <a href="/doc">Docs</a>
+        <a href="https://github.com/tfukaza/SnapLineJS" target="_blank" rel="noopener noreferrer">GitHub</a>
+      </div>
+      <div class="footer-collumn">
+        <a href="/#assets"><h4>Assets</h4></a>
+        <span class="footer-link-disabled">SnapZap</span>
+        <a href="/dropandsnap">DropAndSnap</a>
+        <span class="footer-link-disabled">SnapLine</span>
+      </div>
+    </div>
+  </div>
+</footer>
+
 <style lang="scss">
   .nav-bar {
     display: flex;
@@ -92,6 +114,74 @@
 
     &:hover svg {
       transform: scale(1.1);
+    }
+  }
+
+  .app-footer {
+    margin-top: auto;
+    width: 100%;
+    padding: 6rem 0;
+    border-top: 1px solid rgba(0,0,0,0.05);
+    background: white;
+    
+    .footer-content {
+      max-width: var(--page-width, 1400px);
+      margin: 0 auto;
+      padding: 0 2rem;
+      display: flex;
+      justify-content: space-between;
+      align-items: flex-start;
+    }
+
+    .footer-brand {
+      display: flex;
+      gap: 0.5rem;
+      align-items: center;
+      font-size: 0.9rem;
+      color: #8b8a89;
+      font-family: 'Tomorrow', sans-serif;
+      
+      .brand-name {
+        color: #3a2a22;
+        font-weight: 500;
+      }
+    }
+
+    .footer-sections {
+      display: flex;
+      gap: 4rem;
+    }
+
+    .footer-collumn {
+      display: flex;
+      flex-direction: column;
+      gap: 0.75rem;
+
+      h4 {
+        margin: 0;
+        font-size: 0.85rem;
+        font-weight: 600;
+        text-transform: uppercase;
+        letter-spacing: 0.05em;
+        color: #8b8a89;
+      }
+
+      a {
+        text-decoration: none;
+        color: #5e4d44;
+        font-size: 0.9rem;
+        transition: color 0.2s ease;
+        
+        &:hover {
+          color: var(--color-primary);
+        }
+      }
+
+      .footer-link-disabled {
+        font-size: 0.9rem;
+        color: #a8a4a2;
+        cursor: default;
+      }
     }
   }
 </style>

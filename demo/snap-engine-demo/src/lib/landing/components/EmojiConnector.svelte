@@ -59,8 +59,8 @@
 <style>
   .emoji-connector {
     --specular-angle: 130deg;
-    width: 12px;
-    height: 12px;
+    width: calc(var(--connector-radius) * 2);
+    height: calc(var(--connector-radius) * 2);
     border-radius: 50%;
     position: relative;
     cursor: pointer;

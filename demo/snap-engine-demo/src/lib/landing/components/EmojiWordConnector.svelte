@@ -195,7 +195,7 @@
                 </div>
             {/each}
         </div>
-        <div></div>
+        <div class="connector-spacer slot shallow"></div>
         <div class="word-column">
             {#each wordNodes as item (item.id)}
                 <div class="word-chip">
@@ -223,34 +223,19 @@
         height: 100%;
         width: 100%;
         user-select: none;
+
+        --connector-radius: 6px;
     }
 
     :global(.emoji-word-connectors #snap-canvas) {
         display: grid;
         overflow: visible !important;
         grid-template-columns: auto 1fr auto;
-        // gap: 10px;
         height: 100%;
         width: 100%;
         position: relative;
         overflow: hidden;
         align-items: center;
-    }
-
-    .emoji-column,
-    .word-column {
-        // position: absolute;
-        // top: 50%;
-        // transform: translateY(-50%);
-        // display: flex;
-        // flex-direction: column;
-        // gap: 0.85rem;
-    }
-
-    .emoji-column {
-    }
-
-    .word-column {
     }
 
     :global(.emoji-node),
@@ -261,6 +246,7 @@
         background: transparent;
         border: none;
         box-shadow: none;
+        z-index: 1001;
     }
 
     .emoji-chip,
@@ -271,22 +257,7 @@
         position: relative;
         align-items: center;
         gap: var(--size-8);
-        // align-items: center;
-        // justify-content: space-between;
-        // border-radius: var(--size-6);
-        // border: 1px solid rgba(0, 0, 0, 0.08);
-        // padding: 0.55rem 0.85rem;
-        // background: rgba(255, 255, 255, 0.75);
-        // backdrop-filter: blur(12px);
-        // gap: 0.5rem;
     }
-
-    // .emoji-chip :global(svg) {
-    //     transform: none !important;
-    //     top: 50%;
-    //     right: 0;
-    //     z-index: -1;
-    // }
 
     .word-chip {
         flex-direction: row;
@@ -295,18 +266,15 @@
         p {
             font-size: 10px;
         }
-        // justify-content: flex-start;
     }
 
-    .word-chip :global(.emoji-connector) {
-        // order: 0;
-        // margin-right: 0.75rem;
-        // transform: translate(-50%, -50%);
+    .connector-spacer {
+        width: calc(100% + var(--connector-radius) * 2);
+        transform: translateX(calc(var(--connector-radius) * -1));
+        z-index: -1;
+        height: 100%;
+        border-radius: var(--ui-radius);
+        background-color: var(--color-background-tint);
     }
 
-    .emoji-chip :global(.emoji-connector) {
-        // order: 2;
-        // margin-left: auto;
-        // transform: translate(-50%, -50%);
-    }
 </style>
