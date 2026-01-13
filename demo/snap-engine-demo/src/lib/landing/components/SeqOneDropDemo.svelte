@@ -115,6 +115,7 @@
     justify-content: center;
     width: 24px;
     height: 24px;
+    touch-action: none;
     // padding: 0.2rem;
     // background: #fff;
     // border: 1px solid rgba(15, 23, 42, 0.08);

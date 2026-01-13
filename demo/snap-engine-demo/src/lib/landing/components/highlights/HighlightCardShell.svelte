@@ -49,6 +49,13 @@
     // padding: var(--size-48);
   }
 
+   @media (max-width: 720px) {
+    article {
+      // padding: var(--size-24);
+      grid-column: span 2;
+    }
+  }
+
   .card-shell-body {
     flex: 1 1 auto;
     border-top: 1px solid #e6e3e2;
@@ -90,6 +97,8 @@
   @media (max-width: 720px) {
     .card-heading {
       flex-direction: column;
+      padding: var(--size-32);
+      padding-bottom: 0;
     }
 
     .card-heading__aside {

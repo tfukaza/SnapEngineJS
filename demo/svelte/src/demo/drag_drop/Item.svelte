@@ -61,7 +61,7 @@
 
 
 
-  @media (max-width: 600px) and (min-width: 401px) {
+  /* @media (max-width: 600px) and (min-width: 401px) {
     .item {
       padding: var(--size-8);
     }
@@ -75,5 +75,5 @@
         font-size: 0.8rem;
       }
     }
-  }
+  } */
 </style>

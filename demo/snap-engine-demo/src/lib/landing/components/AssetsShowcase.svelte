@@ -30,7 +30,6 @@
 </script>
 
 <section class="assets-showcase">
-  <div class="explainer-surface">
     <h2 class="eyebrow">Assets</h2>
     <p class="subhead">Interactive UI elements, ready out of the box.</p>
 
@@ -110,7 +109,7 @@
         <span class="coming-soon-label">Coming Soon</span>
       </div>
     </div>
-  </div>
+
 </section>
 
 <style lang="scss">
@@ -366,5 +365,12 @@
     padding: 2px 6px;
     color: white;
     border-radius: 10px;
+  }
+
+  @media (max-width: 600px) {
+    .asset-card {
+      min-height: 200px;
+      max-height: 250px;
+    }
   }
 </style>

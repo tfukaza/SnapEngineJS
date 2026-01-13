@@ -717,9 +717,13 @@
   }
 
   @media (max-width: 720px) {
-    .panel-grid {
-      grid-template-columns: repeat(auto-fit, minmax(130px, 1fr));
-      gap: 0.4rem;
+    // .panel-grid {
+    //   grid-template-columns: repeat(auto-fit, minmax(130px, 1fr));
+    //   gap: 0.4rem;
+    // }
+
+    .pointer-demo-wrapper {
+      padding: var(--size-24);
     }
 
     .pointer-panel {

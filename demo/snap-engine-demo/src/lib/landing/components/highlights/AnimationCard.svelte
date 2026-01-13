@@ -516,6 +516,7 @@
     justify-content: center;
     background-image: radial-gradient(circle, rgba(47, 31, 26, 0.15) 1px, transparent 1px);
     background-size: 32px 32px;
+    min-height: 150px;
   }
 
   .animated-square {
@@ -564,7 +565,7 @@
   .timeline-content {
     --timeline-label-width: 100px;
     display: grid;
-    grid-template-columns: var(--timeline-label-width) minmax(0, 1fr);
+    grid-template-columns: auto minmax(0, 1fr);
     row-gap: 0.4rem;
     column-gap: 0.6rem;
     align-items: center;
@@ -700,16 +701,16 @@
   }
 
   @media (max-width: 720px) {
-    .track {
-      grid-template-columns: 1fr;
-    }
+    // .track {
+    //   grid-template-columns: 1fr;
+    // }
 
-    .timeline-slider {
-      grid-template-columns: 1fr;
-    }
+    // .timeline-slider {
+    //   grid-template-columns: 1fr;
+    // }
 
-    .track-lane {
-      height: 30px;
-    }
+    // .track-lane {
+    //   height: 30px;
+    // }
   }
 </style>

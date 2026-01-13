@@ -659,13 +659,13 @@
     fill: none;
   }
 
-  @media (max-width: 720px) {
-    .optimization-demo {
-      grid-template-columns: 1fr;
-    }
+  // @media (max-width: 720px) {
+  //   .optimization-demo {
+  //     grid-template-columns: 1fr;
+  //   }
 
-    .connector-layer {
-      display: none;
-    }
-  }
+  //   .connector-layer {
+  //     display: none;
+  //   }
+  // }
 </style>

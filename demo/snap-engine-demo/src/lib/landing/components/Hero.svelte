@@ -599,6 +599,9 @@
     border-radius: var(--size-12);
     background-color: var(--color-background-tint);
     margin: 100px auto;
+    container-type: inline-size;
+    container-name: landing;
+    overflow: hidden;
   }
 
   .hero-layout {
@@ -791,5 +794,35 @@
   #wave-timeline {
     flex: 1;
     accent-color: var(--color-secondary-5);
+  }
+
+  @container landing (max-width: 1000px) {
+    .hero-layout {
+      grid-template-columns: 1fr;
+      grid-template-rows: min-content 1fr;
+      gap: 0;
+      padding: 0;
+      align-items: start;
+    }
+
+    .hero-text {
+      padding: var(--size-48) 0;
+      padding-left: 0;
+      width: 100%;
+      justify-content: center;
+      align-items: center;
+      text-align: center;
+    }
+
+    .hero-text h1 {
+      text-align: center; 
+    }
+
+    .hero-card {
+      // align-items: start;
+      // padding-top: 0;
+      width: 150%;
+      transform: translateX(-16%) scale(0.6);
+    }
   }
 </style>

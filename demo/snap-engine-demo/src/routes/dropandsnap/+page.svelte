@@ -438,6 +438,10 @@
     align-items: center;
     justify-content: center;
     padding: 0.5rem;
+
+     @media screen and (max-width: 700px) {
+      padding: 0.2rem;
+    }
   }
 
   // .word-card {
@@ -453,6 +457,9 @@
     display: inline-block;
     user-select: none;
     cursor: grab;
+    touch-action: none;
+
+   
   }
 
   .char:active {
@@ -464,6 +471,10 @@
     font-size: 4rem;
     font-weight: 800;
     line-height: 1;
+
+    @media screen and (max-width: 700px) {
+      font-size: 1.5rem;
+    }
   }
 
   .subtitle-text {
@@ -573,18 +584,18 @@
     letter-spacing: 0.08em;
   }
 
-  @media (max-width: 1024px) {
-    .examples-grid {
-      grid-template-columns: repeat(2, minmax(0, 1fr));
-      grid-template-rows: none;
-      grid-template-areas:
-        "pm pm"
-        "pm pm"
-        "kanban kanban"
-        "insights sentence"
-        "layout layout";
-    }
-  }
+  // @media (max-width: 1024px) {
+  //   .examples-grid {
+  //     grid-template-columns: repeat(2, minmax(0, 1fr));
+  //     grid-template-rows: none;
+  //     grid-template-areas:
+  //       "pm pm"
+  //       "pm pm"
+  //       "kanban kanban"
+  //       "insights sentence"
+  //       "layout layout";
+  //   }
+  // }
 
   @media (max-width: 720px) {
     .examples-grid {
@@ -602,6 +613,7 @@
     gap: var(--size-16);
     background: white;
     min-height: 300px;
+    touch-action: none;
   }
 
   .prompt-section {
@@ -668,6 +680,7 @@
     border-radius: 4px;
     // font-weight: 500;
     cursor: grab;
+    touch-action: none;
   }
 
   .sentence-word:active {
@@ -748,6 +761,7 @@
     border: 1px solid rgb(219, 219, 219);
     border-radius: var(--ui-radius);
     cursor: grab;
+    touch-action: none;
     width: 100%;
     box-sizing: border-box;
   }
@@ -845,6 +859,7 @@
     background: white;
     border: 1px solid rgba(0, 0, 0, 0.05);
     cursor: grab;
+    touch-action: none;
     width: 100%;
     box-sizing: border-box;
   }
@@ -919,6 +934,7 @@
     color: #5e4d44;
     border: 1px solid rgb(216, 216, 216);
     cursor: grab;
+    touch-action: none;
     border-radius: 3px;
     font-size: 0.75rem;
     padding: 0.25rem 0.75rem;
