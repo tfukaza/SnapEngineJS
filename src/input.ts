@@ -562,22 +562,6 @@ class InputControl {
         if (thisGID != pointer.callerGID) {
           continue;
         }
-        // console.info("handleMultiPointer", pointer);
-        const startPosition = this.getCoordinates(
-          pointer.startX,
-          pointer.startY,
-        );
-        const currentPosition = this.getCoordinates(pointer.x, pointer.y);
-        const deltaCoordinates = {
-          x: currentPosition.x - startPosition.x,
-          y: currentPosition.y - startPosition.y,
-          cameraX: currentPosition.cameraX - startPosition.cameraX,
-          cameraY: currentPosition.cameraY - startPosition.cameraY,
-          screenX: currentPosition.screenX - startPosition.screenX,
-          screenY: currentPosition.screenY - startPosition.screenY,
-        };
-        if (pointer.moveCount == 0) {
-        }
         pointer.moveCount++;
         // Drag gestures are only handled by the global input engine
         // to avoid edge cases where the pointer leaves the DOM element while dragging,
@@ -590,13 +574,21 @@ class InputControl {
         // NOTE: The for loop is needed for non-touch devices.
         // It seems like that on touch devices, the pointerMove event continues working even after the cursor has
         // left the DOM element, which is not the case for mouse events.
-        // if (this._isGlobal) {
-        // console.info(
-        //   "drag gesture",
-        //   gesture.memberList.map((m) => m._ownerGID),
-        // );
         for (const member of gesture.memberList) {
-          // if (member._ownerGID == gesture.initiatorID) {
+          // Use the member's engine to transform coordinates, not the global InputControl's engine
+          const startPosition = member.getCoordinates(
+            pointer.startX,
+            pointer.startY,
+          );
+          const currentPosition = member.getCoordinates(pointer.x, pointer.y);
+          const deltaCoordinates = {
+            x: currentPosition.x - startPosition.x,
+            y: currentPosition.y - startPosition.y,
+            cameraX: currentPosition.cameraX - startPosition.cameraX,
+            cameraY: currentPosition.cameraY - startPosition.cameraY,
+            screenX: currentPosition.screenX - startPosition.screenX,
+            screenY: currentPosition.screenY - startPosition.screenY,
+          };
           member.event.drag?.({
             gid: member._isGlobal ? GLOBAL_GID : member._ownerGID,
             pointerId: pointer.id,
@@ -605,8 +597,6 @@ class InputControl {
             delta: deltaCoordinates,
             button: e.buttons,
           });
-          // console.log("drag", member._ownerGID, member._event.drag);
-          // }
         }
       }
     }
