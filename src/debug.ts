@@ -75,11 +75,13 @@ export class DebugRendererImpl implements DebugRenderer {
     for (const marker of Object.values(engine.debugMarkerList) as Array<{
       gid: string;
       id: string;
-      type: "point" | "rect" | "circle" | "text";
+      type: "point" | "rect" | "circle" | "text" | "line";
       persistent: boolean;
       color: string;
       x: number;
       y: number;
+      x2?: number;
+      y2?: number;
       width?: number;
       height?: number;
       radius?: number;
@@ -91,6 +93,7 @@ export class DebugRendererImpl implements DebugRenderer {
         marker.x,
         marker.y,
       ) ?? [0, 0];
+      // console.debug("Debug Marker", marker.x, marker.y, cameraX, cameraY);
       if (marker.type == "point") {
         this.debugCtx.beginPath();
         this.debugCtx.fillStyle = marker.color;
@@ -120,6 +123,17 @@ export class DebugRendererImpl implements DebugRenderer {
       } else if (marker.type == "text") {
         this.debugCtx.fillStyle = marker.color;
         this.debugCtx.fillText(marker.text!, cameraX, cameraY);
+      } else if (marker.type == "line") {
+        const [cameraX2, cameraY2] = engine.camera?.getCameraFromWorld(
+          marker.x2!,
+          marker.y2!,
+        ) ?? [0, 0];
+        this.debugCtx.beginPath();
+        this.debugCtx.strokeStyle = marker.color;
+        this.debugCtx.lineWidth = marker.lineWidth ?? 2;
+        this.debugCtx.moveTo(cameraX, cameraY);
+        this.debugCtx.lineTo(cameraX2, cameraY2);
+        this.debugCtx.stroke();
       }
     }
 

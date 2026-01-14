@@ -51,6 +51,7 @@ class EventCallback {
             prop,
             this._object.gid,
             (value as any).bind(this._object),
+            this._object.engine,
           );
         }
         return true;
@@ -222,6 +223,7 @@ export class BaseObject {
             prop,
             this.gid,
             value.bind(this) as (prop: any) => void,
+            this.engine,
           );
         }
         return true;
@@ -544,6 +546,31 @@ export class BaseObject {
       persistent,
       id: `${this.gid}-${id}`,
       filled,
+      lineWidth,
+    };
+  }
+
+  addDebugLine(
+    x1: number,
+    y1: number,
+    x2: number,
+    y2: number,
+    color: string = "red",
+    persistent: boolean = false,
+    id: string = "",
+    lineWidth: number = 2,
+  ) {
+    if (!this.engine) return;
+    this.engine.debugMarkerList[`${this.gid}-${id}`] = {
+      gid: this.gid,
+      type: "line",
+      color: color,
+      x: x1,
+      y: y1,
+      x2,
+      y2,
+      persistent,
+      id: `${this.gid}-${id}`,
       lineWidth,
     };
   }

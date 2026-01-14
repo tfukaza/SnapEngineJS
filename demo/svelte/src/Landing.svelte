@@ -26,9 +26,39 @@
     { label: "Collision", value: "collision" },
   ];
 
-  let selectedDemo = $state("welcome");
+  function getDemoFromUrl() {
+    if (typeof window === "undefined") return "welcome";
+    const params = new URLSearchParams(window.location.search);
+    const demo = params.get("demo");
+    if (demo && demoOptions.some((o) => o.value === demo)) {
+      return demo;
+    }
+    return "welcome";
+  }
+
+  let selectedDemo = $state(getDemoFromUrl());
   let debugEnabled = $state(false);
   let dragDemoRef: DragDemo | null = $state(null);
+
+  $effect(() => {
+    if (typeof window !== "undefined") {
+      const url = new URL(window.location.href);
+      if (url.searchParams.get("demo") !== selectedDemo) {
+        url.searchParams.set("demo", selectedDemo);
+        window.history.pushState({}, "", url);
+      }
+    }
+  });
+
+  $effect(() => {
+    const handlePopState = () => {
+      selectedDemo = getDemoFromUrl();
+    };
+    window.addEventListener("popstate", handlePopState);
+    return () => {
+      window.removeEventListener("popstate", handlePopState);
+    };
+  });
 
   function toggleDebug(event: Event) {
     if (selectedDemo !== "drag") {

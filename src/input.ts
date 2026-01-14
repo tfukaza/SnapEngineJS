@@ -1,6 +1,5 @@
 import { GlobalManager } from "./global";
 import { BaseObject } from "./object";
-import { Engine } from "./snapline";
 import { EventProxyFactory } from "./util";
 
 export enum mouseButton {
@@ -142,11 +141,10 @@ export interface InputEventCallback {
   pinchEnd: null | ((prop: pinchEndProp) => void);
 }
 
-type InputEventRecord<T> = {
-  [P in keyof T]: Record<string, (prop: T[P]) => void>;
-};
+// type InputEventRecord<T> = {
+//   [P in keyof T]: Record<string, { callback: (prop: T[P]) => void; engine: any }>;
+// };
 
-type InputEventCallbackRecord = InputEventRecord<InputEventCallback>;
 
 export type touchData = {
   x: number;
@@ -752,21 +750,19 @@ interface pinchGesture {
 class GlobalInputControl {
   #document: Document;
   global: GlobalManager | null;
-  engine: any;
 
   _inputControl: InputControl;
-  globalCallbacks: InputEventCallbackRecord;
+  globalCallbacks: Record<string, Record<string, { callback: (prop: any) => void, engine: any | null }>>;
   _pointerDict: { [key: number]: pointerData };
   _gestureDict: { [key: string]: dragGesture | pinchGesture };
 
   _event: InputEventCallback;
   event: InputEventCallback;
 
-  constructor(global: GlobalManager, engine: any) {
+  constructor(global: GlobalManager) {
     this.global = global;
-    this.engine = engine;
     this.#document = document;
-    this._inputControl = new InputControl(engine, true, null);
+    this._inputControl = new InputControl({ global: global }, true, null);
     this._inputControl.addCursorEventListener(
       this.#document,
     );
@@ -787,20 +783,66 @@ class GlobalInputControl {
     this._pointerDict = {}; // Dictionary of pointers for pointer events, indexed by the pointer identifier
     this._gestureDict = {}; // Dictionary of gestures for gesture events, indexed by the gesture identifier
 
+    type inputCallbackKey = keyof InputEventCallback;
+
+    // Helper function to transform screen coordinates to world coordinates
+    const transformPosition = (pos: eventPosition | undefined, camera: any): eventPosition | undefined => {
+      if (!pos || pos.screenX == null || pos.screenY == null || !camera) {
+        return pos;
+      }
+      const [cameraX, cameraY] = camera.getCameraFromScreen(pos.screenX, pos.screenY);
+      const [worldX, worldY] = camera.getWorldFromCamera(cameraX, cameraY);
+      return {
+        x: worldX,
+        y: worldY,
+        cameraX,
+        cameraY,
+        screenX: pos.screenX,
+        screenY: pos.screenY,
+      };
+    };
+
     for (const [key] of Object.entries(this.globalCallbacks)) {
-      this._inputControl.event[key as keyof InputEventCallback] = (
+      this._inputControl.event[key as inputCallbackKey] = (
         prop: any,
       ) => {
-        // console.log("Global Input Event iteration", key, prop);
-        // console.trace();
-        // this.inputControl.event[key as keyof InputEventCallback]?.call(
-        //   this.inputControl,
-        //   prop,
-        // );
-        for (const callback of Object.values(
-          this.globalCallbacks[key as keyof InputEventCallback],
+        for (const { callback, engine } of Object.values(
+          this.globalCallbacks[key],
         )) {
-          callback(prop);
+          const transformWithEngine = (targetEngine: any) => {
+            if (!targetEngine?.camera) {
+              return prop;
+            }
+            const transformed: any = { ...prop };
+            // Transform all position-related properties
+            if (prop.position) {
+              transformed.position = transformPosition(prop.position, targetEngine.camera);
+            }
+            if (prop.start) {
+              transformed.start = transformPosition(prop.start, targetEngine.camera);
+            }
+            if (prop.end) {
+              transformed.end = transformPosition(prop.end, targetEngine.camera);
+            }
+            if (prop.delta) {
+              transformed.delta = transformPosition(prop.delta, targetEngine.camera);
+            }
+            return transformed;
+          };
+
+          if (!engine) {
+            // No engine specified - this is a truly global listener, call for all engines
+            if (this.global && this.global.engines && this.global.engines.size > 0) {
+              for (const currentEngine of this.global.engines) {
+                callback(transformWithEngine(currentEngine));
+              }
+            } else {
+              callback(prop);
+            }
+          } else {
+            // Engine specified - transform coordinates using that specific engine only
+            callback(transformWithEngine(engine));
+          }
         }
       };
     }
@@ -823,6 +865,7 @@ class GlobalInputControl {
             prop as keyof InputEventCallback,
             GLOBAL_GID,
             value.bind(this),
+            null,
           );
         } else {
           this.unsubscribeGlobalCursorEvent(
@@ -857,8 +900,9 @@ class GlobalInputControl {
     event: keyof InputEventCallback,
     gid: string,
     callback: (prop: any) => void,
+    engine: any | null,
   ) {
-    this.globalCallbacks[event][gid] = callback;
+    this.globalCallbacks[event][gid] = { callback, engine };
   }
 
   unsubscribeGlobalCursorEvent(event: keyof InputEventCallback, gid: string) {

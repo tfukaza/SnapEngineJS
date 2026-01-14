@@ -25,7 +25,7 @@ class GlobalManager {
   private static instance: GlobalManager | null = null;
   private static readonly GLOBAL_ENGINE_KEY = "__global__";
 
-  inputEngines: WeakMap<any, GlobalInputControl>;
+  inputEngine: GlobalInputControl | null;
   objectTable: Record<string, Record<string, BaseObject>>;
   data: any;
   gid: number;
@@ -51,8 +51,8 @@ class GlobalManager {
   engines: Set<any>;
 
   private constructor() {
-  this.objectTable = {};
-  this.inputEngines = new WeakMap();
+    this.objectTable = {};
+    this.inputEngine = null;
     this.data = {};
     this.gid = 0;
     this.#engineIdCounter = 0;
@@ -118,10 +118,6 @@ class GlobalManager {
   unregisterEngine(engine: any): void {
     this.engines.delete(engine);
 
-    const inputEngine = this.inputEngines.get(engine);
-    inputEngine?.destroy();
-    this.inputEngines.delete(engine);
-
     const engineId = this.#engineIds.get(engine);
     if (engineId) {
       delete this.objectTable[engineId];
@@ -130,6 +126,8 @@ class GlobalManager {
 
     // Stop the global render loop if no engines remain
     if (this.engines.size === 0) {
+      this.inputEngine?.destroy();
+      this.inputEngine = null;
       this.#stopRenderLoop();
     }
   }
@@ -234,10 +232,10 @@ class GlobalManager {
   }
 
   getInputEngine(engine: any | null): GlobalInputControl | null {
-    if (!engine) {
+    if (!engine && !this.inputEngine) {
       return null;
     }
-    return this.inputEngines.get(engine) ?? this.#ensureInputEngine(engine);
+    return this.inputEngine ?? this.#ensureInputEngine(engine);
   }
 
   getEngineId(engine: any | null): string | null {
@@ -299,13 +297,11 @@ class GlobalManager {
     }
   }
 
-  #ensureInputEngine(engine: any): GlobalInputControl {
-    let inputEngine = this.inputEngines.get(engine);
-    if (!inputEngine) {
-      inputEngine = new GlobalInputControl(this, engine);
-      this.inputEngines.set(engine, inputEngine);
+  #ensureInputEngine(_engine: any): GlobalInputControl {
+    if (!this.inputEngine) {
+      this.inputEngine = new GlobalInputControl(this);
     }
-    return inputEngine;
+    return this.inputEngine;
   }
 
   #ensureEngineId(engine: any): string {
