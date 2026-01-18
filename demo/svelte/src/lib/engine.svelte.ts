@@ -1,10 +1,10 @@
-import { ElementObject, SnapLine } from "../../../../src/index";
+import { ElementObject, Engine } from "../../../../src/index";
 import type { Component } from "svelte";
-let engineDict: { [key: string]: SnapLine } = {};
+let engineDict: { [key: string]: Engine } = {};
 
 export function getEngine(id: string) {
   if (!engineDict[id]) {
-    engineDict[id] = new SnapLine();
+    engineDict[id] = new Engine();
   }
   return engineDict[id];
 }

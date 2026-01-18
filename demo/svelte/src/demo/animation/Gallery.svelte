@@ -1,13 +1,12 @@
 <script lang="ts">
-  
-    import Canvas from "../../lib2/Canvas.svelte";
+    import Canvas from "../../lib/Canvas.svelte";
     import Basic from "./Basic.svelte";
     import Variable from "./Variable.svelte";
     import Sequence from "./Sequence.svelte";
     import TimeControl from "./TimeControl.svelte";
   </script>
     
-  <Canvas id="input">
+  <Canvas id="gallery-demo-canvas">
     <div class="gallery">
       <Basic />
       <Variable />
@@ -17,27 +16,21 @@
   </Canvas>
     
   <style lang="scss">
-    :global(#snap-canvas) {
+    @import "../../../../app.scss";
+
+    .gallery {
       width: 100%;
       height: 100%;
+      display: flex;
+      flex-wrap: wrap;
+      gap: var(--size-16);
+      justify-content: center;
+      align-content: center;
+      overflow-y: auto;
+      padding: var(--size-16);
+      box-sizing: border-box;
     }
 
-    :global(.gallery) {
-      width: 100%;
-      height: 100%;
-      display: grid;
-      grid-template-columns: repeat(2, 1fr);
-      gap: 10px;
-    }
 
-    :global(.gallery > .exhibit) {
-      position: relative;
-      background-color: #f0f0f0;
-      border-radius: 16px;
-      overflow: hidden;
-      height: 300px;
-      // break-inside: avoid;
-    }
-  
   </style>
   

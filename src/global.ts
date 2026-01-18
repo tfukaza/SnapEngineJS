@@ -1,41 +1,38 @@
-import Camera from "./camera";
 import { BaseObject, queueEntry } from "./object";
-import { AnimationObject, SequenceObject } from "./animation";
 import { GlobalInputControl } from "./input";
-import { CollisionEngine } from "./collision";
-import { SnapLine } from "./snapline";
 
-interface coordinates {
-  worldX: number;
-  worldY: number;
-  cameraX: number;
-  cameraY: number;
-  screenX: number;
-  screenY: number;
-}
-
-interface debugMarker {
-  type: "point" | "rect" | "circle" | "text";
-  gid: string;
-  id: string;
-  persistent: boolean; // Persists on screen until cleared or replaced
-  color: string;
-  x: number;
-  y: number;
-  width?: number;
-  height?: number;
-  radius?: number;
-  text?: string;
-}
-
+/**
+ * Central state manager shared across all engine instances.
+ *
+ * Manages global state including:
+ * - Unique object ID generation
+ * - Global input control
+ * - Shared render queues for synchronized rendering across all engines
+ * - Shared data storage
+ * - Engine instance registry
+ *
+ * This is a singleton - only one instance exists per application.
+ * Multiple Engine instances share the same GlobalManager and render pipeline.
+ *
+ * @example
+ * ```typescript
+ * const global = GlobalManager.getInstance();
+ * const engine1 = new Engine();
+ * const engine2 = new Engine(); // Shares the same GlobalManager and render queues
+ * ```
+ */
 class GlobalManager {
-  containerElement: HTMLElement | null;
-  cursor: coordinates;
-  camera: Camera | null;
-  inputEngine: GlobalInputControl | null;
-  collisionEngine: CollisionEngine | null;
-  objectTable: Record<string, BaseObject>;
+  private static instance: GlobalManager | null = null;
+  private static readonly GLOBAL_ENGINE_KEY = "__global__";
 
+  inputEngine: GlobalInputControl | null;
+  objectTable: Record<string, Record<string, BaseObject>>;
+  data: any;
+  gid: number;
+  #engineIdCounter: number;
+  #engineIds: WeakMap<any, string>;
+
+  // Shared render state across all engines
   currentStage:
     | "IDLE"
     | "READ_1"
@@ -44,57 +41,288 @@ class GlobalManager {
     | "WRITE_2"
     | "READ_3"
     | "WRITE_3";
-  read1Queue: Record<string, Map<string, queueEntry>>;
-  write1Queue: Record<string, Map<string, queueEntry>>;
-  read2Queue: Record<string, Map<string, queueEntry>>;
-  write2Queue: Record<string, Map<string, queueEntry>>;
-  read3Queue: Record<string, Map<string, queueEntry>>;
-  write3Queue: Record<string, Map<string, queueEntry>>;
+  read1Queue: Map<string, Map<string, queueEntry>>;
+  write1Queue: Map<string, Map<string, queueEntry>>;
+  read2Queue: Map<string, Map<string, queueEntry>>;
+  write2Queue: Map<string, Map<string, queueEntry>>;
+  read3Queue: Map<string, Map<string, queueEntry>>;
+  write3Queue: Map<string, Map<string, queueEntry>>;
+  // Registry of all engine instances
+  engines: Set<any>;
 
-  animationList: (AnimationObject | SequenceObject)[] = [];
-  animationFragment: HTMLDivElement;
-
-  debugMarkerList: Record<string, debugMarker> = {};
-
-  data: any;
-  snapline: SnapLine | null;
-
-  gid: number;
-
-  constructor() {
-    this.containerElement = null;
-    this.cursor = {
-      worldX: 0,
-      worldY: 0,
-      cameraX: 0,
-      cameraY: 0,
-      screenX: 0,
-      screenY: 0,
-    };
-    this.camera = null;
-    this.collisionEngine = null;
+  private constructor() {
     this.objectTable = {};
-    this.inputEngine = new GlobalInputControl(this);
+    this.inputEngine = null;
+    this.data = {};
+    this.gid = 0;
+    this.#engineIdCounter = 0;
+    this.#engineIds = new WeakMap();
 
     this.currentStage = "IDLE";
-    this.read1Queue = {};
-    this.write1Queue = {};
-    this.read2Queue = {};
-    this.write2Queue = {};
-    this.read3Queue = {};
-    this.write3Queue = {};
-    this.animationList = [];
-    this.animationFragment = document.createElement("div");
-    document.body.appendChild(this.animationFragment);
+    this.read1Queue = new Map();
+    this.write1Queue = new Map();
+    this.read2Queue = new Map();
+    this.write2Queue = new Map();
+    this.read3Queue = new Map();
+    this.write3Queue = new Map();
 
-    this.data = {};
-    this.snapline = null;
-    this.gid = 0;
+    this.engines = new Set();
   }
 
+  /**
+   * Gets the singleton instance of GlobalManager.
+   * Creates it if it doesn't exist yet.
+   *
+   * @returns The GlobalManager singleton instance
+   */
+  static getInstance(): GlobalManager {
+    if (!GlobalManager.instance) {
+      GlobalManager.instance = new GlobalManager();
+    }
+    return GlobalManager.instance;
+  }
+
+  /**
+   * Resets the singleton instance. Useful for testing.
+   * WARNING: This will affect all Engine instances using this GlobalManager.
+   */
+  static resetInstance(): void {
+    GlobalManager.instance = null;
+  }
+
+  /**
+   * Registers an Engine instance with the global render pipeline.
+   * Called automatically by Engine constructor.
+   *
+   * @param engine - The Engine instance to register
+   * @internal
+   */
+  registerEngine(engine: any): void {
+    this.engines.add(engine);
+    this.#ensureEngineId(engine);
+    this.#ensureInputEngine(engine);
+
+    // Start the global render loop if this is the first engine
+    if (this.engines.size === 1) {
+      this.#startRenderLoop();
+    }
+  }
+
+  /**
+   * Unregisters an Engine instance from the global render pipeline.
+   * Should be called when an Engine is destroyed.
+   *
+   * @param engine - The Engine instance to unregister
+   * @internal
+   */
+  unregisterEngine(engine: any): void {
+    this.engines.delete(engine);
+
+    const engineId = this.#engineIds.get(engine);
+    if (engineId) {
+      delete this.objectTable[engineId];
+      this.#engineIds.delete(engine);
+    }
+
+    // Stop the global render loop if no engines remain
+    if (this.engines.size === 0) {
+      this.inputEngine?.destroy();
+      this.inputEngine = null;
+      this.#stopRenderLoop();
+    }
+  }
+
+  #animationFrameId: number | null = null;
+
+  /**
+   * Starts the global render loop.
+   * Batches render stages across all engines to prevent layout thrashing.
+   * @internal
+   */
+  #startRenderLoop(): void {
+    if (this.#animationFrameId !== null) {
+      return; // Already running
+    }
+
+    const step = () => {
+      const timestamp = Date.now();
+
+      // Process each stage for ALL engines before moving to the next stage
+      // This prevents layout thrashing by batching DOM reads and writes
+
+      // READ_1 stage for all engines
+      this.currentStage = "READ_1";
+      for (const engine of this.engines) {
+        engine._processStage("READ_1", this.read1Queue, timestamp);
+      }
+      this.read1Queue = new Map();
+
+      // WRITE_1 stage for all engines
+      this.currentStage = "WRITE_1";
+      for (const engine of this.engines) {
+        engine._processStage("WRITE_1", this.write1Queue, timestamp);
+      }
+      this.write1Queue = new Map();
+
+      // READ_2 stage for all engines
+      this.currentStage = "READ_2";
+      for (const engine of this.engines) {
+        engine._processStage("READ_2", this.read2Queue, timestamp);
+      }
+      this.read2Queue = new Map();
+
+      // WRITE_2 stage for all engines
+      this.currentStage = "WRITE_2";
+      for (const engine of this.engines) {
+        engine._processStage("WRITE_2", this.write2Queue, timestamp);
+      }
+      this.write2Queue = new Map();
+
+      // Animation processing for all engines
+      for (const engine of this.engines) {
+        engine._processAnimations(timestamp);
+      }
+
+      // READ_3 stage for all engines
+      this.currentStage = "READ_3";
+      for (const engine of this.engines) {
+        engine._processStage("READ_3", this.read3Queue, timestamp);
+      }
+      this.read3Queue = new Map();
+
+      // WRITE_3 stage for all engines
+      this.currentStage = "WRITE_3";
+      for (const engine of this.engines) {
+        engine._processStage("WRITE_3", this.write3Queue, timestamp);
+      }
+      this.write3Queue = new Map();
+
+      this.currentStage = "IDLE";
+
+      // Post-render processing (collisions, debug) for all engines
+      for (const engine of this.engines) {
+        engine._processPostRender(timestamp);
+      }
+
+      this.#animationFrameId = window.requestAnimationFrame(step);
+    };
+
+    this.#animationFrameId = window.requestAnimationFrame(step);
+  }
+
+  /**
+   * Stops the global render loop.
+   * @internal
+   */
+  #stopRenderLoop(): void {
+    if (this.#animationFrameId !== null) {
+      window.cancelAnimationFrame(this.#animationFrameId);
+      this.#animationFrameId = null;
+    }
+  }
+
+  /**
+   * Generates a unique identifier for objects.
+   *
+   * @returns A unique string ID that increments with each call.
+   */
   getGlobalId() {
     this.gid++;
     return this.gid.toString();
+  }
+
+  getInputEngine(engine: any | null): GlobalInputControl | null {
+    if (!engine && !this.inputEngine) {
+      return null;
+    }
+    return this.inputEngine ?? this.#ensureInputEngine(engine);
+  }
+
+  getEngineId(engine: any | null): string | null {
+    if (!engine) {
+      return null;
+    }
+    return this.#engineIds.get(engine) ?? null;
+  }
+
+  getEngineObjectTable(
+    engine: any | null,
+    create: boolean = true,
+  ): Record<string, BaseObject> | null {
+    if (!engine) {
+      if (!create && !this.objectTable[GlobalManager.GLOBAL_ENGINE_KEY]) {
+        return null;
+      }
+      return this.#ensureGlobalObjectTable();
+    }
+
+    let engineId = this.#engineIds.get(engine);
+    if (!engineId) {
+      if (!create) {
+        return null;
+      }
+      engineId = this.#ensureEngineId(engine);
+    }
+
+    if (!this.objectTable[engineId]) {
+      if (!create) {
+        return null;
+      }
+      this.objectTable[engineId] = {};
+    }
+
+    return this.objectTable[engineId];
+  }
+
+  registerObject(object: BaseObject): void {
+    const table = this.getEngineObjectTable(object.engine ?? null, true);
+    if (table) {
+      table[object.gid] = object;
+    }
+  }
+
+  unregisterObject(object: BaseObject): void {
+    const table = this.getEngineObjectTable(object.engine ?? null, false);
+    if (!table) {
+      return;
+    }
+    delete table[object.gid];
+
+    if (Object.keys(table).length === 0) {
+      const key =
+        object.engine && this.#engineIds.get(object.engine)
+          ? this.#engineIds.get(object.engine)!
+          : GlobalManager.GLOBAL_ENGINE_KEY;
+      delete this.objectTable[key];
+    }
+  }
+
+  #ensureInputEngine(_engine: any): GlobalInputControl {
+    if (!this.inputEngine) {
+      this.inputEngine = new GlobalInputControl(this);
+    }
+    return this.inputEngine;
+  }
+
+  #ensureEngineId(engine: any): string {
+    let engineId = this.#engineIds.get(engine);
+    if (!engineId) {
+      this.#engineIdCounter++;
+      engineId = `engine-${this.#engineIdCounter}`;
+      this.#engineIds.set(engine, engineId);
+    }
+    if (!this.objectTable[engineId]) {
+      this.objectTable[engineId] = {};
+    }
+    return engineId;
+  }
+
+  #ensureGlobalObjectTable(): Record<string, BaseObject> {
+    const key = GlobalManager.GLOBAL_ENGINE_KEY;
+    if (!this.objectTable[key]) {
+      this.objectTable[key] = {};
+    }
+    return this.objectTable[key];
   }
 }
 

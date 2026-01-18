@@ -17,6 +17,7 @@ export interface ConnectorConfig {
   maxConnectors?: number;
   allowDragOut?: boolean;
   lineClass?: typeof LineComponent;
+  colliderRadius?: number;
 }
 
 interface ConnectorCallback {
@@ -43,11 +44,11 @@ class ConnectorComponent extends ElementObject {
   #connectorCallback: ConnectorCallback | null = null;
 
   constructor(
-    global: GlobalManager,
+    engine: any,
     parent: NodeComponent,
     config: ConnectorConfig = {},
   ) {
-    super(global, parent as unknown as BaseObject);
+    super(engine, parent as unknown as BaseObject);
 
     this.#prop = {};
     this.#outgoingLines = [];
@@ -56,14 +57,28 @@ class ConnectorComponent extends ElementObject {
     this.#name = config.name || this.gid || "";
     this.event.input.pointerDown = this.onCursorDown;
 
-    this.#hitCircle = new CircleCollider(global, this, 0, 0, 30);
+    this.#hitCircle = new CircleCollider(engine, this, 0, 0, config.colliderRadius ?? 30);
     this.addCollider(this.#hitCircle);
 
-    this.#mouseHitBox = new PointCollider(global, this, 0, 0);
+    this.#mouseHitBox = new PointCollider(engine, this, 0, 0);
     this.addCollider(this.#mouseHitBox);
 
     this.#targetConnector = null;
     this.transformMode = "none";
+
+    // Center colliders on the connector element once DOM is assigned
+    this.event.dom.onAssignDom = () => {
+      this.queueUpdate("READ_1", () => {
+        this.readDom();
+        const prop = this.getDomProperty("READ_1");
+        const centerX = prop.width / 2;
+        const centerY = prop.height / 2;
+        this.#hitCircle.transform.x = centerX;
+        this.#hitCircle.transform.y = centerY;
+        this.#mouseHitBox.transform.x = centerX;
+        this.#mouseHitBox.transform.y = centerY;
+      });
+    };
 
     this.#connectorCallback = {
       onConnectOutgoing: null,
@@ -130,6 +145,7 @@ class ConnectorComponent extends ElementObject {
     if (prop.event.button != 0) {
       return;
     }
+    console.debug(`Pointer down on connector ${this.gid}`);
     this.inputEngine.resetDragMembers();
     if (currentIncomingLines.length > 0) {
       this.startPickUpLine(currentIncomingLines[0], prop);
@@ -187,9 +203,9 @@ class ConnectorComponent extends ElementObject {
   createLine(): LineComponent {
     let line: LineComponent;
     if (this.#config.lineClass) {
-      line = new this.#config.lineClass(this.global, this);
+      line = new this.#config.lineClass(this.engine, this);
     } else {
-      line = new LineComponent(this.global, this);
+      line = new LineComponent(this.engine, this);
     }
     this.children.push(line);
     return line;

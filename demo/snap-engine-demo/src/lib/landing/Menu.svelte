@@ -1,9 +1,10 @@
 <script lang="ts">
   import { ElementObject } from "../../../../../src/index";
   import { getContext, onMount } from "svelte";
-  import type { SnapLine } from "../../../../../src/index";
+  import type { Engine } from "../../../../../src/index";
+  import { AnimationObject } from "../../../../../src/animation";
 
-  const engine: SnapLine = getContext("engine");
+  const engine: Engine = getContext("engine");
 
   const PANEL_ASCENDING_DURATION = 200;
   const PANEL_ASCENDING_EASING = "cubic-bezier(.06,.68,.37,1.16)";
@@ -34,8 +35,8 @@
     movingToIndex: number;
     initialX: number;
 
-    constructor(engine: SnapLine, parent: ElementObject | null) {
-      super(engine.global, parent);
+    constructor(engine: Engine, parent: ElementObject | null) {
+      super(engine, parent);
       this.prevIndex = 0;
       this.prevIndex1 = 0;
       this.animationState = "selectedIdle";
@@ -63,7 +64,8 @@
           let offset = index * -property.width / this.itemList.length;
           let startX = this.prevIndex1 * -property.width / this.itemList.length;
           this.prevIndex1 = index;
-          this.animate(
+          const anim = new AnimationObject(
+            this.element,
             {
               transform: [
                 `translate(${startX}px, 0px)`,
@@ -84,8 +86,8 @@
               },
             }
           );
-          this.animationState = "moving";
-          this.animation.play();
+          this.addAnimation(anim);
+          anim.play();
         } else if (
           ["ascending", "descending", "selectedIdle"].includes(
             this.animationState
@@ -101,7 +103,8 @@
       const offset = index * -property.width / this.itemList.length;
       const startX = this.prevIndex1 * -property.width / this.itemList.length;
       this.prevIndex1 = index;
-      this.animate(
+      const anim = new AnimationObject(
+        this.element,
         {
           transform: [
             `translate(${startX}px, 0px)`,
@@ -122,7 +125,8 @@
           },
         }
       );
-      this.animation.play();
+      this.addAnimation(anim);
+      anim.play();
       this.animationState = "moving";
       this.movingToIndex = index;
     }
@@ -134,8 +138,8 @@
     container: MenuCarousel | null;
     currentZ: number;
 
-    constructor(engine: SnapLine, parent: ElementObject | null, index: number) {
-      super(engine.global, parent);
+    constructor(engine: Engine, parent: ElementObject | null, index: number) {
+      super(engine, parent);
       this.index = index;
       this.prevIndex = 0;
       this.container = null;
@@ -144,7 +148,8 @@
     }
 
     lowerPanel(targetIndex: number, delay: number = 0) {
-      this.animate(
+      const anim = new AnimationObject(
+        this.element,
         {
           $alpha: [this.currentZ, 1],
         },
@@ -169,7 +174,8 @@
           },
         }
       );
-      this.animation.play();
+      this.addAnimation(anim);
+      anim.play();
       this.container!.animationState = "descending";
     }
 
@@ -188,7 +194,8 @@
         this.transform.y = 0;
         this.requestTransform("WRITE_2");
       };
-      this.animate(
+      const anim = new AnimationObject(
+        this.element,
         {
           $alpha: [this.currentZ, 0],
         },
@@ -205,7 +212,8 @@
           },
         }
       );
-      this.animation.play();
+      this.addAnimation(anim);
+      anim.play();
       this.container!.animationState = "ascending";
     }
 
@@ -224,21 +232,15 @@
 
   let menuItems = $state([
     {
-      index: 0,
       title: "UI Engine",
-      icon: "🎨",
       object: new MenuItem(engine, null, 0),
     },
     {
-      index: 1,
       title: "Node UI",
-      icon: "🎨",
       object: new MenuItem(engine, null, 1),
     },
     {
-      index: 2,
       title: "Drag & Drop",
-      icon: "🎨",
       object: new MenuItem(engine, null, 2),
     },
   ]);

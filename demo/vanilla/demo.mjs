@@ -1,10 +1,10 @@
 import {
-  SnapLine,
+  Engine,
   ConnectorComponent,
   LineComponent,
-} from "./lib/snapline.mjs";
+} from "./snapline/snapline.mjs";
 
-const sl = new SnapLine();
+const sl = new Engine();
 
 let addNodeMenu = null;
 

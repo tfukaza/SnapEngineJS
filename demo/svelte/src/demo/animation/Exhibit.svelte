@@ -10,27 +10,36 @@
 
 </script>
 
-<div class="exhibit" id="basic-animation">
+<div class="exhibit card" id="basic-animation">
   {@render children()}
   <div class="control-panel">
-    <button on:click={props.play}>Play</button>
-    <button on:click={props.pause}>Pause</button>
-    <button on:click={props.reverse}>Reverse</button>
-    <button on:click={props.cancel}>Cancel</button>
+    <button onclick={() => props.play?.()}>Play</button>
+    <button onclick={() => props.pause?.()}>Pause</button>
+    <button onclick={() => props.reverse?.()}>Reverse</button>
+    <button onclick={() => props.cancel?.()}>Cancel</button>
   </div>
 </div>
 
 <style lang="scss">
+  @import "../../../../app.scss";
+
   .exhibit {
-    position: relative;
-    background-color: #f0f0f0;
-    border-radius: 16px;
-    overflow: hidden;
+
+    width: 400px;
+    height: 300px;
+
   }
   .control-panel {
     position: absolute;
-    top: 0;
-    left: 0;
+    top: var(--size-12);
+    left: var(--size-12);
+    display: flex;
+    gap: var(--size-12);
+    z-index: 10;
+
+    button {
+      color: var(--color-text);
+    }
   }
 
 </style>

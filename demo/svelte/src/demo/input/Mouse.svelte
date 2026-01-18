@@ -1,9 +1,8 @@
 <script lang="ts">
-    import type {SnapLine} from "../../../../../src/index";
-    import type {pointerMoveProp} from "../../../../../src/input";
-    import { onMount, getContext } from "svelte";
+    // import type {Engine} from "../../../../../src/index";
+    // import { getContext } from "svelte";
 
-    let engine:SnapLine = getContext("engine");
+    // let engine:Engine = getContext("engine");
 
     // let pointerPosition: any = $state({x: 0, y: 0, screenX: 0, screenY: 0, cameraX: 0, cameraY: 0});
     // let style = $derived(`top: ${pointerPosition.screenY}px; left: ${pointerPosition.screenX}px;`);
@@ -16,9 +15,10 @@
     //     }
     // }
     // onMount(() => {
-    //     if (engine.global.inputEngine) {
-    //         // engine.global.inputEngine._inputControl.event.pointerMove = updateMousePosition;
-    //         engine.global.inputEngine.subscribeGlobalCursorEvent("pointerMove", "100", updateMousePosition);
+    //     const globalInputEngine = engine.global.getInputEngine(engine);
+    //     if (globalInputEngine) {
+    //         // globalInputEngine._inputControl.event.pointerMove = updateMousePosition;
+    //         globalInputEngine.subscribeGlobalCursorEvent("pointerMove", "100", updateMousePosition);
     //     }
     // });
 

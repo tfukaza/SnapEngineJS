@@ -1,8 +1,25 @@
-import { GlobalManager } from "./global";
 import { TransformProperty } from "./object";
-function getDomProperty(global: GlobalManager, dom: HTMLElement) {
+
+/**
+ * Retrieves the position and dimensions of a DOM element in multiple coordinate spaces.
+ *
+ * Returns coordinates in world space (accounting for camera transform), camera space,
+ * and screen space, along with transformed dimensions.
+ *
+ * @param engine - The engine instance containing camera information.
+ * @param dom - The HTML element to measure.
+ * @returns An object containing position and size in various coordinate systems.
+ *
+ * @example
+ * ```typescript
+ * const props = getDomProperty(engine, myElement);
+ * console.log(props.x, props.y); // World coordinates
+ * console.log(props.screenX, props.screenY); // Screen coordinates
+ * ```
+ */
+function getDomProperty(engine: any, dom: HTMLElement) {
   const rect = dom.getBoundingClientRect();
-  if (global.camera == null) {
+  if (engine == null || engine.camera == null) {
     return {
       height: rect.height,
       width: rect.width,
@@ -14,14 +31,14 @@ function getDomProperty(global: GlobalManager, dom: HTMLElement) {
       screenY: rect.top,
     };
   }
-  const [cameraX, cameraY] = global.camera.getCameraFromScreen(
+  const [cameraX, cameraY] = engine.camera.getCameraFromScreen(
     rect.left,
     rect.top,
   );
-  const [worldX, worldY] = global.camera.getWorldFromCamera(cameraX, cameraY);
+  const [worldX, worldY] = engine.camera.getWorldFromCamera(cameraX, cameraY);
   const [cameraWidth, cameraHeight] =
-    global.camera.getCameraDeltaFromWorldDelta(rect.width, rect.height);
-  const [worldWidth, worldHeight] = global.camera.getWorldDeltaFromCameraDelta(
+    engine.camera.getCameraDeltaFromWorldDelta(rect.width, rect.height);
+  const [worldWidth, worldHeight] = engine.camera.getWorldDeltaFromCameraDelta(
     cameraWidth,
     cameraHeight,
   );
@@ -38,11 +55,38 @@ function getDomProperty(global: GlobalManager, dom: HTMLElement) {
   };
 }
 
+/**
+ * Converts a transform object into a CSS transform string.
+ *
+ * Generates a translate3d and scale transformation for hardware acceleration.
+ *
+ * @param transform - The transform properties to convert.
+ * @returns A CSS transform string.
+ *
+ * @example
+ * ```typescript
+ * const transform = { x: 10, y: 20, scaleX: 1.5, scaleY: 1.5 };
+ * const css = generateTransformString(transform);
+ * // Returns: "translate3d(10px, 20px, 0px) scale(1.5, 1.5) "
+ * ```
+ */
 function generateTransformString(transform: TransformProperty) {
   const string = `translate3d(${transform.x}px, ${transform.y}px, 0px) scale(${transform.scaleX}, ${transform.scaleY}) `;
   return string;
 }
 
+/**
+ * Parses a CSS transform string to extract position values.
+ *
+ * @param transform - A CSS transform string to parse.
+ * @returns An object with x and y coordinates.
+ *
+ * @example
+ * ```typescript
+ * const result = parseTransformString("translate3d(10px, 20px, 0px)");
+ * // Returns: { x: 10, y: 20 }
+ * ```
+ */
 function parseTransformString(transform: string) {
   const transformValues = transform.split("(")[1].split(")")[0].split(",");
   return {
@@ -79,9 +123,15 @@ function getDomStyle(dom: HTMLElement | SVGElement) {
 }
 
 /**
- * Sets the style of a DOM element.
- * @param dom The DOM element to be styled.
- * @param style The new style to be added to the DOM element.
+ * Applies CSS styles to a DOM element.
+ *
+ * @param dom - The HTML or SVG element to style.
+ * @param style - An object containing CSS property-value pairs.
+ *
+ * @example
+ * ```typescript
+ * setDomStyle(element, { color: 'red', fontSize: '16px' });
+ * ```
  */
 function setDomStyle(
   dom: HTMLElement | SVGElement,
@@ -92,6 +142,24 @@ function setDomStyle(
 
 interface CallbackInterface extends Record<KeyType, Function | null> {}
 
+/**
+ * Creates a proxy for event callbacks that automatically binds them to an object.
+ *
+ * When a callback function is assigned to the proxy, it's automatically bound to the
+ * specified object, ensuring the correct `this` context during event handling.
+ *
+ * @param object - The object to bind callbacks to.
+ * @param dict - The callback dictionary to proxy.
+ * @param secondary - Optional secondary callback dictionary for fallback.
+ * @returns A proxy that handles callback binding automatically.
+ *
+ * @example
+ * ```typescript
+ * const callbacks = { onClick: null };
+ * const proxy = EventProxyFactory(myObject, callbacks);
+ * proxy.onClick = function() { console.log(this); }; // Automatically bound to myObject
+ * ```
+ */
 function EventProxyFactory<BindObject, Callback extends object>(
   object: BindObject,
   dict: Callback,

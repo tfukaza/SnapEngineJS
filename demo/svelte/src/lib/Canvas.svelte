@@ -1,27 +1,48 @@
 <script lang="ts">
-  import { onMount, setContext } from "svelte";
+  import { onMount } from "svelte";
+  import { setContext } from "svelte";
   import { getEngine } from "./engine.svelte";
+  import type { Engine } from "../../../../src/index";
 
   let {
     id,
     children,
-  }: { id: string; style?: Record<string, string>; children: any } = $props();
+    engine = $bindable<Engine | null>(null),
+    debug = false,
+  }: {
+    id: string;
+    style?: Record<string, string>;
+    children: any;
+    engine?: Engine | null;
+    debug?: boolean;
+  } = $props();
   let canvas: HTMLDivElement | null = null;
 
-  const engine = getEngine(id);
-  setContext("engine", engine);
+  const resolvedEngine = (engine ?? getEngine(id)) as Engine;
+  engine = resolvedEngine;
+  setContext("engine", resolvedEngine);
+
+  resolvedEngine.enableCollisionEngine();
 
   onMount(() => {
-    engine.assignDom(canvas as HTMLElement);
-    engine.global.camera?.setCameraCenterPosition(0, 0);
+    resolvedEngine.assignDom(canvas as HTMLElement);
+    resolvedEngine.camera?.setCameraPosition(0, 0);
+  });
+
+  $effect(() => {
+    if (debug) {
+      resolvedEngine.enableDebug();
+    } else {
+      resolvedEngine.disableDebug();
+    }
   });
 
   export function enableDebug() {
-    engine.enableDebug();
+    resolvedEngine.enableDebug();
   }
 
   export function disableDebug() {
-    engine.disableDebug();
+    resolvedEngine.disableDebug();
   }
 </script>
 

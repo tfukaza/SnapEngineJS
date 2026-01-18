@@ -2,6 +2,7 @@
 
   import { onMount, getContext } from "svelte";
   import { CameraControl } from "../../../../../src/asset/cameraControl";
+  import { AnimationObject } from "../../../../../src/animation";
 
   let cameraControl: CameraControl = getContext("cameraControl");
 
@@ -9,7 +10,8 @@
     cameraControl.queueUpdate("WRITE_2").addCallback(() => {
       const cameraStart = cameraControl.getCameraCenterPosition();
       const cameraTarget = { x: 0, y: 0 };
-      cameraControl.animate(
+      const anim = new AnimationObject(
+        null,
         { $t: [0, 1] },
         {
           duration: 1000,
@@ -22,7 +24,8 @@
           },
         }
       );
-      cameraControl.animation.play();
+      cameraControl.addAnimation(anim);
+      anim.play();
     });
   });
 </script>

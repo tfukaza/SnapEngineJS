@@ -1,45 +1,53 @@
 <script lang="ts">
-  import type {SnapLine} from "../../../../index";
-  import { getContext, onMount } from "svelte";
+  import type {Engine} from "../../../../index";
+  import { getContext, onMount, onDestroy } from "svelte";
   import { ElementObject } from "../../../../../src/object";
+  import { AnimationObject } from "../../../../../src/animation";
   import Exhibit from "./Exhibit.svelte";
   import type { ExhibitProps } from "./Exhibit.svelte";
   
-  let engine:SnapLine = getContext("engine");
-  let object:ElementObject = new ElementObject(engine.global, null);
+  let engine:Engine = getContext("engine");
+  let object:ElementObject = new ElementObject(engine, null);
   let props:ExhibitProps = {};
 
   onMount(() => {
-    object.animate(
+    const anim = new AnimationObject(
+      null,
       {
         $x: [0, 100],
       },
       {
         duration: 10000,
         easing: "ease-in-out",
-        tick: (values) => {
-          object.element!.innerHTML = `${values.$x}`;
+        tick: (values: any) => {
+          if (object.element) {
+            object.element.innerHTML = `<h1>${Math.round(values.$x)}</h1>`;
+          }
         },
       },
     );
-    props.play = () => object.animation.play();
-    props.pause = () => object.animation.pause();
-    props.reverse = () => object.animation.reverse();
-    props.cancel = () => object.animation.cancel();
+    object.addAnimation(anim);
+    anim.play();
+
+    props.play = () => anim.play();
+    props.pause = () => anim.pause();
+    props.reverse = () => anim.reverse();
+    props.cancel = () => anim.cancel();
+  });
+
+  onDestroy(() => {
+    if (object.animation) {
+      object.animation.cancel();
+    }
+    object.destroy();
   });
 </script>
 
 <Exhibit {props} >
-  <div class="circle" bind:this={object.element} style="top: 50%; left: 50%; position: absolute;"></div>
+  <div bind:this={object.element} style="top: 50%; left: 50%; position: absolute; transform: translate(-50%, -50%);"></div>
 </Exhibit>
 
   <style lang="scss">
-    .circle {
-      width: 32px;
-      height: 32px;
-      border-radius: 50%;
-      background-color: rgb(255, 94, 0);
-    }
-  
+    @import "../../../../app.scss";
   </style>
   

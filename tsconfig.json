@@ -5,6 +5,7 @@
     "module": "ESNext",
     "lib": ["ESNext", "DOM"],
     "moduleResolution": "Node",
+    "allowArbitraryExtensions": true,
     "strict": true,
     "sourceMap": true,
     "resolveJsonModule": true,
@@ -18,7 +19,8 @@
     "outDir": "out-tsc",
     "paths": {
       "@/*": ["./src/*"]
-    }
+    },
+    "jsx": "react-jsx"
   },
   "include": ["src", "demo"]
 }

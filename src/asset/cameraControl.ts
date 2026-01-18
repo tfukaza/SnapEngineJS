@@ -1,4 +1,3 @@
-import { GlobalManager } from "../global";
 import {
   pointerDownProp,
   pointerMoveProp,
@@ -17,15 +16,15 @@ class CameraControl extends ElementObject {
 
   resizeObserver: ResizeObserver | null = null;
 
-  #prevCenterX: number = 0;
-  #prevCenterY: number = 0;
+  #prevCameraX: number = 0;
+  #prevCameraY: number = 0;
 
   constructor(
-    globals: GlobalManager,
+    engine: any,
     zoomLock: boolean = false,
     panLock: boolean = false,
   ) {
-    super(globals, null);
+    super(engine, null);
     this.zoomLock = zoomLock;
     this.panLock = panLock;
     this._mouseDownX = 0;
@@ -49,46 +48,49 @@ class CameraControl extends ElementObject {
 
     this.resizeObserver = null;
 
-    this.#prevCenterX = 0;
-    this.#prevCenterY = 0;
+    this.#prevCameraX = 0;
+    this.#prevCameraY = 0;
 
-    this.global.snapline!.event.containerElementAssigned = () => {
+    this.engine.event.containerElementAssigned = () => {
       this.resizeObserver = new ResizeObserver(() => {
-        this.updateCameraCenterPosition(this.#prevCenterX, this.#prevCenterY);
+        this.setCameraPosition(this.#prevCameraX, this.#prevCameraY);
         this.paintCamera();
       });
-      this.resizeObserver.observe(this.global.containerElement!);
+      this.resizeObserver.observe(this.engine.containerElement!);
       this.resizeObserver.observe(window.document.body);
     };
   }
 
   paintCamera() {
-    this.global.camera?.updateCameraProperty();
-    this.global.camera?.updateCamera();
-    this.style.transform = this.global.camera?.canvasStyle as string;
+    this.engine.camera?.updateCameraProperty();
+    this.engine.camera?.updateCamera();
+    this.style.transform = this.engine.camera?.canvasStyle as string;
     this.requestTransform("WRITE_2");
   }
 
   updateCameraCenterPosition(x: number = 0, y: number = 0) {
-    this.global.camera?.setCameraCenterPosition(x, y);
-    const prev = this.global.camera?.getCameraCenterPosition();
-    this.#prevCenterX = prev?.x || 0;
-    this.#prevCenterY = prev?.y || 0;
+    this.engine.camera?.setCameraCenterPosition(x, y);
+    this.#prevCameraX = this.engine.camera?.cameraPositionX || 0;
+    this.#prevCameraY = this.engine.camera?.cameraPositionY || 0;
     this.paintCamera();
   }
 
   setCameraPosition(x: number, y: number) {
-    this.global.camera?.setCameraPosition(x, y);
+    this.engine.camera?.setCameraPosition(x, y);
+    this.#prevCameraX = x;
+    this.#prevCameraY = y;
     this.paintCamera();
   }
 
   setCameraCenterPosition(x: number, y: number) {
-    this.global.camera?.setCameraCenterPosition(x, y);
+    this.engine.camera?.setCameraCenterPosition(x, y);
+    this.#prevCameraX = this.engine.camera?.cameraPositionX || 0;
+    this.#prevCameraY = this.engine.camera?.cameraPositionY || 0;
     this.paintCamera();
   }
 
   getCameraCenterPosition() {
-    return this.global.camera?.getCameraCenterPosition() || { x: 0, y: 0 };
+    return this.engine.camera?.getCameraCenterPosition() || { x: 0, y: 0 };
   }
 
   onCursorDown(prop: pointerDownProp) {
@@ -101,7 +103,7 @@ class CameraControl extends ElementObject {
     this._state = "panning";
     this._mouseDownX = prop.position.screenX;
     this._mouseDownY = prop.position.screenY;
-    this.global.camera?.handlePanStart();
+    this.engine.camera?.handlePanStart();
     prop.event.preventDefault();
   }
 
@@ -111,21 +113,20 @@ class CameraControl extends ElementObject {
     }
     const dx = prop.position.screenX - this._mouseDownX;
     const dy = prop.position.screenY - this._mouseDownY;
-    this.global.camera?.handlePanDrag(dx, dy);
-    this.style.transform = this.global.camera?.canvasStyle as string;
+    this.engine.camera?.handlePanDrag(dx, dy);
+    this.style.transform = this.engine.camera?.canvasStyle as string;
     this.requestTransform("WRITE_2");
   }
 
-  onCursorUp(prop: pointerUpProp) {
+  onCursorUp(_prop: pointerUpProp) {
     if (this._state != "panning") {
       return;
     }
     this._state = "idle";
-    this.global.camera?.handlePanEnd();
-    this.style.transform = this.global.camera?.canvasStyle as string;
-    const prev = this.global.camera?.getCameraCenterPosition();
-    this.#prevCenterX = prev?.x || 0;
-    this.#prevCenterY = prev?.y || 0;
+    this.engine.camera?.handlePanEnd();
+    this.style.transform = this.engine.camera?.canvasStyle as string;
+    this.#prevCameraX = this.engine.camera?.cameraPositionX || 0;
+    this.#prevCameraY = this.engine.camera?.cameraPositionY || 0;
     this.requestTransform("WRITE_2");
   }
 
@@ -133,7 +134,7 @@ class CameraControl extends ElementObject {
     if (this.zoomLock) {
       return;
     }
-    let camera = this.global.camera!;
+  const camera = this.engine.camera!;
     if (
       prop.position.screenX < camera.containerOffsetX ||
       prop.position.screenX > camera.containerOffsetX + camera.cameraWidth ||
@@ -142,14 +143,27 @@ class CameraControl extends ElementObject {
     ) {
       return;
     }
-    this.global.camera?.handleScroll(
-      prop.delta / 2000,
-      prop.position.cameraX,
-      prop.position.cameraY,
-    );
-    this.style.transform = this.global.camera?.canvasStyle as string;
-    this.requestTransform("WRITE_2");
+    this.zoomBy(prop.delta / 2000, prop.position.cameraX, prop.position.cameraY);
     prop.event.preventDefault();
+  }
+
+  zoomBy(deltaZoom: number, originX?: number, originY?: number) {
+    if (this.zoomLock) {
+      return;
+    }
+    const camera = this.engine.camera;
+    if (!camera) {
+      return;
+    }
+
+    const targetX = originX ?? camera.cameraWidth / 2;
+    const targetY = originY ?? camera.cameraHeight / 2;
+
+    camera.handleScroll(deltaZoom, targetX, targetY);
+    this.style.transform = camera.canvasStyle as string;
+    this.#prevCameraX = camera.cameraPositionX || 0;
+    this.#prevCameraY = camera.cameraPositionY || 0;
+    this.requestTransform("WRITE_2");
   }
 }
 

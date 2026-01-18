@@ -1,97 +1,207 @@
 import Camera from "./camera";
-import { CircleCollider, CollisionEngine } from "./collision";
 import { GlobalManager } from "./global";
-import { BaseObject, ElementObject, frameStats, queueEntry } from "./object";
-import { AnimationObject, SequenceObject } from "./animation";
+import {
+  BaseObject,
+  ElementObject,
+  frameStats,
+  queueEntry,
+  detachAnimationFromOwner,
+} from "./object";
 import { EventProxyFactory } from "./util";
+import { CollisionEngine } from "./collision";
+import { AnimationInterface } from "./animation";
+import type { DebugRenderer } from "./debug";
 
-export interface SnapLineConfig {}
+export interface EngineConfig {}
 
 export interface engineCallback {
   containerElementAssigned: ((containerElement: HTMLElement) => void) | null;
 }
 
-class SnapLine {
-  snaplineConfig: SnapLineConfig;
-  #containerStyle: { [key: string]: string } = {};
-  global: GlobalManager;
-  _collisionEngine: CollisionEngine | null = null;
+type AnimationProcessor = (timestamp: number) => void;
+
+/**
+ * The main engine class that manages the rendering loop, object updates,
+ * and optional features like animations, collisions, camera controls, and debugging.
+ *
+ * The engine uses a multi-stage render pipeline (READ_1, WRITE_1, READ_2, WRITE_2, READ_3, WRITE_3)
+ * to minimize DOM reflows and maximize performance.
+ *
+ * Multiple Engine instances can coexist, each managing their own canvas and render pipeline
+ * while sharing a global GlobalManager singleton for ID generation and global input.
+ *
+ * Features can be enabled on-demand to keep bundle sizes small:
+ * - Animation engine via `enableAnimationEngine()`
+ * - Collision detection via `enableCollisionEngine()`
+ * - Camera controls via `enableCameraControl()`
+ * - Debug visualization via `enableDebug()`
+ *
+ * @example
+ * ```typescript
+ * const engine = new Engine();
+ * engine.assignDom(document.getElementById('container'));
+ * await engine.enableAnimationEngine();
+ * await engine.enableDebug();
+ * ```
+ *
+ * @example
+ * ```typescript
+ * // Multiple engines sharing the same GlobalManager
+ * const global = GlobalManager.getInstance();
+ * const engine1 = new Engine();
+ * const engine2 = new Engine();
+ * ```
+ */
+class Engine {
+  engineConfig: EngineConfig;
+  // #containerStyle: { [key: string]: string } = {};
+  global: GlobalManager | null = null;
+
+  // Engine-specific properties
+  containerElement: HTMLElement | null = null;
+  cursor: {
+    worldX: number;
+    worldY: number;
+    cameraX: number;
+    cameraY: number;
+    screenX: number;
+    screenY: number;
+  };
+  camera: Camera | null = null;
+  collisionEngine: CollisionEngine | null = null;
+
+  animationList: AnimationInterface[] = [];
+  debugMarkerList: Record<
+    string,
+    {
+      type: "point" | "rect" | "circle" | "text";
+      gid: string;
+      id: string;
+      persistent: boolean;
+      color: string;
+      x: number;
+      y: number;
+      width?: number;
+      height?: number;
+      radius?: number;
+      text?: string;
+    }
+  > = {};
+
   _event: engineCallback;
   event: engineCallback;
-  debug: boolean = false;
-  debugWindow: HTMLCanvasElement | null = null;
-  debugCtx: CanvasRenderingContext2D | null = null;
   #resizeObserver: ResizeObserver | null = null;
+  #animationProcessor: AnimationProcessor | null = null;
+  #debugRenderer: DebugRenderer | null = null;
 
-  constructor(config: SnapLineConfig = {}) {
-    this.global = new GlobalManager();
-    this.global.read1Queue = {};
-    this.global.write1Queue = {};
-    this.global.read2Queue = {};
-    this.global.write2Queue = {};
-    this.global.read3Queue = {};
-    this.global.write3Queue = {};
-    this.global.animationList = [];
-    this.global.snapline = this;
-    let defaultConfig: SnapLineConfig = {
+  constructor(config: EngineConfig = {}, setGlobal: boolean = true) {
+    
+    if (setGlobal) {
+      this.global = GlobalManager.getInstance();
+      this.global.registerEngine(this);
+    } 
+
+    this.cursor = {
+      worldX: 0,
+      worldY: 0,
+      cameraX: 0,
+      cameraY: 0,
+      screenX: 0,
+      screenY: 0,
+    };
+
+    let defaultConfig: EngineConfig = {
       cameraConfig: {
         enableZoom: true,
         enablePan: true,
         panBounds: { top: null, left: null, right: null, bottom: null },
       },
     };
-    this.snaplineConfig = {
+    this.engineConfig = {
       ...defaultConfig,
       ...config,
     };
 
-    this.#containerStyle = {
-      position: "relative",
-      overflow: "hidden",
-    };
-
-    this.global.collisionEngine = new CollisionEngine();
+    // this.#containerStyle = {
+    //   position: "relative",
+    //   overflow: "hidden",
+    // };
 
     this._event = {
       containerElementAssigned: null,
     };
     this.event = EventProxyFactory(this, this._event);
 
-    this.debug = false;
     this.#resizeObserver = new ResizeObserver(() => {
-      if (this.debug) {
-        let containerRect =
-          this.global.containerElement!.getBoundingClientRect();
-        this.debugWindow!.width = containerRect.width;
-        this.debugWindow!.height = containerRect.height;
+      if (this.#debugRenderer) {
+        let containerRect = this.containerElement!.getBoundingClientRect();
+        this.#debugRenderer.updateSize(
+          containerRect.width,
+          containerRect.height,
+        );
       }
     });
   }
 
-  enableDebug() {
-    if (this.global.containerElement == null) {
+  /**
+   * Enables debug visualization overlay showing object bounding boxes, collision shapes,
+   * coordinate grid, and debug markers.
+   *
+   * The debug overlay is rendered on a canvas element positioned absolutely over the container.
+   * This method dynamically imports the debug module to keep it tree-shakeable.
+   *
+   * @returns A promise that resolves when the debug renderer is initialized
+   *
+   * @example
+   * ```typescript
+   * await engine.enableDebug();
+   * // Now debug overlays will be visible
+   * ```
+   */
+  async enableDebug() {
+    if (this.containerElement == null) {
       return;
     }
-    this.debug = true;
-    this.debugWindow = document.createElement("canvas");
-    this.debugWindow.style.position = "absolute";
-    this.debugWindow.style.top = "0";
-    this.debugWindow.style.left = "0";
-    let containerRect = this.global.containerElement!.getBoundingClientRect();
-    this.debugWindow.width = containerRect.width;
-    this.debugWindow.height = containerRect.height;
-    this.debugWindow.style.zIndex = "1000";
-    this.debugWindow.style.pointerEvents = "none";
-    this.global.containerElement!.appendChild(this.debugWindow);
-    this.debugCtx = this.debugWindow.getContext("2d");
+    if (this.#debugRenderer) {
+      return; // Already enabled
+    }
+    const { DebugRendererImpl } = await import("./debug");
+    this.#debugRenderer = new DebugRendererImpl();
+    this.#debugRenderer.enable(this.containerElement);
   }
 
+  /**
+   * Enables interactive camera controls for panning and zooming.
+   *
+   * This method dynamically imports the CameraControl module to keep it tree-shakeable.
+   * Camera controls use middle mouse button for panning and scroll wheel for zooming.
+   *
+   * @param zoom - Whether to enable zoom controls (default: true)
+   * @param pan - Whether to enable pan controls (default: true)
+   * @returns A promise that resolves with the CameraControl instance
+   *
+   * @example
+   * ```typescript
+   * const controls = await engine.enableCameraControl(true, true);
+   * controls.setCameraCenterPosition(100, 100);
+   * ```
+   */
+  async enableCameraControl(zoom: boolean = true, pan: boolean = true) {
+    const { CameraControl } = await import("./asset/cameraControl");
+    const cameraControl = new CameraControl(this, zoom, pan);
+    if (this.containerElement) {
+      cameraControl.element = this.containerElement;
+    }
+    return cameraControl;
+  }
+
+  /**
+   * Disables and removes the debug visualization overlay.
+   */
   disableDebug() {
-    this.debug = false;
-    if (this.debugWindow) {
-      this.debugWindow.remove();
-      this.debugWindow = null;
-      this.debugCtx = null;
+    if (this.#debugRenderer) {
+      this.#debugRenderer.disable();
+      this.#debugRenderer = null;
     }
   }
 
@@ -100,276 +210,25 @@ class SnapLine {
    * @param containerDom: The element that contains all other elements.
    */
   assignDom(containerDom: HTMLElement) {
-    this.global.containerElement = containerDom;
-    this.global.camera = new Camera(containerDom);
+    this.containerElement = containerDom;
+    this.camera = new Camera(containerDom);
+    // this.camera.updateCameraProperty();
     this.event.containerElementAssigned?.(containerDom);
     this.#resizeObserver?.observe(containerDom);
-
-    window.requestAnimationFrame(this.#step.bind(this));
+  
   }
 
-  debugObjectBoundingBox(object: BaseObject) {
-    if (this.debugCtx == null) {
-      return;
-    }
-    // Draw a small box at the object's world position, with the object's GID as the text
-    this.debugCtx.beginPath();
-    this.debugCtx.fillStyle = "rgba(0, 0, 0, 0.5)";
-    const [cameraX, cameraY] = this.global.camera?.getCameraFromWorld(
-      ...object.worldPosition,
-    ) ?? [0, 0];
-    this.debugCtx.rect(cameraX, cameraY, 20, 20);
-    this.debugCtx.fill();
-    this.debugCtx.fillStyle = "white";
-    this.debugCtx.fillText(object.gid, cameraX, cameraY + 10);
-
-    // If object has a dom, draw a rectangle around the object's width and height, with a 1px black border
-    if (object.hasOwnProperty("_dom")) {
-      let elementObject = object as ElementObject;
-
-      const colors = ["#FF0000A0", "#00FF00A0", "#0000FFA0"];
-      const stages = ["READ_1", "READ_2", "READ_3"];
-      for (let i = 0; i < 3; i++) {
-        const property = elementObject.getDomProperty(stages[i] as any);
-        this.debugCtx.stroke();
-        this.debugCtx.beginPath();
-        this.debugCtx.strokeStyle = colors[i];
-        this.debugCtx.lineWidth = 1;
-        const [domCameraX, domCameraY] = this.global.camera?.getCameraFromWorld(
-          property.x,
-          property.y,
-        ) ?? [0, 0];
-        this.debugCtx.rect(
-          domCameraX,
-          domCameraY,
-          property.width,
-          property.height,
-        );
-        this.debugCtx.stroke();
-      }
-
-      // Black rectangle represents the object's transform property
-      this.debugCtx.beginPath();
-      this.debugCtx.strokeStyle = "black";
-      this.debugCtx.lineWidth = 1;
-      this.debugCtx.rect(
-        cameraX,
-        cameraY,
-        elementObject._dom.property.width,
-        elementObject._dom.property.height,
-      );
-    }
-
-    const COLLIDER_BLUE = "rgba(0, 0, 255, 0.5)";
-
-    for (let collisionObject of object._colliderList) {
-      this.debugCtx.beginPath();
-      this.debugCtx.strokeStyle = COLLIDER_BLUE
-      this.debugCtx.lineWidth = 1;
-      const [colliderCameraX, colliderCameraY] =
-        this.global.camera?.getCameraFromWorld(
-          object.transform.x + collisionObject.transform.x,
-          object.transform.y + collisionObject.transform.y,
-        ) ?? [0, 0];
-      if (collisionObject.type == "circle") {
-        this.debugCtx.arc(
-          colliderCameraX,
-          colliderCameraY,
-          (collisionObject as CircleCollider).radius,
-          0,
-          2 * Math.PI,
-        );
-        this.debugCtx.stroke();
-      } else if (collisionObject.type == "rect") {
-        this.debugCtx.rect(
-          colliderCameraX,
-          colliderCameraY,
-          collisionObject.transform.width,
-          collisionObject.transform.height,
-        );
-        this.debugCtx.stroke();
-      } else if (collisionObject.type == "point") {
-        this.debugCtx.arc(colliderCameraX, colliderCameraY, 2, 0, 2 * Math.PI);
-        this.debugCtx.fillStyle = COLLIDER_BLUE;
-        this.debugCtx.fill();
-      }
-    }
-  }
-
-  renderDebugGrid() {
-    if (this.debugCtx == null) {
-      return;
-    }
-
-    const gridSize = 100; // Size of each grid cell in world coordinates
-    const camera = this.global.camera;
-    if (!camera) return;
-
-    // Get the visible area in world coordinates
-    const [worldLeft, worldTop] = camera.getWorldFromCamera(0, 0);
-    const [worldRight, worldBottom] = camera.getWorldFromCamera(
-      this.debugWindow!.width,
-      this.debugWindow!.height,
-    );
-
-    // Calculate grid lines
-    const startX = Math.floor(worldLeft / gridSize) * gridSize;
-    const endX = Math.ceil(worldRight / gridSize) * gridSize;
-    const startY = Math.floor(worldTop / gridSize) * gridSize;
-    const endY = Math.ceil(worldBottom / gridSize) * gridSize;
-
-    // Draw grid lines
-    this.debugCtx.beginPath();
-    this.debugCtx.strokeStyle = "rgba(200, 200, 200, 0.3)";
-    this.debugCtx.lineWidth = 1;
-
-    // Draw vertical grid lines
-    for (let x = startX; x <= endX; x += gridSize) {
-      const [screenX1, screenY1] = camera.getCameraFromWorld(x, worldTop);
-      const [screenX2, screenY2] = camera.getCameraFromWorld(x, worldBottom);
-      this.debugCtx.moveTo(screenX1, screenY1);
-      this.debugCtx.lineTo(screenX2, screenY2);
-    }
-
-    // Draw horizontal grid lines
-    for (let y = startY; y <= endY; y += gridSize) {
-      const [screenX1, screenY1] = camera.getCameraFromWorld(worldLeft, y);
-      const [screenX2, screenY2] = camera.getCameraFromWorld(worldRight, y);
-      this.debugCtx.moveTo(screenX1, screenY1);
-      this.debugCtx.lineTo(screenX2, screenY2);
-    }
-
-    this.debugCtx.stroke();
-
-    // Draw X and Y axes
-    this.debugCtx.beginPath();
-    this.debugCtx.strokeStyle = "rgba(0, 0, 0, 0.8)";
-    this.debugCtx.lineWidth = 2;
-
-    // Find the visible portion of the axes
-    const xAxisVisible = startY <= 0 && endY >= 0;
-    const yAxisVisible = startX <= 0 && endX >= 0;
-
-    // X-axis
-    if (xAxisVisible) {
-      const [xAxisStartX, xAxisStartY] = camera.getCameraFromWorld(startX, 0);
-      const [xAxisEndX, xAxisEndY] = camera.getCameraFromWorld(endX, 0);
-      this.debugCtx.moveTo(xAxisStartX, xAxisStartY);
-      this.debugCtx.lineTo(xAxisEndX, xAxisEndY);
-    }
-
-    // Y-axis
-    if (yAxisVisible) {
-      const [yAxisStartX, yAxisStartY] = camera.getCameraFromWorld(0, startY);
-      const [yAxisEndX, yAxisEndY] = camera.getCameraFromWorld(0, endY);
-      this.debugCtx.moveTo(yAxisStartX, yAxisStartY);
-      this.debugCtx.lineTo(yAxisEndX, yAxisEndY);
-    }
-
-    this.debugCtx.stroke();
-
-    // Draw coordinate labels
-    this.debugCtx.fillStyle = "rgba(0, 0, 0, 0.8)";
-    this.debugCtx.font = "12px Arial";
-    this.debugCtx.textAlign = "center";
-
-    // X-axis labels
-    for (let x = startX; x <= endX; x += gridSize) {
-      if (x === 0) continue; // Skip 0 as it's the origin
-      const [screenX, screenY] = camera.getCameraFromWorld(x, 0);
-      // Only draw label if it's within the visible area
-      if (screenY >= 0 && screenY <= this.debugWindow!.height) {
-        this.debugCtx.fillText(x.toString(), screenX, screenY + 20);
-      }
-    }
-
-    // Y-axis labels
-    for (let y = startY; y <= endY; y += gridSize) {
-      if (y === 0) continue; // Skip 0 as it's the origin
-      const [screenX, screenY] = camera.getCameraFromWorld(0, y);
-      // Only draw label if it's within the visible area
-      if (screenX >= 0 && screenX <= this.debugWindow!.width) {
-        this.debugCtx.fillText(y.toString(), screenX - 20, screenY + 4);
-      }
-    }
-
-    // Draw origin label if it's visible
-    const [originX, originY] = camera.getCameraFromWorld(0, 0);
-    if (
-      originX >= 0 &&
-      originX <= this.debugWindow!.width &&
-      originY >= 0 &&
-      originY <= this.debugWindow!.height
-    ) {
-      this.debugCtx.fillText("(0,0)", originX + 20, originY - 10);
-    }
-  }
-
-  renderDebugFrame(stats: frameStats) {
-    if (this.debugWindow == null) {
-      return;
-    }
-    this.debugCtx?.clearRect(
-      0,
-      0,
-      this.debugWindow.width,
-      this.debugWindow.height,
-    );
-
-    this.renderDebugGrid();
-
-    for (const object of Object.values(this.global.objectTable)) {
-      this.debugObjectBoundingBox(object);
-    }
-
-    if (this.debugCtx == null) {
-      return;
-    }
-    for (const marker of Object.values(this.global.debugMarkerList)) {
-      const [cameraX, cameraY] = this.global.camera?.getCameraFromWorld(
-        marker.x,
-        marker.y,
-      ) ?? [0, 0];
-      if (marker.type == "point") {
-        this.debugCtx.beginPath();
-        this.debugCtx.fillStyle = marker.color;
-        this.debugCtx.arc(cameraX, cameraY, 5, 0, 2 * Math.PI);
-        this.debugCtx.fill();
-      } else if (marker.type == "rect") {
-        this.debugCtx.beginPath();
-        this.debugCtx.fillStyle = marker.color;
-        this.debugCtx.rect(cameraX, cameraY, marker.width!, marker.height!);
-        this.debugCtx.fill();
-      } else if (marker.type == "circle") {
-        this.debugCtx.beginPath();
-        this.debugCtx.fillStyle = marker.color;
-        this.debugCtx.arc(cameraX, cameraY, marker.radius!, 0, 2 * Math.PI);
-        this.debugCtx.fill();
-      } else if (marker.type == "text") {
-        this.debugCtx.fillStyle = marker.color;
-        this.debugCtx.fillText(marker.text!, cameraX, cameraY);
-      }
-    }
-
-    for (const id in this.global.debugMarkerList) {
-      if (!this.global.debugMarkerList[id].persistent) {
-        delete this.global.debugMarkerList[id];
-      }
-    }
-  }
-
-  /**
-   * Main loop for rendering the canvas.
-   */
-  #step(): void {
-    this._renderFrame();
-    window.requestAnimationFrame(this.#step.bind(this));
-  }
-
-  #processQueue(stage: string, queue: Record<string, Map<string, queueEntry>>) {
+  #processQueue(stage: string, queue: Map<string, Map<string, queueEntry>>) {
     // Keep a set of all objects that have been processed
     let processedObjects: Set<BaseObject> = new Set();
-    for (const queueEntry of Object.values(queue)) {
+    for (const queueEntry of queue.values()) {
+      // Check if the object belongs to this engine
+      // All entries in the inner map belong to the same object (same GID)
+      const firstEntry = queueEntry.values().next().value;
+      if (!firstEntry || firstEntry.object.engine !== this) {
+        continue;
+      }
+
       for (const objectEntry of queueEntry.values()) {
         if (!objectEntry.callback) {
           continue;
@@ -399,54 +258,135 @@ class SnapLine {
     }
   }
 
-  _renderFrame(): void {
-    let timestamp = Date.now();
+  /**
+   * Internal method to process a single render stage.
+   * Called by GlobalManager's render loop.
+   * @internal
+   */
+  _processStage(
+    stage: string,
+    queue: Map<string, Map<string, queueEntry>>,
+    _timestamp: number,
+  ): void {
+    this.#processQueue(stage, queue);
+  }
 
-    let stats: frameStats = {
-      timestamp: timestamp,
-    };
+  /**
+   * Internal method to process animations.
+   * Called by GlobalManager's render loop between WRITE_2 and READ_3.
+   * @internal
+   */
+  _processAnimations(timestamp: number): void {
+    this.#animationProcessor?.(timestamp);
+  }
 
-    this.global.currentStage = "READ_1";
-    this.#processQueue("READ_1", this.global.read1Queue);
-    this.global.read1Queue = {};
+  /**
+   * Internal method to process post-render tasks (collisions, debug).
+   * Called by GlobalManager's render loop after all stages complete.
+   * @internal
+   */
+  _processPostRender(timestamp: number): void {
+    this.collisionEngine?.detectCollisions();
 
-    this.global.currentStage = "WRITE_1";
-    this.#processQueue("WRITE_1", this.global.write1Queue);
-    this.global.write1Queue = {};
+    const stats: frameStats = { timestamp };
+    const localObjectTable =
+      this.global!.getEngineObjectTable(this, false) ?? {};
+    this.#debugRenderer?.renderFrame(stats, this, localObjectTable);
+  }
 
-    this.global.currentStage = "READ_2";
-    this.#processQueue("READ_2", this.global.read2Queue);
-    this.global.read2Queue = {};
-
-    this.global.currentStage = "WRITE_2";
-    this.#processQueue("WRITE_2", this.global.write2Queue);
-    this.global.write2Queue = {};
-
-    let newAnimationList: (AnimationObject | SequenceObject)[] = [];
-    for (const animation of this.global.animationList) {
-      if (
-        animation.calculateFrame(stats.timestamp) == false &&
-        animation.requestDelete == false
-      ) {
-        newAnimationList.push(animation);
-      }
+  /**
+   * Enables the collision detection engine.
+   *
+   * Once enabled, collision detection runs automatically during each render frame.
+   * Objects can add colliders via `object.addCollider()`.
+   *
+   * @example
+   * ```typescript
+   * engine.enableCollisionEngine();
+   * const collider = new CircleCollider(engine, object, 50);
+   * object.addCollider(collider);
+   * ```
+   */
+  enableCollisionEngine() {
+    if (this.collisionEngine) {
+      return;
     }
-    this.global.animationList = newAnimationList;
+    this.collisionEngine = new CollisionEngine();
+  }
 
-    this.global.currentStage = "READ_3";
-    this.#processQueue("READ_3", this.global.read3Queue);
-    this.global.read3Queue = {};
+  /**
+   * Enables the animation engine for processing Web Animations API animations.
+   *
+   * This method dynamically sets up the animation processor that runs during each frame.
+   * Animations can be added to objects via `object.addAnimation()`.
+   *
+   * @returns A promise that resolves when the animation engine is initialized
+   *
+   * @example
+   * ```typescript
+   * await engine.enableAnimationEngine();
+   * const animation = new AnimationObject(element, { x: [0, 100] }, { duration: 1000 });
+   * object.addAnimation(animation);
+   * ```
+   */
+  enableAnimationEngine() {
+    if (this.#animationProcessor) {
+      return;
+    }
 
-    this.global.currentStage = "WRITE_3";
-    this.#processQueue("WRITE_3", this.global.write3Queue);
-    this.global.write3Queue = {};
+    this.#animationProcessor = (timestamp: number) => {
+      const newAnimationList: AnimationInterface[] = [];
+      for (const animation of this.animationList) {
+        const shouldKeep =
+          animation.calculateFrame(timestamp) === false &&
+          animation.requestDelete === false;
 
-    this.global.currentStage = "IDLE";
+        if (shouldKeep) {
+          newAnimationList.push(animation);
+        } else {
+          detachAnimationFromOwner(animation);
+        }
+      }
+      this.animationList = newAnimationList;
+    };
+  }
 
-    this.global.collisionEngine?.detectCollisions();
+  /**
+   * Destroys this Engine instance, cleaning up resources and unregistering from GlobalManager.
+   *
+   * This stops the render loop, removes event listeners, and ensures the engine
+   * no longer participates in global rendering.
+   *
+   * @example
+   * ```typescript
+   * const engine = new Engine();
+   * // ... use engine ...
+   * engine.destroy(); // Clean up when done
+   * ```
+   */
+  destroy() {
+    // Unregister from global manager
+    this.global!.unregisterEngine(this);
 
-    this.renderDebugFrame(stats);
+    // Clean up resize observer
+    if (this.#resizeObserver && this.containerElement) {
+      this.#resizeObserver.unobserve(this.containerElement);
+      this.#resizeObserver = null;
+    }
+
+    // Disable debug renderer
+    if (this.#debugRenderer) {
+      this.disableDebug();
+    }
+
+    // Clear references
+    this.containerElement = null;
+    this.camera = null;
+    this.collisionEngine = null;
+    this.animationList = [];
+    this.debugMarkerList = {};
+    this.#animationProcessor = null;
   }
 }
 
-export { SnapLine };
+export { Engine };

@@ -1,10 +1,10 @@
 <script lang="ts">
     import { onMount, setContext, getContext } from "svelte";
     import { Background } from "../../../../src/index";
-    import type { SnapLine } from "../../../../src/index";
+    import type { Engine } from "../../../../src/index";
     let background: HTMLDivElement | null = null;
 
-    const engine:SnapLine = getContext("engine");
+    const engine:Engine = getContext("engine");
     let bg = new Background(engine.global, null);
 
     setContext("bg", bg);

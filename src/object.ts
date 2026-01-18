@@ -8,12 +8,7 @@ import {
 import { Collider } from "./collision";
 import { getDomProperty } from "./util";
 import { GlobalManager } from "./global";
-import {
-  AnimationObject,
-  keyframeList,
-  keyframeProperty,
-  SequenceObject,
-} from "./animation";
+import type { AnimationInterface } from "./animation";
 import { UUID } from "crypto";
 
 export interface DomEvent {
@@ -46,16 +41,17 @@ class EventCallback {
     };
     this.global = new Proxy(this._global, {
       set: (_, prop: any, value: CallableFunction | null) => {
+        const globalInputEngine = this._object.global.getInputEngine(
+          this._object.engine,
+        );
         if (value == null) {
-          this._object.global.inputEngine?.unsubscribeGlobalCursorEvent(
-            prop,
-            this._object.gid,
-          );
+          globalInputEngine?.unsubscribeGlobalCursorEvent(prop, this._object.gid);
         } else {
-          this._object.global.inputEngine?.subscribeGlobalCursorEvent(
+          globalInputEngine?.subscribeGlobalCursorEvent(
             prop,
             this._object.gid,
             (value as any).bind(this._object),
+            this._object.engine,
           );
         }
         return true;
@@ -118,8 +114,32 @@ export interface frameStats {
   timestamp: number;
 }
 
+const animationOwnerMap = new WeakMap<AnimationInterface, BaseObject>();
+
+/**
+ * Base class for all objects in the engine.
+ *
+ * Provides core functionality for:
+ * - Transform management (position, scale)
+ * - Parent-child hierarchies
+ * - Event handling (global and input events)
+ * - Collision detection
+ * - Animations
+ * - Debug markers
+ *
+ * Each object belongs to a specific Engine instance while sharing the global
+ * GlobalManager singleton for ID generation.
+ *
+ * @example
+ * ```typescript
+ * const obj = new BaseObject(engine, parentObject);
+ * obj.worldPosition = [100, 200];
+ * obj.addCollider(new CircleCollider(obj.engine, obj, 50));
+ * ```
+ */
 export class BaseObject {
   global: GlobalManager;
+  engine: any; // Will be the Engine instance - using any to avoid circular dependency
   gid: string;
   parent: BaseObject | null;
   children: BaseObject[] = [];
@@ -137,15 +157,21 @@ export class BaseObject {
   _requestPostWrite: boolean = false;
 
   _colliderList: Collider[] = [];
-  _animationList: (AnimationObject | SequenceObject)[] = [];
+  _animationList: AnimationInterface[] = [];
 
   _globalInput: InputEventCallback;
   globalInput: InputEventCallback;
 
-  constructor(global: GlobalManager, parent: BaseObject | null) {
-    this.global = global;
-    this.gid = global.getGlobalId();
-    this.global.objectTable[this.gid] = this;
+  constructor(engineOrGlobal: any, parent: BaseObject | null) {
+    if (engineOrGlobal.global) {
+      this.engine = engineOrGlobal;
+      this.global = engineOrGlobal.global;
+    } else {
+      this.global = engineOrGlobal;
+      this.engine = null;
+    }
+    this.gid = this.global.getGlobalId();
+    this.global.registerObject(this);
     this.parent = parent;
 
     this._colliderList = [];
@@ -189,13 +215,15 @@ export class BaseObject {
     };
     this.globalInput = new Proxy(this._globalInput, {
       set: (_, prop: any, value: CallableFunction | null) => {
+        const globalInputEngine = this.global.getInputEngine(this.engine);
         if (value == null) {
-          this.global.inputEngine?.unsubscribeGlobalCursorEvent(prop, this.gid);
+          globalInputEngine?.unsubscribeGlobalCursorEvent(prop, this.gid);
         } else {
-          this.global.inputEngine?.subscribeGlobalCursorEvent(
+          globalInputEngine?.subscribeGlobalCursorEvent(
             prop,
             this.gid,
             value.bind(this) as (prop: any) => void,
+            this.engine,
           );
         }
         return true;
@@ -205,7 +233,8 @@ export class BaseObject {
 
   destroy() {
     // TODO: Remove colliders
-    delete this.global.objectTable[this.gid];
+    this.cancelAnimations();
+    this.global.unregisterObject(this);
   }
 
   get worldPosition(): [number, number] {
@@ -219,28 +248,58 @@ export class BaseObject {
 
   get cameraPosition(): [number, number] {
     return (
-      this.global.camera?.getCameraFromWorld(...this.worldPosition) ?? [0, 0]
+      this.engine.camera?.getCameraFromWorld(...this.worldPosition) ?? [0, 0]
     );
   }
 
   set cameraPosition(position: [number, number]) {
-    this.worldPosition = this.global.camera?.getWorldFromCamera(
+    this.worldPosition = this.engine?.camera?.getWorldFromCamera(
       ...position,
     ) ?? [0, 0];
   }
 
   get screenPosition(): [number, number] {
     return (
-      this.global.camera?.getScreenFromCamera(...this.cameraPosition) ?? [0, 0]
+      this.engine.camera?.getScreenFromCamera(...this.cameraPosition) ?? [0, 0]
     );
   }
 
   set screenPosition(position: [number, number]) {
-    this.cameraPosition = this.global.camera?.getCameraFromScreen(
+    this.cameraPosition = this.engine?.camera?.getCameraFromScreen(
       ...position,
     ) ?? [0, 0];
   }
 
+  /**
+   * Queues an update callback to be executed during a specific stage of the render pipeline.
+   *
+   * The SnapLine render pipeline has 6 stages:
+   * - READ_1
+   * - WRITE_1
+   * - READ_2
+   * - WRITE_2
+   * - READ_3
+   * - WRITE_3
+   *
+   * Read stages are for reading DOM properties (which may trigger reflows),
+   * while write stages are for applying changes to the DOM.
+   * Batching reads and writes prevents layout thrashing and improves performance.
+   *
+   * @param stage - The render stage when the callback should execute (default: "READ_1")
+   * @param callback - Optional callback function to execute during the stage
+   * @param queueID - Optional unique identifier for this queue entry
+   * @returns The queue entry object
+   *
+   * @example
+   * ```typescript
+   * object.queueUpdate("READ_1", () => {
+   *   // Read DOM properties
+   * });
+   * object.queueUpdate("WRITE_2", () => {
+   *   // Apply transforms
+   * });
+   * ```
+   */
   queueUpdate(
     stage:
       | "READ_1"
@@ -252,7 +311,7 @@ export class BaseObject {
     callback: null | (() => void) = null,
     queueID: string | null = null,
   ): queueEntry {
-    let request = new queueEntry(this, callback, queueID);
+    const request = new queueEntry(this, callback, queueID);
     let queue = this.global.read1Queue;
     switch (stage) {
       case "READ_1":
@@ -274,17 +333,17 @@ export class BaseObject {
         queue = this.global.write3Queue;
         break;
     }
-    if (!queue[this.gid]) {
-      queue[this.gid] = new Map();
+    if (!queue.get(this.gid)) {
+      queue.set(this.gid, new Map());
     }
-    queue[this.gid].set(request.uuid, request);
+    queue.get(this.gid)!.set(request.uuid, request);
     return request;
   }
 
   /**
    * Read the DOM property of the object.
    */
-  readDom(accountTransform: boolean = false) {
+  readDom(_: boolean = false) {
     for (const collider of this._colliderList) {
       collider.read();
     }
@@ -321,42 +380,113 @@ export class BaseObject {
     }
   }
 
-  // requestFLIP(
-  //   callback: null | (() => void) = null,
-  // ): [preReadEntry, writeEntry, readEntry, postWriteEntry] {
-  //   return [
-  //     this.requestPreRead(false, true),
-  //     this.requestWrite(callback?.bind(this)),
-  //     this.requestRead(true, false),
-  //     this.requestPostWrite(),
-  //   ];
-  // }
 
-  animate(keyframe: keyframeList, property: keyframeProperty) {
-    let animation = new AnimationObject(this, keyframe, property);
-    for (const animation of this._animationList) {
-      animation.cancel();
+  /**
+   * Add an animation to this object.
+   * Users should create animation instances directly and pass them here.
+   */
+  /**
+   * Adds an animation to this object and cancels any existing animations.
+   *
+   * This method automatically enables the animation engine if it's not already enabled.
+   * Only one animation can be active per object at a time.
+   *
+   * @param animation - The animation to add (AnimationObject or SequenceObject)
+   * @returns The added animation
+   *
+   * @example
+   * ```typescript
+   * const anim = new AnimationObject(element, { x: [0, 100] }, { duration: 1000 });
+   * await object.addAnimation(anim);
+   * ```
+   */
+  addAnimation(
+    animation: AnimationInterface,
+    options: { replaceExisting?: boolean } = {},
+  ) {
+    this.engine?.enableAnimationEngine();
+
+    const replaceExisting = options.replaceExisting ?? true;
+
+    if (replaceExisting) {
+      this.cancelAnimations();
     }
-    this._animationList = [];
+
     this._animationList.push(animation);
-    this.global.animationList.push(animation);
+    animationOwnerMap.set(animation, this);
+    this.engine?.animationList.push(animation);
     return animation;
   }
 
-  get animation() {
-    return this._animationList[0];
+  cancelAnimations() {
+    for (const existingAnimation of [...this._animationList]) {
+      existingAnimation.requestDelete = true;
+      existingAnimation.cancel();
+      this.removeAnimationReference(existingAnimation);
+    }
   }
 
-  animateSequence(animations: AnimationObject[]) {
-    let sequence = new SequenceObject();
+  removeAnimationReference(animation: AnimationInterface) {
+    this._animationList = this._animationList.filter(
+      (anim) => anim !== animation,
+    );
+    animationOwnerMap.delete(animation);
+  }
+
+  /**
+   * Convenience method to create and add an animation to this object.
+   * 
+   * @deprecated Use addAnimation with AnimationObject instead.
+   *
+   * @param keyframe - The keyframe properties to animate
+   * @param property - Animation options (duration, easing, etc.)
+   * @returns The created animation
+   *
+   * @example
+   * ```typescript
+   * object.animate(
+   *   { transform: ["translate(0px, 0px)", "translate(100px, 0px)"] },
+   *   { duration: 1000, easing: "ease-in-out" }
+   * );
+   * ```
+   */
+  async animate(keyframe: Record<string, any>, property: any) {
+    const { AnimationObject } = await import("./animation");
+    const animation = new AnimationObject(
+      (this as unknown as ElementObject).element,
+      keyframe,
+      property,
+    );
+    return this.addAnimation(animation, { replaceExisting: true });
+  }
+
+  /**
+   * Convenience method to create and add a sequence of animations to this object.
+   *
+   * @param animations - Array of AnimationInterface objects to play as a sequence
+   * @returns The created sequence animation
+   *
+   * @example
+   * ```typescript
+   * const anim1 = new AnimationObject(object, { x: [0, 100] }, { duration: 1000 });
+   * const anim2 = new AnimationObject(object, { y: [0, 100] }, { duration: 1000 });
+   * object.animateSequence([anim1, anim2]);
+   * ```
+   */
+  async animateSequence(animations: AnimationInterface[]) {
+    const { SequenceObject } = await import("./animation");
+    const sequence = new SequenceObject();
     for (const animation of animations) {
       sequence.add(animation);
     }
+    return this.addAnimation(sequence, { replaceExisting: true });
+  }
 
-    this._animationList = [];
-    this._animationList.push(sequence);
-    this.global.animationList.push(sequence);
-    return sequence;
+  get animation() {
+    if (this._animationList.length === 0) {
+      return null;
+    }
+    return this._animationList[this._animationList.length - 1];
   }
 
   getCurrentStats(): frameStats {
@@ -367,7 +497,11 @@ export class BaseObject {
 
   addCollider(collider: Collider) {
     this._colliderList.push(collider);
-    this.global.collisionEngine?.addObject(collider);
+    if (!this.engine){
+      console.warn("Engine is not set, cannot add collider to collision engine");
+      return;
+    }
+    this.engine.collisionEngine?.addObject(collider);
   }
 
   addDebugPoint(
@@ -377,7 +511,8 @@ export class BaseObject {
     persistent: boolean = false,
     id: string = "",
   ) {
-    this.global.debugMarkerList[`${this.gid}-${id}`] = {
+    if (!this.engine) return;
+    this.engine.debugMarkerList[`${this.gid}-${id}`] = {
       gid: this.gid,
       type: "point",
       color: color,
@@ -396,8 +531,11 @@ export class BaseObject {
     color: string = "red",
     persistent: boolean = false,
     id: string = "",
+    filled: boolean = true,
+    lineWidth: number = 1,
   ) {
-    this.global.debugMarkerList[`${this.gid}-${id}`] = {
+    if (!this.engine) return;
+    this.engine.debugMarkerList[`${this.gid}-${id}`] = {
       gid: this.gid,
       type: "rect",
       color: color,
@@ -407,6 +545,33 @@ export class BaseObject {
       height,
       persistent,
       id: `${this.gid}-${id}`,
+      filled,
+      lineWidth,
+    };
+  }
+
+  addDebugLine(
+    x1: number,
+    y1: number,
+    x2: number,
+    y2: number,
+    color: string = "red",
+    persistent: boolean = false,
+    id: string = "",
+    lineWidth: number = 2,
+  ) {
+    if (!this.engine) return;
+    this.engine.debugMarkerList[`${this.gid}-${id}`] = {
+      gid: this.gid,
+      type: "line",
+      color: color,
+      x: x1,
+      y: y1,
+      x2,
+      y2,
+      persistent,
+      id: `${this.gid}-${id}`,
+      lineWidth,
     };
   }
 
@@ -418,7 +583,8 @@ export class BaseObject {
     persistent: boolean = false,
     id: string = "",
   ) {
-    this.global.debugMarkerList[`${this.gid}-${id}`] = {
+    if (!this.engine) return;
+    this.engine.debugMarkerList[`${this.gid}-${id}`] = {
       gid: this.gid,
       type: "circle",
       color: color,
@@ -438,7 +604,8 @@ export class BaseObject {
     persistent: boolean = false,
     id: string = "",
   ) {
-    this.global.debugMarkerList[`${this.gid}-${id}`] = {
+    if (!this.engine) return;
+    this.engine.debugMarkerList[`${this.gid}-${id}`] = {
       gid: this.gid,
       x,
       y,
@@ -451,16 +618,38 @@ export class BaseObject {
   }
 
   clearDebugMarker(id: string) {
-    delete this.global.debugMarkerList[`${this.gid}-${id}`];
+    if (!this.engine) return;
+    delete this.engine.debugMarkerList[`${this.gid}-${id}`];
   }
 
   clearAllDebugMarkers() {
-    for (const marker of Object.values(this.global.debugMarkerList)) {
+    if (!this.engine) return;
+    for (const marker of Object.values(this.engine.debugMarkerList) as Array<{
+      gid: string;
+      id: string;
+      type: "point" | "rect" | "circle" | "text";
+      persistent: boolean;
+      color: string;
+      x: number;
+      y: number;
+      width?: number;
+      height?: number;
+      radius?: number;
+      text?: string;
+    }>) {
       if (marker.gid == this.gid) {
-        delete this.global.debugMarkerList[marker.id];
+        delete this.engine.debugMarkerList[marker.id];
       }
     }
   }
+}
+
+export function detachAnimationFromOwner(animation: AnimationInterface) {
+  const owner = animationOwnerMap.get(animation);
+  if (!owner) {
+    return;
+  }
+  owner.removeAnimationReference(animation);
 }
 
 interface DomProperty extends TransformProperty {
@@ -479,6 +668,7 @@ export interface DomInsertMode {
 export class DomElement {
   _uuid: string;
   _global: GlobalManager;
+  _engine: any;
   _owner: ElementObject;
   element: HTMLElement | null;
   _pendingInsert: boolean;
@@ -499,13 +689,19 @@ export class DomElement {
   mutationObserver: MutationObserver | null = null;
 
   constructor(
-    global: GlobalManager,
+    engineOrGlobal: any,
     owner: ElementObject,
     dom: HTMLElement | null = null,
     insertMode: DomInsertMode = {},
     isFragment: boolean = false,
   ) {
-    this._global = global;
+    if (engineOrGlobal.global) {
+      this._engine = engineOrGlobal;
+      this._global = engineOrGlobal.global;
+    } else {
+      this._global = engineOrGlobal;
+      this._engine = null;
+    }
     this.element = dom;
     this.property = {
       x: 0,
@@ -525,7 +721,7 @@ export class DomElement {
     };
     this._pendingInsert = isFragment;
     this._owner = owner;
-    this._uuid = (++global.gid).toString();
+    this._uuid = (++this._global.gid).toString();
     this._requestWrite = false;
     this._requestRead = false;
     this._requestDelete = false;
@@ -586,7 +782,7 @@ export class DomElement {
       throw new Error("Element is not set");
     }
 
-    const property = getDomProperty(this._global, this.element);
+    const property = getDomProperty(this._engine, this.element);
     const transform = this.element.style.transform;
     let transformApplied = {
       x: 0,
@@ -624,7 +820,7 @@ export class DomElement {
     for (const [key, value] of Object.entries(this._dataAttribute)) {
       this.element.setAttribute(`data-${key}`, value);
     }
-    this.element.setAttribute("data-snapline-gid", this._owner.gid);
+    this.element.setAttribute("data-engine-gid", this._owner.gid);
   }
 
   /**
@@ -656,7 +852,7 @@ export class DomElement {
     } else if (this._owner.transformMode == "relative") {
       // If the transform mode is relative, the final transform property is calculated taking into account
       // the current position of the element.
-      let [newX, newY] = [
+      const [newX, newY] = [
         this._owner.transform.x - this.property.x,
         this._owner.transform.y - this.property.y,
       ];
@@ -709,6 +905,7 @@ export class DomElement {
     if (this.element) {
       this.element.remove();
     }
+    this.element = null;
   }
 }
 
@@ -751,9 +948,9 @@ export class ElementObject extends BaseObject {
 
   inputEngine: InputControl;
 
-  constructor(global: GlobalManager, parent: BaseObject | null) {
-    super(global, parent);
-    this._dom = new DomElement(global, this, null);
+  constructor(engine: any, parent: BaseObject | null) {
+    super(engine, parent);
+    this._dom = new DomElement(engine, this, null);
     this.inScene = false;
     this._requestWrite = false;
     this._requestRead = false;
@@ -809,7 +1006,11 @@ export class ElementObject extends BaseObject {
       },
     });
 
-    this.inputEngine = new InputControl(this.global, false, this.gid);
+    this.inputEngine = new InputControl(
+      this.engine,
+      false,
+      this.gid,
+    );
   }
 
   destroy() {
@@ -821,6 +1022,15 @@ export class ElementObject extends BaseObject {
   getDomProperty(stage: "READ_1" | "READ_2" | "READ_3" | null = null) {
     const index = stage == "READ_1" ? 0 : stage == "READ_2" ? 1 : 2;
     return this._domProperty[index];
+  }
+
+  copyDomProperty(
+    fromStage: "READ_1" | "READ_2" | "READ_3",
+    toStage: "READ_1" | "READ_2" | "READ_3",
+  ) {
+    const fromIndex = fromStage == "READ_1" ? 0 : fromStage == "READ_2" ? 1 : 2;
+    const toIndex = toStage == "READ_1" ? 0 : toStage == "READ_2" ? 1 : 2;
+    Object.assign(this._domProperty[toIndex], this._domProperty[fromIndex]);
   }
 
   /**
@@ -909,7 +1119,7 @@ export class ElementObject extends BaseObject {
     type Keys = keyof InputEventCallback;
     const keys = Object.keys(this.inputEngine.event) as Keys[];
     for (const event of keys) {
-      let callback: InputEventCallback[typeof event] =
+      const callback: InputEventCallback[typeof event] =
         this.event.input[event]?.bind(this) || null;
       this.inputEngine.event[event] = callback as any;
     }
@@ -958,7 +1168,7 @@ export class ElementObject extends BaseObject {
     saveTransform: boolean = true,
     stage: "READ_1" | "READ_2" | "READ_3" = "READ_1",
   ): queueEntry {
-    let callback = () => {
+    const callback = () => {
       this.readDom(accountTransform);
       if (saveTransform) {
         this.saveDomPropertyToTransform(stage);
@@ -972,7 +1182,7 @@ export class ElementObject extends BaseObject {
     writeCallback: null | (() => void) = null,
     stage: "WRITE_1" | "WRITE_2" | "WRITE_3" = "WRITE_1",
   ): queueEntry {
-    let callback = () => {
+    const callback = () => {
       if (mutate) {
         this.writeDom();
       }
@@ -982,7 +1192,7 @@ export class ElementObject extends BaseObject {
   }
 
   requestDestroy(): queueEntry {
-    let callback = () => {
+    const callback = () => {
       this.destroyDom();
     };
     return this.queueUpdate("WRITE_2", callback, "destroy");
@@ -991,7 +1201,7 @@ export class ElementObject extends BaseObject {
   requestTransform(
     stage: "WRITE_1" | "WRITE_2" | "WRITE_3" = "WRITE_2",
   ): queueEntry {
-    let callback = () => {
+    const callback = () => {
       this.writeTransform();
     };
     return this.queueUpdate(stage, callback, "transform");

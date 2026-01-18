@@ -2,7 +2,7 @@
   import {
     NodeComponent,
     ConnectorComponent,
-    SnapLine,
+    Engine,
   } from "../../../../../src/index";
   import { getContext, onDestroy } from "svelte";
 
@@ -16,7 +16,7 @@
     allowDragOut?: boolean;
   } = $props();
 
-  let engine: SnapLine = getContext("engine");
+  let engine: Engine = getContext("engine");
   let nodeObject: NodeComponent = getContext("nodeObject");
   let connector = new ConnectorComponent(engine.global, nodeObject, {
     name: name,

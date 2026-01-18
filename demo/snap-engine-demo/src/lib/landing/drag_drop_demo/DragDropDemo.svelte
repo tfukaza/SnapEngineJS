@@ -1,9 +1,10 @@
 <script lang="ts">
   import Container from "./ItemContainer.svelte";
   import Item from "./Item.svelte";
-  import "../../../app.scss";
+  import "../../../../../app.scss";
   import { getContext, onMount } from "svelte";
   import { CameraControl } from "../../../../../../src/asset/cameraControl";
+  import { AnimationObject } from "../../../../../../src/animation";
   import { fade } from "svelte/transition";
 
   let cameraControl: CameraControl = getContext("cameraControl");
@@ -73,9 +74,9 @@
 
   onMount(() => {
     const cameraStart = cameraControl.getCameraCenterPosition();
-    const cameraTarget = { x: 0, y: cameraControl.global.camera!.cameraHeight / 3.2 };
+    const cameraTarget = { x: 0, y: cameraControl.engine.camera!.cameraHeight / 3.2 };
     cameraControl.queueUpdate("WRITE_1").addCallback(() => {
-      cameraControl.animate({
+      const anim = new AnimationObject(null, {
         $t: [0, 1],
       },
       {
@@ -88,7 +89,8 @@
           );
         },
       });
-      cameraControl.animation.play();
+      cameraControl.addAnimation(anim);
+      anim.play();
     });
   });
 
@@ -126,7 +128,7 @@
 </div>
 
 <style lang="scss">
-  @import "../../../app.scss";
+  @import "../../../../../app.scss";
 
   #drag-drop-demo {    
     --item-height: 45.5px;

@@ -1,5 +1,5 @@
 <script lang="ts">
-    import { NodeComponent, LineComponent, SnapLine } from "../../../../../src/index";
+    import { NodeComponent, LineComponent, Engine } from "../../../../../src/index";
     import Line from "./Line.svelte";
     import { onMount, setContext, getContext, onDestroy } from "svelte";
     import { blur } from "svelte/transition";
@@ -11,9 +11,9 @@
         children: any
     } = $props();
     let nodeDOM: HTMLDivElement | null = null;
-    let engine:SnapLine = getContext("engine");
+    let engine:Engine = getContext("engine");
     if (!nodeObject) {
-         nodeObject = new NodeComponent(engine.global, null);
+         nodeObject = new NodeComponent(engine, null);
     }
     let lineList: LineComponent[] = $state(nodeObject.getAllOutgoingLines());
 

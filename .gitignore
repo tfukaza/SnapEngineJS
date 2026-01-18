@@ -25,10 +25,15 @@ dist-ssr
 *.sw?
 **/*.css.map
 
-demo/vanilla/lib/*
-demo/react/src/lib/*
-
 /test-results/
 /playwright-report/
 /blob-report/
 /playwright/.cache/
+
+# Generated build files
+*.mjs
+*.umd.js
+
+# Exceptions
+!vite.config.mjs
+!demo.mjs

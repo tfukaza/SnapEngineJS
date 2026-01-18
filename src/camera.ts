@@ -17,14 +17,14 @@ export interface CameraConfig {
 class Camera {
   /**
    * Represents a camera that can be used to pan and zoom the view of a DOM element.
-   * This class maintains 3 coordinate systems:
+   * The camera maintains 3 coordinate systems:
    * - Viewport coordinates: The x,y coordinates of the pointer on the browser viewport.
    *   (0,0) is the top left corner of the screen and the x,y coordinates increase as you move right and down.
    * - Camera coordinates: The x,y coordinates of the camera view.
    *   (0,0) is the top left corner of the camera view and the x,y coordinates increase as you move right and down.
    *   The position of the camera is the top left corner of the camera view.
    * - World coordinates: The x,y coordinates of the world that the camera is viewing.
-   *   (0,0) is the CENTER of the world and the x,y coordinates increase as you move right and down.
+   *   (0,0) is the center of the world and the x,y coordinates increase as you move right and down.
    */
   #containerDom: HTMLElement; // The DOM element that represents the camera view
   #containerOffsetX: number; // The x coordinate of the container DOM on the browser viewport
@@ -38,11 +38,28 @@ class Camera {
   #zoom: number; // The zoom level of the camera, 1 means no zoom, smaller values zoom out, larger values zoom in
   #config: CameraConfig;
   #canvasStyle: string; // The CSS transform style that should be applied to the DOM element
-  // #cameraCenterMode: "center" | "topLeft";
-  #cameraCenterX: number;
-  #cameraCenterY: number;
   #resizeObserver: ResizeObserver;
 
+  /**
+   * Creates a new Camera instance for panning and zooming a DOM element.
+   *
+   * @param container - The HTML element that will serve as the camera viewport
+   * @param config - Configuration options for camera behavior
+   * @param config.enableZoom - Whether zoom functionality is enabled (default: true)
+   * @param config.zoomBounds - Min/max zoom limits (default: {min: 0.2, max: 1})
+   * @param config.enablePan - Whether pan functionality is enabled (default: true)
+   * @param config.panBounds - Boundaries for panning (default: no bounds)
+   * @param config.handleResize - Whether to handle window resize events (default: true)
+   *
+   * @example
+   * ```typescript
+   * const camera = new Camera(document.getElementById('canvas'), {
+   *   enableZoom: true,
+   *   zoomBounds: { min: 0.1, max: 2.0 },
+   *   enablePan: true
+   * });
+   * ```
+   */
   constructor(container: HTMLElement, config: CameraConfig = {}) {
     let containerRect = container.getBoundingClientRect();
     this.#containerDom = container;
@@ -50,18 +67,12 @@ class Camera {
     this.#containerOffsetY = containerRect.top;
     this.#cameraWidth = containerRect.width;
     this.#cameraHeight = containerRect.height;
-    this.#cameraCenterX = this.#cameraWidth / 2;
-    this.#cameraCenterY = this.#cameraHeight / 2;
     this.#cameraPositionX = 0;
     this.#cameraPositionY = 0;
-    // this.#cameraCenterMode = "topLeft";
-    // if (this.#cameraCenterMode == "topLeft") {
-    //   this.#cameraPositionX = this.#cameraWidth / 2;
-    //   this.#cameraPositionY = this.#cameraHeight / 2;
-    // }
     this.#cameraPanStartX = 0;
     this.#cameraPanStartY = 0;
     this.#zoom = 1;
+
     const defaultConfig = {
       enableZoom: true,
       zoomBounds: { min: 0.2, max: 1 },
@@ -83,32 +94,77 @@ class Camera {
     }
 
     window.addEventListener("scroll", () => {
+      const rect = this.#containerDom.getBoundingClientRect();
+      this.#containerOffsetX = rect.left;
+      this.#containerOffsetY = rect.top;
       this.updateCamera();
     });
   }
 
+  /**
+   * Gets the current width of the camera viewport.
+   * @returns The camera viewport width in pixels
+   */
   get cameraWidth() {
     return this.#cameraWidth;
   }
+
+  /**
+   * Gets the current height of the camera viewport.
+   * @returns The camera viewport height in pixels
+   */
   get cameraHeight() {
     return this.#cameraHeight;
   }
+
+  /**
+   * Gets the current X position of the camera in world coordinates.
+   * @returns The camera X position
+   */
   get cameraPositionX() {
     return this.#cameraPositionX;
   }
+
+  /**
+   * Gets the current Y position of the camera in world coordinates.
+   * @returns The camera Y position
+   */
   get cameraPositionY() {
     return this.#cameraPositionY;
   }
+
+  /**
+   * Gets the current zoom level of the camera.
+   * @returns The zoom level (1.0 = no zoom, <1 = zoomed out, >1 = zoomed in)
+   */
   get zoom() {
     return this.#zoom;
   }
+
+  /**
+   * Gets the X offset of the container element relative to the viewport.
+   * @returns The container X offset in pixels
+   */
   get containerOffsetX() {
     return this.#containerOffsetX;
   }
+
+  /**
+   * Gets the Y offset of the container element relative to the viewport.
+   * @returns The container Y offset in pixels
+   */
   get containerOffsetY() {
     return this.#containerOffsetY;
   }
 
+  /**
+   * Updates the camera's dimensional properties by reading the current container bounds.
+   * This method is automatically called when the container is resized.
+   *
+   * @remarks
+   * This method performs DOM read operations and should ideally be queued in a read phase
+   * to avoid layout thrashing.
+   */
   updateCameraProperty() {
     // TODO: Move this read operation to the READ queue
     let containerRect = this.#containerDom.getBoundingClientRect();
@@ -116,28 +172,27 @@ class Camera {
     this.#containerOffsetY = containerRect.top;
     this.#cameraWidth = containerRect.width;
     this.#cameraHeight = containerRect.height;
-    this.#cameraCenterX = this.#cameraWidth / 2 + this.#cameraPositionX;
-    this.#cameraCenterY = this.#cameraHeight / 2 + this.#cameraPositionY;
+    // console.debug("Camera properties updated:", {
+    //   width: this.#cameraWidth,
+    //   height: this.#cameraHeight,
+    //   offsetX: this.#containerOffsetX,
+    //   offsetY: this.#containerOffsetY,
+    // });
   }
 
-  // centerCamera(x: number, y: number) {
-  //   let dx = this.#cameraPositionX - this.#cameraCenterX + x;
-  //   let dy = this.#cameraPositionY - this.#cameraCenterY + y;
-  //   this.#cameraPositionX = dx;
-  //   this.#cameraPositionY = dy;
-  //   this.updateCamera();
-  // }
-
   /**
-   * Given the x and y coordinates of the camera, the zoom level, and the width and height of the camera,
-   * calculates the transformation matrix that converts a x,y coordinate of the DOM to
-   * the x,y coordinate of the camera view.
-   * @param cameraX   The x coordinate of the point in the world
-   * @param cameraY   The y coordinate of the point in the world
-   * @param zoom  The zoom level of the camera
-   * @param #cameraWidth  The width of the camera view
-   * @param #cameraHeight The height of the camera view
-   * @returns A string representing the CSS transform matrix that should be applied to the DOM element
+   * Generates a CSS 3D transformation matrix string for converting world coordinates to camera view.
+   *
+   * @param cameraX - The X coordinate of the camera position in world space
+   * @param cameraY - The Y coordinate of the camera position in world space
+   * @param zoom - The zoom level to apply to the transformation
+   * @returns A CSS matrix3d string that can be applied to DOM elements
+   *
+   * @example
+   * ```typescript
+   * const matrix = camera.worldToCameraMatrix(100, 50, 1.5);
+   * element.style.transform = `matrix3d(${matrix})`;
+   * ```
    */
   worldToCameraMatrix(cameraX: number, cameraY: number, zoom: number): string {
     const s1 = zoom;
@@ -148,7 +203,12 @@ class Camera {
   }
 
   /**
-   * Updates the camera view based on the current camera position and zoom level
+   * Updates the camera's CSS transformation style based on current position and zoom.
+   * This method should be called after any changes to camera position or zoom level.
+   *
+   * @remarks
+   * The generated style can be retrieved via the `canvasStyle` getter and applied to DOM elements
+   * to reflect the current camera view transformation.
    */
   updateCamera() {
     const matrix = this.worldToCameraMatrix(
@@ -160,16 +220,42 @@ class Camera {
     this.#canvasStyle = `matrix3d(${matrix})`;
   }
 
+  /**
+   * Gets the current CSS transformation style string for the camera.
+   * @returns A CSS transform string that can be applied to DOM elements
+   */
   get canvasStyle() {
     return this.#canvasStyle;
   }
 
+  /**
+   * Sets the camera position to specific world coordinates.
+   *
+   * @param x - The X coordinate in world space
+   * @param y - The Y coordinate in world space
+   *
+   * @example
+   * ```typescript
+   * camera.setCameraPosition(100, 200); // Move camera to world position (100, 200)
+   * ```
+   */
   setCameraPosition(x: number, y: number) {
     this.#cameraPositionX = x;
     this.#cameraPositionY = y;
     this.updateCamera();
   }
 
+  /**
+   * Sets the camera position so that the specified world coordinates appear at the center of the viewport.
+   *
+   * @param x - The X coordinate in world space to center on
+   * @param y - The Y coordinate in world space to center on
+   *
+   * @example
+   * ```typescript
+   * camera.setCameraCenterPosition(0, 0); // Center the camera on world origin
+   * ```
+   */
   setCameraCenterPosition(x: number, y: number) {
     // Set the camera position to the center of the camera view
     this.#cameraPositionX = x - this.#cameraWidth / 2;
@@ -177,18 +263,43 @@ class Camera {
     this.updateCamera();
   }
 
+  /**
+   * Gets the world coordinates of the current camera center point.
+   *
+   * @returns An object containing the world coordinates of the camera center
+   * @returns returns.x - The X coordinate of the camera center in world space
+   * @returns returns.y - The Y coordinate of the camera center in world space
+   *
+   * @example
+   * ```typescript
+   * const center = camera.getCameraCenterPosition();
+   * console.log(`Camera centered at: ${center.x}, ${center.y}`);
+   * ```
+   */
   getCameraCenterPosition(): { x: number; y: number } {
-    // Get the center position of the camera view
     const centerX = this.#cameraPositionX + this.#cameraWidth / 2;
     const centerY = this.#cameraPositionY + this.#cameraHeight / 2;
     return { x: centerX, y: centerY };
   }
 
   /**
-   * Handle the scroll event to zoom in and out of the camera view
-   * @param deltaZoom Amount of scroll
-   * @param cameraX The x coordinate of the pointer in the camera view
-   * @param cameraY The y coordinate of the pointer in the camera view
+   * Handles zoom input by adjusting the camera zoom level and position.
+   * The camera will zoom towards the specified point in camera coordinates.
+   *
+   * @param deltaZoom - The amount to change the zoom level (positive = zoom in, negative = zoom out)
+   * @param cameraX - The X coordinate in camera space to zoom towards
+   * @param cameraY - The Y coordinate in camera space to zoom towards
+   *
+   * @remarks
+   * - Zoom is constrained by the configured zoom bounds
+   * - If panning is enabled, the camera position is adjusted to zoom towards the specified point
+   * - If panning is disabled, zoom occurs from the current camera center
+   *
+   * @example
+   * ```typescript
+   * // Zoom in by 0.1 towards the mouse position
+   * camera.handleScroll(0.1, mouseX, mouseY);
+   * ```
    */
   handleScroll(deltaZoom: number, cameraX: number, cameraY: number) {
     if (!this.#config.enableZoom) {
@@ -216,11 +327,11 @@ class Camera {
       this.#cameraPositionX -=
         (this.#cameraWidth / this.#zoom) *
         (zoomRatio - 1) *
-        (1 - (this.#cameraWidth * 1.5 - cameraX) / this.#cameraWidth);
+        (1 - (this.#cameraWidth - cameraX) / this.#cameraWidth);
       this.#cameraPositionY -=
         (this.#cameraHeight / this.#zoom) *
         (zoomRatio - 1) *
-        (1 - (this.#cameraHeight * 1.5 - cameraY) / this.#cameraHeight);
+        (1 - (this.#cameraHeight - cameraY) / this.#cameraHeight);
     }
     this.#zoom += deltaZoom;
 
@@ -228,12 +339,21 @@ class Camera {
   }
 
   /**
-   * Updates the camera position based on the change in mouse position.
-   * Compared to the 3 stage process of handlePanStart, handlePanDrag, and handlePanEnd functions,
-   * using this functions may cause a slight deviance between mouse movement and camera movement
-   * as the camera position is updated based on the change in mouse position.
-   * @param deltaX  Change in mouse position
-   * @param deltaY  Change in mouse position
+   * Handles camera panning by applying a delta movement.
+   *
+   * @param deltaX - The change in X position (positive = pan right)
+   * @param deltaY - The change in Y position (positive = pan down)
+   *
+   * @remarks
+   * This is a simple pan method that applies movement directly. For more precise panning
+   * that accounts for the exact mouse position, use the three-stage process:
+   * handlePanStart() → handlePanDrag() → handlePanEnd()
+   *
+   * @example
+   * ```typescript
+   * // Pan the camera 10 pixels right and 5 pixels up
+   * camera.handlePan(10, -5);
+   * ```
    */
   handlePan(deltaX: number, deltaY: number) {
     if (!this.#config.enablePan) {
@@ -246,10 +366,20 @@ class Camera {
   }
 
   /**
-   * Should be called when a user presses the pointer down to start panning the camera.
-   * This function is the start of a 3-stage process to pan the camera:
-   *    handlePanStart -> handlePanDrag -> handlePanEnd
-   * This allows camera pans based on the absolute position of the pointer relative to when the pan started.
+   * Initiates a panning operation by recording the current camera position.
+   * This is the first step in a three-stage panning process that provides more accurate
+   * tracking of mouse movement during drag operations.
+   *
+   * @remarks
+   * Call this method when a pan gesture begins (e.g., on mousedown or touchstart).
+   * Follow with handlePanDrag() calls during movement and handlePanEnd() when complete.
+   *
+   * @example
+   * ```typescript
+   * element.addEventListener('mousedown', () => {
+   *   camera.handlePanStart();
+   * });
+   * ```
    */
   handlePanStart() {
     if (!this.#config.enablePan) {
@@ -260,10 +390,34 @@ class Camera {
   }
 
   /**
-   * Updates the camera position based on the change in mouse position, relative to the start of the pan.
-   * This function should be called after handlePanStart and before handlePanEnd.
-   * @param deltaX  Change in mouse position
-   * @param deltaY  Change in mouse position
+   * Updates camera position during a panning operation based on cumulative movement
+   * from the initial pan start position.
+   *
+   * @param deltaX - Total X movement since handlePanStart() was called
+   * @param deltaY - Total Y movement since handlePanStart() was called
+   *
+   * @remarks
+   * - This method should be called between handlePanStart() and handlePanEnd()
+   * - Delta values are cumulative from the start position, not incremental
+   * - Respects configured pan boundaries if set
+   * - Movement is automatically adjusted for current zoom level
+   *
+   * @example
+   * ```typescript
+   * let startX, startY;
+   *
+   * element.addEventListener('mousedown', (e) => {
+   *   camera.handlePanStart();
+   *   startX = e.clientX;
+   *   startY = e.clientY;
+   * });
+   *
+   * element.addEventListener('mousemove', (e) => {
+   *   const deltaX = e.clientX - startX;
+   *   const deltaY = e.clientY - startY;
+   *   camera.handlePanDrag(deltaX, deltaY);
+   * });
+   * ```
    */
   handlePanDrag(deltaX: number, deltaY: number) {
     if (!this.#config.enablePan) {
@@ -301,9 +455,19 @@ class Camera {
   }
 
   /**
-   * Should be called when a user releases the pointer to end panning the camera.
-   * This function is the end of a 3-stage process to pan the camera:
-   *    handlePanStart -> handlePanDrag -> handlePanEnd
+   * Completes a panning operation by resetting the pan start coordinates.
+   * This is the final step in the three-stage panning process.
+   *
+   * @remarks
+   * Call this method when a pan gesture ends (e.g., on mouseup or touchend).
+   * This cleans up the internal pan tracking state.
+   *
+   * @example
+   * ```typescript
+   * element.addEventListener('mouseup', () => {
+   *   camera.handlePanEnd();
+   * });
+   * ```
    */
   handlePanEnd() {
     if (!this.#config.enablePan) {
@@ -314,10 +478,17 @@ class Camera {
   }
 
   /**
-   * Converts the x and y coordinates of the world to the x and y coordinates of the camera view.
-   * @param worldX  The x coordinate of the point in the world
-   * @param worldY  The y coordinate of the point in the world
-   * @returns The x and y coordinates of the point in the camera view
+   * Converts world coordinates to camera viewport coordinates.
+   *
+   * @param worldX - The X coordinate in world space
+   * @param worldY - The Y coordinate in world space
+   * @returns A tuple [cameraX, cameraY] representing the point in camera coordinates
+   *
+   * @example
+   * ```typescript
+   * const [cameraX, cameraY] = camera.getCameraFromWorld(100, 200);
+   * console.log(`World point (100, 200) appears at camera position (${cameraX}, ${cameraY})`);
+   * ```
    */
   getCameraFromWorld(worldX: number, worldY: number): [number, number] {
     const c_x = (worldX - this.#cameraPositionX) * this.#zoom; // + this.#cameraWidth / 2;
@@ -327,10 +498,17 @@ class Camera {
   }
 
   /**
-   * Converts the x and y coordinates of the camera view to the x and y coordinates of the browser viewport.
-   * @param cameraX The x coordinate of the point in the camera view
-   * @param cameraY The y coordinate of the point in the camera view
-   * @returns
+   * Converts camera viewport coordinates to screen/browser viewport coordinates.
+   *
+   * @param cameraX - The X coordinate in camera space
+   * @param cameraY - The Y coordinate in camera space
+   * @returns A tuple [screenX, screenY] representing the point in screen coordinates
+   *
+   * @example
+   * ```typescript
+   * const [screenX, screenY] = camera.getScreenFromCamera(50, 75);
+   * // Use screenX, screenY for positioning absolute elements relative to the viewport
+   * ```
    */
   getScreenFromCamera(cameraX: number, cameraY: number): [number, number] {
     const s_x = cameraX + this.#containerOffsetX;
@@ -340,10 +518,18 @@ class Camera {
   }
 
   /**
-   * Converts the x and y coordinates of the camera view to the x and y coordinates of the world.
-   * @param mouseX
-   * @param mouseY
-   * @returns
+   * Converts camera viewport coordinates to world coordinates.
+   *
+   * @param cameraX - The X coordinate in camera space
+   * @param cameraY - The Y coordinate in camera space
+   * @returns A tuple [worldX, worldY] representing the point in world coordinates
+   *
+   * @example
+   * ```typescript
+   * // Convert mouse position in camera to world coordinates
+   * const [worldX, worldY] = camera.getWorldFromCamera(mouseX, mouseY);
+   * console.log(`Mouse is over world position: ${worldX}, ${worldY}`);
+   * ```
    */
   getWorldFromCamera(cameraX: number, cameraY: number): [number, number] {
     const w_x = cameraX / this.#zoom + this.#cameraPositionX;
@@ -352,6 +538,21 @@ class Camera {
     return [w_x, w_y];
   }
 
+  /**
+   * Converts screen/browser viewport coordinates to camera viewport coordinates.
+   *
+   * @param mouseX - The X coordinate in screen space (e.g., from mouse event)
+   * @param mouseY - The Y coordinate in screen space (e.g., from mouse event)
+   * @returns A tuple [cameraX, cameraY] representing the point in camera coordinates
+   *
+   * @example
+   * ```typescript
+   * element.addEventListener('click', (e) => {
+   *   const [cameraX, cameraY] = camera.getCameraFromScreen(e.clientX, e.clientY);
+   *   console.log(`Clicked at camera position: ${cameraX}, ${cameraY}`);
+   * });
+   * ```
+   */
   getCameraFromScreen(mouseX: number, mouseY: number): [number, number] {
     mouseX = mouseX - this.#containerOffsetX;
     mouseY = mouseY - this.#containerOffsetY;
@@ -359,10 +560,18 @@ class Camera {
   }
 
   /**
-   * Converts the change in x and y coordinates of the world to the change in x and y coordinates of the camera view.
-   * @param worldDeltaX
-   * @param worldDeltaY
-   * @returns
+   * Converts a movement delta in world coordinates to camera viewport coordinates.
+   * Useful for transforming movement or size values between coordinate systems.
+   *
+   * @param worldDeltaX - The X component of movement/size in world space
+   * @param worldDeltaY - The Y component of movement/size in world space
+   * @returns A tuple [cameraDeltaX, cameraDeltaY] representing the delta in camera coordinates
+   *
+   * @example
+   * ```typescript
+   * // Convert a 10x10 world space rectangle to camera space
+   * const [cameraWidth, cameraHeight] = camera.getCameraDeltaFromWorldDelta(10, 10);
+   * ```
    */
   getCameraDeltaFromWorldDelta(
     worldDeltaX: number,
@@ -375,10 +584,19 @@ class Camera {
   }
 
   /**
-   * Converts the change in x and y coordinates of the camera view to the change in x and y coordinates of the world.
-   * @param cameraDeltaX
-   * @param cameraDeltaY
-   * @returns
+   * Converts a movement delta in camera viewport coordinates to world coordinates.
+   * Useful for transforming movement or size values between coordinate systems.
+   *
+   * @param cameraDeltaX - The X component of movement/size in camera space
+   * @param cameraDeltaY - The Y component of movement/size in camera space
+   * @returns A tuple [worldDeltaX, worldDeltaY] representing the delta in world coordinates
+   *
+   * @example
+   * ```typescript
+   * // Convert a 50px camera movement to world space movement
+   * const [worldDeltaX, worldDeltaY] = camera.getWorldDeltaFromCameraDelta(50, 30);
+   * // Use worldDeltaX, worldDeltaY to move objects in world space
+   * ```
    */
   getWorldDeltaFromCameraDelta(
     cameraDeltaX: number,
