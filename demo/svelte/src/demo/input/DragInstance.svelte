@@ -152,6 +152,9 @@
 
     function pinchStart(prop: pinchStartProp) {
         if (!engine) return;
+        const id = "pinch-" + prop.gestureID;
+        const source = getEventSource(prop.gid);
+        
         pinchMarker[prop.gestureID] = {
             id: prop.gestureID,
             x0: prop.start.pointerList[0].x,
@@ -159,19 +162,92 @@
             x1: prop.start.pointerList[1].x, 
             y1: prop.start.pointerList[1].y, 
             object: new ElementObject(engine, null)
+        };
+
+        if (debugHelper) {
+            // Draw points at each finger position
+            debugHelper.addDebugPoint(prop.start.pointerList[0].x, prop.start.pointerList[0].y, "orange", true, id + "-p0");
+            debugHelper.addDebugPoint(prop.start.pointerList[1].x, prop.start.pointerList[1].y, "orange", true, id + "-p1");
+            // Draw line between fingers
+            debugHelper.addDebugLine(
+                prop.start.pointerList[0].x, prop.start.pointerList[0].y,
+                prop.start.pointerList[1].x, prop.start.pointerList[1].y,
+                "orange", true, id + "-line"
+            );
+            // Show distance text at midpoint
+            const midX = (prop.start.pointerList[0].x + prop.start.pointerList[1].x) / 2;
+            const midY = (prop.start.pointerList[0].y + prop.start.pointerList[1].y) / 2;
+            debugHelper.addDebugText(
+                midX, midY - 20,
+                `${source} Pinch Start\nDist: ${round(prop.start.distance)}`,
+                "orange", true, id + "-text"
+            );
         }
     }
 
     function pinch(prop: pinchProp) {
+        const id = "pinch-" + prop.gestureID;
+        const source = getEventSource(prop.gid);
+        
         Object.assign(pinchMarker[prop.gestureID], {
             x0: prop.pointerList[0].x, 
             y0: prop.pointerList[0].y, 
             x1: prop.pointerList[1].x, 
             y1: prop.pointerList[1].y, 
         });
+
+        if (debugHelper) {
+            // Update points at each finger position
+            debugHelper.addDebugPoint(prop.pointerList[0].x, prop.pointerList[0].y, "cyan", true, id + "-p0");
+            debugHelper.addDebugPoint(prop.pointerList[1].x, prop.pointerList[1].y, "cyan", true, id + "-p1");
+            // Update line between fingers
+            debugHelper.addDebugLine(
+                prop.pointerList[0].x, prop.pointerList[0].y,
+                prop.pointerList[1].x, prop.pointerList[1].y,
+                "cyan", true, id + "-line"
+            );
+            // Show distance and scale text at midpoint
+            const midX = (prop.pointerList[0].x + prop.pointerList[1].x) / 2;
+            const midY = (prop.pointerList[0].y + prop.pointerList[1].y) / 2;
+            const scale = prop.distance / prop.start.distance;
+            debugHelper.addDebugText(
+                midX, midY - 20,
+                `${source} Pinch\nDist: ${round(prop.distance)}\nScale: ${round(scale)}x`,
+                "cyan", true, id + "-text"
+            );
+        }
     }
+
     function pinchEnd(prop: pinchEndProp) {
+        const id = "pinch-" + prop.gestureID;
+        const source = getEventSource(prop.gid);
+        
         delete pinchMarker[prop.gestureID];
+
+        if (debugHelper) {
+            // Clear pinch markers
+            debugHelper.clearDebugMarker(id + "-p0");
+            debugHelper.clearDebugMarker(id + "-p1");
+            debugHelper.clearDebugMarker(id + "-line");
+            debugHelper.clearDebugMarker(id + "-text");
+            
+            // Show final pinch end briefly
+            const midX = (prop.end.pointerList[0].x + prop.end.pointerList[1].x) / 2;
+            const midY = (prop.end.pointerList[0].y + prop.end.pointerList[1].y) / 2;
+            const scale = prop.end.distance / prop.start.distance;
+            debugHelper.addDebugText(
+                midX, midY - 20,
+                `${source} Pinch End\nFinal Scale: ${round(scale)}x`,
+                "magenta", true, id + "-end-text"
+            );
+            
+            // Clear end marker after delay
+            setTimeout(() => {
+                if (debugHelper) {
+                    debugHelper.clearDebugMarker(id + "-end-text");
+                }
+            }, 1000);
+        }
     }
 
 

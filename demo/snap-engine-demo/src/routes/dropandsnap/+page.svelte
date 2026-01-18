@@ -1,7 +1,18 @@
 <script lang="ts">
+  import { onMount } from "svelte";
   import Canvas from "../../../../svelte/src/lib/Canvas.svelte";
   import Item from "../../../../svelte/src/demo/drag_drop/Item.svelte";
   import Container from "../../../../svelte/src/demo/drag_drop/ItemContainer.svelte";
+  import { GlobalManager } from "../../../../../src/index";
+
+  // Set max simultaneous drags to 1 for this demo (runs after engines are created)
+  onMount(() => {
+    const globalManager = GlobalManager.getInstance();
+    const globalInput = globalManager.getInputEngine(null);
+    if (globalInput) {
+      globalInput.config.maxSimultaneousDrags = 1;
+    }
+  });
 
   const title = "Drop and Snap";
 

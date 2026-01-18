@@ -420,6 +420,8 @@ class InputControl {
         memberList: [this, ...this.#dragMemberList],
         initiatorID: this._isGlobal ? GLOBAL_GID : this._ownerGID ?? "",
       };
+      // Enforce max simultaneous drags limit
+      this.globalInputEngine?.enforceMaxDragLimit();
     }
   }
 
@@ -533,6 +535,17 @@ class InputControl {
   }
 
   /**
+   * Called when a pointer event is cancelled (e.g., touch interrupted by system gesture).
+   * Treated as a pointer up event to clean up any ongoing gestures.
+   * @param e
+   */
+  onPointerCancel(e: PointerEvent) {
+    console.debug("onPointerCancel", e.pointerId);
+    // Treat cancel as pointer up to clean up gesture state
+    this.onPointerUp(e);
+  }
+
+  /**
    * Called when the user scrolls the mouse wheel
    * @param e
    */
@@ -601,71 +614,89 @@ class InputControl {
       }
     }
     // Handle pinch gestures.
-    // Pinch gestures can only be handled by the global input engine
-    if (numKeys >= 2 && this._isGlobal) {
-      const pointerList = Object.values(this.globalPointerDict);
-      // Sort the pointer list by the time they are pressed
-      pointerList.sort((a, b) => a.timestamp - b.timestamp);
-      // TODO: Only update gesture entries that are adjacent to the pointer event that triggered the pinch gesture
+    // Pinch gestures need to be handled by the global input engine since they involve
+    // multiple pointers that may start on different elements.
+    if (numKeys >= 2) {
+      if (this._isGlobal) {
+        // Global InputControl handles pinch detection directly
+        this._detectAndFirePinchGestures();
+      } else {
+        // Non-global InputControl delegates to global InputControl
+        const globalInput = this.globalInputEngine;
+        if (globalInput) {
+          globalInput._inputControl._detectAndFirePinchGestures();
+        }
+      }
+    }
+  }
 
-      // Every 2 pointers that are adjacent chronologically are considered to be a pinch gesture
-      for (let i = 0; i < pointerList.length - 1; i++) {
-        const pointer_0 = pointerList[i];
-        const pointer_1 = pointerList[i + 1];
+  /**
+   * Detects and fires pinch gesture events based on current pointer state.
+   * Called by #handleMultiPointer when 2+ pointers are tracked.
+   * @internal
+   */
+  _detectAndFirePinchGestures() {
+    const pointerList = Object.values(this.globalPointerDict);
+    if (pointerList.length < 2) return;
+    
+    // Sort the pointer list by the time they are pressed
+    pointerList.sort((a, b) => a.timestamp - b.timestamp);
 
-        const gestureKey = `${pointer_0.id}-${pointer_1.id}`;
+    // Every 2 pointers that are adjacent chronologically are considered to be a pinch gesture
+    for (let i = 0; i < pointerList.length - 1; i++) {
+      const pointer_0 = pointerList[i];
+      const pointer_1 = pointerList[i + 1];
 
-        const startMiddleX = (pointer_0.startX + pointer_1.startX) / 2;
-        const startMiddleY = (pointer_0.startY + pointer_1.startY) / 2;
-        const startMiddle = this.getCoordinates(startMiddleX, startMiddleY);
-        const startDistance = Math.sqrt(
-          Math.pow(pointer_0.startX - pointer_1.startX, 2) +
-            Math.pow(pointer_0.startY - pointer_1.startY, 2),
-        );
-        const currentPointer0 = this.getCoordinates(pointer_0.x, pointer_0.y);
-        const currentPointer1 = this.getCoordinates(pointer_1.x, pointer_1.y);
-        const currentDistance = Math.sqrt(
-          Math.pow(pointer_0.x - pointer_1.x, 2) +
-            Math.pow(pointer_0.y - pointer_1.y, 2),
-        );
+      const gestureKey = `${pointer_0.id}-${pointer_1.id}`;
 
-        if (this.globalGestureDict[gestureKey] == null) {
-          this.globalGestureDict[gestureKey] = {
-            type: "pinch",
-            state: "pinch",
-            memberList: [this],
-            start: {
-              pointerList: [currentPointer0, currentPointer1],
-              distance: startDistance,
-            },
+      const startMiddleX = (pointer_0.startX + pointer_1.startX) / 2;
+      const startMiddleY = (pointer_0.startY + pointer_1.startY) / 2;
+      const startMiddle = this.getCoordinates(startMiddleX, startMiddleY);
+      const startDistance = Math.sqrt(
+        Math.pow(pointer_0.startX - pointer_1.startX, 2) +
+          Math.pow(pointer_0.startY - pointer_1.startY, 2),
+      );
+      const currentPointer0 = this.getCoordinates(pointer_0.x, pointer_0.y);
+      const currentPointer1 = this.getCoordinates(pointer_1.x, pointer_1.y);
+      const currentDistance = Math.sqrt(
+        Math.pow(pointer_0.x - pointer_1.x, 2) +
+          Math.pow(pointer_0.y - pointer_1.y, 2),
+      );
+
+      if (this.globalGestureDict[gestureKey] == null) {
+        this.globalGestureDict[gestureKey] = {
+          type: "pinch",
+          state: "pinch",
+          memberList: [this],
+          start: {
             pointerList: [currentPointer0, currentPointer1],
             distance: startDistance,
-          };
-          this.event.pinchStart?.({
-            gid: this._isGlobal ? GLOBAL_GID : this._ownerGID,
-            gestureID: gestureKey,
-            start: {
-              pointerList: [currentPointer0, currentPointer1],
-              distance: startDistance,
-            },
-          });
-          console.warn("pinchStart", startMiddle, this._ownerGID);
-        } else {
-          // this.globalGestureDict[gestureKey].memberList.push(this);
-        }
-
-        const pinchGesture = this.globalGestureDict[gestureKey] as pinchGesture;
-        pinchGesture.pointerList = [currentPointer0, currentPointer1];
-        pinchGesture.distance = currentDistance;
-        this.event.pinch?.({
+          },
+          pointerList: [currentPointer0, currentPointer1],
+          distance: startDistance,
+        };
+        this.event.pinchStart?.({
           gid: this._isGlobal ? GLOBAL_GID : this._ownerGID,
           gestureID: gestureKey,
-          start: pinchGesture.start,
-          pointerList: pinchGesture.pointerList,
-          distance: pinchGesture.distance,
+          start: {
+            pointerList: [currentPointer0, currentPointer1],
+            distance: startDistance,
+          },
         });
-        console.warn("pinch", currentPointer0, currentPointer1, this._ownerGID);
+        console.debug("pinchStart", startMiddle, this._ownerGID);
       }
+
+      const pinchGesture = this.globalGestureDict[gestureKey] as pinchGesture;
+      pinchGesture.pointerList = [currentPointer0, currentPointer1];
+      pinchGesture.distance = currentDistance;
+      this.event.pinch?.({
+        gid: this._isGlobal ? GLOBAL_GID : this._ownerGID,
+        gestureID: gestureKey,
+        start: pinchGesture.start,
+        pointerList: pinchGesture.pointerList,
+        distance: pinchGesture.distance,
+      });
+      console.debug("pinch", currentPointer0, currentPointer1, this._ownerGID);
     }
   }
 
@@ -684,6 +715,7 @@ class InputControl {
     this.addListener(dom, "pointerdown", this.onPointerDown);
     this.addListener(dom, "pointermove", this.onPointerMove);
     this.addListener(dom, "pointerup", this.onPointerUp);
+    this.addListener(dom, "pointercancel", this.onPointerCancel);
     this.addListener(dom, "wheel", this.onWheel);
   }
 
@@ -718,6 +750,22 @@ interface pinchGesture {
 }
 
 /**
+ * Configuration options for the global input control.
+ */
+export interface GlobalInputConfig {
+  /**
+   * Maximum number of simultaneous drag gestures allowed.
+   * When exceeded, the oldest drag gesture will be cancelled.
+   * Set to 0 or Infinity for unlimited. Default is Infinity.
+   */
+  maxSimultaneousDrags: number;
+}
+
+const DEFAULT_GLOBAL_INPUT_CONFIG: GlobalInputConfig = {
+  maxSimultaneousDrags: Infinity,
+};
+
+/**
  * Global input event manager for the entire engine instance.
  *
  * Manages:
@@ -733,6 +781,7 @@ interface pinchGesture {
  * @example
  * ```typescript
  * const globalInput = new GlobalInputControl(global, engine);
+ * globalInput.config.maxSimultaneousDrags = 1; // Only allow one drag at a time
  * // Objects subscribe via: engine.enableCameraControl()
  * // or object.event.global.pointerMove = (props) => { ... }
  * ```
@@ -749,9 +798,15 @@ class GlobalInputControl {
   _event: InputEventCallback;
   event: InputEventCallback;
 
-  constructor(global: GlobalManager) {
+  /**
+   * Configuration options for global input handling.
+   */
+  config: GlobalInputConfig;
+
+  constructor(global: GlobalManager, config: Partial<GlobalInputConfig> = {}) {
     this.global = global;
     this.#document = document;
+    this.config = { ...DEFAULT_GLOBAL_INPUT_CONFIG, ...config };
     this._inputControl = new InputControl({ global: global }, true, null);
     this._inputControl.addCursorEventListener(
       this.#document,
@@ -792,6 +847,14 @@ class GlobalInputControl {
       };
     };
 
+    // Helper function to transform pinch pointer lists
+    const transformPinchPointerList = (pointerList: eventPosition[] | undefined, camera: any): eventPosition[] | undefined => {
+      if (!pointerList || !camera) {
+        return pointerList;
+      }
+      return pointerList.map(pos => transformPosition(pos, camera)!);
+    };
+
     for (const [key] of Object.entries(this.globalCallbacks)) {
       this._inputControl.event[key as inputCallbackKey] = (
         prop: any,
@@ -809,13 +872,33 @@ class GlobalInputControl {
               transformed.position = transformPosition(prop.position, targetEngine.camera);
             }
             if (prop.start) {
-              transformed.start = transformPosition(prop.start, targetEngine.camera);
+              // Handle pinch events where start is { pointerList, distance }
+              if (prop.start.pointerList) {
+                transformed.start = {
+                  ...prop.start,
+                  pointerList: transformPinchPointerList(prop.start.pointerList, targetEngine.camera),
+                };
+              } else {
+                transformed.start = transformPosition(prop.start, targetEngine.camera);
+              }
             }
             if (prop.end) {
-              transformed.end = transformPosition(prop.end, targetEngine.camera);
+              // Handle pinch events where end is { pointerList, distance }
+              if (prop.end.pointerList) {
+                transformed.end = {
+                  ...prop.end,
+                  pointerList: transformPinchPointerList(prop.end.pointerList, targetEngine.camera),
+                };
+              } else {
+                transformed.end = transformPosition(prop.end, targetEngine.camera);
+              }
             }
             if (prop.delta) {
               transformed.delta = transformPosition(prop.delta, targetEngine.camera);
+            }
+            // Handle pinch events pointerList array
+            if (prop.pointerList) {
+              transformed.pointerList = transformPinchPointerList(prop.pointerList, targetEngine.camera);
             }
             return transformed;
           };
@@ -897,6 +980,81 @@ class GlobalInputControl {
 
   unsubscribeGlobalCursorEvent(event: keyof InputEventCallback, gid: string) {
     delete this.globalCallbacks[event][gid];
+  }
+
+  /**
+   * Gets the number of active drag gestures.
+   */
+  getActiveDragCount(): number {
+    return Object.values(this._gestureDict).filter(g => g.type === "drag").length;
+  }
+
+  /**
+   * Gets active drag gestures sorted by timestamp (oldest first).
+   */
+  getActiveDragsSortedByTime(): { pointerId: number; gesture: dragGesture; timestamp: number }[] {
+    const drags: { pointerId: number; gesture: dragGesture; timestamp: number }[] = [];
+    
+    for (const [key, gesture] of Object.entries(this._gestureDict)) {
+      if (gesture.type !== "drag") continue;
+      const pointerId = parseInt(key, 10);
+      const pointerData = this._pointerDict[pointerId];
+      if (pointerData) {
+        drags.push({
+          pointerId,
+          gesture: gesture as dragGesture,
+          timestamp: pointerData.timestamp,
+        });
+      }
+    }
+    
+    return drags.sort((a, b) => a.timestamp - b.timestamp);
+  }
+
+  /**
+   * Cancels the oldest drag gesture by firing dragEnd for all its members.
+   * Used to enforce maxSimultaneousDrags limit.
+   */
+  cancelOldestDrag(): void {
+    const drags = this.getActiveDragsSortedByTime();
+    if (drags.length === 0) return;
+    
+    const oldest = drags[0];
+    const pointerData = this._pointerDict[oldest.pointerId];
+    if (!pointerData) return;
+    
+    console.debug("Cancelling oldest drag", oldest.pointerId, "to enforce max drag limit");
+    
+    // Fire dragEnd for all members of this gesture
+    for (const member of oldest.gesture.memberList) {
+      const startPosition = member.getCoordinates(pointerData.startX, pointerData.startY);
+      const endPosition = member.getCoordinates(pointerData.x, pointerData.y);
+      
+      member.event.dragEnd?.({
+        gid: member._isGlobal ? GLOBAL_GID : member._ownerGID,
+        pointerId: oldest.pointerId,
+        start: startPosition,
+        end: endPosition,
+        button: 0, // No button info available for cancelled drag
+      });
+    }
+    
+    // Clean up the gesture and pointer data
+    delete this._gestureDict[oldest.pointerId];
+    delete this._pointerDict[oldest.pointerId];
+  }
+
+  /**
+   * Enforces the maxSimultaneousDrags limit by cancelling oldest drags if needed.
+   * Should be called after a new drag is registered.
+   */
+  enforceMaxDragLimit(): void {
+    const maxDrags = this.config.maxSimultaneousDrags;
+    if (maxDrags <= 0 || maxDrags === Infinity) return;
+    
+    while (this.getActiveDragCount() > maxDrags) {
+      this.cancelOldestDrag();
+    }
   }
 }
 

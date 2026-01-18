@@ -19,6 +19,10 @@
         margin-top: 200px;
         height: 60vh;
         gap: 1rem;
+        /* Disable touch gestures */
+        touch-action: none;
+        -webkit-user-select: none;
+        user-select: none;
     }
 
     .pane {
@@ -26,5 +30,7 @@
         position: relative;
         border: 1px solid #ccc;
         height: 100%;
+        /* Disable touch gestures */
+        touch-action: none;
     }
 </style>
