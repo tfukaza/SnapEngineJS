@@ -9,19 +9,47 @@ var __privateGet = (obj, member, getter) => (__accessCheck(obj, member, "read fr
 var __privateAdd = (obj, member, value) => member.has(obj) ? __typeError("Cannot add the same private member more than once") : member instanceof WeakSet ? member.add(obj) : member.set(obj, value);
 var __privateSet = (obj, member, value, setter) => (__accessCheck(obj, member, "write to private field"), setter ? setter.call(obj, value) : member.set(obj, value), value);
 var __privateMethod = (obj, member, method) => (__accessCheck(obj, member, "access private method"), method);
-var _containerDom, _containerOffsetX, _containerOffsetY, _cameraWidth, _cameraHeight, _cameraPositionX, _cameraPositionY, _cameraPanStartX, _cameraPanStartY, _zoom, _config, _canvasStyle, _cameraCenterX, _cameraCenterY, _resizeObserver, _variables, _animation, _varAnimation, _offset, _easing, _duration, _delay, _hasVariable, _deleteOnFinish, _debugObject, _dragMemberList, _InputControl_instances, handleMultiPointer_fn, _document, _containerStyle, _resizeObserver2, _SnapLine_instances, step_fn, processQueue_fn, _config2, _name, _prop, _outgoingLines, _incomingLines, _state, _hitCircle, _mouseHitBox, _targetConnector, _connectorCallback, _prevCenterX, _prevCenterY;
+var __privateWrapper = (obj, member, setter, getter) => ({
+  set _(value) {
+    __privateSet(obj, member, value, setter);
+  },
+  get _() {
+    return __privateGet(obj, member, getter);
+  }
+});
+var _containerDom, _containerOffsetX, _containerOffsetY, _cameraWidth, _cameraHeight, _cameraPositionX, _cameraPositionY, _cameraPanStartX, _cameraPanStartY, _zoom, _config, _canvasStyle, _resizeObserver, _debugObject, _dragMemberList, _listenerControllers, _InputControl_instances, isPointerTracked_fn, isEventWithinEngine_fn, shouldHandlePointerEvent_fn, shouldHandleWheelEvent_fn, handleMultiPointer_fn, _document, _engineIdCounter, _engineIds, _animationFrameId, _GlobalManager_instances, startRenderLoop_fn, stopRenderLoop_fn, ensureInputEngine_fn, ensureEngineId_fn, ensureGlobalObjectTable_fn, _resizeObserver2, _animationProcessor, _debugRenderer, _Engine_instances, processQueue_fn, _config2, _name, _prop, _outgoingLines, _incomingLines, _state, _hitCircle, _mouseHitBox, _targetConnector, _connectorCallback, _prevCameraX, _prevCameraY;
 class Camera {
+  /**
+   * Creates a new Camera instance for panning and zooming a DOM element.
+   *
+   * @param container - The HTML element that will serve as the camera viewport
+   * @param config - Configuration options for camera behavior
+   * @param config.enableZoom - Whether zoom functionality is enabled (default: true)
+   * @param config.zoomBounds - Min/max zoom limits (default: {min: 0.2, max: 1})
+   * @param config.enablePan - Whether pan functionality is enabled (default: true)
+   * @param config.panBounds - Boundaries for panning (default: no bounds)
+   * @param config.handleResize - Whether to handle window resize events (default: true)
+   *
+   * @example
+   * ```typescript
+   * const camera = new Camera(document.getElementById('canvas'), {
+   *   enableZoom: true,
+   *   zoomBounds: { min: 0.1, max: 2.0 },
+   *   enablePan: true
+   * });
+   * ```
+   */
   constructor(container, config = {}) {
     /**
      * Represents a camera that can be used to pan and zoom the view of a DOM element.
-     * This class maintains 3 coordinate systems:
+     * The camera maintains 3 coordinate systems:
      * - Viewport coordinates: The x,y coordinates of the pointer on the browser viewport.
      *   (0,0) is the top left corner of the screen and the x,y coordinates increase as you move right and down.
      * - Camera coordinates: The x,y coordinates of the camera view.
      *   (0,0) is the top left corner of the camera view and the x,y coordinates increase as you move right and down.
      *   The position of the camera is the top left corner of the camera view.
      * - World coordinates: The x,y coordinates of the world that the camera is viewing.
-     *   (0,0) is the CENTER of the world and the x,y coordinates increase as you move right and down.
+     *   (0,0) is the center of the world and the x,y coordinates increase as you move right and down.
      */
     __privateAdd(this, _containerDom);
     // The DOM element that represents the camera view
@@ -44,9 +72,6 @@ class Camera {
     __privateAdd(this, _config);
     __privateAdd(this, _canvasStyle);
     // The CSS transform style that should be applied to the DOM element
-    // #cameraCenterMode: "center" | "topLeft";
-    __privateAdd(this, _cameraCenterX);
-    __privateAdd(this, _cameraCenterY);
     __privateAdd(this, _resizeObserver);
     let containerRect = container.getBoundingClientRect();
     __privateSet(this, _containerDom, container);
@@ -54,8 +79,6 @@ class Camera {
     __privateSet(this, _containerOffsetY, containerRect.top);
     __privateSet(this, _cameraWidth, containerRect.width);
     __privateSet(this, _cameraHeight, containerRect.height);
-    __privateSet(this, _cameraCenterX, __privateGet(this, _cameraWidth) / 2);
-    __privateSet(this, _cameraCenterY, __privateGet(this, _cameraHeight) / 2);
     __privateSet(this, _cameraPositionX, 0);
     __privateSet(this, _cameraPositionY, 0);
     __privateSet(this, _cameraPanStartX, 0);
@@ -78,56 +101,89 @@ class Camera {
       __privateGet(this, _resizeObserver).observe(window.document.body);
     }
     window.addEventListener("scroll", () => {
+      const rect = __privateGet(this, _containerDom).getBoundingClientRect();
+      __privateSet(this, _containerOffsetX, rect.left);
+      __privateSet(this, _containerOffsetY, rect.top);
       this.updateCamera();
     });
   }
+  /**
+   * Gets the current width of the camera viewport.
+   * @returns The camera viewport width in pixels
+   */
   get cameraWidth() {
     return __privateGet(this, _cameraWidth);
   }
+  /**
+   * Gets the current height of the camera viewport.
+   * @returns The camera viewport height in pixels
+   */
   get cameraHeight() {
     return __privateGet(this, _cameraHeight);
   }
+  /**
+   * Gets the current X position of the camera in world coordinates.
+   * @returns The camera X position
+   */
   get cameraPositionX() {
     return __privateGet(this, _cameraPositionX);
   }
+  /**
+   * Gets the current Y position of the camera in world coordinates.
+   * @returns The camera Y position
+   */
   get cameraPositionY() {
     return __privateGet(this, _cameraPositionY);
   }
+  /**
+   * Gets the current zoom level of the camera.
+   * @returns The zoom level (1.0 = no zoom, <1 = zoomed out, >1 = zoomed in)
+   */
   get zoom() {
     return __privateGet(this, _zoom);
   }
+  /**
+   * Gets the X offset of the container element relative to the viewport.
+   * @returns The container X offset in pixels
+   */
   get containerOffsetX() {
     return __privateGet(this, _containerOffsetX);
   }
+  /**
+   * Gets the Y offset of the container element relative to the viewport.
+   * @returns The container Y offset in pixels
+   */
   get containerOffsetY() {
     return __privateGet(this, _containerOffsetY);
   }
+  /**
+   * Updates the camera's dimensional properties by reading the current container bounds.
+   * This method is automatically called when the container is resized.
+   *
+   * @remarks
+   * This method performs DOM read operations and should ideally be queued in a read phase
+   * to avoid layout thrashing.
+   */
   updateCameraProperty() {
     let containerRect = __privateGet(this, _containerDom).getBoundingClientRect();
     __privateSet(this, _containerOffsetX, containerRect.left);
     __privateSet(this, _containerOffsetY, containerRect.top);
     __privateSet(this, _cameraWidth, containerRect.width);
     __privateSet(this, _cameraHeight, containerRect.height);
-    __privateSet(this, _cameraCenterX, __privateGet(this, _cameraWidth) / 2 + __privateGet(this, _cameraPositionX));
-    __privateSet(this, _cameraCenterY, __privateGet(this, _cameraHeight) / 2 + __privateGet(this, _cameraPositionY));
   }
-  // centerCamera(x: number, y: number) {
-  //   let dx = this.#cameraPositionX - this.#cameraCenterX + x;
-  //   let dy = this.#cameraPositionY - this.#cameraCenterY + y;
-  //   this.#cameraPositionX = dx;
-  //   this.#cameraPositionY = dy;
-  //   this.updateCamera();
-  // }
   /**
-   * Given the x and y coordinates of the camera, the zoom level, and the width and height of the camera,
-   * calculates the transformation matrix that converts a x,y coordinate of the DOM to
-   * the x,y coordinate of the camera view.
-   * @param cameraX   The x coordinate of the point in the world
-   * @param cameraY   The y coordinate of the point in the world
-   * @param zoom  The zoom level of the camera
-   * @param #cameraWidth  The width of the camera view
-   * @param #cameraHeight The height of the camera view
-   * @returns A string representing the CSS transform matrix that should be applied to the DOM element
+   * Generates a CSS 3D transformation matrix string for converting world coordinates to camera view.
+   *
+   * @param cameraX - The X coordinate of the camera position in world space
+   * @param cameraY - The Y coordinate of the camera position in world space
+   * @param zoom - The zoom level to apply to the transformation
+   * @returns A CSS matrix3d string that can be applied to DOM elements
+   *
+   * @example
+   * ```typescript
+   * const matrix = camera.worldToCameraMatrix(100, 50, 1.5);
+   * element.style.transform = `matrix3d(${matrix})`;
+   * ```
    */
   worldToCameraMatrix(cameraX, cameraY, zoom) {
     const s1 = zoom;
@@ -137,7 +193,12 @@ class Camera {
     return `${s1},0,0,0,0,${s2},0,0,0,0,1,0,${t1},${t2},0,1`;
   }
   /**
-   * Updates the camera view based on the current camera position and zoom level
+   * Updates the camera's CSS transformation style based on current position and zoom.
+   * This method should be called after any changes to camera position or zoom level.
+   *
+   * @remarks
+   * The generated style can be retrieved via the `canvasStyle` getter and applied to DOM elements
+   * to reflect the current camera view transformation.
    */
   updateCamera() {
     const matrix = this.worldToCameraMatrix(
@@ -147,29 +208,81 @@ class Camera {
     );
     __privateSet(this, _canvasStyle, `matrix3d(${matrix})`);
   }
+  /**
+   * Gets the current CSS transformation style string for the camera.
+   * @returns A CSS transform string that can be applied to DOM elements
+   */
   get canvasStyle() {
     return __privateGet(this, _canvasStyle);
   }
+  /**
+   * Sets the camera position to specific world coordinates.
+   *
+   * @param x - The X coordinate in world space
+   * @param y - The Y coordinate in world space
+   *
+   * @example
+   * ```typescript
+   * camera.setCameraPosition(100, 200); // Move camera to world position (100, 200)
+   * ```
+   */
   setCameraPosition(x, y) {
     __privateSet(this, _cameraPositionX, x);
     __privateSet(this, _cameraPositionY, y);
     this.updateCamera();
   }
+  /**
+   * Sets the camera position so that the specified world coordinates appear at the center of the viewport.
+   *
+   * @param x - The X coordinate in world space to center on
+   * @param y - The Y coordinate in world space to center on
+   *
+   * @example
+   * ```typescript
+   * camera.setCameraCenterPosition(0, 0); // Center the camera on world origin
+   * ```
+   */
   setCameraCenterPosition(x, y) {
     __privateSet(this, _cameraPositionX, x - __privateGet(this, _cameraWidth) / 2);
     __privateSet(this, _cameraPositionY, y - __privateGet(this, _cameraHeight) / 2);
     this.updateCamera();
   }
+  /**
+   * Gets the world coordinates of the current camera center point.
+   *
+   * @returns An object containing the world coordinates of the camera center
+   * @returns returns.x - The X coordinate of the camera center in world space
+   * @returns returns.y - The Y coordinate of the camera center in world space
+   *
+   * @example
+   * ```typescript
+   * const center = camera.getCameraCenterPosition();
+   * console.log(`Camera centered at: ${center.x}, ${center.y}`);
+   * ```
+   */
   getCameraCenterPosition() {
     const centerX = __privateGet(this, _cameraPositionX) + __privateGet(this, _cameraWidth) / 2;
     const centerY = __privateGet(this, _cameraPositionY) + __privateGet(this, _cameraHeight) / 2;
     return { x: centerX, y: centerY };
   }
   /**
-   * Handle the scroll event to zoom in and out of the camera view
-   * @param deltaZoom Amount of scroll
-   * @param cameraX The x coordinate of the pointer in the camera view
-   * @param cameraY The y coordinate of the pointer in the camera view
+   * Handles zoom input by adjusting the camera zoom level and position.
+   * The camera will zoom towards the specified point in camera coordinates.
+   *
+   * @param deltaZoom - The amount to change the zoom level (positive = zoom in, negative = zoom out)
+   * @param cameraX - The X coordinate in camera space to zoom towards
+   * @param cameraY - The Y coordinate in camera space to zoom towards
+   *
+   * @remarks
+   * - Zoom is constrained by the configured zoom bounds
+   * - If panning is enabled, the camera position is adjusted to zoom towards the specified point
+   * - If panning is disabled, zoom occurs from the current camera center
+   *
+   * @example
+   * ```typescript
+   * // Zoom in by 0.1 towards the mouse position
+   * camera.handleScroll(0.1, mouseX, mouseY);
+   * ```
    */
   handleScroll(deltaZoom, cameraX, cameraY) {
     if (!__privateGet(this, _config).enableZoom) {
@@ -189,19 +302,28 @@ class Camera {
     }
     const zoomRatio = __privateGet(this, _zoom) / (__privateGet(this, _zoom) + deltaZoom);
     if (__privateGet(this, _config).enablePan) {
-      __privateSet(this, _cameraPositionX, __privateGet(this, _cameraPositionX) - __privateGet(this, _cameraWidth) / __privateGet(this, _zoom) * (zoomRatio - 1) * (1 - (__privateGet(this, _cameraWidth) * 1.5 - cameraX) / __privateGet(this, _cameraWidth)));
-      __privateSet(this, _cameraPositionY, __privateGet(this, _cameraPositionY) - __privateGet(this, _cameraHeight) / __privateGet(this, _zoom) * (zoomRatio - 1) * (1 - (__privateGet(this, _cameraHeight) * 1.5 - cameraY) / __privateGet(this, _cameraHeight)));
+      __privateSet(this, _cameraPositionX, __privateGet(this, _cameraPositionX) - __privateGet(this, _cameraWidth) / __privateGet(this, _zoom) * (zoomRatio - 1) * (1 - (__privateGet(this, _cameraWidth) - cameraX) / __privateGet(this, _cameraWidth)));
+      __privateSet(this, _cameraPositionY, __privateGet(this, _cameraPositionY) - __privateGet(this, _cameraHeight) / __privateGet(this, _zoom) * (zoomRatio - 1) * (1 - (__privateGet(this, _cameraHeight) - cameraY) / __privateGet(this, _cameraHeight)));
     }
     __privateSet(this, _zoom, __privateGet(this, _zoom) + deltaZoom);
     this.updateCamera();
   }
   /**
-   * Updates the camera position based on the change in mouse position.
-   * Compared to the 3 stage process of handlePanStart, handlePanDrag, and handlePanEnd functions,
-   * using this functions may cause a slight deviance between mouse movement and camera movement
-   * as the camera position is updated based on the change in mouse position.
-   * @param deltaX  Change in mouse position
-   * @param deltaY  Change in mouse position
+   * Handles camera panning by applying a delta movement.
+   *
+   * @param deltaX - The change in X position (positive = pan right)
+   * @param deltaY - The change in Y position (positive = pan down)
+   *
+   * @remarks
+   * This is a simple pan method that applies movement directly. For more precise panning
+   * that accounts for the exact mouse position, use the three-stage process:
+   * handlePanStart() → handlePanDrag() → handlePanEnd()
+   *
+   * @example
+   * ```typescript
+   * // Pan the camera 10 pixels right and 5 pixels up
+   * camera.handlePan(10, -5);
+   * ```
    */
   handlePan(deltaX, deltaY) {
     if (!__privateGet(this, _config).enablePan) {
@@ -212,10 +334,20 @@ class Camera {
     this.updateCamera();
   }
   /**
-   * Should be called when a user presses the pointer down to start panning the camera.
-   * This function is the start of a 3-stage process to pan the camera:
-   *    handlePanStart -> handlePanDrag -> handlePanEnd
-   * This allows camera pans based on the absolute position of the pointer relative to when the pan started.
+   * Initiates a panning operation by recording the current camera position.
+   * This is the first step in a three-stage panning process that provides more accurate
+   * tracking of mouse movement during drag operations.
+   *
+   * @remarks
+   * Call this method when a pan gesture begins (e.g., on mousedown or touchstart).
+   * Follow with handlePanDrag() calls during movement and handlePanEnd() when complete.
+   *
+   * @example
+   * ```typescript
+   * element.addEventListener('mousedown', () => {
+   *   camera.handlePanStart();
+   * });
+   * ```
    */
   handlePanStart() {
     if (!__privateGet(this, _config).enablePan) {
@@ -225,10 +357,34 @@ class Camera {
     __privateSet(this, _cameraPanStartY, __privateGet(this, _cameraPositionY));
   }
   /**
-   * Updates the camera position based on the change in mouse position, relative to the start of the pan.
-   * This function should be called after handlePanStart and before handlePanEnd.
-   * @param deltaX  Change in mouse position
-   * @param deltaY  Change in mouse position
+   * Updates camera position during a panning operation based on cumulative movement
+   * from the initial pan start position.
+   *
+   * @param deltaX - Total X movement since handlePanStart() was called
+   * @param deltaY - Total Y movement since handlePanStart() was called
+   *
+   * @remarks
+   * - This method should be called between handlePanStart() and handlePanEnd()
+   * - Delta values are cumulative from the start position, not incremental
+   * - Respects configured pan boundaries if set
+   * - Movement is automatically adjusted for current zoom level
+   *
+   * @example
+   * ```typescript
+   * let startX, startY;
+   *
+   * element.addEventListener('mousedown', (e) => {
+   *   camera.handlePanStart();
+   *   startX = e.clientX;
+   *   startY = e.clientY;
+   * });
+   *
+   * element.addEventListener('mousemove', (e) => {
+   *   const deltaX = e.clientX - startX;
+   *   const deltaY = e.clientY - startY;
+   *   camera.handlePanDrag(deltaX, deltaY);
+   * });
+   * ```
    */
   handlePanDrag(deltaX, deltaY) {
     if (!__privateGet(this, _config).enablePan) {
@@ -253,9 +409,19 @@ class Camera {
     this.updateCamera();
   }
   /**
-   * Should be called when a user releases the pointer to end panning the camera.
-   * This function is the end of a 3-stage process to pan the camera:
-   *    handlePanStart -> handlePanDrag -> handlePanEnd
+   * Completes a panning operation by resetting the pan start coordinates.
+   * This is the final step in the three-stage panning process.
+   *
+   * @remarks
+   * Call this method when a pan gesture ends (e.g., on mouseup or touchend).
+   * This cleans up the internal pan tracking state.
+   *
+   * @example
+   * ```typescript
+   * element.addEventListener('mouseup', () => {
+   *   camera.handlePanEnd();
+   * });
+   * ```
    */
   handlePanEnd() {
     if (!__privateGet(this, _config).enablePan) {
@@ -265,10 +431,17 @@ class Camera {
     __privateSet(this, _cameraPanStartY, 0);
   }
   /**
-   * Converts the x and y coordinates of the world to the x and y coordinates of the camera view.
-   * @param worldX  The x coordinate of the point in the world
-   * @param worldY  The y coordinate of the point in the world
-   * @returns The x and y coordinates of the point in the camera view
+   * Converts world coordinates to camera viewport coordinates.
+   *
+   * @param worldX - The X coordinate in world space
+   * @param worldY - The Y coordinate in world space
+   * @returns A tuple [cameraX, cameraY] representing the point in camera coordinates
+   *
+   * @example
+   * ```typescript
+   * const [cameraX, cameraY] = camera.getCameraFromWorld(100, 200);
+   * console.log(`World point (100, 200) appears at camera position (${cameraX}, ${cameraY})`);
+   * ```
    */
   getCameraFromWorld(worldX, worldY) {
     const c_x = (worldX - __privateGet(this, _cameraPositionX)) * __privateGet(this, _zoom);
@@ -276,10 +449,17 @@ class Camera {
     return [c_x, c_y];
   }
   /**
-   * Converts the x and y coordinates of the camera view to the x and y coordinates of the browser viewport.
-   * @param cameraX The x coordinate of the point in the camera view
-   * @param cameraY The y coordinate of the point in the camera view
-   * @returns
+   * Converts camera viewport coordinates to screen/browser viewport coordinates.
+   *
+   * @param cameraX - The X coordinate in camera space
+   * @param cameraY - The Y coordinate in camera space
+   * @returns A tuple [screenX, screenY] representing the point in screen coordinates
+   *
+   * @example
+   * ```typescript
+   * const [screenX, screenY] = camera.getScreenFromCamera(50, 75);
+   * // Use screenX, screenY for positioning absolute elements relative to the viewport
+   * ```
    */
   getScreenFromCamera(cameraX, cameraY) {
     const s_x = cameraX + __privateGet(this, _containerOffsetX);
@@ -287,26 +467,57 @@ class Camera {
     return [s_x, s_y];
   }
   /**
-   * Converts the x and y coordinates of the camera view to the x and y coordinates of the world.
-   * @param mouseX
-   * @param mouseY
-   * @returns
+   * Converts camera viewport coordinates to world coordinates.
+   *
+   * @param cameraX - The X coordinate in camera space
+   * @param cameraY - The Y coordinate in camera space
+   * @returns A tuple [worldX, worldY] representing the point in world coordinates
+   *
+   * @example
+   * ```typescript
+   * // Convert mouse position in camera to world coordinates
+   * const [worldX, worldY] = camera.getWorldFromCamera(mouseX, mouseY);
+   * console.log(`Mouse is over world position: ${worldX}, ${worldY}`);
+   * ```
    */
   getWorldFromCamera(cameraX, cameraY) {
     const w_x = cameraX / __privateGet(this, _zoom) + __privateGet(this, _cameraPositionX);
     const w_y = cameraY / __privateGet(this, _zoom) + __privateGet(this, _cameraPositionY);
     return [w_x, w_y];
   }
+  /**
+   * Converts screen/browser viewport coordinates to camera viewport coordinates.
+   *
+   * @param mouseX - The X coordinate in screen space (e.g., from mouse event)
+   * @param mouseY - The Y coordinate in screen space (e.g., from mouse event)
+   * @returns A tuple [cameraX, cameraY] representing the point in camera coordinates
+   *
+   * @example
+   * ```typescript
+   * element.addEventListener('click', (e) => {
+   *   const [cameraX, cameraY] = camera.getCameraFromScreen(e.clientX, e.clientY);
+   *   console.log(`Clicked at camera position: ${cameraX}, ${cameraY}`);
+   * });
+   * ```
+   */
   getCameraFromScreen(mouseX, mouseY) {
     mouseX = mouseX - __privateGet(this, _containerOffsetX);
     mouseY = mouseY - __privateGet(this, _containerOffsetY);
     return [mouseX, mouseY];
   }
   /**
-   * Converts the change in x and y coordinates of the world to the change in x and y coordinates of the camera view.
-   * @param worldDeltaX
-   * @param worldDeltaY
-   * @returns
+   * Converts a movement delta in world coordinates to camera viewport coordinates.
+   * Useful for transforming movement or size values between coordinate systems.
+   *
+   * @param worldDeltaX - The X component of movement/size in world space
+   * @param worldDeltaY - The Y component of movement/size in world space
+   * @returns A tuple [cameraDeltaX, cameraDeltaY] representing the delta in camera coordinates
+   *
+   * @example
+   * ```typescript
+   * // Convert a 10x10 world space rectangle to camera space
+   * const [cameraWidth, cameraHeight] = camera.getCameraDeltaFromWorldDelta(10, 10);
+   * ```
    */
   getCameraDeltaFromWorldDelta(worldDeltaX, worldDeltaY) {
     const c_dx = worldDeltaX * __privateGet(this, _zoom);
@@ -314,10 +525,19 @@ class Camera {
     return [c_dx, c_dy];
   }
   /**
-   * Converts the change in x and y coordinates of the camera view to the change in x and y coordinates of the world.
-   * @param cameraDeltaX
-   * @param cameraDeltaY
-   * @returns
+   * Converts a movement delta in camera viewport coordinates to world coordinates.
+   * Useful for transforming movement or size values between coordinate systems.
+   *
+   * @param cameraDeltaX - The X component of movement/size in camera space
+   * @param cameraDeltaY - The Y component of movement/size in camera space
+   * @returns A tuple [worldDeltaX, worldDeltaY] representing the delta in world coordinates
+   *
+   * @example
+   * ```typescript
+   * // Convert a 50px camera movement to world space movement
+   * const [worldDeltaX, worldDeltaY] = camera.getWorldDeltaFromCameraDelta(50, 30);
+   * // Use worldDeltaX, worldDeltaY to move objects in world space
+   * ```
    */
   getWorldDeltaFromCameraDelta(cameraDeltaX, cameraDeltaY) {
     const w_dx = cameraDeltaX / __privateGet(this, _zoom);
@@ -337,12 +557,10 @@ _cameraPanStartY = new WeakMap();
 _zoom = new WeakMap();
 _config = new WeakMap();
 _canvasStyle = new WeakMap();
-_cameraCenterX = new WeakMap();
-_cameraCenterY = new WeakMap();
 _resizeObserver = new WeakMap();
-function getDomProperty(global, dom) {
+function getDomProperty(engine, dom) {
   const rect = dom.getBoundingClientRect();
-  if (global.camera == null) {
+  if (engine == null || engine.camera == null) {
     return {
       height: rect.height,
       width: rect.width,
@@ -354,13 +572,13 @@ function getDomProperty(global, dom) {
       screenY: rect.top
     };
   }
-  const [cameraX, cameraY] = global.camera.getCameraFromScreen(
+  const [cameraX, cameraY] = engine.camera.getCameraFromScreen(
     rect.left,
     rect.top
   );
-  const [worldX, worldY] = global.camera.getWorldFromCamera(cameraX, cameraY);
-  const [cameraWidth, cameraHeight] = global.camera.getCameraDeltaFromWorldDelta(rect.width, rect.height);
-  const [worldWidth, worldHeight] = global.camera.getWorldDeltaFromCameraDelta(
+  const [worldX, worldY] = engine.camera.getWorldFromCamera(cameraX, cameraY);
+  const [cameraWidth, cameraHeight] = engine.camera.getCameraDeltaFromWorldDelta(rect.width, rect.height);
+  const [worldWidth, worldHeight] = engine.camera.getWorldDeltaFromCameraDelta(
     cameraWidth,
     cameraHeight
   );
@@ -410,275 +628,6 @@ function EventProxyFactory(object, dict, secondary = null) {
     }
   });
 }
-class AnimationObject {
-  constructor(owner, keyframe, property) {
-    __publicField(this, "owner");
-    __publicField(this, "keyframe");
-    __publicField(this, "property");
-    __privateAdd(this, _variables);
-    __privateAdd(this, _animation);
-    __privateAdd(this, _varAnimation);
-    __privateAdd(this, _offset);
-    __privateAdd(this, _easing);
-    __privateAdd(this, _duration);
-    __privateAdd(this, _delay);
-    __privateAdd(this, _hasVariable);
-    __privateAdd(this, _deleteOnFinish);
-    __publicField(this, "requestDelete");
-    this.owner = owner;
-    this.keyframe = keyframe;
-    this.property = property;
-    __privateSet(this, _animation, null);
-    __privateSet(this, _deleteOnFinish, true);
-    if (!this.property.duration) {
-      this.property.duration = 1e3;
-    }
-    if (!this.property.delay) {
-      this.property.delay = 0;
-    }
-    let numKeys = 0;
-    for (const [key, value] of Object.entries(this.keyframe)) {
-      const len = Array.isArray(value) ? value.length : 1;
-      numKeys = Math.max(numKeys, len);
-    }
-    if (!this.property.offset) {
-      __privateSet(this, _offset, []);
-      for (let i = 0; i < numKeys; i++) {
-        __privateGet(this, _offset).push(i / (numKeys - 1));
-      }
-    } else {
-      __privateSet(this, _offset, this.property.offset);
-    }
-    if (!this.property.easing) {
-      __privateSet(this, _easing, ["linear"]);
-    } else {
-      if (Array.isArray(this.property.easing)) {
-        __privateSet(this, _easing, this.property.easing);
-      } else {
-        __privateSet(this, _easing, [this.property.easing]);
-      }
-    }
-    if (!this.property.duration) {
-      __privateSet(this, _duration, [this.property.duration]);
-    } else {
-      if (Array.isArray(this.property.duration)) {
-        __privateSet(this, _duration, this.property.duration);
-      } else {
-        __privateSet(this, _duration, [this.property.duration]);
-      }
-    }
-    if (!this.property.delay) {
-      __privateSet(this, _delay, 0);
-    } else {
-      __privateSet(this, _delay, this.property.delay);
-    }
-    __privateSet(this, _variables, {});
-    __privateSet(this, _varAnimation, []);
-    __privateSet(this, _hasVariable, Object.keys(this.keyframe).filter((key) => {
-      return key.startsWith("$");
-    }).length > 0);
-    let cssKeyframe = {};
-    for (const [key, value] of Object.entries(this.keyframe)) {
-      if (!key.startsWith("$")) {
-        cssKeyframe[key] = value;
-      } else {
-        __privateGet(this, _variables)[key] = value;
-      }
-    }
-    if (__privateGet(this, _hasVariable) && Object.keys(cssKeyframe).length == 0) {
-      cssKeyframe = {};
-    }
-    if (this.property.offset) {
-      cssKeyframe.offset = this.property.offset;
-    }
-    const target = this.owner instanceof ElementObject ? this.owner._dom.element : this.owner.global.animationFragment;
-    const animationProperty = {
-      delay: __privateGet(this, _delay),
-      fill: "both"
-    };
-    if (__privateGet(this, _duration).length > 1) {
-      cssKeyframe.duration = __privateGet(this, _duration);
-    } else {
-      animationProperty.duration = __privateGet(this, _duration)[0];
-    }
-    if (__privateGet(this, _easing).length > 1) {
-      cssKeyframe.easing = __privateGet(this, _easing);
-    } else {
-      animationProperty.easing = __privateGet(this, _easing)[0];
-    }
-    __privateSet(this, _animation, new Animation(
-      new KeyframeEffect(target, cssKeyframe, animationProperty)
-    ));
-    this.requestDelete = false;
-    __privateGet(this, _animation).onfinish = () => {
-      var _a, _b;
-      (_b = (_a = this.property).finish) == null ? void 0 : _b.call(_a);
-      this.finish();
-      __privateGet(this, _animation).cancel();
-      this.requestDelete = true;
-      console.log("Animation finished");
-    };
-    __privateSet(this, _varAnimation, []);
-    if (__privateGet(this, _hasVariable) && __privateGet(this, _easing).length > 1) {
-      for (let i = 0; i < __privateGet(this, _offset).length - 1; i++) {
-        const intervalKeys = {};
-        for (const [key, value] of Object.entries(__privateGet(this, _variables))) {
-          intervalKeys[key] = value.slice(i, i + 1);
-        }
-        const intervalDuration = (__privateGet(this, _offset)[i + 1] - __privateGet(this, _offset)[i]) * this.property.duration;
-        const intervalDelay = __privateGet(this, _offset)[i] * this.property.duration + this.property.delay;
-        const intervalEasing = __privateGet(this, _easing)[i];
-        const animation = new Animation(
-          new KeyframeEffect(target, intervalKeys, {
-            duration: intervalDuration,
-            delay: intervalDelay,
-            easing: intervalEasing,
-            fill: "both"
-          })
-        );
-        animation.onfinish = () => {
-          animation.cancel();
-        };
-        animation.persist();
-        __privateGet(this, _varAnimation).push(animation);
-      }
-    }
-  }
-  pause() {
-    __privateGet(this, _animation).pause();
-    for (let i = 0; i < __privateGet(this, _varAnimation).length; i++) {
-      __privateGet(this, _varAnimation)[i].pause();
-    }
-  }
-  play() {
-    __privateGet(this, _animation).play();
-    for (let i = 0; i < __privateGet(this, _varAnimation).length; i++) {
-      __privateGet(this, _varAnimation)[i].play();
-    }
-  }
-  cancel() {
-    __privateGet(this, _animation).cancel();
-    for (let i = 0; i < __privateGet(this, _varAnimation).length; i++) {
-      __privateGet(this, _varAnimation)[i].cancel();
-    }
-  }
-  reverse() {
-    __privateGet(this, _animation).reverse();
-    for (let i = 0; i < __privateGet(this, _varAnimation).length; i++) {
-      __privateGet(this, _varAnimation)[i].reverse();
-    }
-  }
-  calculateFrame(currentTime) {
-    var _a, _b, _c, _d;
-    const alpha = __privateGet(this, _animation).effect.getComputedTiming().progress;
-    if (alpha == null) {
-      return false;
-    }
-    const alphaElapsedTime = this.property.duration * alpha + this.property.delay;
-    if (__privateGet(this, _hasVariable)) {
-      let currentKey = 0;
-      for (let i = 0; i < __privateGet(this, _offset).length - 1; i++) {
-        if (__privateGet(this, _offset)[i] <= alpha && alpha < __privateGet(this, _offset)[i + 1]) {
-          currentKey = i;
-          break;
-        }
-      }
-      let localAlpha = alpha;
-      if (__privateGet(this, _easing).length > 1) {
-        const currentVarAnimation = __privateGet(this, _varAnimation)[currentKey];
-        currentVarAnimation.currentTime = alphaElapsedTime;
-        localAlpha = currentVarAnimation.effect.getComputedTiming().progress ?? 0;
-      }
-      const varValues = {};
-      for (const [key, value] of Object.entries(__privateGet(this, _variables))) {
-        const varFrom = value[currentKey];
-        const varTo = value[currentKey + 1];
-        const varValue = varFrom + (varTo - varFrom) * localAlpha;
-        varValues[key] = varValue;
-      }
-      (_b = (_a = this.property).tick) == null ? void 0 : _b.call(_a, varValues);
-    } else {
-      (_d = (_c = this.property).tick) == null ? void 0 : _d.call(_c, {});
-    }
-    return false;
-  }
-  finish() {
-    var _a;
-    (_a = __privateGet(this, _animation)) == null ? void 0 : _a.commitStyles();
-  }
-  set currentTime(time) {
-    __privateGet(this, _animation).currentTime = time;
-    for (let i = 0; i < __privateGet(this, _varAnimation).length; i++) {
-      __privateGet(this, _varAnimation)[i].currentTime = time;
-    }
-  }
-  set progress(progress) {
-    this.currentTime = (this.property.duration + this.property.delay) * progress;
-  }
-}
-_variables = new WeakMap();
-_animation = new WeakMap();
-_varAnimation = new WeakMap();
-_offset = new WeakMap();
-_easing = new WeakMap();
-_duration = new WeakMap();
-_delay = new WeakMap();
-_hasVariable = new WeakMap();
-_deleteOnFinish = new WeakMap();
-class SequenceObject {
-  constructor() {
-    __publicField(this, "animations");
-    __publicField(this, "startTime");
-    __publicField(this, "endTime");
-    __publicField(this, "expired");
-    __publicField(this, "requestDelete");
-    this.animations = [];
-    this.startTime = -1;
-    this.endTime = -1;
-    this.expired = false;
-    this.requestDelete = false;
-  }
-  add(animation) {
-    this.animations.push(animation);
-  }
-  play() {
-    for (let i = 0; i < this.animations.length; i++) {
-      this.animations[i].play();
-    }
-  }
-  pause() {
-    for (let i = 0; i < this.animations.length; i++) {
-      this.animations[i].pause();
-    }
-  }
-  cancel() {
-    for (let i = 0; i < this.animations.length; i++) {
-      this.animations[i].cancel();
-    }
-  }
-  reverse() {
-    for (let i = 0; i < this.animations.length; i++) {
-      this.animations[i].reverse();
-    }
-  }
-  calculateFrame(currentTime) {
-    let result = false;
-    for (let i = 0; i < this.animations.length; i++) {
-      result = this.animations[i].calculateFrame(currentTime) || result;
-    }
-    return result;
-  }
-  set currentTime(time) {
-    for (let i = 0; i < this.animations.length; i++) {
-      this.animations[i].currentTime = time;
-    }
-  }
-  set progress(progress) {
-    for (let i = 0; i < this.animations.length; i++) {
-      this.animations[i].progress = progress;
-    }
-  }
-}
 let EventCallback$1 = class EventCallback {
   constructor(object) {
     __publicField(this, "_object");
@@ -703,17 +652,17 @@ let EventCallback$1 = class EventCallback {
     };
     this.global = new Proxy(this._global, {
       set: (_, prop, value) => {
-        var _a, _b;
+        const globalInputEngine = this._object.global.getInputEngine(
+          this._object.engine
+        );
         if (value == null) {
-          (_a = this._object.global.inputEngine) == null ? void 0 : _a.unsubscribeGlobalCursorEvent(
-            prop,
-            this._object.gid
-          );
+          globalInputEngine == null ? void 0 : globalInputEngine.unsubscribeGlobalCursorEvent(prop, this._object.gid);
         } else {
-          (_b = this._object.global.inputEngine) == null ? void 0 : _b.subscribeGlobalCursorEvent(
+          globalInputEngine == null ? void 0 : globalInputEngine.subscribeGlobalCursorEvent(
             prop,
             this._object.gid,
-            value.bind(this._object)
+            value.bind(this._object),
+            this._object.engine
           );
         }
         return true;
@@ -759,9 +708,12 @@ class queueEntry {
     }
   }
 }
+const animationOwnerMap = /* @__PURE__ */ new WeakMap();
 class BaseObject {
-  constructor(global, parent) {
+  constructor(engineOrGlobal, parent) {
     __publicField(this, "global");
+    __publicField(this, "engine");
+    // Will be the Engine instance - using any to avoid circular dependency
     __publicField(this, "gid");
     __publicField(this, "parent");
     __publicField(this, "children", []);
@@ -778,9 +730,15 @@ class BaseObject {
     __publicField(this, "_animationList", []);
     __publicField(this, "_globalInput");
     __publicField(this, "globalInput");
-    this.global = global;
-    this.gid = global.getGlobalId();
-    this.global.objectTable[this.gid] = this;
+    if (engineOrGlobal.global) {
+      this.engine = engineOrGlobal;
+      this.global = engineOrGlobal.global;
+    } else {
+      this.global = engineOrGlobal;
+      this.engine = null;
+    }
+    this.gid = this.global.getGlobalId();
+    this.global.registerObject(this);
     this.parent = parent;
     this._colliderList = [];
     this.transform = {
@@ -821,14 +779,15 @@ class BaseObject {
     };
     this.globalInput = new Proxy(this._globalInput, {
       set: (_, prop, value) => {
-        var _a, _b;
+        const globalInputEngine = this.global.getInputEngine(this.engine);
         if (value == null) {
-          (_a = this.global.inputEngine) == null ? void 0 : _a.unsubscribeGlobalCursorEvent(prop, this.gid);
+          globalInputEngine == null ? void 0 : globalInputEngine.unsubscribeGlobalCursorEvent(prop, this.gid);
         } else {
-          (_b = this.global.inputEngine) == null ? void 0 : _b.subscribeGlobalCursorEvent(
+          globalInputEngine == null ? void 0 : globalInputEngine.subscribeGlobalCursorEvent(
             prop,
             this.gid,
-            value.bind(this)
+            value.bind(this),
+            this.engine
           );
         }
         return true;
@@ -836,7 +795,8 @@ class BaseObject {
     });
   }
   destroy() {
-    delete this.global.objectTable[this.gid];
+    this.cancelAnimations();
+    this.global.unregisterObject(this);
   }
   get worldPosition() {
     return [this.transform.x, this.transform.y];
@@ -847,26 +807,56 @@ class BaseObject {
   }
   get cameraPosition() {
     var _a;
-    return ((_a = this.global.camera) == null ? void 0 : _a.getCameraFromWorld(...this.worldPosition)) ?? [0, 0];
+    return ((_a = this.engine.camera) == null ? void 0 : _a.getCameraFromWorld(...this.worldPosition)) ?? [0, 0];
   }
   set cameraPosition(position) {
-    var _a;
-    this.worldPosition = ((_a = this.global.camera) == null ? void 0 : _a.getWorldFromCamera(
+    var _a, _b;
+    this.worldPosition = ((_b = (_a = this.engine) == null ? void 0 : _a.camera) == null ? void 0 : _b.getWorldFromCamera(
       ...position
     )) ?? [0, 0];
   }
   get screenPosition() {
     var _a;
-    return ((_a = this.global.camera) == null ? void 0 : _a.getScreenFromCamera(...this.cameraPosition)) ?? [0, 0];
+    return ((_a = this.engine.camera) == null ? void 0 : _a.getScreenFromCamera(...this.cameraPosition)) ?? [0, 0];
   }
   set screenPosition(position) {
-    var _a;
-    this.cameraPosition = ((_a = this.global.camera) == null ? void 0 : _a.getCameraFromScreen(
+    var _a, _b;
+    this.cameraPosition = ((_b = (_a = this.engine) == null ? void 0 : _a.camera) == null ? void 0 : _b.getCameraFromScreen(
       ...position
     )) ?? [0, 0];
   }
+  /**
+   * Queues an update callback to be executed during a specific stage of the render pipeline.
+   *
+   * The SnapLine render pipeline has 6 stages:
+   * - READ_1
+   * - WRITE_1
+   * - READ_2
+   * - WRITE_2
+   * - READ_3
+   * - WRITE_3
+   *
+   * Read stages are for reading DOM properties (which may trigger reflows),
+   * while write stages are for applying changes to the DOM.
+   * Batching reads and writes prevents layout thrashing and improves performance.
+   *
+   * @param stage - The render stage when the callback should execute (default: "READ_1")
+   * @param callback - Optional callback function to execute during the stage
+   * @param queueID - Optional unique identifier for this queue entry
+   * @returns The queue entry object
+   *
+   * @example
+   * ```typescript
+   * object.queueUpdate("READ_1", () => {
+   *   // Read DOM properties
+   * });
+   * object.queueUpdate("WRITE_2", () => {
+   *   // Apply transforms
+   * });
+   * ```
+   */
   queueUpdate(stage = "READ_1", callback = null, queueID = null) {
-    let request = new queueEntry(this, callback, queueID);
+    const request = new queueEntry(this, callback, queueID);
     let queue = this.global.read1Queue;
     switch (stage) {
       case "READ_1":
@@ -888,16 +878,16 @@ class BaseObject {
         queue = this.global.write3Queue;
         break;
     }
-    if (!queue[this.gid]) {
-      queue[this.gid] = /* @__PURE__ */ new Map();
+    if (!queue.get(this.gid)) {
+      queue.set(this.gid, /* @__PURE__ */ new Map());
     }
-    queue[this.gid].set(request.uuid, request);
+    queue.get(this.gid).set(request.uuid, request);
     return request;
   }
   /**
    * Read the DOM property of the object.
    */
-  readDom(accountTransform = false) {
+  readDom(_ = false) {
     for (const collider of this._colliderList) {
       collider.read();
     }
@@ -932,38 +922,102 @@ class BaseObject {
       collider.recalculate();
     }
   }
-  // requestFLIP(
-  //   callback: null | (() => void) = null,
-  // ): [preReadEntry, writeEntry, readEntry, postWriteEntry] {
-  //   return [
-  //     this.requestPreRead(false, true),
-  //     this.requestWrite(callback?.bind(this)),
-  //     this.requestRead(true, false),
-  //     this.requestPostWrite(),
-  //   ];
-  // }
-  animate(keyframe, property) {
-    let animation = new AnimationObject(this, keyframe, property);
-    for (const animation2 of this._animationList) {
-      animation2.cancel();
+  /**
+   * Add an animation to this object.
+   * Users should create animation instances directly and pass them here.
+   */
+  /**
+   * Adds an animation to this object and cancels any existing animations.
+   *
+   * This method automatically enables the animation engine if it's not already enabled.
+   * Only one animation can be active per object at a time.
+   *
+   * @param animation - The animation to add (AnimationObject or SequenceObject)
+   * @returns The added animation
+   *
+   * @example
+   * ```typescript
+   * const anim = new AnimationObject(element, { x: [0, 100] }, { duration: 1000 });
+   * await object.addAnimation(anim);
+   * ```
+   */
+  addAnimation(animation, options = {}) {
+    var _a, _b;
+    (_a = this.engine) == null ? void 0 : _a.enableAnimationEngine();
+    const replaceExisting = options.replaceExisting ?? true;
+    if (replaceExisting) {
+      this.cancelAnimations();
     }
-    this._animationList = [];
     this._animationList.push(animation);
-    this.global.animationList.push(animation);
+    animationOwnerMap.set(animation, this);
+    (_b = this.engine) == null ? void 0 : _b.animationList.push(animation);
     return animation;
   }
-  get animation() {
-    return this._animationList[0];
+  cancelAnimations() {
+    for (const existingAnimation of [...this._animationList]) {
+      existingAnimation.requestDelete = true;
+      existingAnimation.cancel();
+      this.removeAnimationReference(existingAnimation);
+    }
   }
-  animateSequence(animations) {
-    let sequence = new SequenceObject();
+  removeAnimationReference(animation) {
+    this._animationList = this._animationList.filter(
+      (anim) => anim !== animation
+    );
+    animationOwnerMap.delete(animation);
+  }
+  /**
+   * Convenience method to create and add an animation to this object.
+   * 
+   * @deprecated Use addAnimation with AnimationObject instead.
+   *
+   * @param keyframe - The keyframe properties to animate
+   * @param property - Animation options (duration, easing, etc.)
+   * @returns The created animation
+   *
+   * @example
+   * ```typescript
+   * object.animate(
+   *   { transform: ["translate(0px, 0px)", "translate(100px, 0px)"] },
+   *   { duration: 1000, easing: "ease-in-out" }
+   * );
+   * ```
+   */
+  async animate(keyframe, property) {
+    const { AnimationObject } = await import("./animation-y_r26ccE.mjs");
+    const animation = new AnimationObject(
+      this.element,
+      keyframe,
+      property
+    );
+    return this.addAnimation(animation, { replaceExisting: true });
+  }
+  /**
+   * Convenience method to create and add a sequence of animations to this object.
+   *
+   * @param animations - Array of AnimationInterface objects to play as a sequence
+   * @returns The created sequence animation
+   *
+   * @example
+   * ```typescript
+   * const anim1 = new AnimationObject(object, { x: [0, 100] }, { duration: 1000 });
+   * const anim2 = new AnimationObject(object, { y: [0, 100] }, { duration: 1000 });
+   * object.animateSequence([anim1, anim2]);
+   * ```
+   */
+  async animateSequence(animations) {
+    const { SequenceObject } = await import("./animation-y_r26ccE.mjs");
+    const sequence = new SequenceObject();
     for (const animation of animations) {
       sequence.add(animation);
     }
-    this._animationList = [];
-    this._animationList.push(sequence);
-    this.global.animationList.push(sequence);
-    return sequence;
+    return this.addAnimation(sequence, { replaceExisting: true });
+  }
+  get animation() {
+    if (this._animationList.length === 0) {
+      return null;
+    }
+    return this._animationList[this._animationList.length - 1];
   }
   getCurrentStats() {
     return {
@@ -973,10 +1027,15 @@ class BaseObject {
   addCollider(collider) {
     var _a;
     this._colliderList.push(collider);
-    (_a = this.global.collisionEngine) == null ? void 0 : _a.addObject(collider);
+    if (!this.engine) {
+      console.warn("Engine is not set, cannot add collider to collision engine");
+      return;
+    }
+    (_a = this.engine.collisionEngine) == null ? void 0 : _a.addObject(collider);
   }
   addDebugPoint(x, y, color = "red", persistent = false, id = "") {
-    this.global.debugMarkerList[`${this.gid}-${id}`] = {
+    if (!this.engine) return;
+    this.engine.debugMarkerList[`${this.gid}-${id}`] = {
       gid: this.gid,
       type: "point",
       color,
@@ -986,8 +1045,9 @@ class BaseObject {
       id: `${this.gid}-${id}`
     };
   }
-  addDebugRect(x, y, width, height, color = "red", persistent = false, id = "") {
-    this.global.debugMarkerList[`${this.gid}-${id}`] = {
+  addDebugRect(x, y, width, height, color = "red", persistent = false, id = "", filled = true, lineWidth = 1) {
+    if (!this.engine) return;
+    this.engine.debugMarkerList[`${this.gid}-${id}`] = {
       gid: this.gid,
       type: "rect",
       color,
@@ -996,11 +1056,29 @@ class BaseObject {
       width,
       height,
       persistent,
-      id: `${this.gid}-${id}`
+      id: `${this.gid}-${id}`,
+      filled,
+      lineWidth
+    };
+  }
+  addDebugLine(x1, y1, x2, y2, color = "red", persistent = false, id = "", lineWidth = 2) {
+    if (!this.engine) return;
+    this.engine.debugMarkerList[`${this.gid}-${id}`] = {
+      gid: this.gid,
+      type: "line",
+      color,
+      x: x1,
+      y: y1,
+      x2,
+      y2,
+      persistent,
+      id: `${this.gid}-${id}`,
+      lineWidth
     };
   }
   addDebugCircle(x, y, radius, color = "red", persistent = false, id = "") {
-    this.global.debugMarkerList[`${this.gid}-${id}`] = {
+    if (!this.engine) return;
+    this.engine.debugMarkerList[`${this.gid}-${id}`] = {
       gid: this.gid,
       type: "circle",
       color,
@@ -1012,7 +1090,8 @@ class BaseObject {
     };
   }
   addDebugText(x, y, text, color = "red", persistent = false, id = "") {
-    this.global.debugMarkerList[`${this.gid}-${id}`] = {
+    if (!this.engine) return;
+    this.engine.debugMarkerList[`${this.gid}-${id}`] = {
       gid: this.gid,
       x,
       y,
@@ -1024,20 +1103,30 @@ class BaseObject {
     };
   }
   clearDebugMarker(id) {
-    delete this.global.debugMarkerList[`${this.gid}-${id}`];
+    if (!this.engine) return;
+    delete this.engine.debugMarkerList[`${this.gid}-${id}`];
   }
   clearAllDebugMarkers() {
-    for (const marker of Object.values(this.global.debugMarkerList)) {
+    if (!this.engine) return;
+    for (const marker of Object.values(this.engine.debugMarkerList)) {
       if (marker.gid == this.gid) {
-        delete this.global.debugMarkerList[marker.id];
+        delete this.engine.debugMarkerList[marker.id];
       }
     }
   }
 }
+function detachAnimationFromOwner(animation) {
+  const owner = animationOwnerMap.get(animation);
+  if (!owner) {
+    return;
+  }
+  owner.removeAnimationReference(animation);
+}
 class DomElement {
-  constructor(global, owner, dom = null, insertMode = {}, isFragment = false) {
+  constructor(engineOrGlobal, owner, dom = null, insertMode = {}, isFragment = false) {
     __publicField(this, "_uuid");
     __publicField(this, "_global");
+    __publicField(this, "_engine");
     __publicField(this, "_owner");
     __publicField(this, "element");
     __publicField(this, "_pendingInsert");
@@ -1053,7 +1142,13 @@ class DomElement {
     __publicField(this, "insertMode");
     __publicField(this, "resizeObserver", null);
     __publicField(this, "mutationObserver", null);
-    this._global = global;
+    if (engineOrGlobal.global) {
+      this._engine = engineOrGlobal;
+      this._global = engineOrGlobal.global;
+    } else {
+      this._global = engineOrGlobal;
+      this._engine = null;
+    }
     this.element = dom;
     this.property = {
       x: 0,
@@ -1073,7 +1168,7 @@ class DomElement {
     };
     this._pendingInsert = isFragment;
     this._owner = owner;
-    this._uuid = (++global.gid).toString();
+    this._uuid = (++this._global.gid).toString();
     this._requestWrite = false;
     this._requestRead = false;
     this._requestDelete = false;
@@ -1124,7 +1219,7 @@ class DomElement {
     if (!this.element) {
       throw new Error("Element is not set");
     }
-    const property = getDomProperty(this._global, this.element);
+    const property = getDomProperty(this._engine, this.element);
     const transform = this.element.style.transform;
     let transformApplied = {
       x: 0,
@@ -1157,7 +1252,7 @@ class DomElement {
     for (const [key, value] of Object.entries(this._dataAttribute)) {
       this.element.setAttribute(`data-${key}`, value);
     }
-    this.element.setAttribute("data-snapline-gid", this._owner.gid);
+    this.element.setAttribute("data-engine-gid", this._owner.gid);
   }
   /**
    * Write the CSS transform property of the element.
@@ -1184,7 +1279,7 @@ class DomElement {
         })
       };
     } else if (this._owner.transformMode == "relative") {
-      let [newX, newY] = [
+      const [newX, newY] = [
         this._owner.transform.x - this.property.x,
         this._owner.transform.y - this.property.y
       ];
@@ -1225,11 +1320,12 @@ class DomElement {
     if (this.element) {
       this.element.remove();
     }
+    this.element = null;
   }
 }
 class ElementObject extends BaseObject {
-  constructor(global, parent) {
-    super(global, parent);
+  constructor(engine, parent) {
+    super(engine, parent);
     __publicField(this, "_dom");
     __publicField(this, "_requestWrite");
     __publicField(this, "_requestRead");
@@ -1254,7 +1350,7 @@ class ElementObject extends BaseObject {
     __publicField(this, "_callback");
     __publicField(this, "callback");
     __publicField(this, "inputEngine");
-    this._dom = new DomElement(global, this, null);
+    this._dom = new DomElement(engine, this, null);
     this.inScene = false;
     this._requestWrite = false;
     this._requestRead = false;
@@ -1309,7 +1405,11 @@ class ElementObject extends BaseObject {
         return true;
       }
     });
-    this.inputEngine = new InputControl(this.global, false, this.gid);
+    this.inputEngine = new InputControl(
+      this.engine,
+      false,
+      this.gid
+    );
   }
   destroy() {
     this._dom.destroyDom();
@@ -1318,6 +1418,11 @@ class ElementObject extends BaseObject {
   getDomProperty(stage = null) {
     const index = stage == "READ_1" ? 0 : stage == "READ_2" ? 1 : 2;
     return this._domProperty[index];
+  }
+  copyDomProperty(fromStage, toStage) {
+    const fromIndex = fromStage == "READ_1" ? 0 : fromStage == "READ_2" ? 1 : 2;
+    const toIndex = toStage == "READ_1" ? 0 : toStage == "READ_2" ? 1 : 2;
+    Object.assign(this._domProperty[toIndex], this._domProperty[fromIndex]);
   }
   /**
    * Save the DOM property to the transform property.
@@ -1390,7 +1495,7 @@ class ElementObject extends BaseObject {
     (_a = this.inputEngine) == null ? void 0 : _a.addCursorEventListener(element);
     const keys = Object.keys(this.inputEngine.event);
     for (const event of keys) {
-      let callback = ((_b = this.event.input[event]) == null ? void 0 : _b.bind(this)) || null;
+      const callback = ((_b = this.event.input[event]) == null ? void 0 : _b.bind(this)) || null;
       this.inputEngine.event[event] = callback;
     }
     (_d = (_c = this.event.dom).onAssignDom) == null ? void 0 : _d.call(_c);
@@ -1424,7 +1529,7 @@ class ElementObject extends BaseObject {
    * Common queue requests for element objects.
    */
   requestRead(accountTransform = false, saveTransform = true, stage = "READ_1") {
-    let callback = () => {
+    const callback = () => {
       this.readDom(accountTransform);
       if (saveTransform) {
         this.saveDomPropertyToTransform(stage);
@@ -1433,7 +1538,7 @@ class ElementObject extends BaseObject {
     return this.queueUpdate(stage, callback, stage);
   }
   requestWrite(mutate = true, writeCallback = null, stage = "WRITE_1") {
-    let callback = () => {
+    const callback = () => {
       if (mutate) {
         this.writeDom();
       }
@@ -1442,13 +1547,13 @@ class ElementObject extends BaseObject {
     return this.queueUpdate(stage, callback, stage);
   }
   requestDestroy() {
-    let callback = () => {
+    const callback = () => {
       this.destroyDom();
     };
     return this.queueUpdate("WRITE_2", callback, "destroy");
   }
   requestTransform(stage = "WRITE_2") {
-    let callback = () => {
+    const callback = () => {
       this.writeTransform();
     };
     return this.queueUpdate(stage, callback, "transform");
@@ -1462,7 +1567,7 @@ class ElementObject extends BaseObject {
 }
 const GLOBAL_GID = "global";
 class InputControl {
-  constructor(global, isGlobal = true, ownerGID = null) {
+  constructor(engine, isGlobal = true, ownerGID = null) {
     __privateAdd(this, _InputControl_instances);
     /**
      * Functions as a middleware that converts mouse and touch events into a unified event format.
@@ -1481,8 +1586,11 @@ class InputControl {
     __publicField(this, "_ownerGID");
     __privateAdd(this, _debugObject);
     __privateAdd(this, _dragMemberList);
+    __privateAdd(this, _listenerControllers);
+    __publicField(this, "engine");
     var _a;
-    this.global = global;
+    this.engine = engine;
+    this.global = engine.global;
     this._element = null;
     this._isGlobal = isGlobal;
     this._sortedTouchArray = [];
@@ -1490,6 +1598,7 @@ class InputControl {
     this._ownerGID = ownerGID;
     this._localPointerDict = {};
     __privateSet(this, _dragMemberList, []);
+    __privateSet(this, _listenerControllers, []);
     this._event = {
       pointerDown: null,
       pointerMove: null,
@@ -1511,10 +1620,20 @@ class InputControl {
     __privateSet(this, _debugObject, new BaseObject(this.global, null));
   }
   destroy() {
+    for (const controller of __privateGet(this, _listenerControllers)) {
+      controller.abort();
+    }
+    __privateSet(this, _listenerControllers, []);
+    this._element = null;
+    this._sortedTouchArray = [];
+    this._sortedTouchDict = {};
+    this._localPointerDict = {};
   }
   get globalInputEngine() {
-    var _a;
-    return (_a = this.global) == null ? void 0 : _a.inputEngine;
+    if (!this.global) {
+      return null;
+    }
+    return this.global.getInputEngine(this.engine ?? null);
   }
   get globalPointerDict() {
     if (this.globalInputEngine == null) {
@@ -1541,7 +1660,7 @@ class InputControl {
   //   }
   // }
   getCoordinates(screenX, screenY) {
-    if (this.global == null) {
+    if (this.engine == null || this.engine.camera == null) {
       return {
         x: screenX,
         y: screenY,
@@ -1551,11 +1670,11 @@ class InputControl {
         screenY
       };
     }
-    const [cameraX, cameraY] = this.global.camera.getCameraFromScreen(
+    const [cameraX, cameraY] = this.engine.camera.getCameraFromScreen(
       screenX,
       screenY
     );
-    const [worldX, worldY] = this.global.camera.getWorldFromCamera(
+    const [worldX, worldY] = this.engine.camera.getWorldFromCamera(
       cameraX,
       cameraY
     );
@@ -1575,7 +1694,10 @@ class InputControl {
    * @returns
    */
   onPointerDown(e) {
-    var _a, _b, _c, _d;
+    var _a, _b, _c, _d, _e;
+    if (!__privateMethod(this, _InputControl_instances, isEventWithinEngine_fn).call(this, e.target)) {
+      return;
+    }
     e.stopPropagation();
     const coordinates = this.getCoordinates(e.clientX, e.clientY);
     (_b = (_a = this.event).pointerDown) == null ? void 0 : _b.call(_a, {
@@ -1605,7 +1727,13 @@ class InputControl {
       start: coordinates,
       button: e.buttons
     });
-    __privateGet(this, _debugObject).addDebugPoint(coordinates.x, coordinates.y, "red", true, "pointerDown");
+    __privateGet(this, _debugObject).addDebugPoint(
+      coordinates.x,
+      coordinates.y,
+      "red",
+      true,
+      "pointerDown"
+    );
     if (this.globalGestureDict[e.pointerId]) {
       this.globalGestureDict[e.pointerId].memberList.push(this);
     } else {
@@ -1615,6 +1743,7 @@ class InputControl {
         memberList: [this, ...__privateGet(this, _dragMemberList)],
         initiatorID: this._isGlobal ? GLOBAL_GID : this._ownerGID ?? ""
       };
+      (_e = this.globalInputEngine) == null ? void 0 : _e.enforceMaxDragLimit();
     }
   }
   /**
@@ -1623,6 +1752,9 @@ class InputControl {
    */
   onPointerMove(e) {
     var _a, _b;
+    if (!__privateMethod(this, _InputControl_instances, shouldHandlePointerEvent_fn).call(this, e, { allowHover: true })) {
+      return;
+    }
     e.preventDefault();
     const coordinates = this.getCoordinates(e.clientX, e.clientY);
     (_b = (_a = this.event).pointerMove) == null ? void 0 : _b.call(_a, {
@@ -1652,6 +1784,9 @@ class InputControl {
    */
   onPointerUp(e) {
     var _a, _b, _c, _d, _e, _f;
+    if (!__privateMethod(this, _InputControl_instances, shouldHandlePointerEvent_fn).call(this, e)) {
+      return;
+    }
     e.preventDefault();
     const coordinates = this.getCoordinates(e.clientX, e.clientY);
     console.debug("onPointerUp", e.pointerId, coordinates);
@@ -1715,11 +1850,23 @@ class InputControl {
     e.stopPropagation();
   }
   /**
+   * Called when a pointer event is cancelled (e.g., touch interrupted by system gesture).
+   * Treated as a pointer up event to clean up any ongoing gestures.
+   * @param e
+   */
+  onPointerCancel(e) {
+    console.debug("onPointerCancel", e.pointerId);
+    this.onPointerUp(e);
+  }
+  /**
    * Called when the user scrolls the mouse wheel
    * @param e
    */
   onWheel(e) {
     var _a, _b;
+    if (!__privateMethod(this, _InputControl_instances, shouldHandleWheelEvent_fn).call(this, e)) {
+      return;
+    }
     const coordinates = this.getCoordinates(e.clientX, e.clientY);
     (_b = (_a = this.event).mouseWheel) == null ? void 0 : _b.call(_a, {
       event: e,
@@ -1727,67 +1874,17 @@ class InputControl {
       delta: e.deltaY,
       gid: this._isGlobal ? GLOBAL_GID : this._ownerGID
     });
-    console.debug("onWheel", coordinates);
     e.stopPropagation();
   }
-  addListener(dom, event, callback) {
-    dom.addEventListener(event, callback.bind(this));
-  }
-  addCursorEventListener(dom) {
-    this.addListener(dom, "pointerdown", this.onPointerDown);
-    this.addListener(dom, "pointermove", this.onPointerMove);
-    this.addListener(dom, "pointerup", this.onPointerUp);
-    this.addListener(dom, "wheel", this.onWheel);
-  }
-  addDragMember(member) {
-    __privateGet(this, _dragMemberList).push(member);
-  }
-  resetDragMembers() {
-    __privateSet(this, _dragMemberList, []);
-  }
-}
-_debugObject = new WeakMap();
-_dragMemberList = new WeakMap();
-_InputControl_instances = new WeakSet();
-handleMultiPointer_fn = function(e) {
-  var _a, _b, _c, _d, _e, _f;
-  const numKeys = Object.keys(this.globalPointerDict).length;
-  if (numKeys >= 1) {
-    for (const pointer of Object.values(this.globalPointerDict)) {
-      const thisGID = this._isGlobal ? GLOBAL_GID : this._ownerGID;
-      if (thisGID != pointer.callerGID) {
-        continue;
-      }
-      const startPosition = this.getCoordinates(
-        pointer.startX,
-        pointer.startY
-      );
-      const currentPosition = this.getCoordinates(pointer.x, pointer.y);
-      const deltaCoordinates = {
-        x: currentPosition.x - startPosition.x,
-        y: currentPosition.y - startPosition.y,
-        cameraX: currentPosition.cameraX - startPosition.cameraX,
-        cameraY: currentPosition.cameraY - startPosition.cameraY,
-        screenX: currentPosition.screenX - startPosition.screenX,
-        screenY: currentPosition.screenY - startPosition.screenY
-      };
-      if (pointer.moveCount == 0) ;
-      pointer.moveCount++;
-      const gesture = this.globalGestureDict[pointer.id];
-      for (const member of gesture.memberList) {
-        (_b = (_a = member.event).drag) == null ? void 0 : _b.call(_a, {
-          gid: member._isGlobal ? GLOBAL_GID : member._ownerGID,
-          pointerId: pointer.id,
-          start: startPosition,
-          position: currentPosition,
-          delta: deltaCoordinates,
-          button: e.buttons
-        });
-      }
-    }
-  }
-  if (numKeys >= 2 && this._isGlobal) {
+  /**
+   * Detects and fires pinch gesture events based on current pointer state.
+   * Called by #handleMultiPointer when 2+ pointers are tracked.
+   * @internal
+   */
+  _detectAndFirePinchGestures() {
+    var _a, _b, _c, _d;
     const pointerList = Object.values(this.globalPointerDict);
+    if (pointerList.length < 2) return;
     pointerList.sort((a, b) => a.timestamp - b.timestamp);
     for (let i = 0; i < pointerList.length - 1; i++) {
       const pointer_0 = pointerList[i];
@@ -1816,7 +1913,7 @@ handleMultiPointer_fn = function(e) {
           pointerList: [currentPointer0, currentPointer1],
           distance: startDistance
         };
-        (_d = (_c = this.event).pinchStart) == null ? void 0 : _d.call(_c, {
+        (_b = (_a = this.event).pinchStart) == null ? void 0 : _b.call(_a, {
           gid: this._isGlobal ? GLOBAL_GID : this._ownerGID,
           gestureID: gestureKey,
           start: {
@@ -1824,24 +1921,127 @@ handleMultiPointer_fn = function(e) {
             distance: startDistance
           }
         });
-        console.warn("pinchStart", startMiddle, this._ownerGID);
+        console.debug("pinchStart", startMiddle, this._ownerGID);
       }
       const pinchGesture = this.globalGestureDict[gestureKey];
       pinchGesture.pointerList = [currentPointer0, currentPointer1];
       pinchGesture.distance = currentDistance;
-      (_f = (_e = this.event).pinch) == null ? void 0 : _f.call(_e, {
+      (_d = (_c = this.event).pinch) == null ? void 0 : _d.call(_c, {
         gid: this._isGlobal ? GLOBAL_GID : this._ownerGID,
         gestureID: gestureKey,
         start: pinchGesture.start,
         pointerList: pinchGesture.pointerList,
         distance: pinchGesture.distance
       });
-      console.warn("pinch", currentPointer0, currentPointer1, this._ownerGID);
+      console.debug("pinch", currentPointer0, currentPointer1, this._ownerGID);
+    }
+  }
+  addListener(dom, event, callback) {
+    const controller = new AbortController();
+    const boundCallback = callback.bind(this);
+    dom.addEventListener(event, boundCallback, { signal: controller.signal });
+    __privateGet(this, _listenerControllers).push(controller);
+  }
+  addCursorEventListener(dom) {
+    this.addListener(dom, "pointerdown", this.onPointerDown);
+    this.addListener(dom, "pointermove", this.onPointerMove);
+    this.addListener(dom, "pointerup", this.onPointerUp);
+    this.addListener(dom, "pointercancel", this.onPointerCancel);
+    this.addListener(dom, "wheel", this.onWheel);
+  }
+  addDragMember(member) {
+    __privateGet(this, _dragMemberList).push(member);
+  }
+  resetDragMembers() {
+    __privateSet(this, _dragMemberList, []);
+  }
+}
+_debugObject = new WeakMap();
+_dragMemberList = new WeakMap();
+_listenerControllers = new WeakMap();
+_InputControl_instances = new WeakSet();
+isPointerTracked_fn = function(pointerId) {
+  return this.globalPointerDict[pointerId] != null;
+};
+isEventWithinEngine_fn = function(target) {
+  var _a;
+  const container = (_a = this.engine) == null ? void 0 : _a.containerElement;
+  if (container == null) {
+    return true;
+  }
+  if (!(target instanceof Node)) {
+    return false;
+  }
+  return container.contains(target);
+};
+shouldHandlePointerEvent_fn = function(event, options = {}) {
+  const { allowHover = false } = options;
+  if (__privateMethod(this, _InputControl_instances, isPointerTracked_fn).call(this, event.pointerId)) {
+    return true;
+  }
+  if (allowHover) {
+    return __privateMethod(this, _InputControl_instances, isEventWithinEngine_fn).call(this, event.target);
+  }
+  return __privateMethod(this, _InputControl_instances, isEventWithinEngine_fn).call(this, event.target);
+};
+shouldHandleWheelEvent_fn = function(event) {
+  return __privateMethod(this, _InputControl_instances, isEventWithinEngine_fn).call(this, event.target);
+};
+handleMultiPointer_fn = function(e) {
+  var _a, _b;
+  const numKeys = Object.keys(this.globalPointerDict).length;
+  if (numKeys >= 1) {
+    for (const pointer of Object.values(this.globalPointerDict)) {
+      const thisGID = this._isGlobal ? GLOBAL_GID : this._ownerGID;
+      if (thisGID != pointer.callerGID) {
+        continue;
+      }
+      pointer.moveCount++;
+      const gesture = this.globalGestureDict[pointer.id];
+      if (!gesture) {
+        continue;
+      }
+      for (const member of gesture.memberList) {
+        const startPosition = member.getCoordinates(
+          pointer.startX,
+          pointer.startY
+        );
+        const currentPosition = member.getCoordinates(pointer.x, pointer.y);
+        const deltaCoordinates = {
+          x: currentPosition.x - startPosition.x,
+          y: currentPosition.y - startPosition.y,
+          cameraX: currentPosition.cameraX - startPosition.cameraX,
+          cameraY: currentPosition.cameraY - startPosition.cameraY,
+          screenX: currentPosition.screenX - startPosition.screenX,
+          screenY: currentPosition.screenY - startPosition.screenY
+        };
+        (_b = (_a = member.event).drag) == null ? void 0 : _b.call(_a, {
+          gid: member._isGlobal ? GLOBAL_GID : member._ownerGID,
+          pointerId: pointer.id,
+          start: startPosition,
+          position: currentPosition,
+          delta: deltaCoordinates,
+          button: e.buttons
+        });
+      }
+    }
+  }
+  if (numKeys >= 2) {
+    if (this._isGlobal) {
+      this._detectAndFirePinchGestures();
+    } else {
+      const globalInput = this.globalInputEngine;
+      if (globalInput) {
+        globalInput._inputControl._detectAndFirePinchGestures();
+      }
     }
   }
 };
+const DEFAULT_GLOBAL_INPUT_CONFIG = {
+  maxSimultaneousDrags: Infinity
+};
 class GlobalInputControl {
-  constructor(global = null) {
+  constructor(global, config = {}) {
     __privateAdd(this, _document);
     __publicField(this, "global");
     __publicField(this, "_inputControl");
@@ -1850,9 +2050,14 @@ class GlobalInputControl {
     __publicField(this, "_gestureDict");
     __publicField(this, "_event");
     __publicField(this, "event");
+    /**
+     * Configuration options for global input handling.
+     */
+    __publicField(this, "config");
     this.global = global;
     __privateSet(this, _document, document);
-    this._inputControl = new InputControl(this.global, true, null);
+    this.config = { ...DEFAULT_GLOBAL_INPUT_CONFIG, ...config };
+    this._inputControl = new InputControl({ global }, true, null);
     this._inputControl.addCursorEventListener(
       __privateGet(this, _document)
     );
@@ -1870,12 +2075,79 @@ class GlobalInputControl {
     };
     this._pointerDict = {};
     this._gestureDict = {};
-    for (const [key, callbackRecord] of Object.entries(this.globalCallbacks)) {
+    const transformPosition = (pos, camera) => {
+      if (!pos || pos.screenX == null || pos.screenY == null || !camera) {
+        return pos;
+      }
+      const [cameraX, cameraY] = camera.getCameraFromScreen(pos.screenX, pos.screenY);
+      const [worldX, worldY] = camera.getWorldFromCamera(cameraX, cameraY);
+      return {
+        x: worldX,
+        y: worldY,
+        cameraX,
+        cameraY,
+        screenX: pos.screenX,
+        screenY: pos.screenY
+      };
+    };
+    const transformPinchPointerList = (pointerList, camera) => {
+      if (!pointerList || !camera) {
+        return pointerList;
+      }
+      return pointerList.map((pos) => transformPosition(pos, camera));
+    };
+    for (const [key] of Object.entries(this.globalCallbacks)) {
       this._inputControl.event[key] = (prop) => {
-        for (const callback of Object.values(
+        for (const { callback, engine } of Object.values(
           this.globalCallbacks[key]
         )) {
-          callback(prop);
+          const transformWithEngine = (targetEngine) => {
+            if (!(targetEngine == null ? void 0 : targetEngine.camera)) {
+              return prop;
+            }
+            const transformed = { ...prop };
+            if (prop.position) {
+              transformed.position = transformPosition(prop.position, targetEngine.camera);
+            }
+            if (prop.start) {
+              if (prop.start.pointerList) {
+                transformed.start = {
+                  ...prop.start,
+                  pointerList: transformPinchPointerList(prop.start.pointerList, targetEngine.camera)
+                };
+              } else {
+                transformed.start = transformPosition(prop.start, targetEngine.camera);
+              }
+            }
+            if (prop.end) {
+              if (prop.end.pointerList) {
+                transformed.end = {
+                  ...prop.end,
+                  pointerList: transformPinchPointerList(prop.end.pointerList, targetEngine.camera)
+                };
+              } else {
+                transformed.end = transformPosition(prop.end, targetEngine.camera);
+              }
+            }
+            if (prop.delta) {
+              transformed.delta = transformPosition(prop.delta, targetEngine.camera);
+            }
+            if (prop.pointerList) {
+              transformed.pointerList = transformPinchPointerList(prop.pointerList, targetEngine.camera);
+            }
+            return transformed;
+          };
+          if (!engine) {
+            if (this.global && this.global.engines && this.global.engines.size > 0) {
+              for (const currentEngine of this.global.engines) {
+                callback(transformWithEngine(currentEngine));
+              }
+            } else {
+              callback(prop);
+            }
+          } else {
+            callback(transformWithEngine(engine));
+          }
         }
       };
     }
@@ -1892,12 +2164,13 @@ class GlobalInputControl {
       pinchEnd: null
     };
     this.event = new Proxy(this._event, {
-      set: (target, prop, value) => {
+      set: (_target, prop, value) => {
         if (value != null) {
           this.subscribeGlobalCursorEvent(
             prop,
             GLOBAL_GID,
-            value.bind(this)
+            value.bind(this),
+            null
           );
         } else {
           this.unsubscribeGlobalCursorEvent(
@@ -1909,17 +2182,340 @@ class GlobalInputControl {
       }
     });
   }
-  subscribeGlobalCursorEvent(event, gid, callback) {
-    this.globalCallbacks[event][gid] = callback;
+  destroy() {
+    this._inputControl.destroy();
+    this.globalCallbacks = {
+      pointerDown: {},
+      pointerMove: {},
+      pointerUp: {},
+      mouseWheel: {},
+      dragStart: {},
+      drag: {},
+      dragEnd: {},
+      pinchStart: {},
+      pinch: {},
+      pinchEnd: {}
+    };
+    this._pointerDict = {};
+    this._gestureDict = {};
+  }
+  subscribeGlobalCursorEvent(event, gid, callback, engine) {
+    this.globalCallbacks[event][gid] = { callback, engine };
   }
   unsubscribeGlobalCursorEvent(event, gid) {
     delete this.globalCallbacks[event][gid];
   }
+  /**
+   * Gets the number of active drag gestures.
+   */
+  getActiveDragCount() {
+    return Object.values(this._gestureDict).filter((g) => g.type === "drag").length;
+  }
+  /**
+   * Gets active drag gestures sorted by timestamp (oldest first).
+   */
+  getActiveDragsSortedByTime() {
+    const drags = [];
+    for (const [key, gesture] of Object.entries(this._gestureDict)) {
+      if (gesture.type !== "drag") continue;
+      const pointerId = parseInt(key, 10);
+      const pointerData = this._pointerDict[pointerId];
+      if (pointerData) {
+        drags.push({
+          pointerId,
+          gesture,
+          timestamp: pointerData.timestamp
+        });
+      }
+    }
+    return drags.sort((a, b) => a.timestamp - b.timestamp);
+  }
+  /**
+   * Cancels the oldest drag gesture by firing dragEnd for all its members.
+   * Used to enforce maxSimultaneousDrags limit.
+   */
+  cancelOldestDrag() {
+    var _a, _b;
+    const drags = this.getActiveDragsSortedByTime();
+    if (drags.length === 0) return;
+    const oldest = drags[0];
+    const pointerData = this._pointerDict[oldest.pointerId];
+    if (!pointerData) return;
+    console.debug("Cancelling oldest drag", oldest.pointerId, "to enforce max drag limit");
+    for (const member of oldest.gesture.memberList) {
+      const startPosition = member.getCoordinates(pointerData.startX, pointerData.startY);
+      const endPosition = member.getCoordinates(pointerData.x, pointerData.y);
+      (_b = (_a = member.event).dragEnd) == null ? void 0 : _b.call(_a, {
+        gid: member._isGlobal ? GLOBAL_GID : member._ownerGID,
+        pointerId: oldest.pointerId,
+        start: startPosition,
+        end: endPosition,
+        button: 0
+        // No button info available for cancelled drag
+      });
+    }
+    delete this._gestureDict[oldest.pointerId];
+    delete this._pointerDict[oldest.pointerId];
+  }
+  /**
+   * Enforces the maxSimultaneousDrags limit by cancelling oldest drags if needed.
+   * Should be called after a new drag is registered.
+   */
+  enforceMaxDragLimit() {
+    const maxDrags = this.config.maxSimultaneousDrags;
+    if (maxDrags <= 0 || maxDrags === Infinity) return;
+    while (this.getActiveDragCount() > maxDrags) {
+      this.cancelOldestDrag();
+    }
+  }
 }
 _document = new WeakMap();
+const _GlobalManager = class _GlobalManager {
+  constructor() {
+    __privateAdd(this, _GlobalManager_instances);
+    __publicField(this, "inputEngine");
+    __publicField(this, "objectTable");
+    __publicField(this, "data");
+    __publicField(this, "gid");
+    __privateAdd(this, _engineIdCounter);
+    __privateAdd(this, _engineIds);
+    // Shared render state across all engines
+    __publicField(this, "currentStage");
+    __publicField(this, "read1Queue");
+    __publicField(this, "write1Queue");
+    __publicField(this, "read2Queue");
+    __publicField(this, "write2Queue");
+    __publicField(this, "read3Queue");
+    __publicField(this, "write3Queue");
+    // Registry of all engine instances
+    __publicField(this, "engines");
+    __privateAdd(this, _animationFrameId, null);
+    this.objectTable = {};
+    this.inputEngine = null;
+    this.data = {};
+    this.gid = 0;
+    __privateSet(this, _engineIdCounter, 0);
+    __privateSet(this, _engineIds, /* @__PURE__ */ new WeakMap());
+    this.currentStage = "IDLE";
+    this.read1Queue = /* @__PURE__ */ new Map();
+    this.write1Queue = /* @__PURE__ */ new Map();
+    this.read2Queue = /* @__PURE__ */ new Map();
+    this.write2Queue = /* @__PURE__ */ new Map();
+    this.read3Queue = /* @__PURE__ */ new Map();
+    this.write3Queue = /* @__PURE__ */ new Map();
+    this.engines = /* @__PURE__ */ new Set();
+  }
+  /**
+   * Gets the singleton instance of GlobalManager.
+   * Creates it if it doesn't exist yet.
+   *
+   * @returns The GlobalManager singleton instance
+   */
+  static getInstance() {
+    if (!_GlobalManager.instance) {
+      _GlobalManager.instance = new _GlobalManager();
+    }
+    return _GlobalManager.instance;
+  }
+  /**
+   * Resets the singleton instance. Useful for testing.
+   * WARNING: This will affect all Engine instances using this GlobalManager.
+   */
+  static resetInstance() {
+    _GlobalManager.instance = null;
+  }
+  /**
+   * Registers an Engine instance with the global render pipeline.
+   * Called automatically by Engine constructor.
+   *
+   * @param engine - The Engine instance to register
+   * @internal
+   */
+  registerEngine(engine) {
+    this.engines.add(engine);
+    __privateMethod(this, _GlobalManager_instances, ensureEngineId_fn).call(this, engine);
+    __privateMethod(this, _GlobalManager_instances, ensureInputEngine_fn).call(this, engine);
+    if (this.engines.size === 1) {
+      __privateMethod(this, _GlobalManager_instances, startRenderLoop_fn).call(this);
+    }
+  }
+  /**
+   * Unregisters an Engine instance from the global render pipeline.
+   * Should be called when an Engine is destroyed.
+   *
+   * @param engine - The Engine instance to unregister
+   * @internal
+   */
+  unregisterEngine(engine) {
+    var _a;
+    this.engines.delete(engine);
+    const engineId = __privateGet(this, _engineIds).get(engine);
+    if (engineId) {
+      delete this.objectTable[engineId];
+      __privateGet(this, _engineIds).delete(engine);
+    }
+    if (this.engines.size === 0) {
+      (_a = this.inputEngine) == null ? void 0 : _a.destroy();
+      this.inputEngine = null;
+      __privateMethod(this, _GlobalManager_instances, stopRenderLoop_fn).call(this);
+    }
+  }
+  /**
+   * Generates a unique identifier for objects.
+   *
+   * @returns A unique string ID that increments with each call.
+   */
+  getGlobalId() {
+    this.gid++;
+    return this.gid.toString();
+  }
+  getInputEngine(engine) {
+    if (!engine && !this.inputEngine) {
+      return null;
+    }
+    return this.inputEngine ?? __privateMethod(this, _GlobalManager_instances, ensureInputEngine_fn).call(this, engine);
+  }
+  getEngineId(engine) {
+    if (!engine) {
+      return null;
+    }
+    return __privateGet(this, _engineIds).get(engine) ?? null;
+  }
+  getEngineObjectTable(engine, create = true) {
+    if (!engine) {
+      if (!create && !this.objectTable[_GlobalManager.GLOBAL_ENGINE_KEY]) {
+        return null;
+      }
+      return __privateMethod(this, _GlobalManager_instances, ensureGlobalObjectTable_fn).call(this);
+    }
+    let engineId = __privateGet(this, _engineIds).get(engine);
+    if (!engineId) {
+      if (!create) {
+        return null;
+      }
+      engineId = __privateMethod(this, _GlobalManager_instances, ensureEngineId_fn).call(this, engine);
+    }
+    if (!this.objectTable[engineId]) {
+      if (!create) {
+        return null;
+      }
+      this.objectTable[engineId] = {};
+    }
+    return this.objectTable[engineId];
+  }
+  registerObject(object) {
+    const table = this.getEngineObjectTable(object.engine ?? null, true);
+    if (table) {
+      table[object.gid] = object;
+    }
+  }
+  unregisterObject(object) {
+    const table = this.getEngineObjectTable(object.engine ?? null, false);
+    if (!table) {
+      return;
+    }
+    delete table[object.gid];
+    if (Object.keys(table).length === 0) {
+      const key = object.engine && __privateGet(this, _engineIds).get(object.engine) ? __privateGet(this, _engineIds).get(object.engine) : _GlobalManager.GLOBAL_ENGINE_KEY;
+      delete this.objectTable[key];
+    }
+  }
+};
+_engineIdCounter = new WeakMap();
+_engineIds = new WeakMap();
+_animationFrameId = new WeakMap();
+_GlobalManager_instances = new WeakSet();
+/**
+ * Starts the global render loop.
+ * Batches render stages across all engines to prevent layout thrashing.
+ * @internal
+ */
+startRenderLoop_fn = function() {
+  if (__privateGet(this, _animationFrameId) !== null) {
+    return;
+  }
+  const step = () => {
+    const timestamp = Date.now();
+    this.currentStage = "READ_1";
+    for (const engine of this.engines) {
+      engine._processStage("READ_1", this.read1Queue, timestamp);
+    }
+    this.read1Queue = /* @__PURE__ */ new Map();
+    this.currentStage = "WRITE_1";
+    for (const engine of this.engines) {
+      engine._processStage("WRITE_1", this.write1Queue, timestamp);
+    }
+    this.write1Queue = /* @__PURE__ */ new Map();
+    this.currentStage = "READ_2";
+    for (const engine of this.engines) {
+      engine._processStage("READ_2", this.read2Queue, timestamp);
+    }
+    this.read2Queue = /* @__PURE__ */ new Map();
+    this.currentStage = "WRITE_2";
+    for (const engine of this.engines) {
+      engine._processStage("WRITE_2", this.write2Queue, timestamp);
+    }
+    this.write2Queue = /* @__PURE__ */ new Map();
+    for (const engine of this.engines) {
+      engine._processAnimations(timestamp);
+    }
+    this.currentStage = "READ_3";
+    for (const engine of this.engines) {
+      engine._processStage("READ_3", this.read3Queue, timestamp);
+    }
+    this.read3Queue = /* @__PURE__ */ new Map();
+    this.currentStage = "WRITE_3";
+    for (const engine of this.engines) {
+      engine._processStage("WRITE_3", this.write3Queue, timestamp);
+    }
+    this.write3Queue = /* @__PURE__ */ new Map();
+    this.currentStage = "IDLE";
+    for (const engine of this.engines) {
+      engine._processPostRender(timestamp);
+    }
+    __privateSet(this, _animationFrameId, window.requestAnimationFrame(step));
+  };
+  __privateSet(this, _animationFrameId, window.requestAnimationFrame(step));
+};
+/**
+ * Stops the global render loop.
+ * @internal
+ */
+stopRenderLoop_fn = function() {
+  if (__privateGet(this, _animationFrameId) !== null) {
+    window.cancelAnimationFrame(__privateGet(this, _animationFrameId));
+    __privateSet(this, _animationFrameId, null);
+  }
+};
+ensureInputEngine_fn = function(_engine) {
+  if (!this.inputEngine) {
+    this.inputEngine = new GlobalInputControl(this);
+  }
+  return this.inputEngine;
+};
+ensureEngineId_fn = function(engine) {
+  let engineId = __privateGet(this, _engineIds).get(engine);
+  if (!engineId) {
+    __privateWrapper(this, _engineIdCounter)._++;
+    engineId = `engine-${__privateGet(this, _engineIdCounter)}`;
+    __privateGet(this, _engineIds).set(engine, engineId);
+  }
+  if (!this.objectTable[engineId]) {
+    this.objectTable[engineId] = {};
+  }
+  return engineId;
+};
+ensureGlobalObjectTable_fn = function() {
+  const key = _GlobalManager.GLOBAL_ENGINE_KEY;
+  if (!this.objectTable[key]) {
+    this.objectTable[key] = {};
+  }
+  return this.objectTable[key];
+};
+__publicField(_GlobalManager, "instance", null);
+__publicField(_GlobalManager, "GLOBAL_ENGINE_KEY", "__global__");
+let GlobalManager = _GlobalManager;
 class EventCallback2 {
-  // _dom: DomEvent;
-  // dom: DomEvent;
   constructor(object) {
     __publicField(this, "_object");
     __publicField(this, "_collider");
@@ -1934,8 +2530,9 @@ class EventCallback2 {
   }
 }
 class Collider {
-  constructor(global, parent, type, localX, localY) {
+  constructor(engine, parent, type, localX, localY) {
     __publicField(this, "global");
+    __publicField(this, "engine");
     __publicField(this, "parent");
     __publicField(this, "type");
     __publicField(this, "uuid");
@@ -1946,7 +2543,8 @@ class Collider {
     __publicField(this, "event");
     __publicField(this, "_currentCollisions");
     __publicField(this, "_iterationCollisions");
-    this.global = global;
+    this.engine = engine;
+    this.global = engine.global;
     this.parent = parent;
     this.type = type;
     this.uuid = Symbol();
@@ -1961,7 +2559,7 @@ class Collider {
     this._iterationCollisions = /* @__PURE__ */ new Set();
     this._currentCollisions = /* @__PURE__ */ new Set();
     this.recalculate();
-    this.inputEngine = new InputControl(this.global);
+    this.inputEngine = new InputControl(this.engine);
   }
   get worldPosition() {
     return [
@@ -1992,7 +2590,7 @@ class Collider {
     if (!this.element) {
       return;
     }
-    const property = getDomProperty(this.global, this.element);
+    const property = getDomProperty(this.parent.engine, this.element);
     this.transform.x = property.x - this.parent.transform.x;
     this.transform.y = property.y - this.parent.transform.y;
     this.transform.width = property.width;
@@ -2002,22 +2600,22 @@ class Collider {
   }
 }
 class RectCollider extends Collider {
-  constructor(global, parent, localX, localY, width, height) {
-    super(global, parent, "rect", localX, localY);
+  constructor(engine, parent, localX, localY, width, height) {
+    super(engine, parent, "rect", localX, localY);
     this.transform.width = width;
     this.transform.height = height;
   }
 }
 class CircleCollider extends Collider {
-  constructor(global, parent, localX, localY, radius) {
-    super(global, parent, "circle", localX, localY);
+  constructor(engine, parent, localX, localY, radius) {
+    super(engine, parent, "circle", localX, localY);
     __publicField(this, "radius");
     this.radius = radius;
   }
 }
 class PointCollider extends Collider {
-  constructor(global, parent, localX, localY) {
-    super(global, parent, "point", localX, localY);
+  constructor(engine, parent, localX, localY) {
+    super(engine, parent, "point", localX, localY);
   }
 }
 class CollisionEngine {
@@ -2212,28 +2810,28 @@ class CollisionEngine {
     return pointA.worldPosition[0] === pointB.worldPosition[0] && pointA.worldPosition[1] === pointB.worldPosition[1];
   }
 }
-class GlobalManager {
-  constructor() {
-    __publicField(this, "containerElement");
+class Engine {
+  constructor(config = {}, setGlobal = true) {
+    __privateAdd(this, _Engine_instances);
+    __publicField(this, "engineConfig");
+    // #containerStyle: { [key: string]: string } = {};
+    __publicField(this, "global", null);
+    // Engine-specific properties
+    __publicField(this, "containerElement", null);
     __publicField(this, "cursor");
-    __publicField(this, "camera");
-    __publicField(this, "inputEngine");
-    __publicField(this, "collisionEngine");
-    __publicField(this, "objectTable");
-    __publicField(this, "currentStage");
-    __publicField(this, "read1Queue");
-    __publicField(this, "write1Queue");
-    __publicField(this, "read2Queue");
-    __publicField(this, "write2Queue");
-    __publicField(this, "read3Queue");
-    __publicField(this, "write3Queue");
+    __publicField(this, "camera", null);
+    __publicField(this, "collisionEngine", null);
     __publicField(this, "animationList", []);
-    __publicField(this, "animationFragment");
     __publicField(this, "debugMarkerList", {});
-    __publicField(this, "data");
-    __publicField(this, "snapline");
-    __publicField(this, "gid");
-    this.containerElement = null;
+    __publicField(this, "_event");
+    __publicField(this, "event");
+    __privateAdd(this, _resizeObserver2, null);
+    __privateAdd(this, _animationProcessor, null);
+    __privateAdd(this, _debugRenderer, null);
+    if (setGlobal) {
+      this.global = GlobalManager.getInstance();
+      this.global.registerEngine(this);
+    }
     this.cursor = {
       worldX: 0,
       worldY: 0,
@@ -2242,51 +2840,6 @@ class GlobalManager {
       screenX: 0,
       screenY: 0
     };
-    this.camera = null;
-    this.collisionEngine = null;
-    this.objectTable = {};
-    this.inputEngine = new GlobalInputControl(this);
-    this.currentStage = "IDLE";
-    this.read1Queue = {};
-    this.write1Queue = {};
-    this.read2Queue = {};
-    this.write2Queue = {};
-    this.read3Queue = {};
-    this.write3Queue = {};
-    this.animationList = [];
-    this.animationFragment = document.createElement("div");
-    document.body.appendChild(this.animationFragment);
-    this.data = {};
-    this.snapline = null;
-    this.gid = 0;
-  }
-  getGlobalId() {
-    this.gid++;
-    return this.gid.toString();
-  }
-}
-class SnapLine {
-  constructor(config = {}) {
-    __privateAdd(this, _SnapLine_instances);
-    __publicField(this, "snaplineConfig");
-    __privateAdd(this, _containerStyle, {});
-    __publicField(this, "global");
-    __publicField(this, "_collisionEngine", null);
-    __publicField(this, "_event");
-    __publicField(this, "event");
-    __publicField(this, "debug", false);
-    __publicField(this, "debugWindow", null);
-    __publicField(this, "debugCtx", null);
-    __privateAdd(this, _resizeObserver2, null);
-    this.global = new GlobalManager();
-    this.global.read1Queue = {};
-    this.global.write1Queue = {};
-    this.global.read2Queue = {};
-    this.global.write2Queue = {};
-    this.global.read3Queue = {};
-    this.global.write3Queue = {};
-    this.global.animationList = [];
-    this.global.snapline = this;
     let defaultConfig = {
       cameraConfig: {
         enableZoom: true,
@@ -2294,51 +2847,81 @@ class SnapLine {
         panBounds: { top: null, left: null, right: null, bottom: null }
       }
     };
-    this.snaplineConfig = {
+    this.engineConfig = {
       ...defaultConfig,
       ...config
     };
-    __privateSet(this, _containerStyle, {
-      position: "relative",
-      overflow: "hidden"
-    });
-    this.global.collisionEngine = new CollisionEngine();
     this._event = {
       containerElementAssigned: null
     };
     this.event = EventProxyFactory(this, this._event);
-    this.debug = false;
     __privateSet(this, _resizeObserver2, new ResizeObserver(() => {
-      if (this.debug) {
-        let containerRect = this.global.containerElement.getBoundingClientRect();
-        this.debugWindow.width = containerRect.width;
-        this.debugWindow.height = containerRect.height;
+      if (__privateGet(this, _debugRenderer)) {
+        let containerRect = this.containerElement.getBoundingClientRect();
+        __privateGet(this, _debugRenderer).updateSize(
+          containerRect.width,
+          containerRect.height
+        );
       }
     }));
   }
-  enableDebug() {
-    if (this.global.containerElement == null) {
+  /**
+   * Enables debug visualization overlay showing object bounding boxes, collision shapes,
+   * coordinate grid, and debug markers.
+   *
+   * The debug overlay is rendered on a canvas element positioned absolutely over the container.
+   * This method dynamically imports the debug module to keep it tree-shakeable.
+   *
+   * @returns A promise that resolves when the debug renderer is initialized
+   *
+   * @example
+   * ```typescript
+   * await engine.enableDebug();
+   * // Now debug overlays will be visible
+   * ```
+   */
+  async enableDebug() {
+    if (this.containerElement == null) {
       return;
     }
-    this.debug = true;
-    this.debugWindow = document.createElement("canvas");
-    this.debugWindow.style.position = "absolute";
-    this.debugWindow.style.top = "0";
-    this.debugWindow.style.left = "0";
-    let containerRect = this.global.containerElement.getBoundingClientRect();
-    this.debugWindow.width = containerRect.width;
-    this.debugWindow.height = containerRect.height;
-    this.debugWindow.style.zIndex = "1000";
-    this.debugWindow.style.pointerEvents = "none";
-    this.global.containerElement.appendChild(this.debugWindow);
-    this.debugCtx = this.debugWindow.getContext("2d");
+    if (__privateGet(this, _debugRenderer)) {
+      return;
+    }
+    const { DebugRendererImpl } = await import("./debug-wIi8RL1o.mjs");
+    __privateSet(this, _debugRenderer, new DebugRendererImpl());
+    __privateGet(this, _debugRenderer).enable(this.containerElement);
   }
+  /**
+   * Enables interactive camera controls for panning and zooming.
+   *
+   * This method dynamically imports the CameraControl module to keep it tree-shakeable.
+   * Camera controls use middle mouse button for panning and scroll wheel for zooming.
+   *
+   * @param zoom - Whether to enable zoom controls (default: true)
+   * @param pan - Whether to enable pan controls (default: true)
+   * @returns A promise that resolves with the CameraControl instance
+   *
+   * @example
+   * ```typescript
+   * const controls = await engine.enableCameraControl(true, true);
+   * controls.setCameraCenterPosition(100, 100);
+   * ```
+   */
+  async enableCameraControl(zoom = true, pan = true) {
+    const { CameraControl: CameraControl2 } = await Promise.resolve().then(() => cameraControl);
+    const cameraControl$1 = new CameraControl2(this, zoom, pan);
+    if (this.containerElement) {
+      cameraControl$1.element = this.containerElement;
+    }
+    return cameraControl$1;
+  }
+  /**
+   * Disables and removes the debug visualization overlay.
+   */
   disableDebug() {
-    this.debug = false;
-    if (this.debugWindow) {
-      this.debugWindow.remove();
-      this.debugWindow = null;
-      this.debugCtx = null;
+    if (__privateGet(this, _debugRenderer)) {
+      __privateGet(this, _debugRenderer).disable();
+      __privateSet(this, _debugRenderer, null);
     }
   }
   /**
@@ -2347,262 +2930,133 @@ class SnapLine {
    */
   assignDom(containerDom) {
     var _a, _b, _c;
-    this.global.containerElement = containerDom;
-    this.global.camera = new Camera(containerDom);
+    this.containerElement = containerDom;
+    this.camera = new Camera(containerDom);
     (_b = (_a = this.event).containerElementAssigned) == null ? void 0 : _b.call(_a, containerDom);
     (_c = __privateGet(this, _resizeObserver2)) == null ? void 0 : _c.observe(containerDom);
-    window.requestAnimationFrame(__privateMethod(this, _SnapLine_instances, step_fn).bind(this));
   }
-  debugObjectBoundingBox(object) {
-    var _a, _b, _c;
-    if (this.debugCtx == null) {
-      return;
-    }
-    this.debugCtx.beginPath();
-    this.debugCtx.fillStyle = "rgba(0, 0, 0, 0.5)";
-    const [cameraX, cameraY] = ((_a = this.global.camera) == null ? void 0 : _a.getCameraFromWorld(
-      ...object.worldPosition
-    )) ?? [0, 0];
-    this.debugCtx.rect(cameraX, cameraY, 20, 20);
-    this.debugCtx.fill();
-    this.debugCtx.fillStyle = "white";
-    this.debugCtx.fillText(object.gid, cameraX, cameraY + 10);
-    if (object.hasOwnProperty("_dom")) {
-      let elementObject = object;
-      const colors = ["#FF0000A0", "#00FF00A0", "#0000FFA0"];
-      const stages = ["READ_1", "READ_2", "READ_3"];
-      for (let i = 0; i < 3; i++) {
-        const property = elementObject.getDomProperty(stages[i]);
-        this.debugCtx.stroke();
-        this.debugCtx.beginPath();
-        this.debugCtx.strokeStyle = colors[i];
-        this.debugCtx.lineWidth = 1;
-        const [domCameraX, domCameraY] = ((_b = this.global.camera) == null ? void 0 : _b.getCameraFromWorld(
-          property.x,
-          property.y
-        )) ?? [0, 0];
-        this.debugCtx.rect(
-          domCameraX,
-          domCameraY,
-          property.width,
-          property.height
-        );
-        this.debugCtx.stroke();
-      }
-      this.debugCtx.beginPath();
-      this.debugCtx.strokeStyle = "black";
-      this.debugCtx.lineWidth = 1;
-      this.debugCtx.rect(
-        cameraX,
-        cameraY,
-        elementObject._dom.property.width,
-        elementObject._dom.property.height
-      );
-    }
-    const COLLIDER_BLUE = "rgba(0, 0, 255, 0.5)";
-    for (let collisionObject of object._colliderList) {
-      this.debugCtx.beginPath();
-      this.debugCtx.strokeStyle = COLLIDER_BLUE;
-      this.debugCtx.lineWidth = 1;
-      const [colliderCameraX, colliderCameraY] = ((_c = this.global.camera) == null ? void 0 : _c.getCameraFromWorld(
-        object.transform.x + collisionObject.transform.x,
-        object.transform.y + collisionObject.transform.y
-      )) ?? [0, 0];
-      if (collisionObject.type == "circle") {
-        this.debugCtx.arc(
-          colliderCameraX,
-          colliderCameraY,
-          collisionObject.radius,
-          0,
-          2 * Math.PI
-        );
-        this.debugCtx.stroke();
-      } else if (collisionObject.type == "rect") {
-        this.debugCtx.rect(
-          colliderCameraX,
-          colliderCameraY,
-          collisionObject.transform.width,
-          collisionObject.transform.height
-        );
-        this.debugCtx.stroke();
-      } else if (collisionObject.type == "point") {
-        this.debugCtx.arc(colliderCameraX, colliderCameraY, 2, 0, 2 * Math.PI);
-        this.debugCtx.fillStyle = COLLIDER_BLUE;
-        this.debugCtx.fill();
-      }
-    }
+  /**
+   * Internal method to process a single render stage.
+   * Called by GlobalManager's render loop.
+   * @internal
+   */
+  _processStage(stage, queue, _timestamp) {
+    __privateMethod(this, _Engine_instances, processQueue_fn).call(this, stage, queue);
   }
-  renderDebugGrid() {
-    if (this.debugCtx == null) {
-      return;
-    }
-    const gridSize = 100;
-    const camera = this.global.camera;
-    if (!camera) return;
-    const [worldLeft, worldTop] = camera.getWorldFromCamera(0, 0);
-    const [worldRight, worldBottom] = camera.getWorldFromCamera(
-      this.debugWindow.width,
-      this.debugWindow.height
-    );
-    const startX = Math.floor(worldLeft / gridSize) * gridSize;
-    const endX = Math.ceil(worldRight / gridSize) * gridSize;
-    const startY = Math.floor(worldTop / gridSize) * gridSize;
-    const endY = Math.ceil(worldBottom / gridSize) * gridSize;
-    this.debugCtx.beginPath();
-    this.debugCtx.strokeStyle = "rgba(200, 200, 200, 0.3)";
-    this.debugCtx.lineWidth = 1;
-    for (let x = startX; x <= endX; x += gridSize) {
-      const [screenX1, screenY1] = camera.getCameraFromWorld(x, worldTop);
-      const [screenX2, screenY2] = camera.getCameraFromWorld(x, worldBottom);
-      this.debugCtx.moveTo(screenX1, screenY1);
-      this.debugCtx.lineTo(screenX2, screenY2);
-    }
-    for (let y = startY; y <= endY; y += gridSize) {
-      const [screenX1, screenY1] = camera.getCameraFromWorld(worldLeft, y);
-      const [screenX2, screenY2] = camera.getCameraFromWorld(worldRight, y);
-      this.debugCtx.moveTo(screenX1, screenY1);
-      this.debugCtx.lineTo(screenX2, screenY2);
-    }
-    this.debugCtx.stroke();
-    this.debugCtx.beginPath();
-    this.debugCtx.strokeStyle = "rgba(0, 0, 0, 0.8)";
-    this.debugCtx.lineWidth = 2;
-    const xAxisVisible = startY <= 0 && endY >= 0;
-    const yAxisVisible = startX <= 0 && endX >= 0;
-    if (xAxisVisible) {
-      const [xAxisStartX, xAxisStartY] = camera.getCameraFromWorld(startX, 0);
-      const [xAxisEndX, xAxisEndY] = camera.getCameraFromWorld(endX, 0);
-      this.debugCtx.moveTo(xAxisStartX, xAxisStartY);
-      this.debugCtx.lineTo(xAxisEndX, xAxisEndY);
-    }
-    if (yAxisVisible) {
-      const [yAxisStartX, yAxisStartY] = camera.getCameraFromWorld(0, startY);
-      const [yAxisEndX, yAxisEndY] = camera.getCameraFromWorld(0, endY);
-      this.debugCtx.moveTo(yAxisStartX, yAxisStartY);
-      this.debugCtx.lineTo(yAxisEndX, yAxisEndY);
-    }
-    this.debugCtx.stroke();
-    this.debugCtx.fillStyle = "rgba(0, 0, 0, 0.8)";
-    this.debugCtx.font = "12px Arial";
-    this.debugCtx.textAlign = "center";
-    for (let x = startX; x <= endX; x += gridSize) {
-      if (x === 0) continue;
-      const [screenX, screenY] = camera.getCameraFromWorld(x, 0);
-      if (screenY >= 0 && screenY <= this.debugWindow.height) {
-        this.debugCtx.fillText(x.toString(), screenX, screenY + 20);
-      }
-    }
-    for (let y = startY; y <= endY; y += gridSize) {
-      if (y === 0) continue;
-      const [screenX, screenY] = camera.getCameraFromWorld(0, y);
-      if (screenX >= 0 && screenX <= this.debugWindow.width) {
-        this.debugCtx.fillText(y.toString(), screenX - 20, screenY + 4);
-      }
-    }
-    const [originX, originY] = camera.getCameraFromWorld(0, 0);
-    if (originX >= 0 && originX <= this.debugWindow.width && originY >= 0 && originY <= this.debugWindow.height) {
-      this.debugCtx.fillText("(0,0)", originX + 20, originY - 10);
-    }
-  }
-  renderDebugFrame(stats) {
-    var _a, _b;
-    if (this.debugWindow == null) {
-      return;
-    }
-    (_a = this.debugCtx) == null ? void 0 : _a.clearRect(
-      0,
-      0,
-      this.debugWindow.width,
-      this.debugWindow.height
-    );
-    this.renderDebugGrid();
-    for (const object of Object.values(this.global.objectTable)) {
-      this.debugObjectBoundingBox(object);
-    }
-    if (this.debugCtx == null) {
-      return;
-    }
-    for (const marker of Object.values(this.global.debugMarkerList)) {
-      const [cameraX, cameraY] = ((_b = this.global.camera) == null ? void 0 : _b.getCameraFromWorld(
-        marker.x,
-        marker.y
-      )) ?? [0, 0];
-      if (marker.type == "point") {
-        this.debugCtx.beginPath();
-        this.debugCtx.fillStyle = marker.color;
-        this.debugCtx.arc(cameraX, cameraY, 5, 0, 2 * Math.PI);
-        this.debugCtx.fill();
-      } else if (marker.type == "rect") {
-        this.debugCtx.beginPath();
-        this.debugCtx.fillStyle = marker.color;
-        this.debugCtx.rect(cameraX, cameraY, marker.width, marker.height);
-        this.debugCtx.fill();
-      } else if (marker.type == "circle") {
-        this.debugCtx.beginPath();
-        this.debugCtx.fillStyle = marker.color;
-        this.debugCtx.arc(cameraX, cameraY, marker.radius, 0, 2 * Math.PI);
-        this.debugCtx.fill();
-      } else if (marker.type == "text") {
-        this.debugCtx.fillStyle = marker.color;
-        this.debugCtx.fillText(marker.text, cameraX, cameraY);
-      }
-    }
-    for (const id in this.global.debugMarkerList) {
-      if (!this.global.debugMarkerList[id].persistent) {
-        delete this.global.debugMarkerList[id];
-      }
-    }
-  }
-  _renderFrame() {
+  /**
+   * Internal method to process animations.
+   * Called by GlobalManager's render loop between WRITE_2 and READ_3.
+   * @internal
+   */
+  _processAnimations(timestamp) {
     var _a;
-    let timestamp = Date.now();
-    let stats = {
-      timestamp
-    };
-    this.global.currentStage = "READ_1";
-    __privateMethod(this, _SnapLine_instances, processQueue_fn).call(this, "READ_1", this.global.read1Queue);
-    this.global.read1Queue = {};
-    this.global.currentStage = "WRITE_1";
-    __privateMethod(this, _SnapLine_instances, processQueue_fn).call(this, "WRITE_1", this.global.write1Queue);
-    this.global.write1Queue = {};
-    this.global.currentStage = "READ_2";
-    __privateMethod(this, _SnapLine_instances, processQueue_fn).call(this, "READ_2", this.global.read2Queue);
-    this.global.read2Queue = {};
-    this.global.currentStage = "WRITE_2";
-    __privateMethod(this, _SnapLine_instances, processQueue_fn).call(this, "WRITE_2", this.global.write2Queue);
-    this.global.write2Queue = {};
-    let newAnimationList = [];
-    for (const animation of this.global.animationList) {
-      if (animation.calculateFrame(stats.timestamp) == false && animation.requestDelete == false) {
-        newAnimationList.push(animation);
-      }
+    (_a = __privateGet(this, _animationProcessor)) == null ? void 0 : _a.call(this, timestamp);
+  }
+  /**
+   * Internal method to process post-render tasks (collisions, debug).
+   * Called by GlobalManager's render loop after all stages complete.
+   * @internal
+   */
+  _processPostRender(timestamp) {
+    var _a, _b;
+    (_a = this.collisionEngine) == null ? void 0 : _a.detectCollisions();
+    const stats = { timestamp };
+    const localObjectTable = this.global.getEngineObjectTable(this, false) ?? {};
+    (_b = __privateGet(this, _debugRenderer)) == null ? void 0 : _b.renderFrame(stats, this, localObjectTable);
+  }
+  /**
+   * Enables the collision detection engine.
+   *
+   * Once enabled, collision detection runs automatically during each render frame.
+   * Objects can add colliders via `object.addCollider()`.
+   *
+   * @example
+   * ```typescript
+   * engine.enableCollisionEngine();
+   * const collider = new CircleCollider(engine, object, 50);
+   * object.addCollider(collider);
+   * ```
+   */
+  enableCollisionEngine() {
+    if (this.collisionEngine) {
+      return;
     }
-    this.global.animationList = newAnimationList;
-    this.global.currentStage = "READ_3";
-    __privateMethod(this, _SnapLine_instances, processQueue_fn).call(this, "READ_3", this.global.read3Queue);
-    this.global.read3Queue = {};
-    this.global.currentStage = "WRITE_3";
-    __privateMethod(this, _SnapLine_instances, processQueue_fn).call(this, "WRITE_3", this.global.write3Queue);
-    this.global.write3Queue = {};
-    this.global.currentStage = "IDLE";
-    (_a = this.global.collisionEngine) == null ? void 0 : _a.detectCollisions();
-    this.renderDebugFrame(stats);
+    this.collisionEngine = new CollisionEngine();
+  }
+  /**
+   * Enables the animation engine for processing Web Animations API animations.
+   *
+   * This method dynamically sets up the animation processor that runs during each frame.
+   * Animations can be added to objects via `object.addAnimation()`.
+   *
+   * @returns A promise that resolves when the animation engine is initialized
+   *
+   * @example
+   * ```typescript
+   * await engine.enableAnimationEngine();
+   * const animation = new AnimationObject(element, { x: [0, 100] }, { duration: 1000 });
+   * object.addAnimation(animation);
+   * ```
+   */
+  enableAnimationEngine() {
+    if (__privateGet(this, _animationProcessor)) {
+      return;
+    }
+    __privateSet(this, _animationProcessor, (timestamp) => {
+      const newAnimationList = [];
+      for (const animation of this.animationList) {
+        const shouldKeep = animation.calculateFrame(timestamp) === false && animation.requestDelete === false;
+        if (shouldKeep) {
+          newAnimationList.push(animation);
+        } else {
+          detachAnimationFromOwner(animation);
+        }
+      }
+      this.animationList = newAnimationList;
+    });
+  }
+  /**
+   * Destroys this Engine instance, cleaning up resources and unregistering from GlobalManager.
+   *
+   * This stops the render loop, removes event listeners, and ensures the engine
+   * no longer participates in global rendering.
+   *
+   * @example
+   * ```typescript
+   * const engine = new Engine();
+   * // ... use engine ...
+   * engine.destroy(); // Clean up when done
+   * ```
+   */
+  destroy() {
+    this.global.unregisterEngine(this);
+    if (__privateGet(this, _resizeObserver2) && this.containerElement) {
+      __privateGet(this, _resizeObserver2).unobserve(this.containerElement);
+      __privateSet(this, _resizeObserver2, null);
+    }
+    if (__privateGet(this, _debugRenderer)) {
+      this.disableDebug();
+    }
+    this.containerElement = null;
+    this.camera = null;
+    this.collisionEngine = null;
+    this.animationList = [];
+    this.debugMarkerList = {};
+    __privateSet(this, _animationProcessor, null);
   }
 }
-_containerStyle = new WeakMap();
 _resizeObserver2 = new WeakMap();
-_SnapLine_instances = new WeakSet();
-/**
- * Main loop for rendering the canvas.
- */
-step_fn = function() {
-  this._renderFrame();
-  window.requestAnimationFrame(__privateMethod(this, _SnapLine_instances, step_fn).bind(this));
-};
+_animationProcessor = new WeakMap();
+_debugRenderer = new WeakMap();
+_Engine_instances = new WeakSet();
 processQueue_fn = function(stage, queue) {
   var _a, _b, _c, _d, _e, _f, _g, _h, _i, _j, _k, _l;
   let processedObjects = /* @__PURE__ */ new Set();
-  for (const queueEntry2 of Object.values(queue)) {
+  for (const queueEntry2 of queue.values()) {
+    const firstEntry = queueEntry2.values().next().value;
+    if (!firstEntry || firstEntry.object.engine !== this) {
+      continue;
+    }
     for (const objectEntry of queueEntry2.values()) {
       if (!objectEntry.callback) {
         continue;
@@ -2632,8 +3086,8 @@ processQueue_fn = function(stage, queue) {
   }
 };
 class LineComponent extends ElementObject {
-  constructor(globals, parent) {
-    super(globals, parent);
+  constructor(engine, parent) {
+    super(engine, parent);
     __publicField(this, "endWorldX");
     __publicField(this, "endWorldY");
     __publicField(this, "start");
@@ -2674,8 +3128,8 @@ class LineComponent extends ElementObject {
   }
 }
 const _ConnectorComponent = class _ConnectorComponent extends ElementObject {
-  constructor(global, parent, config = {}) {
-    super(global, parent);
+  constructor(engine, parent, config = {}) {
+    super(engine, parent);
     __privateAdd(this, _config2);
     __privateAdd(this, _name);
     __privateAdd(this, _prop);
@@ -2692,12 +3146,24 @@ const _ConnectorComponent = class _ConnectorComponent extends ElementObject {
     __privateSet(this, _config2, config);
     __privateSet(this, _name, config.name || this.gid || "");
     this.event.input.pointerDown = this.onCursorDown;
-    __privateSet(this, _hitCircle, new CircleCollider(global, this, 0, 0, 30));
+    __privateSet(this, _hitCircle, new CircleCollider(engine, this, 0, 0, config.colliderRadius ?? 30));
     this.addCollider(__privateGet(this, _hitCircle));
-    __privateSet(this, _mouseHitBox, new PointCollider(global, this, 0, 0));
+    __privateSet(this, _mouseHitBox, new PointCollider(engine, this, 0, 0));
     this.addCollider(__privateGet(this, _mouseHitBox));
     __privateSet(this, _targetConnector, null);
     this.transformMode = "none";
+    this.event.dom.onAssignDom = () => {
+      this.queueUpdate("READ_1", () => {
+        this.readDom();
+        const prop = this.getDomProperty("READ_1");
+        const centerX = prop.width / 2;
+        const centerY = prop.height / 2;
+        __privateGet(this, _hitCircle).transform.x = centerX;
+        __privateGet(this, _hitCircle).transform.y = centerY;
+        __privateGet(this, _mouseHitBox).transform.x = centerX;
+        __privateGet(this, _mouseHitBox).transform.y = centerY;
+      });
+    };
     __privateSet(this, _connectorCallback, {
       onConnectOutgoing: null,
       onConnectIncoming: null,
@@ -2750,6 +3216,7 @@ const _ConnectorComponent = class _ConnectorComponent extends ElementObject {
     if (prop.event.button != 0) {
       return;
     }
+    console.debug(`Pointer down on connector ${this.gid}`);
     this.inputEngine.resetDragMembers();
     if (currentIncomingLines.length > 0) {
       this.startPickUpLine(currentIncomingLines[0], prop);
@@ -2801,9 +3268,9 @@ const _ConnectorComponent = class _ConnectorComponent extends ElementObject {
   createLine() {
     let line;
     if (__privateGet(this, _config2).lineClass) {
-      line = new (__privateGet(this, _config2)).lineClass(this.global, this);
+      line = new (__privateGet(this, _config2)).lineClass(this.engine, this);
     } else {
-      line = new LineComponent(this.global, this);
+      line = new LineComponent(this.engine, this);
     }
     this.children.push(line);
     return line;
@@ -3004,8 +3471,8 @@ _targetConnector = new WeakMap();
 _connectorCallback = new WeakMap();
 let ConnectorComponent = _ConnectorComponent;
 class NodeComponent extends ElementObject {
-  constructor(global, parent, config = {}) {
-    super(global, parent);
+  constructor(engine, parent, config = {}) {
+    super(engine, parent);
     __publicField(this, "_config");
     __publicField(this, "_connectors");
     __publicField(this, "_components");
@@ -3038,7 +3505,7 @@ class NodeComponent extends ElementObject {
     this.event.input.drag = this.onDrag;
     this.event.input.dragEnd = this.onDragEnd;
     this.event.input.pointerUp = this.onUp;
-    this._hitBox = new RectCollider(this.global, this, 0, 0, 0, 0);
+    this._hitBox = new RectCollider(this.engine, this, 0, 0, 0, 0);
     this.addCollider(this._hitBox);
     this._selected = false;
     this._hasMoved = false;
@@ -3071,6 +3538,9 @@ class NodeComponent extends ElementObject {
     this.event.dom.onAssignDom = () => {
       this._hitBox.element = this.element;
     };
+    if (!this.global.data.select) {
+      this.global.data.select = [];
+    }
   }
   setStartPositions() {
     this._dragStartX = this.transform.x;
@@ -3164,7 +3634,7 @@ class NodeComponent extends ElementObject {
     this.worldPosition = [this._dragStartX + dx, this._dragStartY + dy];
     this.updateNodeLines();
   }
-  onUp(prop) {
+  onUp(_prop2) {
     if (this._hasMoved == false) {
       for (const node of this.global.data.select ?? []) {
         node.setSelected(false);
@@ -3225,8 +3695,8 @@ class NodeComponent extends ElementObject {
   }
 }
 class RectSelectComponent extends ElementObject {
-  constructor(globals, parent) {
-    super(globals, parent);
+  constructor(engine, parent) {
+    super(engine, parent);
     __publicField(this, "_state");
     __publicField(this, "_mouseDownX");
     __publicField(this, "_mouseDownY");
@@ -3237,7 +3707,7 @@ class RectSelectComponent extends ElementObject {
     this.event.global.pointerDown = this.onGlobalCursorDown;
     this.event.global.pointerMove = this.onGlobalCursorMove;
     this.event.global.pointerUp = this.onGlobalCursorUp;
-    this._selectHitBox = new RectCollider(globals, this, 0, 0, 0, 0);
+    this._selectHitBox = new RectCollider(engine, this, 0, 0, 0, 0);
     this._selectHitBox.transform.x = 0;
     this._selectHitBox.transform.y = 0;
     this._selectHitBox.event.collider.onCollide = this.onCollideNode;
@@ -3321,11 +3791,11 @@ class RectSelectComponent extends ElementObject {
   }
 }
 class Background extends ElementObject {
-  constructor(globals, parent) {
-    super(globals, parent);
+  constructor(engine, parent) {
+    super(engine, parent);
     __publicField(this, "_tileSize", 40);
     this.event.global.pointerMove = this.moveBackground;
-    this.dom.style = {
+    this._dom.style = {
       position: "absolute",
       top: "0",
       left: "0",
@@ -3335,24 +3805,24 @@ class Background extends ElementObject {
   }
   moveBackground(_) {
     var _a, _b, _c, _d;
-    let x = (_a = this.global.camera) == null ? void 0 : _a.cameraPositionX;
-    let y = (_b = this.global.camera) == null ? void 0 : _b.cameraPositionY;
-    let width = ((_c = this.global.camera) == null ? void 0 : _c.cameraWidth) * 5;
-    let height = ((_d = this.global.camera) == null ? void 0 : _d.cameraHeight) * 5;
+    let x = (_a = this.engine.camera) == null ? void 0 : _a.cameraPositionX;
+    let y = (_b = this.engine.camera) == null ? void 0 : _b.cameraPositionY;
+    let width = ((_c = this.engine.camera) == null ? void 0 : _c.cameraWidth) * 5;
+    let height = ((_d = this.engine.camera) == null ? void 0 : _d.cameraHeight) * 5;
     this.worldPosition = [
       Math.floor(x / this._tileSize) * this._tileSize - width / 2,
       Math.floor(y / this._tileSize) * this._tileSize - height / 2
     ];
-    this.dom.style = {
+    this._dom.style = {
       width: `${width}px`,
       height: `${height}px`
     };
-    this.requestPostWrite();
+    this.requestWrite();
   }
 }
 class CameraControl extends ElementObject {
-  constructor(globals, zoomLock = false, panLock = false) {
-    super(globals, null);
+  constructor(engine, zoomLock = false, panLock = false) {
+    super(engine, null);
     __publicField(this, "_state", "idle");
     __publicField(this, "_mouseDownX");
     __publicField(this, "_mouseDownY");
@@ -3360,8 +3830,8 @@ class CameraControl extends ElementObject {
     __publicField(this, "zoomLock");
     __publicField(this, "panLock");
     __publicField(this, "resizeObserver", null);
-    __privateAdd(this, _prevCenterX, 0);
-    __privateAdd(this, _prevCenterY, 0);
+    __privateAdd(this, _prevCameraX, 0);
+    __privateAdd(this, _prevCameraY, 0);
     this.zoomLock = zoomLock;
     this.panLock = panLock;
     this._mouseDownX = 0;
@@ -3381,45 +3851,48 @@ class CameraControl extends ElementObject {
     };
     this.requestTransform("WRITE_2");
     this.resizeObserver = null;
-    __privateSet(this, _prevCenterX, 0);
-    __privateSet(this, _prevCenterY, 0);
-    this.global.snapline.event.containerElementAssigned = () => {
+    __privateSet(this, _prevCameraX, 0);
+    __privateSet(this, _prevCameraY, 0);
+    this.engine.event.containerElementAssigned = () => {
       this.resizeObserver = new ResizeObserver(() => {
-        this.updateCameraCenterPosition(__privateGet(this, _prevCenterX), __privateGet(this, _prevCenterY));
+        this.setCameraPosition(__privateGet(this, _prevCameraX), __privateGet(this, _prevCameraY));
         this.paintCamera();
       });
-      this.resizeObserver.observe(this.global.containerElement);
+      this.resizeObserver.observe(this.engine.containerElement);
       this.resizeObserver.observe(window.document.body);
     };
   }
   paintCamera() {
     var _a, _b, _c;
-    (_a = this.global.camera) == null ? void 0 : _a.updateCameraProperty();
-    (_b = this.global.camera) == null ? void 0 : _b.updateCamera();
-    this.style.transform = (_c = this.global.camera) == null ? void 0 : _c.canvasStyle;
+    (_a = this.engine.camera) == null ? void 0 : _a.updateCameraProperty();
+    (_b = this.engine.camera) == null ? void 0 : _b.updateCamera();
+    this.style.transform = (_c = this.engine.camera) == null ? void 0 : _c.canvasStyle;
     this.requestTransform("WRITE_2");
   }
   updateCameraCenterPosition(x = 0, y = 0) {
-    var _a, _b;
-    (_a = this.global.camera) == null ? void 0 : _a.setCameraCenterPosition(x, y);
-    const prev = (_b = this.global.camera) == null ? void 0 : _b.getCameraCenterPosition();
-    __privateSet(this, _prevCenterX, (prev == null ? void 0 : prev.x) || 0);
-    __privateSet(this, _prevCenterY, (prev == null ? void 0 : prev.y) || 0);
+    var _a, _b, _c;
+    (_a = this.engine.camera) == null ? void 0 : _a.setCameraCenterPosition(x, y);
+    __privateSet(this, _prevCameraX, ((_b = this.engine.camera) == null ? void 0 : _b.cameraPositionX) || 0);
+    __privateSet(this, _prevCameraY, ((_c = this.engine.camera) == null ? void 0 : _c.cameraPositionY) || 0);
     this.paintCamera();
   }
   setCameraPosition(x, y) {
     var _a;
-    (_a = this.global.camera) == null ? void 0 : _a.setCameraPosition(x, y);
+    (_a = this.engine.camera) == null ? void 0 : _a.setCameraPosition(x, y);
+    __privateSet(this, _prevCameraX, x);
+    __privateSet(this, _prevCameraY, y);
     this.paintCamera();
   }
   setCameraCenterPosition(x, y) {
-    var _a;
-    (_a = this.global.camera) == null ? void 0 : _a.setCameraCenterPosition(x, y);
+    var _a, _b, _c;
+    (_a = this.engine.camera) == null ? void 0 : _a.setCameraCenterPosition(x, y);
+    __privateSet(this, _prevCameraX, ((_b = this.engine.camera) == null ? void 0 : _b.cameraPositionX) || 0);
+    __privateSet(this, _prevCameraY, ((_c = this.engine.camera) == null ? void 0 : _c.cameraPositionY) || 0);
     this.paintCamera();
   }
   getCameraCenterPosition() {
     var _a;
-    return ((_a = this.global.camera) == null ? void 0 : _a.getCameraCenterPosition()) || { x: 0, y: 0 };
+    return ((_a = this.engine.camera) == null ? void 0 : _a.getCameraCenterPosition()) || { x: 0, y: 0 };
   }
   onCursorDown(prop) {
     var _a;
@@ -3432,7 +3905,7 @@ class CameraControl extends ElementObject {
     this._state = "panning";
     this._mouseDownX = prop.position.screenX;
     this._mouseDownY = prop.position.screenY;
-    (_a = this.global.camera) == null ? void 0 : _a.handlePanStart();
+    (_a = this.engine.camera) == null ? void 0 : _a.handlePanStart();
     prop.event.preventDefault();
   }
   onCursorMove(prop) {
@@ -3442,53 +3915,65 @@ class CameraControl extends ElementObject {
     }
     const dx = prop.position.screenX - this._mouseDownX;
     const dy = prop.position.screenY - this._mouseDownY;
-    (_a = this.global.camera) == null ? void 0 : _a.handlePanDrag(dx, dy);
-    this.style.transform = (_b = this.global.camera) == null ? void 0 : _b.canvasStyle;
+    (_a = this.engine.camera) == null ? void 0 : _a.handlePanDrag(dx, dy);
+    this.style.transform = (_b = this.engine.camera) == null ? void 0 : _b.canvasStyle;
     this.requestTransform("WRITE_2");
   }
-  onCursorUp(prop) {
-    var _a, _b, _c;
+  onCursorUp(_prop2) {
+    var _a, _b, _c, _d;
     if (this._state != "panning") {
       return;
     }
     this._state = "idle";
-    (_a = this.global.camera) == null ? void 0 : _a.handlePanEnd();
-    this.style.transform = (_b = this.global.camera) == null ? void 0 : _b.canvasStyle;
-    const prev = (_c = this.global.camera) == null ? void 0 : _c.getCameraCenterPosition();
-    __privateSet(this, _prevCenterX, (prev == null ? void 0 : prev.x) || 0);
-    __privateSet(this, _prevCenterY, (prev == null ? void 0 : prev.y) || 0);
+    (_a = this.engine.camera) == null ? void 0 : _a.handlePanEnd();
+    this.style.transform = (_b = this.engine.camera) == null ? void 0 : _b.canvasStyle;
+    __privateSet(this, _prevCameraX, ((_c = this.engine.camera) == null ? void 0 : _c.cameraPositionX) || 0);
+    __privateSet(this, _prevCameraY, ((_d = this.engine.camera) == null ? void 0 : _d.cameraPositionY) || 0);
     this.requestTransform("WRITE_2");
   }
   onZoom(prop) {
-    var _a, _b;
     if (this.zoomLock) {
       return;
     }
-    let camera = this.global.camera;
+    const camera = this.engine.camera;
     if (prop.position.screenX < camera.containerOffsetX || prop.position.screenX > camera.containerOffsetX + camera.cameraWidth || prop.position.screenY < camera.containerOffsetY || prop.position.screenY > camera.containerOffsetY + camera.cameraHeight) {
       return;
     }
-    (_a = this.global.camera) == null ? void 0 : _a.handleScroll(
-      prop.delta / 2e3,
-      prop.position.cameraX,
-      prop.position.cameraY
-    );
-    this.style.transform = (_b = this.global.camera) == null ? void 0 : _b.canvasStyle;
-    this.requestTransform("WRITE_2");
+    this.zoomBy(prop.delta / 2e3, prop.position.cameraX, prop.position.cameraY);
     prop.event.preventDefault();
   }
+  zoomBy(deltaZoom, originX, originY) {
+    if (this.zoomLock) {
+      return;
+    }
+    const camera = this.engine.camera;
+    if (!camera) {
+      return;
+    }
+    const targetX = originX ?? camera.cameraWidth / 2;
+    const targetY = originY ?? camera.cameraHeight / 2;
+    camera.handleScroll(deltaZoom, targetX, targetY);
+    this.style.transform = camera.canvasStyle;
+    __privateSet(this, _prevCameraX, camera.cameraPositionX || 0);
+    __privateSet(this, _prevCameraY, camera.cameraPositionY || 0);
+    this.requestTransform("WRITE_2");
+  }
 }
-_prevCenterX = new WeakMap();
-_prevCenterY = new WeakMap();
+_prevCameraX = new WeakMap();
+_prevCameraY = new WeakMap();
+const cameraControl = /* @__PURE__ */ Object.freeze(/* @__PURE__ */ Object.defineProperty({
+  __proto__: null,
+  CameraControl
+}, Symbol.toStringTag, { value: "Module" }));
 export {
   Background,
   BaseObject,
   CameraControl,
   ConnectorComponent,
   ElementObject,
+  Engine,
   GlobalManager,
   LineComponent,
   NodeComponent,
-  RectSelectComponent,
-  SnapLine
+  RectSelectComponent
 };
