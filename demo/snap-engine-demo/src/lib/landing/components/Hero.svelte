@@ -623,8 +623,9 @@
     padding-left: 2rem;
 
     h1 {
-      font-size: clamp(2.5rem, 4vw, 3rem);
-      line-height: 1.1;
+      font-size: 5rem;
+      font-weight: 300;
+      line-height: 0.9;
       margin: 0;
     }
   }

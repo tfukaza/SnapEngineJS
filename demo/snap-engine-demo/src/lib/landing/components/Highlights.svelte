@@ -36,13 +36,11 @@
     margin: clamp(20px, 20vh, 300px) auto;
 
     h2 {
-      font-family: "IBM Plex Mono", "Coral Pixels", cursive;
       font-size: clamp(2.5rem, 5vw, 3.5rem);
       margin-bottom: 1rem;
     }
 
     p {
-      font-family: "IBM Plex Mono", "Coral Pixels", cursive;
       font-size: clamp(1.2rem, 2vw, 1.5rem);
       line-height: 1.6;
     }

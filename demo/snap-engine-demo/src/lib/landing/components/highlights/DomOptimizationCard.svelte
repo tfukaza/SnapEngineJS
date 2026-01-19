@@ -458,6 +458,7 @@
      <div class="opt-toggle">
       <label>Optimize
       <input
+        class="toggle"
         type="checkbox"
         bind:checked={optimize}
         aria-label="Toggle DOM optimization"
@@ -532,9 +533,6 @@
     row-gap: 2rem;
     column-gap: 4rem;
     padding: var(--size-24);
-    // border-radius: 0.7rem;
-    background: var(--color-background-tint);
-    // box-shadow: inset 0 0 0 1px rgba(47, 31, 26, 0.12);
     overflow: hidden;
     height: 100%;
     box-sizing: border-box;

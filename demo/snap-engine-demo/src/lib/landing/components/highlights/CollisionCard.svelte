@@ -9,37 +9,53 @@
   let engine: Engine | null = $state(null);
   let collisionCount = $state(0);
   let isColliding = $state(false);
+  let containerEl: HTMLDivElement | null = $state(null);
+  let containerWidth = $state(360);
+  let containerHeight = $state(360);
 
-  const BOX_X = 30;
-  const BOX_Y = 40;
   const BOX_SIZE = 70;
-  const HERO_CIRCLE_X = 180;
-  const HERO_CIRCLE_Y = 55;
   const HERO_CIRCLE_RADIUS = 35;
-
-  const GRID_DIMENSION = 16;
   const CIRCLE_RADIUS = 8;
   const CIRCLE_GAP = 6;
-  const STAGE_WIDTH = 360;
-  const STAGE_HEIGHT = 360;
   const STEP = CIRCLE_RADIUS * 2 + CIRCLE_GAP;
-  const GRID_WIDTH = CIRCLE_RADIUS * 2 + (GRID_DIMENSION - 1) * STEP;
-  const GRID_HEIGHT = CIRCLE_RADIUS * 2 + (GRID_DIMENSION - 1) * STEP;
-  const GRID_MARGIN_X = (STAGE_WIDTH - GRID_WIDTH) / 2;
-  const GRID_MARGIN_Y = (STAGE_HEIGHT - GRID_HEIGHT) / 2;
+  const GRID_MARGIN = 16; // Margin from container edges
 
-  const collisionCircles = Array.from(
-    { length: GRID_DIMENSION * GRID_DIMENSION },
-    (_, index) => {
-      const row = Math.floor(index / GRID_DIMENSION);
-      const col = index % GRID_DIMENSION;
-      return {
-        id: index,
-        initialX: GRID_MARGIN_X + col * STEP,
-        initialY: GRID_MARGIN_Y + row * STEP,
-      };
-    },
-  );
+  // Calculate grid dimensions based on container size
+  let gridCols = $derived(Math.max(1, Math.floor((containerWidth - GRID_MARGIN * 2) / STEP)));
+  let gridRows = $derived(Math.max(1, Math.floor((containerHeight - GRID_MARGIN * 2) / STEP)));
+
+  // Calculate actual grid size and centering margins
+  let gridWidth = $derived((gridCols - 1) * STEP + CIRCLE_RADIUS * 2);
+  let gridHeight = $derived((gridRows - 1) * STEP + CIRCLE_RADIUS * 2);
+  let gridMarginX = $derived((containerWidth - gridWidth) / 2 - CIRCLE_RADIUS);
+  let gridMarginY = $derived((containerHeight - gridHeight) / 2 - CIRCLE_RADIUS);
+
+  // Hero object positions (relative to container)
+  let boxX = $derived(Math.max(10, gridMarginX - BOX_SIZE / 2));
+  let boxY = $derived(Math.max(10, gridMarginY - BOX_SIZE / 2));
+  let heroCircleX = $derived(Math.min(containerWidth - HERO_CIRCLE_RADIUS - 10, containerWidth - gridMarginX - HERO_CIRCLE_RADIUS));
+  let heroCircleY = $derived(Math.max(HERO_CIRCLE_RADIUS + 10, gridMarginY));
+
+  // Generate collision circles based on dynamic grid
+  let collisionCircles = $derived.by(() => {
+    const cols = gridCols;
+    const rows = gridRows;
+    const marginX = gridMarginX;
+    const marginY = gridMarginY;
+    
+    return Array.from(
+      { length: cols * rows },
+      (_, index) => {
+        const row = Math.floor(index / cols);
+        const col = index % cols;
+        return {
+          id: `${row}-${col}`,
+          initialX: marginX + col * STEP + CIRCLE_RADIUS,
+          initialY: marginY + row * STEP + CIRCLE_RADIUS,
+        };
+      },
+    );
+  });
 
   function handleCollisionBegin() {
     collisionCount++;
@@ -49,6 +65,23 @@
   function handleCollisionEnd() {
     isColliding = false;
   }
+
+  $effect(() => {
+    if (!containerEl) return;
+
+    const resizeObserver = new ResizeObserver((entries) => {
+      for (const entry of entries) {
+        containerWidth = entry.contentRect.width;
+        containerHeight = entry.contentRect.height;
+      }
+    });
+
+    resizeObserver.observe(containerEl);
+
+    return () => {
+      resizeObserver.disconnect();
+    };
+  });
 </script>
 
 <HighlightCardShell
@@ -58,7 +91,7 @@
 >
 
 
-  <div class="collision-demo-container slot">
+  <div class="collision-demo-container" bind:this={containerEl}>
     <div class="dot-grid-background"></div>
     <Canvas id="collision-card-canvas" bind:engine={engine} debug={debugState.enabled}>
       <div class="collision-demo">
@@ -76,8 +109,8 @@
           {/each}
         </div> <CollisionBox
           title="Box"
-          initialX={BOX_X}
-          initialY={BOX_Y}
+          initialX={boxX}
+          initialY={boxY}
           width={BOX_SIZE}
           height={BOX_SIZE}
           onCollisionBegin={handleCollisionBegin}
@@ -85,13 +118,12 @@
         />
         <CollisionCircle
           title="Circle"
-          initialX={HERO_CIRCLE_X}
-          initialY={HERO_CIRCLE_Y}
+          initialX={heroCircleX}
+          initialY={heroCircleY}
           radius={HERO_CIRCLE_RADIUS}
           onCollisionBegin={handleCollisionBegin}
           onCollisionEnd={handleCollisionEnd}
         />
-        <!-- <p class="hint">Hero objects + 256 live colliders — drag to disturb the grid</p> -->
       </div>
     </Canvas>
   </div>
@@ -103,28 +135,25 @@
 
 <style lang="scss">
   .collision-counter {
+    --card-color: #222628;
     display: flex;
     flex-direction: column;
     align-items: center;
     padding: 0.4rem 0.7rem;
-    border-radius: 0.5rem;
-    // background: rgba(47, 31, 26, 0.06);
-    transition: background 0.2s, transform 0.15s;
     position: absolute;
     bottom: 1rem;
     left: 50%;
     transform: translateX(-50%);
 
-    &.active {
-      // background: color-mix(in srgb, var(--color-secondary-1) 20%, transparent);
-      transform: translateX(-50%) scale(1.05);
+    span {
+      font-family: "Pixelify Sans", monospace;
+      color: #fff;
     }
   }
 
   .collision-counter .count {
     font-size: 1.2rem;
     font-weight: 700;
-    color: #3a2a22;
     line-height: 1;
   }
 
@@ -132,7 +161,6 @@
     font-size: 0.55rem;
     text-transform: uppercase;
     letter-spacing: 0.05em;
-    color: rgba(47, 31, 26, 0.6);
   }
 
   .collision-demo-container {
@@ -164,7 +192,8 @@
 
   .collision-demo {
     position: relative;
-    margin: 0 auto;
+    width: 100%;
+    height: 100%;
   }
 
   .collision-grid {
@@ -173,19 +202,6 @@
     :global(.collision-box) {
       cursor: default;
     }
-  }
-
-  .hint {
-    position: absolute;
-    top: 0.5rem;
-    left: 50%;
-    transform: translateX(-50%);
-    margin: 0;
-    font-size: 0.6rem;
-    color: rgba(47, 31, 26, 0.4);
-    text-transform: uppercase;
-    letter-spacing: 0.05em;
-    pointer-events: none;
   }
 
   @media (max-width: 480px) {

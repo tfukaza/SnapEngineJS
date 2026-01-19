@@ -421,7 +421,7 @@
 
 <HighlightCardShell
   className="animation-card theme-secondary-4"
-  title="Animation"
+  title="Animation Engine"
   description="WAAPI based animation engine that's lightweight and performant."
 >
   <Canvas id="highlight-animation" bind:engine bind:this={canvasComponent} debug={debugState.enabled}>
@@ -478,7 +478,7 @@
         </div>
       </div>
 
-      <div class="slot preview-area">
+      <div class="slot shallow preview-area">
         <div class="preview-square-container">
           <div
             class="animated-square"
@@ -516,6 +516,7 @@
     justify-content: center;
     background-image: radial-gradient(circle, rgba(47, 31, 26, 0.15) 1px, transparent 1px);
     background-size: 32px 32px;
+    background-color: var(--color-background-tint);
     min-height: 150px;
   }
 
@@ -553,7 +554,7 @@
     // border: 1px solid rgba(58, 42, 34, 0.15);
     height: auto;
     box-sizing: border-box;
-    background-color: var(--color-background-tint);
+    // background-color: var(--color-background-tint);
     // border-radius: var(--ui-radius) var(--ui-radius) 0 0;
     padding: 1rem;
   }

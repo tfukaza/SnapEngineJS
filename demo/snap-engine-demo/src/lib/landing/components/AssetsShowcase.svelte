@@ -123,10 +123,8 @@
   }
 
   .eyebrow {
-    font-size: clamp(1.5rem, 3vw, 2.25rem);
-    font-weight: 600;
     margin-bottom: 0.5rem;
-    color: #3a2a22;
+    text-align: center;
   }
 
   .subhead {
@@ -183,18 +181,6 @@
       }
     }
 
-    h3 {
-      margin: 0 0 0.5rem 0;
-      font-size: 1.25rem;
-      color: #3a2a22;
-    }
-
-    p {
-      margin: 0;
-      font-size: 0.95rem;
-      color: #5e4d44;
-      line-height: 1.5;
-    }
   }
 
   :global(.drop-snap-card) {
@@ -232,8 +218,9 @@
     pointer-events: none;
     overflow: hidden;
     background-color: var(--color-background-tint);
-    mask-image: linear-gradient(to bottom, transparent 20%, black 40%, black 100%);
-    -webkit-mask-image: linear-gradient(to bottom, transparent 20%, black 40%, black 100%);
+    mask-image: linear-gradient(to bottom, transparent 90px, black 150px, black 100%);
+    -webkit-mask-image: linear-gradient(to bottom, transparent 90px, black 150px, black 100%);
+
   }
 
   .ds-board-transform {

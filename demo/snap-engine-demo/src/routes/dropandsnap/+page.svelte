@@ -165,11 +165,6 @@
 </script>
 
 <section id="landing">
-  <div class="debug-toggle">
-    <button onclick={toggleDebug}>
-      {debug ? "Disable Debug" : "Enable Debug"}
-    </button>
-  </div>
   <Canvas id="dropandsnap-canvas" bind:this={canvasComponent} {debug}>
 
       <div class="hero-section card ground">
@@ -348,6 +343,7 @@
 
 <style lang="scss">
   @import "../../lib/landing/landing.scss";
+  @import url('https://fonts.googleapis.com/css2?family=Geist+Mono:wght@100..900&family=Handjet:wght,ELSH@100..900,2&family=WDXL+Lubrifont+JP+N&display=swap');
 
   .debug-toggle {
     position: fixed;
@@ -378,14 +374,7 @@
     height: clamp(80vh, 80vh, 1200px);
   }
 
-  .hero-section {
-    display: flex;
-    flex-direction: column;
-    align-items: center;
-    justify-content: center;
-    // min-height: 80vh;
-    background-color: white;
-  }
+ 
   
   :global(#snap-canvas) {
     display: flex;
@@ -394,7 +383,16 @@
     justify-content: center;
   }
   .hero-section{
-  
+   display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    // min-height: 80vh;
+    background-color: white;
+
+    @media (max-width: 720px) {
+      width: 80%;
+    }
     .title-section {
       width: fit-content;
       margin-bottom: 2rem;
@@ -478,9 +476,8 @@
   }
 
   .title-text {
-    font-family: "Tomorrow", sans-serif;
+    font-family: "Handjet", sans-serif;
     font-size: 4rem;
-    font-weight: 800;
     line-height: 1;
 
     @media screen and (max-width: 700px) {
@@ -488,12 +485,7 @@
     }
   }
 
-  .subtitle-text {
-    font-size: 1.25rem;
-    font-weight: 400;
-    line-height: 1.4;
-    color: #5e4d44;
-  }
+
 
   .powered-by {
     margin-top: 2rem;
@@ -506,11 +498,9 @@
 
   #drag-drop-header {
     text-align: center;
-    font-family: "IBM Plex Mono", "Coral Pixels", cursive;
     font-size: 3rem;
-    // font-weight: 700;
     margin: 200px 0px;
-    // color: #3a2a22;
+
   }
 
   /* Examples Section */
@@ -539,10 +529,7 @@
   }
 
   .example-card h3 {
-    font-family: "Tomorrow", sans-serif;
-    font-size: 1.5rem;
-    margin: 0;
-    color: #3a2a22;
+    color: #b5b5b6;
   }
 
   .pm-example {
@@ -638,10 +625,9 @@
   }
 
   .english-sentence {
-    font-family: "Pixelify Sans", sans-serif;
-    font-size: 1.2rem;
     span {
       color: #ffffff;
+      font-family: "Pixelify Sans", sans-serif;
     }
   }
 
@@ -655,7 +641,6 @@
   .sentence-drop-zone {
     min-height: 20px;
     border-bottom: 2px solid #eee;
-    // padding: 0.5rem;
     display: flex;
     align-items: center;
     position: relative;
@@ -673,13 +658,11 @@
 
   .sentence-source-zone {
     min-height: 20px;
-    // padding: 0.5rem;
   }
 
   .sentence-source-zone :global(.container) {
     display: flex;
     flex-direction: row;
-    // gap: 0.5rem;
     flex-wrap: wrap;
   }
 
@@ -687,11 +670,10 @@
     background: #ffffff;
     border: 1px solid #ddd;
     padding: 2px 4px;
-    // padding: 0.5rem 1rem;
     border-radius: 4px;
-    // font-weight: 500;
     cursor: grab;
     touch-action: none;
+    font-family: 'WDXL Lubrifont JP N';
   }
 
   .sentence-word:active {
@@ -723,10 +705,6 @@
     cursor: pointer;
     // font-weight: 600;
     // font-family: inherit;
-  }
-
-  .check-btn:hover {
-    background: #5e4d44;
   }
 
   .result {
@@ -949,6 +927,7 @@
     border-radius: 3px;
     font-size: 0.75rem;
     padding: 0.25rem 0.75rem;
+    font-family: 'WDXL Lubrifont JP N';
   }
 
   .grid-card:active {

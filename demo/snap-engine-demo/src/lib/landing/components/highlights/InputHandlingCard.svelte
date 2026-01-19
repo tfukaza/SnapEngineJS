@@ -571,14 +571,11 @@
 
 <style lang="scss">
   .pointer-demo-wrapper {
-    background-color: var(--color-background-tint);
-    // border: 1px solid #d6d3d2;
-    // border-radius: var(--ui-radius);
     display: flex;
     flex-direction: column;
     gap: 0;
     align-items: stretch;
-    padding: var(--size-48)
+    padding: var(--size-24);
   }
 
   :global(.pointer-demo-wrapper #snap-canvas) {
@@ -603,10 +600,6 @@
     position: relative;
     min-height: 150px;
     padding: var(--size-24);
-    // border-radius: var(--ui-radius);
-    background: #ffffff;
-    // border: 1px solid rgba(58, 42, 34, 0.14);
-    // overflow: hidden;
     cursor: none;
   }
 
@@ -625,7 +618,6 @@
     color: #a3a1a0;
     letter-spacing: 2px;
     font-size: 0.7rem;
-    // color: var(--panel-accent);
   }
 
   .panel-helper {

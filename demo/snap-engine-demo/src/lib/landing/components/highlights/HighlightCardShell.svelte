@@ -13,23 +13,21 @@
 
 <article class={`${className}`.trim()}>
   <div class="card-heading">
-    <div class="card-heading__text">
       {#if title}
         <h3>{title}</h3>
       {/if}
       {#if description}
         <p>{description}</p>
       {/if}
-    </div>
-    {#if hasHeadingAsideSlot}
+    <!-- {#if hasHeadingAsideSlot}
       <div class="card-heading__aside">
         <slot name="headingAside" />
       </div>
-    {/if}
+    {/if} -->
   </div>
 
   {#if hasBodySlot}
-    <div class="card-shell-body">
+    <div class="card-shell-body card ground ">
       <slot />
     </div>
   {/if}
@@ -41,69 +39,51 @@
     gap: var(--size-32);
     height: 100%;
     box-sizing: border-box;
-    // background: var(--color-background);
-    border: 1px solid #e6e3e2;
+    background: var(--color-background-tint);
     border-radius: var(--ui-radius);
     overflow: hidden;
-    display: flex;
-    // padding: var(--size-48);
-  }
+    display: flex; 
 
-   @media (max-width: 720px) {
-    article {
-      // padding: var(--size-24);
+    --card-padding: var(--size-48);
+    
+    @media (max-width: 720px) {
+      --card-padding: var(--size-24);
       grid-column: span 2;
     }
   }
 
-  .card-shell-body {
-    flex: 1 1 auto;
-    border-top: 1px solid #e6e3e2;
-    position: relative;
-  }
-
   .card-heading {
-    display: flex;
-    align-items: flex-start;
+    display: grid;
+    grid-template-columns: auto 1fr;
+    align-items: end;
     justify-content: space-between;
-    gap: var(--size-16);
-    padding: var(--size-48) var(--size-48) 0 var(--size-48);
-  }
+    gap: var(--size-48);
+    padding: var(--card-padding) var(--card-padding) 0 var(--card-padding);
 
-  .card-heading__text {
-    flex: 1 1 auto;
-    min-width: 0;
-  }
-
-  .card-heading__text h3 {
-    margin: 0;
-    letter-spacing: -0.02em;
-    font-size: 1.5rem;
-  }
-
-  .card-heading__text p {
-    margin: 0.35rem 0 0;
-    font-size: 0.85rem;
-    color: rgba(58, 42, 34, 0.75);
-  }
-
-  .card-heading__aside {
-    display: flex;
-    flex-shrink: 0;
-    align-items: flex-start;
-    justify-content: flex-end;
-  }
-
-  @media (max-width: 720px) {
-    .card-heading {
-      flex-direction: column;
-      padding: var(--size-32);
-      padding-bottom: 0;
+    h3 {
+      width: min-content; 
+      margin-bottom: 0;
     }
 
-    .card-heading__aside {
-      width: 100%;
-      justify-content: flex-start;
+    @media (max-width: 720px) {
+      gap: var(--size-12);
+      > * {
+        grid-column: span 2;
+      }
     }
   }
+
+  .card-shell-body {
+    margin: var(--card-padding);
+    margin-top: 0;
+    height:100%;
+  }
+
+  // @media (max-width: 720px) {
+  //   .card-heading {
+  //     flex-direction: column;
+  //     padding: var(--size-32);
+  //     padding-bottom: 0;
+  //   }
+  // }
 </style>

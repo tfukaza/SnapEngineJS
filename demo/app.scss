@@ -1,4 +1,5 @@
-@import url("https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@500&family=Tomorrow:wght@400;800&display=swap");
+@import url('https://fonts.googleapis.com/css2?family=Geist+Mono:wght@100..900&family=Handjet:wght,ELSH@100..900,2&display=swap');
+
 
 body {
   margin: 0;
@@ -20,7 +21,7 @@ body {
   --color-background: #ffffff;
   --color-background-tint: #f5f7f7;
   --color-background-dark: #7f8286;
-  --color-text: #3a3b3d;
+  --color-text: #555657;
 
   --size-256: 256px;
   --size-128: 128px;
@@ -46,29 +47,38 @@ h4,
 h5,
 h6 {
   margin: 0;
-  font-weight: 800;
-  font-family: "Tomorrow", sans-serif;
-  color: var(--color-text);
+  font-weight: 400;
+  font-family: 'Handjet', sans-serif;
+  color: #373738;
 }
 
 h1 {
+  font-size: 5rem;
+  font-weight: 300;
   padding-bottom: var(--size-16);
 }
 
 h2 {
+  font-size: 3rem;
   margin-bottom: var(--size-16);
 }
 
 h3 {
+  font-size: 2rem;
   margin-bottom: var(--size-12);
+}
+
+h4 {
+  font-size: 1.5rem;
+  margin-bottom: var(--size-8);
 }
 
 p,
 a,
 span,
 label {
-  font-family: "IBM Plex Mono", monospace;
-  font-size: 14px;
+  font-family: "Geist Mono", monospace;
+  font-size: 1rem;
   color: var(--color-text);
   font-weight: 500;
   margin: 0;
@@ -77,6 +87,27 @@ label {
 
   &.light {
     color: var(--color-background-tint);
+  }
+}
+
+@media (max-width: 720px) {
+  h1 {
+    font-size: 3rem;
+  }
+
+  h2 {
+    font-size: 2.5rem;
+  }
+
+  h3 {
+    font-size: 1.5rem;
+  }
+  h4 {
+    font-size: 1.2rem;
+  }
+
+  p {
+    font-size: 0.8rem;
   }
 }
 

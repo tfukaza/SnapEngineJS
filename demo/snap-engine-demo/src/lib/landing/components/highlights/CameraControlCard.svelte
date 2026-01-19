@@ -23,7 +23,7 @@
   title="Camera Control"
   description="Control pan and zoom of any DOM element."
 >
-  <div class="camera-card slot">
+  <div class="camera-card slot shallow">
         <Canvas id="camera-control-highlight" bind:this={canvasComponent} debug={debugState.enabled}>
           <CameraControlComponent bind:cameraControl>
             <div class="dot-grid-background"></div>
@@ -59,13 +59,13 @@
 
 <style lang="scss">
   .camera-card {
-    // display: flex;
-    // flex-direction: column;
-    background-color: var(--color-background);
+    background-color: var(--color-background-tint);
     height: 100%;
-    border-top-left-radius: 0;
-    border-top-right-radius: 0;
     position: relative;
+
+    @media (max-width: 720px) {
+      height: 300px;
+    }
   }
 
   .dot-grid-background {
@@ -136,7 +136,7 @@
     position: relative;
     pointer-events: none;
     overflow: hidden;
-    border-radius: calc(var(--ui-radius, 18px) - 4px);
+    border-radius: 16px;
 
     img {
       width: 100%;

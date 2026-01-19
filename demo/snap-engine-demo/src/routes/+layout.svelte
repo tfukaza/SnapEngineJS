@@ -8,7 +8,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
 </svelte:head>
 
-<nav class="nav-bar card">
+<nav class="nav-bar">
   <div class="nav-left">
     <a href="/" class="wordmark">SnapEngine</a>
   </div>
@@ -25,26 +25,28 @@
 </nav>
 {@render children()}
 
-<footer class="app-footer">
-  <div class="footer-content">
-    <div class="footer-brand">
-      <span class="brand-name">SnapEngine</span>
-      <span class="copyright">© {new Date().getFullYear()}</span>
-    </div>
-    <div class="footer-sections">
-      <div class="footer-collumn">
-        <h4>Project</h4>
-        <a href="/doc">Docs</a>
-        <a href="https://github.com/tfukaza/SnapLineJS" target="_blank" rel="noopener noreferrer">GitHub</a>
+<footer>
+  <div class="app-footer">
+    <div class="footer-content">
+      <div class="footer-brand">
+        <span class="brand-name">SnapEngine</span>
+        <span class="copyright">© {new Date().getFullYear()}</span>
       </div>
-      <div class="footer-collumn">
-        <a href="/#assets"><h4>Assets</h4></a>
-        <span class="footer-link-disabled">SnapZap</span>
-        <a href="/dropandsnap">DropAndSnap</a>
-        <span class="footer-link-disabled">SnapLine</span>
+      <div class="footer-sections">
+        <div class="footer-column">
+          <h4>Project</h4>
+          <a href="/doc">Docs</a>
+          <a href="https://github.com/tfukaza/SnapLineJS" target="_blank" rel="noopener noreferrer">GitHub</a>
+        </div>
+        <div class="footer-column">
+          <a href="/#assets"><h4>Assets</h4></a>
+          <span class="footer-link-disabled">SnapZap</span>
+          <a href="/dropandsnap">DropAndSnap</a>
+          <span class="footer-link-disabled">SnapLine</span>
+        </div>
       </div>
     </div>
-  </div>
+</div>
 </footer>
 
 <style lang="scss">
@@ -53,15 +55,18 @@
     justify-content: space-between;
     gap: var(--size-64);
     align-items: center;
-    padding: 1rem 2rem;
-    position: fixed;
+    padding: 1rem 0;
     top: 0;
-    left: 50%;
-    transform: translateX(-50%);
-    z-index: 100;
     background: rgba(255, 255, 255, 0.8);
-    backdrop-filter: blur(10px);
     border-radius: 0 0 var(--size-8) var(--size-8);
+    width: clamp(100px, 90%, 1200px);
+    box-sizing: border-box;
+    margin: 0px auto;
+
+    @media (max-width: 720px) {
+      // padding: 1rem;
+      gap: var(--size-32);
+    }
   }
 
   .nav-left {
@@ -69,7 +74,9 @@
     align-items: center;
 
     a {
-      font-family: 'Tomorrow', sans-serif;
+      font-size: 32px;
+      font-weight: 400;
+      font-family: 'Handjet', sans-serif;
     }
   }
 
@@ -117,20 +124,27 @@
     }
   }
 
+  footer {
+      border-top: 1px solid rgba(0,0,0,0.05);
+      width: 100%;
+  }
   .app-footer {
     margin-top: auto;
-    width: 100%;
-    padding: 6rem 0;
-    border-top: 1px solid rgba(0,0,0,0.05);
+    width: clamp(100px, 90%, 1200px);
+    margin: var(--size-128) auto;
+    box-sizing: border-box;
     background: white;
     
     .footer-content {
       max-width: var(--page-width, 1400px);
-      margin: 0 auto;
-      padding: 0 2rem;
       display: flex;
       justify-content: space-between;
       align-items: flex-start;
+
+      @media (max-width: 720px) {
+        flex-direction: column;
+        gap: 2rem;
+      }
     }
 
     .footer-brand {
@@ -152,23 +166,17 @@
       gap: 4rem;
     }
 
-    .footer-collumn {
+    .footer-column {
       display: flex;
       flex-direction: column;
       gap: 0.75rem;
 
       h4 {
         margin: 0;
-        font-size: 0.85rem;
-        font-weight: 600;
-        text-transform: uppercase;
-        letter-spacing: 0.05em;
-        color: #8b8a89;
       }
 
       a {
         text-decoration: none;
-        color: #5e4d44;
         font-size: 0.9rem;
         transition: color 0.2s ease;
         
