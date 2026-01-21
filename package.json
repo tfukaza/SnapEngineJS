@@ -18,6 +18,7 @@
     "server:react": "FRAMEWORK=react vite serve demo/react --config demo/react/vite.config.mjs --host",
     "server:svelte": "FRAMEWORK=svelte vite serve demo/svelte --config demo/svelte/vite.config.mjs --host",
     "dev:all": "concurrently --kill-others \"npm run dev:vanilla\" \"npm run dev:react\"",
+    "website": "concurrently --kill-others \"cd website && npm run dev\" \"cd docs && npm run dev\"",
     "test": "start-server-and-test server:vanilla http://localhost:3001 'playwright test'",
     "test:ui": "start-server-and-test server:vanilla http://localhost:3001 'playwright test --ui'",
     "format": "prettier --write src",
