@@ -1,11 +1,11 @@
 <script lang="ts">
   import { onDestroy } from "svelte";
-  import EmojiWordConnector from "./EmojiWordConnector.svelte";
-  import type { EmojiWordConnection } from "./EmojiWordConnector.svelte";
-  import SeqTwoPannable from "./SeqTwoPannable.svelte";
-  import type { NodePoint } from "./SeqTwoPannable.svelte";
-  import SeqOneDropDemo from "./SeqOneDropDemo.svelte";
-  import SeqPanel from "./SeqPanel.svelte";
+  import EmojiWordConnector from "./hero/EmojiWordConnector.svelte";
+  import type { EmojiWordConnection } from "./hero/EmojiWordConnector.svelte";
+  import SeqTwoPannable from "./hero/SeqTwoPannable.svelte";
+  import type { NodePoint } from "./hero/SeqTwoPannable.svelte";
+  import SeqOneDropDemo from "./hero/SeqOneDropDemo.svelte";
+  import SeqPanel from "./hero/SeqPanel.svelte";
   import { AnimationObject, SequenceObject } from "@snapline/animation";
   import type { ItemContainer } from "@snapline/asset/drag_and_drop/container";
   import type { Engine } from "@snapline/index";
@@ -598,7 +598,7 @@
   #landing {
     border-radius: var(--size-12);
     background-color: var(--color-background-tint);
-    margin: 100px auto;
+    margin: 0px auto;
     container-type: inline-size;
     container-name: landing;
     overflow: hidden;

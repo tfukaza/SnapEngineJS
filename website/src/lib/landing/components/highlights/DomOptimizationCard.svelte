@@ -8,6 +8,7 @@
   } from "@snapline/index";
   import { AnimationObject } from "@snapline/animation";
   import HighlightCardShell from "./HighlightCardShell.svelte";
+  import Canvas from "@svelte-demo/lib/Canvas.svelte";
   import { debugState } from "$lib/landing/debugState.svelte";
 
   type OperationType = "read" | "write";
@@ -65,78 +66,83 @@
   }
 
   let optimize = $state(false);
-  const engine = new Engine();
-  const controller = new BaseObject(engine, null);
+  let engine = $state<Engine | null>(null);
+  let controller = $state<BaseObject | null>(null);
+
+  $effect(() => {
+    if (engine && !controller) {
+      controller = new BaseObject(engine, null);
+    }
+  });
+
   let timelineContainer: HTMLElement | null = null;
   let connectorHost: HTMLElement | null = null;
 
   // Map to store our engine objects
-  const blockObjects: Record<string, TimelineBlockObject> = {};
+  const blockObjects: Record<string, ElementObject> = {};
   const lineObjects: Record<string, ConnectorLineObject> = {};
-  const opObjects: Record<string, OperationObject> = {};
-  let hostObject: HostObject | null = null;
+  const opObjects: Record<string, ElementObject> = {};
+  let hostObject: ElementObject | null = null;
 
-  class OperationObject extends ElementObject {
-    id: string;
-    constructor(
-      engine: Engine,
-      parent: BaseObject | null,
-      element: HTMLElement,
-      id: string,
-    ) {
-      super(engine, parent);
-      this.element = element;
-      this.id = id;
-    }
-  }
+  // class OperationObject extends ElementObject {
+  //   id: string;
+  //   constructor(
+  //     engine: Engine,
+  //     parent: BaseObject | null,
+  //     element: HTMLElement,
+  //     id: string,
+  //   ) {
+  //     super(engine, parent);
+  //     this.element = element;
+  //     this.id = id;
+  //   }
+  // }
 
-  class HostObject extends ElementObject {
-    constructor(
-      engine: Engine,
-      parent: BaseObject | null,
-      element: HTMLElement,
-    ) {
-      super(engine, parent);
-      this.element = element;
-    }
-  }
+  // class HostObject extends ElementObject {
+  //   constructor(
+  //     engine: Engine,
+  //     parent: BaseObject | null,
+  //     element: HTMLElement,
+  //   ) {
+  //     super(engine, parent);
+  //     this.element = element;
+  //   }
+  // }
 
-  class TimelineBlockObject extends ElementObject {
-    id: string;
-    isVisible: boolean = true;
+  // class TimelineBlockObject extends ElementObject {
+  //   id: string;
+  //   isVisible: boolean = true;
 
-    constructor(
-      engine: Engine,
-      parent: BaseObject | null,
-      element: HTMLElement,
-      id: string,
-    ) {
-      super(engine, parent);
-      this.element = element;
-      this.id = id;
-    }
+  //   constructor(
+  //     engine: Engine,
+  //     parent: BaseObject | null,
+  //     element: HTMLElement,
+  //     id: string,
+  //   ) {
+  //     super(engine, parent);
+  //     this.element = element;
+  //     this.id = id;
+  //   }
 
-    readDom(
-      accountTransform: boolean = false,
-      stage: "READ_1" | "READ_2" | "READ_3" | null = null,
-    ) {
-      super.readDom(accountTransform, stage);
-      if (this.element) {
-        this.isVisible = this.element.style.display !== "none";
-      }
-    }
-  }
+  //   readDom(
+  //     accountTransform: boolean = false,
+  //     stage: "READ_1" | "READ_2" | "READ_3" | null = null,
+  //   ) {
+  //     super.readDom(accountTransform, stage);
+  //     if (this.element) {
+  //       this.isVisible = this.element.style.display !== "none";
+  //     }
+  //   }
+  // }
 
   class ConnectorLineObject extends ElementObject {
     id: string;
     startOpId: string;
     endBlockId: string;
 
-    x1: number = 0;
-    y1: number = 0;
-    x2: number = 0;
-    y2: number = 0;
-    visible: boolean = true;
+    svg_dx: number = 0;
+    svg_dy: number = 0;
+    // visible: boolean = true;
 
     constructor(
       engine: Engine,
@@ -154,83 +160,155 @@
     }
 
     updatePosition(stage: "READ_1" | "READ_2" | "READ_3" = "READ_1") {
-      if (!hostObject) return;
+      // if (!hostObject) return;
       const startObj = opObjects[this.startOpId];
       const endObj = blockObjects[this.endBlockId];
 
       if (!startObj || !endObj || !endObj.element) return;
 
-      const hostProp = hostObject.getDomProperty(stage);
+      // const hostProp = hostObject.getDomProperty(stage);
       const startProp = startObj.getDomProperty(stage);
       const endProp = endObj.getDomProperty(stage);
 
-      if (!endObj.isVisible) {
-        this.visible = false;
-      } else {
-        this.visible = true;
-        this.x1 = startProp.x + startProp.width - hostProp.x;
-        this.y1 = startProp.y - hostProp.y + startProp.height / 2;
-        this.x2 = endProp.x - hostProp.x;
-        this.y2 = endProp.y - hostProp.y + endProp.height / 2;
-      }
+      this.transform.x = startProp.x + startProp.width;
+      this.transform.y = startProp.y + startProp.height / 2;
+
+      // if (!endObj.isVisible) {
+      //   this.visible = false;
+      // } else {
+      //   this.visible = true;
+        this.svg_dx = endProp.x - (startProp.x + startProp.width);
+        this.svg_dy = (endProp.y + endProp.height / 2) - (startProp.y + startProp.height / 2);
+      // }
     }
 
     writeDom() {
       if (!this.element) return;
-      if (!this.visible) {
-        this.element.style.display = "none";
-        return;
-      }
-      this.element.style.display = "block";
-      this.element.setAttribute("x1", String(this.x1));
-      this.element.setAttribute("y1", String(this.y1));
-      this.element.setAttribute("x2", String(this.x2));
-      this.element.setAttribute("y2", String(this.y2));
+      // if (!this.visible) {
+      //   this.element.style.display = "none";
+      //   return;
+      // }
+      // this.element.style.display = "block";
+      this.element.setAttribute("x1", "0");
+      this.element.setAttribute("y1", "0");
+      this.element.setAttribute("x2", String(this.svg_dx));
+      this.element.setAttribute("y2", String(this.svg_dy));
     }
   }
 
-  const operationRef: Action<HTMLElement, string> = (node, opId) => {
-    if (!engine) return;
-    const obj = new OperationObject(engine, controller, node, opId);
-    opObjects[opId] = obj;
-    return {
-      destroy() {
+  type NodeDeps = { engine: Engine | null; controller: BaseObject | null };
+
+  const operationRef: Action<
+    HTMLElement,
+    { id: string } & NodeDeps
+  > = (node, { id, engine, controller }) => {
+    let obj: ElementObject | null = null;
+
+    const update = ({
+      id,
+      engine,
+      controller,
+    }: { id: string } & NodeDeps) => {
+      if (obj && (obj.engine !== engine || !controller)) {
         obj.destroy();
-        delete opObjects[opId];
+        obj = null;
+      }
+      if (!obj && engine && controller) {
+        obj = new ElementObject(engine, controller);
+        obj.gid = id;
+        obj.element = node;
+        opObjects[id] = obj;
+      }
+    };
+
+    update({ id, engine, controller });
+
+    return {
+      update,
+      destroy() {
+        if (obj) {
+          obj.destroy();
+          delete opObjects[id];
+        }
       },
     };
   };
 
-  const timelineBlockRef: Action<HTMLElement, string> = (node, blockId) => {
-    if (!engine) return;
-    const obj = new TimelineBlockObject(engine, controller, node, blockId);
-    blockObjects[blockId] = obj;
-    return {
-      destroy() {
+  const timelineBlockRef: Action<
+    HTMLElement,
+    { id: string } & NodeDeps
+  > = (node, { id, engine, controller }) => {
+    let obj: ElementObject | null = null;
+
+    const update = ({
+      id,
+      engine,
+      controller,
+    }: { id: string } & NodeDeps) => {
+      if (obj && (obj.engine !== engine || !controller)) {
         obj.destroy();
-        delete blockObjects[blockId];
+        obj = null;
+      }
+      if (!obj && engine && controller) {
+        obj = new ElementObject(engine, controller);
+        obj.gid = id;
+        obj.element = node;
+        blockObjects[id] = obj;
+      }
+    };
+
+    update({ id, engine, controller });
+    return {
+      update,
+      destroy() {
+        if (obj) {
+          obj.destroy();
+          delete blockObjects[id];
+        }
       },
     };
   };
 
   const connectorLineRef: Action<
     SVGLineElement,
-    { id: string; startOpId: string; endBlockId: string }
-  > = (node, { id, startOpId, endBlockId }) => {
-    if (!engine) return;
-    const obj = new ConnectorLineObject(
-      engine,
-      controller,
-      node,
+    { id: string; startOpId: string; endBlockId: string } & NodeDeps
+  > = (node, { id, startOpId, endBlockId, engine, controller }) => {
+    let obj: ConnectorLineObject | null = null;
+
+    const update = ({
       id,
       startOpId,
       endBlockId,
-    );
-    lineObjects[id] = obj;
-    return {
-      destroy() {
+      engine,
+      controller,
+    }: { id: string; startOpId: string; endBlockId: string } & NodeDeps) => {
+      if (obj && (obj.engine !== engine || !controller)) {
         obj.destroy();
-        delete lineObjects[id];
+        obj = null;
+      }
+
+      if (!obj && engine && controller) {
+        obj = new ConnectorLineObject(
+          engine,
+          controller,
+          node,
+          id,
+          startOpId,
+          endBlockId,
+        );
+        lineObjects[id] = obj;
+      }
+    };
+
+    update({ id, startOpId, endBlockId, engine, controller });
+
+    return {
+      update,
+      destroy() {
+        if (obj) {
+          obj.destroy();
+          delete lineObjects[id];
+        }
       },
     };
   };
@@ -301,11 +379,14 @@
       () => {
         Object.values(blockObjects).forEach((obj) => {
           obj.readDom(false, "READ_1");
-          obj.readDom(false, "READ_3"); // Save starting position for lines
+          obj.copyDomProperty("READ_1", "READ_3");
         });
         // Also read host and ops for lines
-        hostObject?.readDom(false, "READ_3");
-        Object.values(opObjects).forEach((obj) => obj.readDom(false, "READ_3"));
+        // hostObject?.readDom(false, "READ_3");
+        Object.values(opObjects).forEach((obj) => {
+          obj.readDom(false, "READ_3");
+          obj.copyDomProperty("READ_3", "READ_2");
+        });
       },
       "animate-read-1",
     );
@@ -342,12 +423,20 @@
       "animate-read-2",
     );
 
+    // controller.queueUpdate(
+    //   "WRITE_2",
+    //   () => {
+    //     updateLines();
+    //   },
+    //   "animate-update-lines",
+    // );
+
     // WRITE_2: Apply FLIP animations based on position delta
     controller.queueUpdate(
       "WRITE_2",
       () => {
         Object.values(blockObjects).forEach(async (obj) => {
-          if (!visibleBlocks.has(obj.id)) return;
+          if (!visibleBlocks.has(obj.gid)) return;
 
           const prev = obj.getDomProperty("READ_1");
           const curr = obj.getDomProperty("READ_2");
@@ -355,8 +444,8 @@
           const dx = prev.x - curr.x;
           const dy = prev.y - curr.y;
 
-          if (Math.abs(dy) > 0.5 || Math.abs(dx) > 0.5) {
-            const isReflow = obj.id.startsWith("reflow-");
+          // if (Math.abs(dy) > 0.5 || Math.abs(dx) > 0.5) {
+            const isReflow = obj.gid.startsWith("reflow-");
             const keyframes = isReflow
               ? { opacity: [0, 1] }
               : {
@@ -370,82 +459,85 @@
               // Update READ_3 positions on each animation frame so lines can track
               // getBoundingClientRect() returns the visual position including CSS transforms
               tick: () => {
-                obj.readDom(false, "READ_3");
+                obj.queueUpdate("READ_3", () => {
+                  obj.readDom(false, "READ_3");
+                  const line = Object.values(lineObjects).find(
+                    (l) => l.endBlockId === obj.gid,
+                  );
+                  if (line) {
+                    line.updatePosition("READ_3");
+                    line.writeDom();
+                    line.writeTransform();
+                  }
+                });
+
               },
             });
             await obj.addAnimation(anim);
             anim.play();
-          }
+          // }
         });
       },
       "animate-write-2",
     );
   };
 
-  let shouldUpdateLines = true;
+  // let shouldUpdateLines = true;
 
-  const updateLines = () => {
-    if (!controller || !shouldUpdateLines) return;
+  // const updateLines = () => {
+  // //   if (!controller || !shouldUpdateLines) return;
 
-    //   // Read all positions
-    //   controller.queueUpdate("READ_3", () => {
-    //     // hostObject?.readDom(false, "READ_3");
-    //     // Object.values(opObjects).forEach(obj => obj.readDom(false, "READ_3"));
-    //     // Object.values(blockObjects).forEach(obj => obj.readDom(false, "READ_3"));
-    //   },
-    //   "line-update-read"
-    // );
+  // //   // Calculate and write line positions
+  // //   controller.queueUpdate(
+  // //     "WRITE_3",
+  // //     () => {
+  //       Object.values(lineObjects).forEach((line) => {
+  //         line.updatePosition("READ_2");
+  //         line.writeDom();
+  //         line.writeTransform();
+  //       });
 
-    // Calculate and write line positions
-    controller.queueUpdate(
-      "WRITE_3",
-      () => {
-        Object.values(lineObjects).forEach((line) => {
-          line.updatePosition("READ_3");
-          line.writeDom();
-        });
-
-        // Re-queue for next frame
-        // TODO: Add an engine API to queue updates for the next frame instead of using setTimeout
-        if (shouldUpdateLines) {
-          setTimeout(() => updateLines(), 0);
-        }
-      },
-      "line-update-write",
-    );
-  };
-
-  onMount(() => {
-    updateLines();
-
-    if (timelineContainer) {
-      animateBlocks(optimize);
-    }
-  });
-
-  $effect(() => {
-    if (connectorHost && engine && !hostObject) {
-      hostObject = new HostObject(engine, controller, connectorHost);
-    }
-    return () => {
-      if (hostObject) {
-        hostObject.destroy();
-        hostObject = null;
-      }
-    };
-  });
-
-  $effect(() => {
-    if (controller) {
-      animateBlocks(optimize);
-    }
-  });
+  //       // Re-queue for next frame
+  //       // TODO: Add an engine API to queue updates for the next frame instead of using setTimeout
+  //   //     if (shouldUpdateLines) {
+  //   //       setTimeout(() => updateLines(), 0);
+  //   //     }
+  //   //   },
+  //   //   "line-update-write",
+  //   // );
+  // };
 
   onDestroy(() => {
-    shouldUpdateLines = false;
-    controller.destroy();
-    engine.destroy();
+    // shouldUpdateLines = false;
+    if (controller) controller.destroy();
+    // if (hostObject) hostObject.destroy();
+    // engine.destroy(); // Managed by Canvas
   });
+
+  // $effect(() => {
+  //   if (connectorHost && engine && controller && !hostObject) {
+  //     hostObject = new HostObject(engine, controller, connectorHost);
+  //   }
+  //   // Cleanup handled in unrelated onDestroy or explicit null check?
+  //   // The previous code had a return cleanup in $effect.
+  //   return () => {
+  //       if (hostObject) {
+  //           hostObject.destroy();
+  //           hostObject = null;
+  //       }
+  //   }
+  // });
+
+  $effect(() => {
+    // if (controller) {
+      animateBlocks(optimize);
+    // }
+  });
+
+  // onMount(() => {
+    // updateLines();
+  // });
+
 </script>
 
 <HighlightCardShell
@@ -453,6 +545,12 @@
   title="DOM Optimization"
   description="Batch DOM reads and writes to avoid layout thrash."
 >
+  <Canvas 
+    bind:engine 
+    id="dom-optimization-highlight" 
+    debug={debugState.enabled}
+    style={{ height: '100%' }}
+  >
   <div class="optimization-demo" bind:this={connectorHost}>
     <!-- <label slot="headingAside" class="opt-toggle"> -->
      <div class="opt-toggle">
@@ -463,7 +561,7 @@
         bind:checked={optimize}
         aria-label="Toggle DOM optimization"
       >
-      <span/>
+      <span></span>
     </label>
     </div>
     <!-- </label> -->
@@ -471,7 +569,7 @@
       <p class="column-label">Queue</p>
       <ul>
         {#each operations as op}
-          <li class={`operation-item ${op.type}`} use:operationRef={op.id}>
+          <li class={`operation-item ${op.type}`} use:operationRef={{ id: op.id, engine, controller }}>
             <span class="pill">{op.type === "read" ? "R" : "W"}</span>
             <span class="op-label">{op.label}</span>
           </li>
@@ -485,7 +583,7 @@
         {#each timelineBlocks as block (block.id)}
           <div
             class={`timeline-block ${block.type === "reflow" ? "card" : ""} ${block.type}`}
-            use:timelineBlockRef={block.id}
+            use:timelineBlockRef={{ id: block.id, engine, controller }}
           >
             {#if block.type === "reflow"}
               <span class="reflow-label">Reflow</span>
@@ -503,11 +601,14 @@
             id: `line-${op.id}`,
             startOpId: op.id,
             endBlockId: `block-${op.id}`,
+            engine,
+            controller
           }}
         />
       {/each}
     </svg>
   </div>
+  </Canvas>
 </HighlightCardShell>
 
 <style lang="scss">

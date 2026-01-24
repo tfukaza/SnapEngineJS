@@ -13,7 +13,7 @@
     <a href="/" class="wordmark">SnapEngine</a>
   </div>
   <div class="nav-right">
-    <a href="#assets" class="nav-link">Assets</a>
+    <!-- <a href="#assets" class="nav-link">Assets</a> -->
     <a href="/docs" class="nav-link">Docs</a>
     <a href="https://github.com/tfukaza/SnapLineJS" class="nav-link github-link" target="_blank" rel="noopener noreferrer">
       <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">

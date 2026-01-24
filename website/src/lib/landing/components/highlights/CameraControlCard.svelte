@@ -4,6 +4,7 @@
   import type { CameraControl as CameraControlApi } from "@snapline/asset/cameraControl";
   import HighlightCardShell from "./HighlightCardShell.svelte";
   import { debugState } from "$lib/landing/debugState.svelte";
+  import { onMount } from "svelte";
 
   let cameraControl: CameraControlApi | null = null;
   let canvasComponent: Canvas | null = null;
@@ -16,27 +17,25 @@
 
   const zoomIn = () => zoom(ZOOM_STEP);
   const zoomOut = () => zoom(-ZOOM_STEP);
+
+  onMount(() => {
+    cameraControl?.setCameraCenterPosition(1500, 1500);
+  });
 </script>
 
 <HighlightCardShell
   className="camera-control-card theme-secondary-7"
   title="Camera Control"
-  description="Control pan and zoom of any DOM element."
+  description="Zoom and pan any DOM element."
 >
   <div class="camera-card slot shallow">
         <Canvas id="camera-control-highlight" bind:this={canvasComponent} debug={debugState.enabled}>
           <CameraControlComponent bind:cameraControl>
             <div class="dot-grid-background"></div>
             <div class="image-stage">
-              <div class="photo-credit">
-                <p>Photo by</p>
-                <a href="https://unsplash.com/@molliesivaram" target="_blank" rel="noreferrer">
-                  Mollie Sivaram
-                </a>
-              </div>
               <img
-                src="https://images.unsplash.com/photo-1557089289-57d5c9f4f0c4?q=80"
-                alt="Scenic landscape"
+                src="https://upload.wikimedia.org/wikipedia/commons/0/04/NYC_subway-4D.svg"
+                alt="NYC Subway Map"
                 class="stage-image"
                 draggable="false"
               />
@@ -54,14 +53,23 @@
     </button>
   </div>
 
-
+  <div class="photo-credit">
+    <p>Source:</p>
+    <a href="https://en.wikipedia.org/wiki/File:NYC_subway-4D.svg" target="_blank" rel="noreferrer">
+      Wikipedia
+    </a>
+  </div>
 </HighlightCardShell>
 
 <style lang="scss">
   .camera-card {
     background-color: var(--color-background-tint);
+    border: 1px solid #d4d4d4;
     height: 100%;
     position: relative;
+    overflow: hidden;
+    touch-action: none;
+    // margin-top: 20px;
 
     @media (max-width: 720px) {
       height: 300px;
@@ -79,6 +87,8 @@
     background-size: 16px 16px;
     pointer-events: none;
   }
+
+
 
   .zoom-controls {
     display: inline-flex;
@@ -132,11 +142,12 @@
   }
 
   .image-stage {
-    width: 500px;
+    width: 3000px;
     position: relative;
-    pointer-events: none;
+    // pointer-events: none;
     overflow: hidden;
     border-radius: 16px;
+    cursor: grab;
 
     img {
       width: 100%;
@@ -147,22 +158,31 @@
 
   .photo-credit {
     position: absolute;
-    top: 0.75rem;
-    left: 0.75rem;
+    bottom: -20px;
+    left: 2px;
     z-index: 10;
-    padding: 0.35rem 0.65rem;
-    border-radius: 999px;
-    background: rgba(0, 0, 0, 0.6);
-    color: white;
-    font-size: 0.7rem;
+    // padding: 0.35rem 0.65rem;
+    // border-radius: 999px;
+    // background: rgba(0, 0, 0, 0.6);
+    // color: white;
+    // font-size: 0.5rem;
     display: inline-flex;
     gap: 0.35rem;
     align-items: center;
+
+    p {
+      font-size: 0.7rem;
+    }
+
+    a {
+      font-size: 0.7rem;
+      text-decoration: underline;
+    }
   }
 
   .photo-credit a {
-    color: white;
-    text-decoration: underline;
+    // color: white;
+
   }
 
   // .stage-image {

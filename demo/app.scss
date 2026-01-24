@@ -9,7 +9,7 @@ body {
 
 :root {
   --color-primary: #fe620d;
-  --color-secondary: #1e2659;
+  --color-secondary: #323233;
   --color-secondary-1: #f34336;
   --color-secondary-2: #e8b72f;
   --color-secondary-3: #84c122;
@@ -38,6 +38,11 @@ body {
   --size-2: 2px;
 
   --ui-radius: var(--size-8);
+}
+
+::selection {
+  background: var(--color-secondary);
+  color: #fff;
 }
 
 h1,
@@ -147,6 +152,38 @@ section {
   }
 }
 
+.disk {
+  border-radius: 50%;
+  box-shadow:
+    3px 3px 4px -1px #2024255b,
+    2px 2px 2px 0px rgba(255, 255, 255, 0.253) inset;
+  position: relative;
+  z-index: 1;
+
+  &::after {
+    content: "";
+    position: absolute;
+    pointer-events: none;
+    top: 0.5px;
+    left: 0.5px;
+    width: calc(100% - 1px);
+    height: calc(100% - 1px);
+    border-radius: calc(50% - 0.5px);
+    box-sizing: border-box;
+    border-style: inset;
+    border: 1px solid rgb(255, 255, 255);
+    mask-image: conic-gradient(
+        from 135deg at 50% 50%,
+        rgba(0, 0, 0, 0) 0%,
+        rgba(0, 0, 0, 0.0) 35%,
+        rgba(0, 0, 0, 0.9) 50%,
+        rgba(0, 0, 0, 0) 65%,
+        rgba(0, 0, 0, 0) 100%);
+    filter: blur(0.3px);
+    background-blend-mode: multiply;
+  }
+}
+
 .card {
   --card-border: 1px;
   --card-color: var(--color-background);
@@ -205,10 +242,10 @@ section {
 
   &.ground {
     box-shadow:
-      4px 4px 4px -2px rgba(52, 54, 76, 0.172),
-      8px 8px 12px -4px rgba(55, 52, 76, 0.096),
-      12px 12px 20px -8px rgba(31, 30, 41, 0.13),
-      -3px -3px 12px -4px hsla(from var(--card-color) h s calc(l + 15) / 0.2);
+      6px 6px 4px -2px rgba(52, 54, 76, 0.15),
+      10px 10px 12px -4px rgba(55, 52, 76, 0.15),
+      16px 16px 20px -8px rgba(31, 30, 41, 0.15),
+      -4px -4px 16px -4px hsla(from var(--card-color) h s calc(l + 15) / 0.2);
   }
 
 }

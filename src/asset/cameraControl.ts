@@ -94,7 +94,7 @@ class CameraControl extends ElementObject {
   }
 
   onCursorDown(prop: pointerDownProp) {
-    if (prop.event.button != 1) {
+    if (prop.event.button != 0) {
       return;
     }
     if (this.panLock) {
