@@ -1,0 +1,106 @@
+---
+title: Core Concepts
+description: Learn the essential components and architecture of SnapEngine.
+order: 2
+sectionTitle: SnapEngine
+sectionOrder: 1
+---
+
+## Global Manager & Engine Instances
+
+- **GlobalManager**: A singleton that orchestrates the render loop, manages global input, and holds the shared render queues. It ensures that even if you have multiple `Engine` instances on a page, their DOM operations are synchronized to the same animation frame.
+- **Engine**: The main entry point for a specific canvas or container. It manages its own camera, objects, and features (collision, debug, etc.), but delegates the actual scheduling of updates to the GlobalManager.
+
+
+## Object System
+
+All entities in SnapEngine inherit from `BaseObject`. Objects are hierarchical (parent/child) and have built-in support for:
+- **Transforms**: Position, scale, and coordinate conversion (World `<->` Camera `<->` Screen).
+- **Events**: Unified pointer events (drag, pinch, wheel).
+- **Queued Updates**: Built-in methods to schedule DOM operations.
+
+
+## Coordinate Systems & Camera
+
+SnapEngine uses a camera abstraction that maintains three coordinate systems. This is essential for building zoomable/pannable interfaces.
+
+### Coordinate Spaces
+
+1. **Screen Coordinates** (aka Viewport)
+   - Raw pixel coordinates on the browser window, not the document.
+   - `(0, 0)` is the top-left of the viewport.
+   - This is what `getBoundingClientRect()` returns.
+
+2. **Camera Coordinates**
+   - Coordinates relative to the camera's viewport (the container element).
+   - `(0, 0)` is the top-left of the container.
+   - Accounts for the container's offset on the page.
+
+3. **World Coordinates**
+   - The "true" position of objects in your scene.
+   - Independent of camera pan and zoom.
+   - An object at world `(100, 100)` stays at `(100, 100)` regardless of the camera oritentation, container position, or how much the document has been scrolled.
+
+### Coordinate Conversion
+
+`BaseObject` provides automatic coordinate conversion:
+
+```typescript
+// Get world position (consistent regardless of camera)
+const [worldX, worldY] = object.worldPosition;
+
+// Get camera-relative position
+const [camX, camY] = object.cameraPosition;
+
+// Get screen position (raw viewport coordinates)
+const [screenX, screenY] = object.screenPosition;
+
+// Set position using any coordinate system
+object.worldPosition = [100, 200];
+object.cameraPosition = [50, 100];  // Automatically converts to world
+object.screenPosition = [300, 400]; // Automatically converts to world
+```
+
+### Camera API
+
+The camera is accessible via `engine.camera`:
+
+```typescript
+// Pan the camera
+engine.camera.setCameraPosition(x, y);       // Move camera to world position
+engine.camera.setCameraCenterPosition(x, y); // Center camera on world position
+
+// Zoom
+engine.camera.handleScroll(deltaZoom, mouseX, mouseY); // Zoom towards a point
+
+// Get current state
+const zoom = engine.camera.zoom;
+const { x, y } = engine.camera.getCameraCenterPosition();
+
+// Apply camera transform to a canvas element
+canvasElement.style.transform = engine.camera.canvasStyle;
+```
+
+Setting the camera position does not update the DOM. To reflect the new camera position to the rendered screen, `canvasStyle` must be applied to the style of the camera container, ideally using a write queue. 
+
+---
+
+## Render Pipeline & Queue System
+
+The heart of SnapEngine is its multi-stage render pipeline. Unlike standard DOM manipulation where reads and writes can happen interleaved (causing repeated reflows), SnapEngine enforces a strict separation of read and write operations.
+
+The pipeline consists of 6 stages per frame:
+
+1. **READ_1**: Initial read phase. Ideal for reading current DOM state before any changes.
+2. **WRITE_1**: First write phase. Apply initial changes based on READ_1.
+3. **READ_2**: Second read phase. Read the result of WRITE_1 if necessary.
+4. **WRITE_2**: Second write phase. Apply secondary changes.
+   - **Animation Updates**: Animation API updates are processed after WRITE_2.
+5. **READ_3**: Final read phase.
+6. **WRITE_3**: Final write phase.
+   - **Post-Render**: Collision detection and debug rendering happen after WRITE_3.
+
+This system is similar to libraries like `fastdom`, but extended to 3 pairs of read/write cycles to accommodate complex dependency chains often found in node-based editors or physics simulations.
+
+**Why this matters:**
+Browsers are lazy. When you write to the DOM, the browser waits to calculate the layout until you try to read from it. If you interleave reads and writes (`read -> write -> read -> write`), you force the browser to recalculate layout multiple times per frame ("Layout Thrashing"). By batching all reads together and all writes together, we ensure layout is calculated only when necessary.

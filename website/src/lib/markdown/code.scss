@@ -1,0 +1,37 @@
+
+.code-tabs {
+	margin: 1.5rem 0;
+	border-radius: 8px;
+	overflow: hidden;
+    background-color: var(--color-background-tint);
+    padding: 8px;
+}
+
+.code-tabs-header {
+	display: flex;
+	gap: 4px;
+    margin-bottom: 8px;
+}
+
+.code-tabs-content {
+    .card {
+        overflow: hidden;
+    }
+}
+
+.code-tabs-content .doc-code-block {
+	margin: 0;
+}
+
+.code-tabs-content pre {
+	margin: 0;
+	border-radius: 0;
+}
+
+.code-tab-panel {
+	display: none;
+}
+
+.code-tab-panel:first-child {
+	display: block;
+}

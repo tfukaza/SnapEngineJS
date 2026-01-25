@@ -1,0 +1,87 @@
+---
+title: Code Tabs Test
+description: Testing tabbed code blocks for multi-framework examples
+order: 99
+---
+
+
+## Basic Usage
+
+```javascript
+import { SnapLine, Node, Connector, Line } from 'snapline';
+
+const snapline = new SnapLine(document.getElementById('container'));
+
+const node1 = new Node({ x: 100, y: 100, width: 200, height: 150 });
+const node2 = new Node({ x: 400, y: 200, width: 200, height: 150 });
+
+snapline.add(node1);
+snapline.add(node2);
+```
+```jsx
+import { Canvas, Node, Connector, Line } from 'snapline/react';
+
+function App() {
+  return (
+    <Canvas>
+      <Node x={100} y={100} width={200} height={150}>
+        <Connector id="out" type="output" />
+      </Node>
+      <Node x={400} y={200} width={200} height={150}>
+        <Connector id="in" type="input" />
+      </Node>
+    </Canvas>
+  );
+}
+```
+```svelte
+<script>
+  import { Canvas, Node, Connector, Line } from 'snapline/svelte';
+</script>
+
+<Canvas>
+  <Node x={100} y={100} width={200} height={150}>
+    <Connector id="out" type="output" />
+  </Node>
+  <Node x={400} y={200} width={200} height={150}>
+    <Connector id="in" type="input" />
+  </Node>
+</Canvas>
+```
+
+## Another Example
+
+Here's another set of tabs showing connections:
+
+```javascript
+// Creating connections between nodes
+const line = new Line({
+  from: { node: node1, connector: 'output' },
+  to: { node: node2, connector: 'input' }
+});
+
+snapline.add(line);
+```
+```jsx
+// Lines are declarative in React
+<Line 
+  from={{ node: 'node1', connector: 'output' }}
+  to={{ node: 'node2', connector: 'input' }}
+/>
+```
+```svelte
+<!-- Lines are declarative in Svelte -->
+<Line 
+  from={{ node: 'node1', connector: 'output' }}
+  to={{ node: 'node2', connector: 'input' }}
+/>
+```
+
+## Single Code Block
+
+A single code block will not be converted to tabs:
+
+```javascript
+// This is just a single code block
+console.log('Hello, world!');
+```
