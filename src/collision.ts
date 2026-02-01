@@ -6,7 +6,7 @@ import { BaseObject } from "./object";
 import { getDomProperty } from "./util";
 import { InputControl } from "./input";
 import { EventProxyFactory } from "./util";
-import { Engine } from "./snapline";
+import { Engine } from "./engine";
 
 interface CollisionEvent {
   onCollide: null | ((thisObject: Collider, otherObject: Collider) => void);

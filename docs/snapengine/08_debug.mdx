@@ -1,0 +1,125 @@
+---
+title: Debug Renderer
+description: Visual debugging overlay for SnapEngine development.
+order: 8
+sectionTitle: SnapEngine
+sectionOrder: 1
+---
+
+The Debug Renderer provides a visual overlay that displays object bounding boxes, collision shapes, coordinate grids, and custom debug markers. 
+It's useful during development for understanding object positions, debugging collisions, and visualizing the coordinate systems.
+
+## Basic Usage
+
+```typescript
+import { Engine } from 'snapengine';
+import { DebugRenderer } from 'snapengine/debug';
+
+const engine = new Engine();
+engine.assignDom(document.getElementById('container'));
+
+// Enable debug visualization
+engine.setDebugRenderer(new DebugRenderer());
+
+// Later, disable it
+engine.disableDebug();
+```
+
+## What It Displays
+
+When enabled, the debug renderer draws:
+
+1. **Object Bounding Boxes**: Shows the position and dimensions of all `ElementObject` instances
+2. **Collision Shapes**: Visualizes `RectCollider`, `CircleCollider`, and `PointCollider` shapes
+3. **Coordinate Grid**: Displays a grid aligned to world coordinates
+4. **Debug Markers**: Custom points, rectangles, circles, and text labels
+
+## Debug Markers
+
+You can add custom debug markers through the engine:
+
+```typescript
+// Add a point marker
+engine.debugMarkerList['myPoint'] = {
+  type: 'point',
+  gid: 'debug',
+  id: 'myPoint',
+  persistent: true,
+  color: '#ff0000',
+  x: 100,
+  y: 200
+};
+
+// Add a rectangle marker
+engine.debugMarkerList['myRect'] = {
+  type: 'rect',
+  gid: 'debug',
+  id: 'myRect',
+  persistent: true,
+  color: '#00ff00',
+  x: 50,
+  y: 50,
+  width: 100,
+  height: 80
+};
+
+// Add a circle marker
+engine.debugMarkerList['myCircle'] = {
+  type: 'circle',
+  gid: 'debug',
+  id: 'myCircle',
+  persistent: true,
+  color: '#0000ff',
+  x: 200,
+  y: 150,
+  radius: 30
+};
+
+// Add a text label
+engine.debugMarkerList['myText'] = {
+  type: 'text',
+  gid: 'debug',
+  id: 'myText',
+  persistent: true,
+  color: '#ffffff',
+  x: 100,
+  y: 50,
+  text: 'Debug Label'
+};
+```
+
+### Marker Properties
+
+| Property | Type | Description |
+|----------|------|-------------|
+| `type` | `'point' \| 'rect' \| 'circle' \| 'text'` | The shape type |
+| `gid` | `string` | Group identifier |
+| `id` | `string` | Unique marker identifier |
+| `persistent` | `boolean` | If `false`, marker is removed after one frame |
+| `color` | `string` | CSS color string |
+| `x`, `y` | `number` | Position in world coordinates |
+| `width`, `height` | `number` | Dimensions (for `rect` type) |
+| `radius` | `number` | Radius (for `circle` type) |
+| `text` | `string` | Label text (for `text` type) |
+
+## API Reference
+
+### DebugRenderer
+
+```typescript
+class DebugRenderer {
+  enable(engine: Engine): void;
+  disable(): void;
+  updateSize(width: number, height: number): void;
+  renderFrame(stats: frameStats, engine: Engine, objectTable: Record<string, BaseObject>): void;
+}
+```
+
+#### Methods
+
+| Method | Description |
+|--------|-------------|
+| `enable(engine)` | Enables the debug overlay and attaches it to the engine's container |
+| `disable()` | Removes the debug overlay and cleans up event subscriptions |
+| `updateSize(width, height)` | Resizes the debug canvas (called automatically on container resize) |
+| `renderFrame(stats, engine, objectTable)` | Called internally each frame to render debug visuals |

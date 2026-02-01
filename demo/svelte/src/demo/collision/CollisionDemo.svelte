@@ -9,7 +9,6 @@
   import type { Engine } from "../../../../../src/index";
 
   let engine: Engine | null = $state(null);
-  // engine.enableCollisionEngine();
   let boundaryObjects: BaseObject[] = [];
 
   // Boundary dimensions

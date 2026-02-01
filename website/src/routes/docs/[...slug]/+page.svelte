@@ -22,7 +22,7 @@
 
 
 <div class="doc-layout">
-	<aside class="doc-sidebar card ground">
+	<aside class="doc-sidebar">
 		<nav>
 			{#each docSections as section}
 				<div class="sidebar-section">

@@ -1,0 +1,197 @@
+---
+title: Render Queue
+description: Learn how to efficiently read and write to the DOM using SnapEngine's queuing system.
+order: 3
+sectionTitle: SnapEngine
+sectionOrder: 1
+---
+
+## Render Pipeline & Queue System
+To make interesting things happen on the web, you need to interact with the DOM.
+But we already mentioned in the previous section that DOM reads can be expensive. 
+On top of that, writes can be expensive too. Even worse, firing many reads and writes one after another can cause a phenomenon 
+known as **layout thrashing**. This occurs when you read something from the DOM after modifying it
+(like changing an element's size or adding a new element), forcing the the browser to recalculate the layout of the page.
+Rapidly alternating between reads and writes can lead to frequent layout recalculations, severely impacting performance. 
+Instead, we should batch all the reads and writes together, so the layout recalculation only happens once between all the reads and writes.
+<br/>
+
+Libraries like `fastdom` exist to address this specific problem by providing an API to batch DOM reads and writes,
+and also synchronize them with the browser's rendering cycle using `requestAnimationFrame`.
+SnapEngine also has a similar system built-in, albeit with a twist - instead of a single read and write phase per frame,
+it has 3 pairs of read and write phases, designated `READ_1`, `WRITE_1`, `READ_2`, `WRITE_2`, `READ_3`, and `WRITE_3`. 
+This 6-phase design facilitates code that may need to interact with the DOM multiple times in a single frame,
+while also serving as a implicit message that if you find yourself needing more than 6 read/write phases, you may want to reconsider your logic.
+<br/>
+
+In addition to the three read/write pairs, there are also specific points in the render pipeline where certain systems run:
+- Between `WRITE_2` and `READ_3`, the Animation system updates any active animations.
+- After `WRITE_3`, the Collision Detection system runs to update hitboxes, followed by the Debug Renderer if enabled.
+
+<br/>
+
+Below is a summary of the render pipeline stages:
+1. **READ_1**: Initial read phase. Ideal for reading current DOM state before any changes.
+2. **WRITE_1**: First write phase. 
+3. **READ_2**: Second read phase. 
+4. **WRITE_2**: Second write phase. 
+   - **Animation Updates**: Animation API updates are processed after WRITE_2.
+5. **READ_3**: Final read phase.
+6. **WRITE_3**: Final write phase.
+   - **Post-Render**: Collision detection and debug rendering happen after WRITE_3.
+
+## Queuing DOM Updates
+
+The primary way to interact with the render API in SnapEngine is through the `queueUpdate` method available on any `BaseObject` (or its subclasses like `ElementObject`).
+```typescript
+object.queueUpdate(stage, callback, queueID?)
+```
+- **stage**: One of `"READ_1"`, `"WRITE_1"`, `"READ_2"`, `"WRITE_2"`, `"READ_3"`, `"WRITE_3"`.
+- **callback**: The function to execute.
+- **queueID**: (Optional) A unique ID. 
+
+<br/>
+
+If you don't supply a `queueID`, a unique one will be automatically generated. 
+Conversely, if you provide a `queueID`, any pending update with the same ID will be replaced by the new one.
+This is useful for debouncing frequent updates (e.g., from `mousemove` events) so that only the latest update runs per frame.
+
+**Example:**
+```typescript
+object.width = 0;
+// Read current state
+object.queueUpdate("READ_1", () => {
+    // `this` is automatically bound to the object in the callback
+    this.width = object.element.offsetWidth;
+});
+// Schedule the write based on the read
+object.queueUpdate("WRITE_1", () => {
+    this.element.style.width = (this.width + 10) + 'px';
+});
+```
+
+All `queueUpdate` calls return a `queueEntry` object, which contains information about the queued update.
+
+## DOM Property Operations
+
+Due to the overhead of DOM read and writes mentioned in the previous section, 
+it can be very difficult to constantly reflect the state of an object to the screen (namely its position and size),
+or keep the object's state in sync with the DOM.
+In fact in most cases, you must assume that the DOM state is out of sync with what the engine thinks it is.
+<br/>
+
+For this reason, objects in SnapEngine maintain two separate concepts of properties:
+the `transform` properties (like `worldPosition`, `localPosition`, etc.) 
+which are what the engine thinks the object's properties is, and the `dom` properties,
+which reflects the actual state of the DOM element. Again, these two states are usually not in sync, 
+and you must be aware of when to read from or write to the DOM at all times.
+
+### Writing
+
+When updating DOM properties in general, notably styles, classes, or data attributes, 
+you can specify them in `ElementObject` properties `style`, `classes`, and `dataAttributes`.
+These will be applied to the DOM element when you call `writeDom()`.
+
+```typescript
+object.style = { backgroundColor: 'red', padding: '10px' };
+object.classes = ['active', 'highlighted'];
+
+object.queueUpdate("WRITE_1", () => {
+    object.writeDom();  // Applies all pending changes
+});
+```
+
+A common scenario is updating just the location and size of an object based on its `transform` properties.
+In most browser engines, changing the `transform` property is more performant than changing properties like `top`, `left`, `width`, or `height`,
+and often is the preferred way to move elements around the screen - so much so that SnapEngine provides a specialized method 
+for updating the DOM element's transform properties.
+
+```typescript
+object.worldPosition = [100, 200];
+
+object.queueUpdate("WRITE_1", () => {
+    object.writeTransform();  // Only updates transform, no layout thrashing
+});
+```
+
+When you set an object's `worldPosition`, internally it gets saved to its transform properties. 
+Once again, this is not the same as the DOM element's position, which is only reflected to the screen when you call `writeTransform()`.
+
+Applying the transform also comes in four modes - `direct`, `relative`, `offset` and `none`. 
+- `direct`(Default):    Directly sets the dom element's CSS transform properties based on the transform property saved to the object. 
+                        This is the most straightforward mode, and suitable for simple use cases.
+- `relative`:   Applies the object's transform properties such that it will be positioned on screen where it is specified by the transform properties,
+                regardless of the current dom position. This is useful if some other factors (like CSS updates by another code) are affecting the element's position, 
+                and you want to take that into account when setting the element's final position on screen.
+                Note that for this mode to work correctly, you must first read the current DOM position using `readDom()` in a prior read phase.
+- `offset`:     Similar to `relative`, but instead of calculating the final position based on the current object's DOM properties, 
+                it uses the _transform_ properties of a designated `transformOrigin` object. This is useful for creating parent-child relationships where the child object's position is relative to the parent object.
+- `none`:       Does not apply any transform changes to the DOM element.
+
+Both the `transformMode` and `transformOrigin` properties can be set on the object:
+```typescript
+object.transformMode = "relative"; // Change to relative mode
+object.transformOrigin = parentObject; // Set parent object as transform origin if using offset mode
+```
+
+### Reading
+
+`readDom()` reads the DOM properties at the current render stage and caches them internally to one of three slots: `READ_1`, `READ_2`, or `READ_3`,
+depending on which stage it is called in. You can then retrieve the cached properties using `getDomProperty(stage)`:
+
+```typescript
+// ElementObject has built-in caching
+object.queueUpdate("READ_1", () => {
+    this.readDom(); // Reads DOM and caches to READ_1 slot
+    const props = object.getDomProperty("READ_1");
+    console.log(props.screenX, props.screenY, props.width, props.height);
+});
+```
+
+If for whatever reason you need to copy cached properties between stages, you can use `copyDomProperty(fromStage, toStage)`:
+```typescript
+object.queueUpdate("READ_2", () => {
+    object.readDom(); // Reads DOM and caches to READ_2 slot
+    object.copyDomProperty("READ_2", "READ_3"); // Copy to READ_3 slot
+});
+```
+
+Note that `readDom()` and `getDomProperty()` manages the location of the elements in screen space instead of world space.
+We will cover the difference later in the Camera documentation. 
+<br/>
+
+If you want to convert the screen space position to world space and save it to the object's `transform` properties, you can use `saveDomPropertyToTransform(stage)`:
+```typescript
+object.queueUpdate("READ_1", () => {
+    object.readDom(); // Reads DOM and caches to READ_1 slot
+    object.saveDomPropertyToTransform("READ_1"); // Converts screen position to world position and saves to transform properties
+});
+```
+
+`readDom()` can also take an optional boolean parameter `accountTransform` (default: `false`). 
+When set to `true`, the method will factor in the object's current transform properties when reading the DOM element's position. 
+In other words, it will read the DOM element's position as if any current transform properties have not been applied yet.
+This may be useful in situations where you want to get the "real" position of the element on screen, e.g. getting the original position of a 
+loading spinner that is being animated using CSS transforms.
+
+```typescript
+object.queueUpdate("READ_1", () => {
+    object.readDom(true); // Reads DOM accounting for current transform properties
+    const props = object.getDomProperty("READ_1");
+    console.log(props.screenX, props.screenY, props.width, props.height);
+});
+```
+
+## Convenience Methods
+
+`requestRead(accountTransform?, saveTransform?, stage?)` essentially combines 
+`readDom(accountTransform)`, `saveDomPropertyToTransform()` and `queueUpdate()` into a single method call.
+```typescript
+let queueEntry = object.requestRead(true, true, "READ_1");
+```
+
+Likewise, `requestWrite(mutate?, writeCallback?, stage?)` combines
+`queueUpdate()` and `writeDom()` into a single method call.
+```typescript
+let queueEntry = object.requestWrite(true, null, "WRITE_1");
+```

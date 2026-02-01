@@ -1,4 +1,5 @@
-import Camera from "./camera";
+import {StationaryCamera} from "./camera";
+import type { Camera } from "./camera";
 import { GlobalManager } from "./global";
 import {
   BaseObject,
@@ -7,25 +8,26 @@ import {
   queueEntry,
   detachAnimationFromOwner,
 } from "./object";
-import { EventProxyFactory } from "./util";
-import { CollisionEngine } from "./collision";
-import { AnimationInterface } from "./animation";
+import type { CollisionEngine } from "./collision";
+import type { AnimationInterface } from "./animation";
 import type { DebugRenderer } from "./debug";
+import type { CameraControl } from "./asset/cameraControl";
 
 export interface EngineConfig {}
 
-export interface engineCallback {
-  containerElementAssigned: ((containerElement: HTMLElement) => void) | null;
-}
+const DEFAULT_ENGINE_CONFIG: EngineConfig = {
+};
+
+/**
+ * Available engine event types that can be subscribed to.
+ */
+export type EngineEventType = 'containerAssigned' | 'containerResized' | 'containerMoved';
 
 type AnimationProcessor = (timestamp: number) => void;
 
 /**
  * The main engine class that manages the rendering loop, object updates,
  * and optional features like animations, collisions, camera controls, and debugging.
- *
- * The engine uses a multi-stage render pipeline (READ_1, WRITE_1, READ_2, WRITE_2, READ_3, WRITE_3)
- * to minimize DOM reflows and maximize performance.
  *
  * Multiple Engine instances can coexist, each managing their own canvas and render pipeline
  * while sharing a global GlobalManager singleton for ID generation and global input.
@@ -53,24 +55,15 @@ type AnimationProcessor = (timestamp: number) => void;
  * ```
  */
 class Engine {
-  engineConfig: EngineConfig;
-  // #containerStyle: { [key: string]: string } = {};
-  global: GlobalManager | null = null;
 
-  // Engine-specific properties
-  containerElement: HTMLElement | null = null;
-  cursor: {
-    worldX: number;
-    worldY: number;
-    cameraX: number;
-    cameraY: number;
-    screenX: number;
-    screenY: number;
-  };
-  camera: Camera | null = null;
-  collisionEngine: CollisionEngine | null = null;
+  engineConfig: EngineConfig; // Engine configuration options
+  global: GlobalManager | null = null; // Reference to the global manager
 
-  animationList: AnimationInterface[] = [];
+  containerElement: HTMLElement | null = null; // The DOM element for the engine's container.
+  camera: Camera | null = null; // Optional camera instance
+  collisionEngine: CollisionEngine | null = null; // Optional collision engine instance
+  animationList: AnimationInterface[] = []; // List of active animations, if animation engine is enabled  
+  #animationProcessor: AnimationProcessor | null = null;
   debugMarkerList: Record<
     string,
     {
@@ -86,113 +79,129 @@ class Engine {
       radius?: number;
       text?: string;
     }
-  > = {};
-
-  _event: engineCallback;
-  event: engineCallback;
-  #resizeObserver: ResizeObserver | null = null;
-  #animationProcessor: AnimationProcessor | null = null;
+  > = {}; // Debug markers by ID
   #debugRenderer: DebugRenderer | null = null;
 
-  constructor(config: EngineConfig = {}, setGlobal: boolean = true) {
-    
-    if (setGlobal) {
-      this.global = GlobalManager.getInstance();
-      this.global.registerEngine(this);
-    } 
+  // Event subscribers - allows multiple listeners per event type
+  #eventSubscribers: Record<EngineEventType, Record<string, (element: HTMLElement) => void>> = {
+    containerAssigned: {},
+    containerResized: {},
+    containerMoved: {},
+  };
 
-    this.cursor = {
-      worldX: 0,
-      worldY: 0,
-      cameraX: 0,
-      cameraY: 0,
-      screenX: 0,
-      screenY: 0,
-    };
+  #resizeObserver: ResizeObserver | null = null;
 
-    let defaultConfig: EngineConfig = {
-      cameraConfig: {
-        enableZoom: true,
-        enablePan: true,
-        panBounds: { top: null, left: null, right: null, bottom: null },
-      },
-    };
+
+  constructor(config: EngineConfig = {}) {
+    this.global = GlobalManager.getInstance();
+    this.global.registerEngine(this);
     this.engineConfig = {
-      ...defaultConfig,
+      ...DEFAULT_ENGINE_CONFIG,
       ...config,
     };
-
-    // this.#containerStyle = {
-    //   position: "relative",
-    //   overflow: "hidden",
-    // };
-
-    this._event = {
-      containerElementAssigned: null,
-    };
-    this.event = EventProxyFactory(this, this._event);
-
-    this.#resizeObserver = new ResizeObserver(() => {
-      if (this.#debugRenderer) {
-        let containerRect = this.containerElement!.getBoundingClientRect();
-        this.#debugRenderer.updateSize(
-          containerRect.width,
-          containerRect.height,
-        );
-      }
-    });
   }
 
   /**
-   * Enables debug visualization overlay showing object bounding boxes, collision shapes,
-   * coordinate grid, and debug markers.
+   * Subscribe to an engine event with a unique identifier.
+   * Multiple subscribers can listen to the same event.
+   * 
+   * @param event - The event type to subscribe to
+   * @param id - A unique identifier for this subscription (used for unsubscribing)
+   * @param callback - The callback function to invoke when the event fires
+   * 
+   * @example
+   * ```typescript
+   * engine.subscribeEvent('containerAssigned', 'myComponent', (element) => {
+   *   console.log('Container assigned:', element);
+   * });
+   * ```
+   */
+  subscribeEvent(event: EngineEventType, id: string, callback: (element: HTMLElement) => void) {
+    this.#eventSubscribers[event][id] = callback;
+  }
+
+  /**
+   * Unsubscribe from an engine event.
+   * 
+   * @param event - The event type to unsubscribe from
+   * @param id - The unique identifier used when subscribing
+   * 
+   * @example
+   * ```typescript
+   * engine.unsubscribeEvent('containerAssigned', 'myComponent');
+   * ```
+   */
+  unsubscribeEvent(event: EngineEventType, id: string) {
+    delete this.#eventSubscribers[event][id];
+  }
+
+  /**
+   * Publish an event to all subscribers.
+   * @internal
+   */
+  #publishEvent(event: EngineEventType, element: HTMLElement) {
+    for (const callback of Object.values(this.#eventSubscribers[event])) {
+      callback(element);
+    }
+  }
+
+  /**
+   * Initialize dom elements, and event listeners for the library.
+   * This must be handled outside the constructor since many frontend frameworks
+   * run Component constructors before the DOM element is available.
+   * 
+   * @param element: The element acting as the container.
+   */
+  assignDom(element: HTMLElement) {
+    this.containerElement = element;
+    // Camera may not be set if cameraControl was not used
+    if (!this.camera) {
+      this.camera = new StationaryCamera(this);
+    }
+    this.camera.containerDom = element;
+
+    // Set up resize observer
+    this.#resizeObserver = new ResizeObserver(() => {
+      this.#publishEvent('containerResized', this.containerElement!);
+    });
+    this.#resizeObserver?.observe(element);
+    this.#resizeObserver?.observe(window.document.body);
+    // Set up scroll listener
+    window.addEventListener('scroll', () => {
+      this.#publishEvent('containerMoved', this.containerElement!);
+    });
+
+    this.#publishEvent('containerAssigned', element);
+  }
+
+  set element(containerDom: HTMLElement) {
+    this.assignDom(containerDom);
+  }
+
+  /**
+   * Sets the debug renderer for visualization overlay.
    *
-   * The debug overlay is rendered on a canvas element positioned absolutely over the container.
-   * This method dynamically imports the debug module to keep it tree-shakeable.
-   *
-   * @returns A promise that resolves when the debug renderer is initialized
+   * @param renderer - The debug renderer instance to use
    *
    * @example
    * ```typescript
-   * await engine.enableDebug();
-   * // Now debug overlays will be visible
+   * import { Engine } from 'snapengine';
+   * import { DebugRenderer } from 'snapengine/debug';
+   * 
+   * const engine = new Engine();
+   * engine.element = document.getElementById('container');
+   * engine.setDebugRenderer(new DebugRenderer());
    * ```
    */
-  async enableDebug() {
+  setDebugRenderer(renderer: DebugRenderer) {
     if (this.containerElement == null) {
       return;
     }
     if (this.#debugRenderer) {
       return; // Already enabled
     }
-    const { DebugRendererImpl } = await import("./debug");
-    this.#debugRenderer = new DebugRendererImpl();
-    this.#debugRenderer.enable(this.containerElement);
-  }
-
-  /**
-   * Enables interactive camera controls for panning and zooming.
-   *
-   * This method dynamically imports the CameraControl module to keep it tree-shakeable.
-   * Camera controls use middle mouse button for panning and scroll wheel for zooming.
-   *
-   * @param zoom - Whether to enable zoom controls (default: true)
-   * @param pan - Whether to enable pan controls (default: true)
-   * @returns A promise that resolves with the CameraControl instance
-   *
-   * @example
-   * ```typescript
-   * const controls = await engine.enableCameraControl(true, true);
-   * controls.setCameraCenterPosition(100, 100);
-   * ```
-   */
-  async enableCameraControl(zoom: boolean = true, pan: boolean = true) {
-    const { CameraControl } = await import("./asset/cameraControl");
-    const cameraControl = new CameraControl(this, zoom, pan);
-    if (this.containerElement) {
-      cameraControl.element = this.containerElement;
-    }
-    return cameraControl;
+    this.#debugRenderer = renderer;
+    this.#debugRenderer.enable(this);
   }
 
   /**
@@ -203,19 +212,6 @@ class Engine {
       this.#debugRenderer.disable();
       this.#debugRenderer = null;
     }
-  }
-
-  /**
-   * Initialize global stats, dom elements, and event listeners for the library.
-   * @param containerDom: The element that contains all other elements.
-   */
-  assignDom(containerDom: HTMLElement) {
-    this.containerElement = containerDom;
-    this.camera = new Camera(containerDom);
-    // this.camera.updateCameraProperty();
-    this.event.containerElementAssigned?.(containerDom);
-    this.#resizeObserver?.observe(containerDom);
-  
   }
 
   #processQueue(stage: string, queue: Map<string, Map<string, queueEntry>>) {
@@ -287,7 +283,6 @@ class Engine {
    */
   _processPostRender(timestamp: number): void {
     this.collisionEngine?.detectCollisions();
-
     const stats: frameStats = { timestamp };
     const localObjectTable =
       this.global!.getEngineObjectTable(this, false) ?? {};
@@ -295,38 +290,51 @@ class Engine {
   }
 
   /**
-   * Enables the collision detection engine.
+   * Sets a collision engine instance for collision detection.
+   * 
+   * This method allows you to inject a collision engine from a separate import,
+   * enabling true tree-shaking when collision detection is not used.
    *
-   * Once enabled, collision detection runs automatically during each render frame.
-   * Objects can add colliders via `object.addCollider()`.
+   * @param collisionEngine - The collision engine instance to use
    *
    * @example
    * ```typescript
-   * engine.enableCollisionEngine();
+   * import { Engine } from 'snapengine';
+   * import { CollisionEngine, CircleCollider } from 'snapengine/collision';
+   * 
+   * const engine = new Engine();
+   * engine.element = document.getElementById('container');
+   * engine.setCollisionEngine(new CollisionEngine());
+   * 
    * const collider = new CircleCollider(engine, object, 50);
    * object.addCollider(collider);
    * ```
    */
-  enableCollisionEngine() {
+  setCollisionEngine(collisionEngine: CollisionEngine) {
     if (this.collisionEngine) {
       return;
     }
-    this.collisionEngine = new CollisionEngine();
+    this.collisionEngine = collisionEngine;
   }
 
   /**
    * Enables the animation engine for processing Web Animations API animations.
    *
-   * This method dynamically sets up the animation processor that runs during each frame.
-   * Animations can be added to objects via `object.addAnimation()`.
-   *
-   * @returns A promise that resolves when the animation engine is initialized
-   *
+   * The animation engine processes animations each frame. This method only sets up
+   * the processing loop - animation classes should be imported separately.
+   * 
    * @example
    * ```typescript
-   * await engine.enableAnimationEngine();
+   * import { Engine } from 'snapengine';
+   * import { AnimationObject } from 'snapengine/animation';
+   * 
+   * const engine = new Engine();
+   * engine.element = document.getElementById('container');
+   * engine.enableAnimationEngine();
+   * 
    * const animation = new AnimationObject(element, { x: [0, 100] }, { duration: 1000 });
    * object.addAnimation(animation);
+   * animation.play();
    * ```
    */
   enableAnimationEngine() {
@@ -371,6 +379,7 @@ class Engine {
     // Clean up resize observer
     if (this.#resizeObserver && this.containerElement) {
       this.#resizeObserver.unobserve(this.containerElement);
+      this.#resizeObserver.unobserve(window.document.body);
       this.#resizeObserver = null;
     }
 

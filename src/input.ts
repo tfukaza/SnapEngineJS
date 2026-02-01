@@ -141,11 +141,6 @@ export interface InputEventCallback {
   pinchEnd: null | ((prop: pinchEndProp) => void);
 }
 
-// type InputEventRecord<T> = {
-//   [P in keyof T]: Record<string, { callback: (prop: T[P]) => void; engine: any }>;
-// };
-
-
 export type touchData = {
   x: number;
   y: number;
@@ -153,11 +148,14 @@ export type touchData = {
   identifier: number;
 };
 
+/**
+ * General input event data struct for both mouse and touch pointers.
+ */
 export type pointerData = {
   id: number; // pointer id
   callerGID: string | null; // GID of the element that triggered the pointer event
   timestamp: number; // Timestamp of the pointer event
-  x: number;
+  x: number; // All coordinates are in word space
   y: number;
   startX: number;
   startY: number;
@@ -190,6 +188,7 @@ export interface InputControlOption {
  *
  * @example
  * ```typescript
+ * const engine = new Engine();
  * const input = new InputControl(engine, false, object.gid);
  * input.event.pointerDown = (props) => {
  *   console.log('Pointer at', props.position.x, props.position.y);
@@ -236,7 +235,7 @@ class InputControl {
     this._ownerGID = ownerGID;
     this._localPointerDict = {};
     this.#dragMemberList = [];
-  this.#listenerControllers = [];
+    this.#listenerControllers = [];
     this._event = {
       pointerDown: null,
       pointerMove: null,
@@ -304,6 +303,8 @@ class InputControl {
 
   getCoordinates(screenX: number, screenY: number) {
     if (this.engine == null || this.engine.camera == null) {
+      // This generally should not happen, because even engines that don't use camera 
+      // control still have a default camera instance.
       return {
         x: screenX,
         y: screenY,

@@ -162,7 +162,7 @@ export class BaseObject {
   _globalInput: InputEventCallback;
   globalInput: InputEventCallback;
 
-  constructor(engineOrGlobal: any, parent: BaseObject | null) {
+  constructor(engineOrGlobal: any, parent: BaseObject | null = null) {
     if (engineOrGlobal.global) {
       this.engine = engineOrGlobal;
       this.global = engineOrGlobal.global;
@@ -948,7 +948,7 @@ export class ElementObject extends BaseObject {
 
   inputEngine: InputControl;
 
-  constructor(engine: any, parent: BaseObject | null) {
+  constructor(engine: any, parent: BaseObject | null = null) {
     super(engine, parent);
     this._dom = new DomElement(engine, this, null);
     this.inScene = false;
@@ -1019,7 +1019,7 @@ export class ElementObject extends BaseObject {
     super.destroy();
   }
 
-  getDomProperty(stage: "READ_1" | "READ_2" | "READ_3" | null = null) {
+  getDomProperty(stage: "READ_1" | "READ_2" | "READ_3" | null = null): DomProperty {
     const index = stage == "READ_1" ? 0 : stage == "READ_2" ? 1 : 2;
     return this._domProperty[index];
   }
@@ -1027,7 +1027,7 @@ export class ElementObject extends BaseObject {
   copyDomProperty(
     fromStage: "READ_1" | "READ_2" | "READ_3",
     toStage: "READ_1" | "READ_2" | "READ_3",
-  ) {
+  ): void {
     const fromIndex = fromStage == "READ_1" ? 0 : fromStage == "READ_2" ? 1 : 2;
     const toIndex = toStage == "READ_1" ? 0 : toStage == "READ_2" ? 1 : 2;
     Object.assign(this._domProperty[toIndex], this._domProperty[fromIndex]);
@@ -1040,7 +1040,7 @@ export class ElementObject extends BaseObject {
    */
   saveDomPropertyToTransform(
     stage: "READ_1" | "READ_2" | "READ_3" | null = null,
-  ) {
+  ): void {
     let currentStage = stage ?? this.global.currentStage;
     currentStage = currentStage == "IDLE" ? "READ_2" : currentStage;
 

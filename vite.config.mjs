@@ -8,13 +8,13 @@ export default defineConfig(({ command, mode }) => {
   if (mode === "development") {
     switch (framework) {
       case "vanilla":
-        outputDir = "demo/vanilla/snapline";
+        outputDir = "demo/vanilla/snapengine";
         break;
       case "react":
-        outputDir = "demo/react/src/snapline";
+        outputDir = "demo/react/src/snapengine";
         break;
       case "svelte":
-        outputDir = "demo/svelte/src/snapline";
+        outputDir = "demo/svelte/src/snapengine";
         break;
       case "test":
         break;
@@ -31,9 +31,16 @@ export default defineConfig(({ command, mode }) => {
     },
     build: {
       lib: {
-        entry: resolve(__dirname, "src/index.ts"),
-        name: "SnapLineJs",
-        filename: "snapline",
+        entry: {
+          snapengine: resolve(__dirname, "src/index.ts"),
+          debug: resolve(__dirname, "src/debug.ts"),
+          "camera-control": resolve(__dirname, "src/asset/cameraControl.ts"),
+          animation: resolve(__dirname, "src/animation.ts"),
+          collision: resolve(__dirname, "src/collision.ts"),
+        },
+        name: "SnapEngine",
+        formats: ["es"],
+        fileName: (format, entryName) => `${entryName}.mjs`,
       },
       outDir: outputDir,
       minify: mode === "production" ? "terser" : false,

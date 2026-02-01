@@ -1,0 +1,149 @@
+---
+title: Collision Detection
+description: Efficient collision detection with multiple shape types and event callbacks.
+order: 6
+sectionTitle: SnapEngine
+sectionOrder: 1
+---
+
+SnapEngine's collision system provides efficient collision detection between objects using a sweep-and-prune algorithm. 
+It supports multiple collision shapes and triggers callbacks when collisions begin, continue, or end.
+
+## Basic Usage
+
+```typescript
+import { Engine, ElementObject } from 'snapengine';
+import { CollisionEngine, RectCollider, CircleCollider } from 'snapengine/collision';
+
+const engine = new Engine();
+engine.assignDom(document.getElementById('container'));
+
+// Enable collision detection
+engine.setCollisionEngine(new CollisionEngine());
+
+// Create objects with colliders
+const player = new ElementObject(engine, null);
+player.element = document.getElementById('player');
+
+const obstacle = new ElementObject(engine, null);
+obstacle.element = document.getElementById('obstacle');
+
+// Add collision shapes
+const playerCollider = new CircleCollider(engine, player, 0, 0, 25);
+player.addCollider(playerCollider);
+
+const obstacleCollider = new RectCollider(engine, obstacle, 0, 0, 100, 50);
+obstacle.addCollider(obstacleCollider);
+
+// Set up collision callbacks
+playerCollider.event.collider.onBeginContact = (self, other) => {
+  console.log('Player hit something!');
+};
+
+playerCollider.event.collider.onEndContact = (self, other) => {
+  console.log('Player no longer colliding');
+};
+```
+
+## Collider Types
+
+### RectCollider
+
+An axis-aligned rectangular collision shape.
+
+```typescript
+const collider = new RectCollider(
+  engine,    // Engine instance
+  object,    // Parent BaseObject
+  localX,    // X offset from parent
+  localY,    // Y offset from parent
+  width,     // Rectangle width
+  height     // Rectangle height
+);
+```
+
+**Example:**
+
+```typescript
+// Create a 100x50 rectangle collider centered on the object
+const rect = new RectCollider(engine, object, -50, -25, 100, 50);
+object.addCollider(rect);
+```
+
+### CircleCollider
+
+A circular collision shape defined by radius.
+
+```typescript
+const collider = new CircleCollider(
+  engine,    // Engine instance
+  object,    // Parent BaseObject
+  localX,    // X offset from parent (center)
+  localY,    // Y offset from parent (center)
+  radius     // Circle radius
+);
+```
+
+**Example:**
+
+```typescript
+// Create a circle collider with radius 30
+const circle = new CircleCollider(engine, object, 0, 0, 30);
+object.addCollider(circle);
+```
+
+### PointCollider
+
+A single-point collision shape for precise hit detection.
+
+```typescript
+const collider = new PointCollider(
+  engine,    // Engine instance
+  object,    // Parent BaseObject
+  localX,    // X offset from parent
+  localY     // Y offset from parent
+);
+```
+
+**Example:**
+
+```typescript
+// Create a point collider at the object's origin
+const point = new PointCollider(engine, object, 0, 0);
+object.addCollider(point);
+```
+
+## Collision Events
+
+Each collider provides three event callbacks:
+
+| Event | Description |
+|-------|-------------|
+| `onBeginContact` | Called once when two colliders first touch |
+| `onCollide` | Called every frame while two colliders overlap |
+| `onEndContact` | Called once when two colliders stop touching |
+
+**Callback signature:**
+
+```typescript
+(thisCollider: Collider, otherCollider: Collider) => void
+```
+
+**Example:**
+
+```typescript
+collider.event.collider.onBeginContact = (self, other) => {
+  // 'self' is this collider
+  // 'other' is the collider we're colliding with
+  console.log('Collision started with:', other.parent);
+};
+
+collider.event.collider.onCollide = (self, other) => {
+  // Called every frame during collision
+  console.log('Still colliding...');
+};
+
+collider.event.collider.onEndContact = (self, other) => {
+  console.log('Collision ended');
+};
+```

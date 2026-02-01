@@ -3,6 +3,8 @@
   import { setContext } from "svelte";
   import { getEngine } from "./engine.svelte";
   import type { Engine } from "../../../../src/index";
+  import { DebugRenderer } from "../../../../src/debug";
+  import { CollisionEngine } from "../../../../src/collision";
 
   let {
     id,
@@ -22,7 +24,7 @@
   engine = resolvedEngine;
   setContext("engine", resolvedEngine);
 
-  resolvedEngine.enableCollisionEngine();
+  resolvedEngine.setCollisionEngine(new CollisionEngine());
 
   onMount(() => {
     resolvedEngine.assignDom(canvas as HTMLElement);
@@ -31,14 +33,14 @@
 
   $effect(() => {
     if (debug) {
-      resolvedEngine.enableDebug();
+      resolvedEngine.setDebugRenderer(new DebugRenderer());
     } else {
       resolvedEngine.disableDebug();
     }
   });
 
   export function enableDebug() {
-    resolvedEngine.enableDebug();
+    resolvedEngine.setDebugRenderer(new DebugRenderer());
   }
 
   export function disableDebug() {
