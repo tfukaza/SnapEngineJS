@@ -43,9 +43,8 @@ export class DebugRenderer implements DebugRendererInterface {
     this.debugCtx = this.debugWindow.getContext("2d");
 
     // Subscribe to container resize events
-    engine.subscribeEvent('containerResized', this.#subscriptionId, (element) => {
-      const rect = element.getBoundingClientRect();
-      this.updateSize(rect.width, rect.height);
+    engine.subscribeEvent('containerResized', this.#subscriptionId, (props) => {
+      this.updateSize(props.bounds.width, props.bounds.height);
     });
   }
 

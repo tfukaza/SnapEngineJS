@@ -154,6 +154,8 @@ export class ItemObject extends ElementObject {
    * @param prop The drag start event properties.
    */
   cursorDown(prop: dragStartProp) {
+    // Disable camera control while dragging
+    this.global.data.allowCameraControl = false;
 
     this.queueUpdate("READ_1", () => {
       // Record the initial position of the container and its items
@@ -273,11 +275,14 @@ export class ItemObject extends ElementObject {
   }
 
   cursorUp(_prop: dragEndProp) {
+    // Re-enable camera control after drag ends
+    this.global.data.allowCameraControl = true;
+
     if (this.container.dragItem !== this) {
       return;
     }
 
-    // TODO: A better way would be to get the last cached position 
+    // TODO: A better way would be to get the last cached position
     // and store it into READ_1
     this.element!.style.position = "relative";
 

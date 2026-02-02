@@ -1,6 +1,5 @@
 ---
 title: Objects
-description: Learn the essential components and architecture of SnapEngine.
 order: 2
 sectionTitle: SnapEngine
 sectionOrder: 1
@@ -61,5 +60,10 @@ Why? Because unlike typical game engines where we have full control over the pos
 Events like window resizing, CSS changes, or possibly even browser plugins can affect the layout of our objects unexpectedly. 
 This necessitates reading from the DOM constantly to maintain up-to-date positions of all objects, but in browsers, DOM reads are expensive.
 Instead, the engine must be very selective about when it reads or update transform properties, to avoid unnecessary performance hits.
+<br/>
+
+Similarly, we also want to avoid updating the position of child elements automatically when the parent moves, since otherwise
+we may trigger unexpected writes to the DOM, which can also be expensive.
+
 
 

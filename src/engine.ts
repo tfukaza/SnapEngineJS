@@ -23,6 +23,26 @@ const DEFAULT_ENGINE_CONFIG: EngineConfig = {
  */
 export type EngineEventType = 'containerAssigned' | 'containerResized' | 'containerMoved';
 
+/**
+ * Container bounds data passed to engine event callbacks.
+ */
+export interface ContainerBounds {
+  left: number;
+  top: number;
+  right: number;
+  bottom: number;
+  width: number;
+  height: number;
+}
+
+/**
+ * Props passed to engine event callbacks.
+ */
+export interface EngineEventProps {
+  element: HTMLElement;
+  bounds: ContainerBounds;
+}
+
 type AnimationProcessor = (timestamp: number) => void;
 
 /**
@@ -60,6 +80,7 @@ class Engine {
   global: GlobalManager | null = null; // Reference to the global manager
 
   containerElement: HTMLElement | null = null; // The DOM element for the engine's container.
+  containerBounds: ContainerBounds | null = null; // Cached bounding rect of the container
   camera: Camera | null = null; // Optional camera instance
   collisionEngine: CollisionEngine | null = null; // Optional collision engine instance
   animationList: AnimationInterface[] = []; // List of active animations, if animation engine is enabled  
@@ -83,7 +104,7 @@ class Engine {
   #debugRenderer: DebugRenderer | null = null;
 
   // Event subscribers - allows multiple listeners per event type
-  #eventSubscribers: Record<EngineEventType, Record<string, (element: HTMLElement) => void>> = {
+  #eventSubscribers: Record<EngineEventType, Record<string, (props: EngineEventProps) => void>> = {
     containerAssigned: {},
     containerResized: {},
     containerMoved: {},
@@ -111,12 +132,12 @@ class Engine {
    * 
    * @example
    * ```typescript
-   * engine.subscribeEvent('containerAssigned', 'myComponent', (element) => {
-   *   console.log('Container assigned:', element);
+   * engine.subscribeEvent('containerAssigned', 'myComponent', (props) => {
+   *   console.log('Container assigned:', props.element, props.bounds);
    * });
    * ```
    */
-  subscribeEvent(event: EngineEventType, id: string, callback: (element: HTMLElement) => void) {
+  subscribeEvent(event: EngineEventType, id: string, callback: (props: EngineEventProps) => void) {
     this.#eventSubscribers[event][id] = callback;
   }
 
@@ -140,8 +161,29 @@ class Engine {
    * @internal
    */
   #publishEvent(event: EngineEventType, element: HTMLElement) {
-    for (const callback of Object.values(this.#eventSubscribers[event])) {
-      callback(element);
+    const callbacks = Object.values(this.#eventSubscribers[event]);
+    if (callbacks.length === 0) {
+      return;
+    }
+
+    // Compute and cache container bounds only if there are subscribers
+    const rect = element.getBoundingClientRect();
+    this.containerBounds = {
+      left: rect.left,
+      top: rect.top,
+      right: rect.right,
+      bottom: rect.bottom,
+      width: rect.width,
+      height: rect.height,
+    };
+
+    const props: EngineEventProps = {
+      element,
+      bounds: this.containerBounds,
+    };
+
+    for (const callback of callbacks) {
+      callback(props);
     }
   }
 

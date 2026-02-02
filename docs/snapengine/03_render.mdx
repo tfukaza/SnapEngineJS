@@ -1,16 +1,13 @@
 ---
 title: Render Queue
-description: Learn how to efficiently read and write to the DOM using SnapEngine's queuing system.
 order: 3
 sectionTitle: SnapEngine
 sectionOrder: 1
 ---
 
-## Render Pipeline & Queue System
 To make interesting things happen on the web, you need to interact with the DOM.
-But we already mentioned in the previous section that DOM reads can be expensive. 
-On top of that, writes can be expensive too. Even worse, firing many reads and writes one after another can cause a phenomenon 
-known as **layout thrashing**. This occurs when you read something from the DOM after modifying it
+But we already mentioned in the previous section that DOM reads and writes can be expensive. 
+Even worse, firing many reads and writes one after another can cause **layout thrashing**. This occurs when you read something from the DOM after modifying it
 (like changing an element's size or adding a new element), forcing the the browser to recalculate the layout of the page.
 Rapidly alternating between reads and writes can lead to frequent layout recalculations, severely impacting performance. 
 Instead, we should batch all the reads and writes together, so the layout recalculation only happens once between all the reads and writes.
@@ -120,12 +117,14 @@ Once again, this is not the same as the DOM element's position, which is only re
 Applying the transform also comes in four modes - `direct`, `relative`, `offset` and `none`. 
 - `direct`(Default):    Directly sets the dom element's CSS transform properties based on the transform property saved to the object. 
                         This is the most straightforward mode, and suitable for simple use cases.
-- `relative`:   Applies the object's transform properties such that it will be positioned on screen where it is specified by the transform properties,
+- `relative`:   Applies the object's transform properties such that it will be positioned on screen,
                 regardless of the current dom position. This is useful if some other factors (like CSS updates by another code) are affecting the element's position, 
                 and you want to take that into account when setting the element's final position on screen.
                 Note that for this mode to work correctly, you must first read the current DOM position using `readDom()` in a prior read phase.
 - `offset`:     Similar to `relative`, but instead of calculating the final position based on the current object's DOM properties, 
-                it uses the _transform_ properties of a designated `transformOrigin` object. This is useful for creating parent-child relationships where the child object's position is relative to the parent object.
+                it uses the _transform_ properties of a designated `transformOrigin` object. 
+                This is useful for creating parent-child relationships where the child object's position is relative to the parent object.
+                If `transformOrigin` is not set, it defaults to the object's parent, and if there is no parent, a warning is logged and it falls back to `relative` mode.
 - `none`:       Does not apply any transform changes to the DOM element.
 
 Both the `transformMode` and `transformOrigin` properties can be set on the object:

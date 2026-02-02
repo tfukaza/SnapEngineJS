@@ -159,6 +159,9 @@ class NodeComponent extends ElementObject {
   }
 
   onDragStart(prop: dragStartProp): void {
+    // Disable camera control while dragging
+    this.global.data.allowCameraControl = false;
+
     for (const node of this.global.data.select ?? []) {
       node.setStartPositions();
       node._mouseDownX = prop.start.x;
@@ -188,6 +191,9 @@ class NodeComponent extends ElementObject {
   }
 
   onDragEnd(prop: dragEndProp) {
+    // Re-enable camera control after drag ends
+    this.global.data.allowCameraControl = true;
+
     for (const node of this.global.data.select ?? []) {
       node.setUpPosition(prop);
     }

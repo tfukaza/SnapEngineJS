@@ -43,10 +43,7 @@
     }
 
     if (!object) {
-      console.debug("No object available");
       return;
-    } else {
-      console.debug("Object available:", object);
     }
     
     // Add collider

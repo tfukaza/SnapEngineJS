@@ -799,7 +799,7 @@
 
   @container landing (max-width: 1000px) {
     .hero-layout {
-      grid-template-columns: 1fr;
+      grid-template-columns: 100%;
       grid-template-rows: min-content 1fr;
       gap: 0;
       padding: 0;
@@ -817,13 +817,14 @@
 
     .hero-text h1 {
       text-align: center; 
+      font-size: clamp(2.5rem, 10vw, 5rem);
     }
 
     .hero-card {
-      // align-items: start;
-      // padding-top: 0;
-      width: 150%;
-      transform: translateX(-16%) scale(0.6);
+      width: clamp(200px, 120%, 600px);
+      // margin: 0 auto;
+      transform-origin: top center;
+      transform: translateX(-9vw) scale(0.8);
     }
   }
 </style>

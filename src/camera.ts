@@ -1,4 +1,4 @@
-import { Engine } from "./engine";
+import { Engine, ContainerBounds } from "./engine";
 
 export interface CameraConfig {
   enableZoom?: boolean;
@@ -147,47 +147,34 @@ export class Camera {
 
   set containerDom(element: HTMLElement | null) {
     this.#containerDom = element;
-    console.debug("Camera container DOM set:", element);
     this.updateCameraProperty();
     this.updateCamera();
 
-    this.#engine.subscribeEvent('containerResized', 'camera', () => {
-      console.debug("Camera container resized");
-      this.updateCameraProperty();
+    this.#engine.subscribeEvent('containerResized', 'camera', (props) => {
+      this.updateCameraProperty(props.bounds);
       this.updateCamera();
     });
-    this.#engine.subscribeEvent('containerMoved', 'camera', () => {
-      console.debug("Camera container moved");
-      this.updateCameraProperty();
+    this.#engine.subscribeEvent('containerMoved', 'camera', (props) => {
+      this.updateCameraProperty(props.bounds);
       this.updateCamera();
     });
   }
 
   /**
-   * Updates the camera's dimensional properties by reading the current container bounds.
-   * This method is automatically called when the container is resized.
+   * Updates the camera's dimensional properties from the provided bounds or by reading from DOM.
+   * This method is automatically called when the container is resized or moved.
    *
-   * @remarks
-   * This method performs DOM read operations and should ideally be queued in a read phase
-   * to avoid layout thrashing.
+   * @param bounds - Optional pre-computed container bounds. If not provided, reads from DOM.
    */
-  updateCameraProperty() {
+  updateCameraProperty(bounds?: ContainerBounds) {
     if (!this.#containerDom) {
       return;
     }
-    // TODO: Move this read operation to the READ queue
-    let containerRect = this.#containerDom.getBoundingClientRect();
-    this.#containerOffsetX = containerRect.left;
-    this.#containerOffsetY = containerRect.top;
-    this.#cameraWidth = containerRect.width;
-    this.#cameraHeight = containerRect.height;
-    console.debug("Camera properties updated:", {
-      element: this.#containerDom,
-      width: this.#cameraWidth,
-      height: this.#cameraHeight,
-      offsetX: this.#containerOffsetX,
-      offsetY: this.#containerOffsetY,
-    });
+    const rect = bounds ?? this.#containerDom.getBoundingClientRect();
+    this.#containerOffsetX = rect.left;
+    this.#containerOffsetY = rect.top;
+    this.#cameraWidth = rect.width;
+    this.#cameraHeight = rect.height;
   }
 
   /**
@@ -627,27 +614,22 @@ export class Camera {
 export class StationaryCamera extends Camera {
   handleScroll(_: number, __: number, ___: number): void {
     // No zooming allowed
-    console.warn("StationaryCamera does not support zooming.");
   }
 
   handlePan(_: number, __: number): void {
     // No panning allowed
-    console.warn("StationaryCamera does not support panning.");
   }
 
   handlePanStart(): void {
     // No panning allowed
-    console.warn("StationaryCamera does not support panning.");
   }
 
   handlePanDrag(_: number, __: number): void {
     // No panning allowed
-    console.warn("StationaryCamera does not support panning.");
   }
 
   handlePanEnd(): void {
     // No panning allowed
-    console.warn("StationaryCamera does not support panning.");
   }
 
 

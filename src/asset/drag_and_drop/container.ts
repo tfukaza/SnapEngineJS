@@ -170,7 +170,6 @@ export class ItemContainer extends ElementObject {
 
   addItem(item: ItemObject) {
     if (this.#itemList.includes(item)) {
-      console.warn("Item already in container:", item);
       return;
     }
     this.#itemList.push(item);
@@ -180,11 +179,6 @@ export class ItemContainer extends ElementObject {
   removeItem(item: ItemObject) {
     const initialLength = this.#itemList.length;
     this.#itemList = this.#itemList.filter((i) => i !== item);
-    if (this.#itemList.length === initialLength) {
-      if (this.#dragItem !== item) {
-        console.warn("Item not found in container during removal:", item);
-      }
-    }
   }
 
   /**
@@ -389,7 +383,6 @@ export class ItemContainer extends ElementObject {
     
     // Remove the ghost item
     this.queueUpdate("WRITE_1", () => {
-      console.log(`addGhostBeforeItem: itemIndex=${caller.indexInList}`);
       this.removeGhostItem();
       // add ghost to the new position
       this.addGhostItem(caller, caller.dropIndex ?? 0);
@@ -412,12 +405,6 @@ export class ItemContainer extends ElementObject {
         rowDropIndex,
         closestRowIndex: _closestRowIndex,
       } = this.determineDropIndex(caller, "READ_2");
-
-      if (dropIndex !== savedDropIndex) {
-        console.debug(
-          `Drop index changed in differentRow: ${savedDropIndex} -> ${dropIndex}`,
-        );
-      }
 
       this.queueUpdate("WRITE_2", () => {
         // console.debug("different row WRITE_2");
@@ -894,7 +881,6 @@ export class ItemContainer extends ElementObject {
     );
 
     if (closestContainer && closestContainer !== this) {
-      console.debug("Item is closest to another container:", closestContainer);
       item.handoffToContainer(closestContainer, stage);
       return closestContainer.determineDropIndex(item, stage);
     }
@@ -1152,7 +1138,6 @@ export class ItemContainer extends ElementObject {
       dropIndex = cumulativeLength + rowDropIndex;
     }
 
-    console.debug(`Current drop index: ${this.#spacerIndex}, Determined dropIndex: ${dropIndex}, rowDropIndex: ${rowDropIndex}, closestRowIndex: ${closestRowIndex}`);
     return {
       dropIndex,
       rowDropIndex,

@@ -35,6 +35,7 @@ export interface pointerDownProp {
   gid: string | null;
   position: eventPosition;
   button: number;
+  isWithinEngine: boolean;
 }
 
 export interface pointerMoveProp {
@@ -64,6 +65,7 @@ export interface dragStartProp {
   pointerId: number;
   start: eventPosition;
   button: number;
+  isWithinEngine: boolean;
 }
 
 export interface dragProp {
@@ -347,6 +349,16 @@ class InputControl {
     return container.contains(target);
   }
 
+  #isCoordinateWithinEngine(screenX: number, screenY: number) {
+    const rect = this.engine?.containerBounds;
+    return (
+      screenX >= rect.left &&
+      screenX <= rect.right &&
+      screenY >= rect.top &&
+      screenY <= rect.bottom
+    );
+  }
+
   #shouldHandlePointerEvent(
     event: PointerEvent,
     options: { allowHover?: boolean } = {},
@@ -372,9 +384,11 @@ class InputControl {
    * @returns
    */
   onPointerDown(e: PointerEvent) {
-    if (!this.#isEventWithinEngine(e.target)) {
+    const isWithinEngine = this.#isCoordinateWithinEngine(e.clientX, e.clientY);
+    if (!isWithinEngine) {
       return;
     }
+    e.preventDefault();
     e.stopPropagation();
     const coordinates = this.getCoordinates(e.clientX, e.clientY);
     this.event.pointerDown?.({
@@ -382,6 +396,7 @@ class InputControl {
       position: coordinates,
       gid: this._isGlobal ? GLOBAL_GID : this._ownerGID,
       button: e.buttons,
+      isWithinEngine,
     });
     const pointerData = {
       id: e.pointerId,
@@ -397,6 +412,7 @@ class InputControl {
       endY: null,
       moveCount: 0,
     };
+
     this.globalPointerDict[e.pointerId] = pointerData;
 
     this.event.dragStart?.({
@@ -404,6 +420,7 @@ class InputControl {
       pointerId: e.pointerId,
       start: coordinates,
       button: e.buttons,
+      isWithinEngine,
     });
     this.#debugObject.addDebugPoint(
       coordinates.x,
@@ -469,7 +486,6 @@ class InputControl {
     }
     e.preventDefault();
     const coordinates = this.getCoordinates(e.clientX, e.clientY);
-    console.debug("onPointerUp", e.pointerId, coordinates);
     this.event.pointerUp?.({
       event: e,
       position: coordinates,
@@ -477,11 +493,9 @@ class InputControl {
       button: e.buttons,
     });
     let pointerData = this.globalPointerDict[e.pointerId];
-    console.debug("onPointerUp", e.pointerId, pointerData);
     // this._localPointerDict[e.pointerId];
     if (pointerData != null) {
       const gesture = this.globalGestureDict[e.pointerId];
-      console.debug("onPointerUp gesture", e.pointerId, gesture);
       if (gesture != null) {
         gesture.state = "release";
 
@@ -489,12 +503,7 @@ class InputControl {
           pointerData.startX,
           pointerData.startY,
         );
-        console.debug(
-          "dragEnd",
-          gesture.memberList.map((m) => m._ownerGID),
-        );
         for (const member of gesture.memberList) {
-          console.debug("dragEnd", e.pointerId, member._ownerGID);
           member.event.dragEnd?.({
             gid: this._isGlobal ? GLOBAL_GID : this._ownerGID,
             pointerId: e.pointerId,
@@ -527,7 +536,6 @@ class InputControl {
               distance: gesture.distance,
             },
           });
-          console.warn("pinchEnd", gestureKey, this._ownerGID);
           delete this.globalGestureDict[gestureKey];
         }
       }
@@ -541,7 +549,6 @@ class InputControl {
    * @param e
    */
   onPointerCancel(e: PointerEvent) {
-    console.debug("onPointerCancel", e.pointerId);
     // Treat cancel as pointer up to clean up gesture state
     this.onPointerUp(e);
   }
@@ -684,7 +691,6 @@ class InputControl {
             distance: startDistance,
           },
         });
-        console.debug("pinchStart", startMiddle, this._ownerGID);
       }
 
       const pinchGesture = this.globalGestureDict[gestureKey] as pinchGesture;
@@ -697,7 +703,6 @@ class InputControl {
         pointerList: pinchGesture.pointerList,
         distance: pinchGesture.distance,
       });
-      console.debug("pinch", currentPointer0, currentPointer1, this._ownerGID);
     }
   }
 
@@ -1023,9 +1028,7 @@ class GlobalInputControl {
     const oldest = drags[0];
     const pointerData = this._pointerDict[oldest.pointerId];
     if (!pointerData) return;
-    
-    console.debug("Cancelling oldest drag", oldest.pointerId, "to enforce max drag limit");
-    
+
     // Fire dragEnd for all members of this gesture
     for (const member of oldest.gesture.memberList) {
       const startPosition = member.getCoordinates(pointerData.startX, pointerData.startY);

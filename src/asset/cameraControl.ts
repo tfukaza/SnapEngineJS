@@ -104,7 +104,6 @@ class CameraControl extends ElementObject {
   }
 
   zoomBy(deltaZoom: number, originX?: number, originY?: number) {
-    console.log("ZoomBy", deltaZoom, originX, originY);
     if (this.config.zoomLock) {
       return;
     }
@@ -115,8 +114,6 @@ class CameraControl extends ElementObject {
 
     const targetX = originX ?? camera.cameraWidth / 2;
     const targetY = originY ?? camera.cameraHeight / 2;
-
-    console.log("ZoomBy", deltaZoom, targetX, targetY);
 
     camera.handleScroll(deltaZoom, targetX, targetY);
     this.style.transform = camera.canvasStyle as string;
@@ -134,6 +131,12 @@ class CameraControl extends ElementObject {
     if (this.config.panLock) {
       return;
     }
+    if (this.global.data.allowCameraControl === false) {
+      return;
+    }
+    if (prop.isWithinEngine === false) {
+      return;
+    }
     this.#state = "panning";
     this.#mouseDownX = prop.position.screenX;
     this.#mouseDownY = prop.position.screenY;
@@ -143,6 +146,9 @@ class CameraControl extends ElementObject {
 
   onCursorMove(prop: pointerMoveProp) {
     if (this.#state != "panning") {
+      return;
+    }
+    if (this.global.data.allowCameraControl === false) {
       return;
     }
     const dx = prop.position.screenX - this.#mouseDownX;

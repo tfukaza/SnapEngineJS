@@ -24,7 +24,7 @@ const customTheme = {
 		},
 		{
 			scope: ['string', 'string.quoted'],
-			settings: { foreground: '#a5d6ff' }
+			settings: { foreground: '#7af16aff' }
 		},
 		{
 			scope: ['constant.numeric', 'constant.language'],
@@ -36,7 +36,7 @@ const customTheme = {
 		},
 		{
 			scope: ['entity.name.function', 'support.function'],
-			settings: { foreground: '#d2a8ff' }
+			settings: { foreground: '#f4a85cff' }
 		},
 		{
 			scope: ['variable', 'variable.other'],
