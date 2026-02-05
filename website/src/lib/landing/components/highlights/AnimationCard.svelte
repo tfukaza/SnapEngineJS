@@ -538,13 +538,14 @@
 
 
     span {
-      font-family: 'Pixelify Sans', sans-serif;
+      font-family: 'Doto', sans-serif;
+      font-weight: 900;
     }
   }
 
-  .preview-square-container {
-    filter: drop-shadow(6px 6px 5px rgba(24, 29, 42, 0.264));
-  }
+  // .preview-square-container {
+  //   filter: drop-shadow(6px 6px 5px rgba(24, 29, 42, 0.264));
+  // }
 
   .value-readout {
     color: #fffaf6;

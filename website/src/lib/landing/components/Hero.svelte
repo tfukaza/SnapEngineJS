@@ -560,13 +560,22 @@
         <!-- Bottom row - slider -->
         <div class="grid-item slider timeline-controls">
           <div class="timeline-row">
-            <button 
-              type="button" 
-              class="playback-toggle" 
+            <button
+              type="button"
+              class="playback-toggle"
               onclick={togglePlayback}
               aria-label={isPlaying ? "Pause animation" : "Play animation"}
             >
-              {isPlaying ? "⏸" : "▶"}
+              {#if isPlaying}
+                <svg width="14" height="14" viewBox="0 0 14 14" fill="currentColor">
+                  <rect x="1" y="1" width="4" height="12" rx="1" />
+                  <rect x="9" y="1" width="4" height="12" rx="1" />
+                </svg>
+              {:else}
+                <svg width="14" height="14" viewBox="0 0 14 14" fill="currentColor">
+                  <path d="M2 1.5a1 1 0 0 1 1.5-.86l9 5.5a1 1 0 0 1 0 1.72l-9 5.5A1 1 0 0 1 2 12.5v-11z" />
+                </svg>
+              {/if}
             </button>
             <input
               id="wave-timeline"
@@ -592,8 +601,6 @@
 
 <style lang="scss">
   @use "../landing.scss";
-  @import url("https://fonts.googleapis.com/css2?family=Micro+5&display=swap");
-  @import url('https://fonts.googleapis.com/css2?family=Pixelify+Sans&display=swap');
 
   #landing {
     border-radius: var(--size-12);
@@ -623,9 +630,7 @@
     padding-left: 2rem;
 
     h1 {
-      font-size: 5rem;
-      font-weight: 300;
-      line-height: 0.9;
+      // line-height: 0.9;
       margin: 0;
     }
   }
@@ -675,12 +680,10 @@
     }
 
     .preview-hero {
-      font-family: "Micro 5", system-ui;
-      font-size: clamp(1rem, 1.5rem, 4rem);
+      font-family: "Doto", system-ui;
+      font-size: clamp(1rem, 1rem, 2rem);
 
       color: #f5f5f5;
-      letter-spacing: 0.05em;
-      line-height: 0.9;
       transition: color 0.5s ease-in-out;
     }
   }

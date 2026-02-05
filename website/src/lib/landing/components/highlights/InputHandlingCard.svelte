@@ -686,7 +686,8 @@
 
     p {
       margin: 0;
-      font-family: "Pixelify Sans", monospace;
+      font-family: "Doto", monospace;
+      font-weight: 900;
       font-size: 12px;
       color: #ffffff;
       white-space: nowrap;

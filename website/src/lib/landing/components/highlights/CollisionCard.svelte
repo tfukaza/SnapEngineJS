@@ -128,8 +128,8 @@
     </Canvas>
   </div>
     <div class="collision-counter card" class:active={isColliding}>
-    <span class="count">{collisionCount}</span>
-    <span class="label">collisions</span>
+    <span class="count pixel-font">{collisionCount}</span>
+    <span class="label pixel-font">collisions</span>
   </div>
 </HighlightCardShell>
 
@@ -146,7 +146,6 @@
     transform: translateX(-50%);
 
     span {
-      font-family: "Pixelify Sans", monospace;
       color: #fff;
     }
   }

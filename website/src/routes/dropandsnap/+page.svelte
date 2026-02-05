@@ -175,7 +175,7 @@
             {#each titleChars as { char, id } (id)}
               <Item style="padding: 0; width: auto;">
                 <div class="card char-card">
-                  <span class="char title-text"
+                  <span class="char title-text pixel-font"
                     >{char === " " ? "\u00A0" : char}</span
                   >
                 </div>
@@ -186,7 +186,7 @@
 
         <div class="subtitle-wrapper">
           <div class="subtitle-card card ground">
-            <p class="subtitle-text">Drag and drop library for the DOM. <br>Framework agnostic and extensible.</p>
+            <p class="subtitle-text pixel-font">Drag and drop library for the DOM. <br>Framework agnostic and extensible.</p>
           </div>
         </div>
 
@@ -281,7 +281,7 @@
         <div class="card ground sentence-builder">
           <div class="card ground prompt-section">
             <div class="english-sentence">
-              <span>It has many uses</span>
+              <span class="pixel-font">It has many uses</span>
             </div>
           </div>
           <div class="sentence-drop-zone" bind:this={sentenceDropZone}>
@@ -343,8 +343,7 @@
 
 <style lang="scss">
   @import "../../lib/landing/landing.scss";
-  @import url('https://fonts.googleapis.com/css2?family=Geist+Mono:wght@100..900&family=Handjet:wght,ELSH@100..900,2&family=WDXL+Lubrifont+JP+N&display=swap');
-
+  
   .debug-toggle {
     position: fixed;
     top: 1rem;
@@ -437,7 +436,6 @@
 
   .subtitle-wrapper .subtitle-text {
     margin: 0;
-    font-family: "Pixelify Sans", sans-serif;
     color: #ffffff;
   }
 
@@ -476,9 +474,9 @@
   }
 
   .title-text {
-    font-family: "Handjet", sans-serif;
     font-size: 4rem;
     line-height: 1;
+    font-weight: 800;
 
     @media screen and (max-width: 700px) {
       font-size: 1.5rem;
@@ -627,7 +625,6 @@
   .english-sentence {
     span {
       color: #ffffff;
-      font-family: "Pixelify Sans", sans-serif;
     }
   }
 
