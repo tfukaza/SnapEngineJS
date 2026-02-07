@@ -1,0 +1,170 @@
+---
+title: Camera Control
+description: Interactive panning and zooming for your canvas.
+order: 4
+sectionTitle: SnapEngine
+sectionOrder: 1
+---
+
+SnapEngine uses a camera abstraction that maintains three coordinate systems. This is essential for building zoomable/pannable interfaces,
+but even for static scenes it is helpful for managing the position of objects relative to the viewport and the engine container
+<br/>
+
+The coordinate systems managed by the engine are:
+1. **Screen Coordinates** (aka Viewport)
+   - Raw pixel coordinates on the browser window, not the document.
+   - `(0, 0)` is the top-left of the viewport.
+   - This is what `getBoundingClientRect()` returns.
+   - This also means that the screen space coordinates of an object will change when the user scrolls the page.
+   - An object at screen `(100, 100)` may be at different world positions depending on the camera pan/zoom and document scroll position.
+
+2. **Camera Coordinates**
+   - Coordinates relative to the camera's viewport (the container element).
+   - `(0, 0)` is the top-left of the container.
+   - Accounts for the container's offset on the page, as well as the scroll position of the document.
+   - An object at camera `(100, 100)` stays at `(100, 100)` regardless of document scroll or container position, but changes with camera pan and zoom.
+
+3. **World Coordinates**
+   - The "true" position of objects in your scene.
+   - Independent of camera pan and zoom, as well as container position and document scroll.
+     An object at world `(100, 100)` stays at `(100, 100)` regardless of the camera orientation, container position, or how much the document has been scrolled.
+
+### Coordinate Conversion
+
+`BaseObject` provides automatic coordinate conversion:
+
+```typescript
+// Get world position (consistent regardless of camera)
+const [worldX, worldY] = object.worldPosition;
+
+// Get camera-relative position
+const [camX, camY] = object.cameraPosition;
+
+// Get screen position (raw viewport coordinates)
+const [screenX, screenY] = object.screenPosition;
+
+// Set position using any coordinate system
+object.worldPosition = [100, 200];
+object.cameraPosition = [50, 100];  // Automatically converts to world
+object.screenPosition = [300, 400]; // Automatically converts to world
+```
+
+### Camera API
+
+The camera is accessible via `engine.camera`:
+
+```typescript
+// Pan the camera
+engine.camera.setCameraPosition(x, y);       // Move camera to world position
+engine.camera.setCameraCenterPosition(x, y); // Center camera on world position
+
+// Zoom
+engine.camera.handleScroll(deltaZoom, mouseX, mouseY); // Zoom towards a point
+
+// Get current state
+const zoom = engine.camera.zoom;
+const { x, y } = engine.camera.getCameraCenterPosition();
+
+// Apply camera transform to a canvas element
+canvasElement.style.transform = engine.camera.canvasStyle;
+```
+
+Setting the camera position does not update the DOM. To reflect the new camera position to the rendered screen, `canvasStyle` must be applied to the style of the camera container, ideally using a write queue. 
+
+
+## CameraControl
+The `CameraControl` object provides interactive pan and zoom controls for your SnapEngine canvas. It handles mouse drag for panning, mouse wheel for zooming, and maintains proper coordinate transformations.
+
+By default, `CameraControl` handles:
+
+| Interaction | Action |
+|-------------|--------|
+| Left mouse drag | Pan the camera |
+| Mouse wheel | Zoom in/out towards cursor |
+
+These can be disabled via the `panLock` and `zoomLock` configuration options.For proper camera control, your HTML should be structured like this:
+
+```html
+<div id="container" style="overflow: hidden; position: relative;">
+  <div id="camera-wrapper">
+    <!-- Your content here -->
+    <div class="object">Object 1</div>
+    <div class="object">Object 2</div>
+  </div>
+</div>
+```
+
+## Usage
+
+```typescript
+import { Engine } from 'snapengine';
+import { CameraControl } from 'snapengine/camera-control';
+
+const engine = new Engine();
+engine.assignDom(document.getElementById('container'));
+
+// Create camera controls
+const cameraControl = new CameraControl(engine, {
+  zoomLock: false,  // Allow zooming
+  panLock: false    // Allow panning
+});
+
+// Assign the camera control element (usually a wrapper around your content)
+cameraControl.element = document.getElementById('camera-wrapper');
+
+// Set initial camera position
+cameraControl.setCameraCenterPosition(0, 0);
+```
+
+
+## Camera Positioning
+
+### setCameraPosition(x, y)
+
+Sets the camera's top-left corner to the specified world coordinates.
+
+```typescript
+// Position camera so world (0, 0) is at the top-left of the viewport
+cameraControl.setCameraPosition(0, 0);
+
+// Pan to show world position (500, 300) at top-left
+cameraControl.setCameraPosition(500, 300);
+```
+
+### setCameraCenterPosition(x, y)
+
+Centers the camera on the specified world coordinates.
+
+```typescript
+// Center the view on world position (100, 100)
+cameraControl.setCameraCenterPosition(100, 100);
+
+// Center on origin
+cameraControl.setCameraCenterPosition(0, 0);
+```
+
+### getCameraCenterPosition()
+
+Returns the current center position of the camera.
+
+```typescript
+const { x, y } = cameraControl.getCameraCenterPosition();
+console.log(`Camera centered at: (${x}, ${y})`);
+```
+
+## Zooming
+
+### zoomBy(deltaZoom, originX?, originY?)
+
+Programmatically zoom the camera by a delta amount. Positive values zoom in, negative values zoom out.
+
+```typescript
+// Zoom in towards the center
+cameraControl.zoomBy(0.1);
+
+// Zoom out from center
+cameraControl.zoomBy(-0.1);
+
+// Zoom towards a specific point (in camera coordinates)
+cameraControl.zoomBy(0.1, 200, 150);
+```

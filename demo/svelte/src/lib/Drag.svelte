@@ -47,25 +47,27 @@
 
     // Assign element (this triggers requestRead which would overwrite transform)
     object.element = element;
-    console.log("Element assigned to drag object", initialX, initialY);
     // Queue transform write AFTER read completes to apply initial position
     object.queueUpdate("WRITE_1", () => {
       if (!object) return;
       object.transform.x = thisInitialX;
       object.transform.y = thisInitialY;
-      console.log("Initial position set:", thisInitialX, thisInitialY);
+      // console.log("Initial position set:", thisInitialX, thisInitialY);
       object.writeTransform();
     });
 
     // Drag event handlers
     object.event.input.dragStart = (prop: dragStartProp) => {
       if (!object) return;
+      // Disable camera control while dragging
+      object.global.data.allowCameraControl = false;
+
       isDragging = true;
       dragStartX = object.transform.x;
       dragStartY = object.transform.y;
       mouseDownX = prop.start.x;
       mouseDownY = prop.start.y;
-      
+
       if (onDragStart) {
         onDragStart();
       }
@@ -85,8 +87,13 @@
     };
 
     object.event.input.dragEnd = (_: dragEndProp) => {
+      if (object) {
+        // Re-enable camera control after drag ends
+        object.global.data.allowCameraControl = true;
+      }
+
       isDragging = false;
-      
+
       if (onDragEnd) {
         onDragEnd();
       }

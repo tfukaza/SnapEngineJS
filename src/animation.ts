@@ -244,7 +244,6 @@ class AnimationObject implements AnimationInterface {
             fill: "both",
           }),
         );
-        console.log("Created interval animation", intervalDuration, intervalDelay, intervalEasing, intervalKeys);
         animation.onfinish = () => {
           animation.cancel();
         };

@@ -1,3 +1,5 @@
+import { Engine, ContainerBounds } from "./engine";
+
 export interface CameraConfig {
   enableZoom?: boolean;
   zoomBounds?: {
@@ -14,7 +16,8 @@ export interface CameraConfig {
   handleResize?: boolean; // Whether to handle resize events and update camera properties
 }
 
-class Camera {
+
+export class Camera {
   /**
    * Represents a camera that can be used to pan and zoom the view of a DOM element.
    * The camera maintains 3 coordinate systems:
@@ -26,7 +29,7 @@ class Camera {
    * - World coordinates: The x,y coordinates of the world that the camera is viewing.
    *   (0,0) is the center of the world and the x,y coordinates increase as you move right and down.
    */
-  #containerDom: HTMLElement; // The DOM element that represents the camera view
+  #containerDom: HTMLElement | null; // The DOM element that represents the camera view
   #containerOffsetX: number; // The x coordinate of the container DOM on the browser viewport
   #containerOffsetY: number; // The y coordinate of the container DOM on the browser viewport
   #cameraWidth: number; // The width of the camera view. This should be the same as the container width.
@@ -38,12 +41,12 @@ class Camera {
   #zoom: number; // The zoom level of the camera, 1 means no zoom, smaller values zoom out, larger values zoom in
   #config: CameraConfig;
   #canvasStyle: string; // The CSS transform style that should be applied to the DOM element
-  #resizeObserver: ResizeObserver;
+  #engine: Engine;
 
   /**
    * Creates a new Camera instance for panning and zooming a DOM element.
    *
-   * @param container - The HTML element that will serve as the camera viewport
+   * @param engine - The engine instance that manages the camera
    * @param config - Configuration options for camera behavior
    * @param config.enableZoom - Whether zoom functionality is enabled (default: true)
    * @param config.zoomBounds - Min/max zoom limits (default: {min: 0.2, max: 1})
@@ -60,13 +63,14 @@ class Camera {
    * });
    * ```
    */
-  constructor(container: HTMLElement, config: CameraConfig = {}) {
-    let containerRect = container.getBoundingClientRect();
-    this.#containerDom = container;
-    this.#containerOffsetX = containerRect.left;
-    this.#containerOffsetY = containerRect.top;
-    this.#cameraWidth = containerRect.width;
-    this.#cameraHeight = containerRect.height;
+  constructor(engine: Engine, config: CameraConfig = {}) {
+    this.#engine = engine;
+    // let containerRect = container.getBoundingClientRect();
+    this.#containerDom = null;
+    this.#containerOffsetX = 0;
+    this.#containerOffsetY = 0;
+    this.#cameraWidth = 0;
+    this.#cameraHeight = 0;
     this.#cameraPositionX = 0;
     this.#cameraPositionY = 0;
     this.#cameraPanStartX = 0;
@@ -83,22 +87,6 @@ class Camera {
 
     this.#canvasStyle = "";
     this.updateCamera();
-
-    // For now, we always handle resize events.
-    if (this.#config.handleResize || true) {
-      this.#resizeObserver = new ResizeObserver(() => {
-        this.updateCameraProperty();
-      });
-      this.#resizeObserver.observe(this.#containerDom);
-      this.#resizeObserver.observe(window.document.body);
-    }
-
-    window.addEventListener("scroll", () => {
-      const rect = this.#containerDom.getBoundingClientRect();
-      this.#containerOffsetX = rect.left;
-      this.#containerOffsetY = rect.top;
-      this.updateCamera();
-    });
   }
 
   /**
@@ -157,27 +145,36 @@ class Camera {
     return this.#containerOffsetY;
   }
 
+  set containerDom(element: HTMLElement | null) {
+    this.#containerDom = element;
+    this.updateCameraProperty();
+    this.updateCamera();
+
+    this.#engine.subscribeEvent('containerResized', 'camera', (props) => {
+      this.updateCameraProperty(props.bounds);
+      this.updateCamera();
+    });
+    this.#engine.subscribeEvent('containerMoved', 'camera', (props) => {
+      this.updateCameraProperty(props.bounds);
+      this.updateCamera();
+    });
+  }
+
   /**
-   * Updates the camera's dimensional properties by reading the current container bounds.
-   * This method is automatically called when the container is resized.
+   * Updates the camera's dimensional properties from the provided bounds or by reading from DOM.
+   * This method is automatically called when the container is resized or moved.
    *
-   * @remarks
-   * This method performs DOM read operations and should ideally be queued in a read phase
-   * to avoid layout thrashing.
+   * @param bounds - Optional pre-computed container bounds. If not provided, reads from DOM.
    */
-  updateCameraProperty() {
-    // TODO: Move this read operation to the READ queue
-    let containerRect = this.#containerDom.getBoundingClientRect();
-    this.#containerOffsetX = containerRect.left;
-    this.#containerOffsetY = containerRect.top;
-    this.#cameraWidth = containerRect.width;
-    this.#cameraHeight = containerRect.height;
-    // console.debug("Camera properties updated:", {
-    //   width: this.#cameraWidth,
-    //   height: this.#cameraHeight,
-    //   offsetX: this.#containerOffsetX,
-    //   offsetY: this.#containerOffsetY,
-    // });
+  updateCameraProperty(bounds?: ContainerBounds) {
+    if (!this.#containerDom) {
+      return;
+    }
+    const rect = bounds ?? this.#containerDom.getBoundingClientRect();
+    this.#containerOffsetX = rect.left;
+    this.#containerOffsetY = rect.top;
+    this.#cameraWidth = rect.width;
+    this.#cameraHeight = rect.height;
   }
 
   /**
@@ -609,4 +606,31 @@ class Camera {
   }
 }
 
-export default Camera;
+/**
+ * By default, every engine has a stationary camera that does not allow any user interaction.
+ * Its main purpose is to convert coordinates between world, camera, and screen spaces.
+ * It can be though of as a special variant of the Camera that that does not allow panning or zooming.
+ */
+export class StationaryCamera extends Camera {
+  handleScroll(_: number, __: number, ___: number): void {
+    // No zooming allowed
+  }
+
+  handlePan(_: number, __: number): void {
+    // No panning allowed
+  }
+
+  handlePanStart(): void {
+    // No panning allowed
+  }
+
+  handlePanDrag(_: number, __: number): void {
+    // No panning allowed
+  }
+
+  handlePanEnd(): void {
+    // No panning allowed
+  }
+
+
+}

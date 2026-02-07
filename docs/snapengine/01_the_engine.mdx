@@ -1,0 +1,55 @@
+---
+title: The Engine
+order: 1
+sectionTitle: SnapEngine
+sectionOrder: 1
+---
+
+Whenever you make anything with SnapEngine, you must first create an `Engine` instance. 
+Each `Engine` manages its own camera, objects, and features (collision detection, debug overlay, etc.). 
+You can spawn multiple `Engine` instances on a single page, and for the most part they operate in isolation from each other.
+<br/>
+
+An engine will always need a container element assigned to it. This element will be the area where the engine will perform 
+most of its functionalities, such as input handling and rendering. 
+
+```typescript
+import { Engine } from "snapengine";
+const container = document.getElementById("engine-container");
+const engine = new Engine();
+engine.element = container;
+```
+
+You may have noticed the `element` property is set after instantiating the `Engine`. 
+This is because SnapEngine is designed to be integrated into frontend frameworks like React or Svelte,
+many of which are designed to generate the DOM elements after the component logic runs. 
+
+```svelte
+<script lang="ts">
+   import { Engine } from "snapengine";
+   let engine: Engine;
+   engine = new Engine();
+</script>
+<div bind:this={engine.element} class="engine-container"></div>
+```
+```tsx
+import React, { useRef, useEffect } from "react";
+import { Engine } from "snapengine";
+
+export function EngineComponent() {
+   const containerRef = useRef<HTMLDivElement>(null);
+   const engine = useRef<Engine | null>(null);
+   useEffect(() => {
+      engine.current = new Engine();
+      if (containerRef.current) {
+         engine.current.element = containerRef.current;
+      }
+   }, []);
+   return <div ref={containerRef} className="engine-container"></div>;
+}
+```
+
+In addition, all `Engine` instances share a single global object called the `GlobalManager`. 
+This singleton is responsible for orchestrating the render loop, managing global input events, and holding the shared render queues. 
+The `GlobalManager` is automatically created when the first `Engine` is instantiated, so you don't need to worry about it.
+

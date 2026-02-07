@@ -1,0 +1,138 @@
+---
+title: Input System
+description: Unified pointer events, gestures, and coordinate transformation.
+order: 5
+sectionTitle: SnapEngine
+sectionOrder: 1
+---
+
+
+SnapEngine's input system provides a unified interface for handling mouse and touch events. It automatically converts raw browser events into a consistent format with coordinate transformation across screen, camera, and world space.
+
+The input system supports:
+- **Pointer Events**: Mouse and touch unified handling
+- **Gestures**: Drag and pinch recognition
+- **Coordinate Transformation**: Automatic conversion between coordinate spaces
+- **Event Propagation**: Both object-level and global event subscription
+
+## Coordinate Spaces
+
+All input events provide positions in three coordinate spaces:
+
+| Property | Description |
+|----------|-------------|
+| `screenX`, `screenY` | Raw viewport coordinates (pixels from top-left of browser window) |
+| `cameraX`, `cameraY` | Position relative to the engine container |
+| `x`, `y` | World coordinates (accounting for camera pan and zoom) |
+
+```typescript
+object.event.input.pointerDown = (props) => {
+  console.log('Screen:', props.position.screenX, props.position.screenY);
+  console.log('Camera:', props.position.cameraX, props.position.cameraY);
+  console.log('World:', props.position.x, props.position.y);
+};
+```
+
+## Object-Level Events
+
+Every `ElementObject` can respond to input events on its DOM element:
+
+```typescript
+const object = new ElementObject(engine, null);
+object.element = myElement;
+
+// Pointer events
+object.event.input.pointerDown = (props) => {
+  console.log('Pointer down at', props.position.x, props.position.y);
+};
+
+object.event.input.pointerMove = (props) => {
+  console.log('Pointer moved to', props.position.x, props.position.y);
+};
+
+object.event.input.pointerUp = (props) => {
+  console.log('Pointer up at', props.position.x, props.position.y);
+};
+
+// Mouse wheel
+object.event.input.mouseWheel = (props) => {
+  console.log('Wheel delta:', props.delta);
+};
+```
+
+By default, all events call `stopPropagation()` so events fired on an object are not automatically bubbled up to parent objects. 
+Events that need to propagate up to the root document are handled by the engine itself via the global event system described below.
+
+
+## Global Events
+
+Subscribe to events regardless of which element the user interacts with. Useful for camera controls, and system-level interactions.
+
+```typescript
+// Subscribe via object.event.global
+object.event.global.pointerMove = (props) => {
+  // Called for all pointer movement in the document
+  console.log('Global pointer at', props.position.x, props.position.y);
+};
+
+object.event.global.mouseWheel = (props) => {
+  // Called for all wheel events
+  console.log('Global wheel:', props.delta);
+};
+```
+
+## Gestures 
+There are also higher level gesture events that wrap raw pointer events. 
+Not only do they provide an easier interface for common interactions, but they also implement common good practices, 
+such as handling pointerDown on the object itself but handling pointerMove and pointerUp globally to avoid losing track of the gesture 
+if the pointer moves outside the object.
+
+```typescript
+object.event.input.dragStart = (props) => {
+  console.log('Drag started at', props.start.x, props.start.y);
+};
+
+object.event.input.drag = (props) => {
+  // Current position
+  console.log('Current:', props.position.x, props.position.y);
+  
+  // Starting position
+  console.log('Started at:', props.start.x, props.start.y);
+  
+  // Delta from start
+  console.log('Delta:', props.delta.x, props.delta.y);
+};
+
+object.event.input.dragEnd = (props) => {
+  console.log('Drag ended at', props.end.x, props.end.y);
+};
+```
+
+For multi-touch pinch gestures:
+
+```typescript
+object.event.input.pinchStart = (props) => {
+  console.log('Pinch started, distance:', props.start.distance);
+  console.log('Touch points:', props.start.pointerList);
+};
+
+object.event.input.pinch = (props) => {
+  const scale = props.distance / props.start.distance;
+  console.log('Scale factor:', scale);
+};
+
+object.event.input.pinchEnd = (props) => {
+  console.log('Pinch ended');
+};
+```
+
+### Global Event Types
+
+All the same event types are available globally:
+
+- `pointerDown`, `pointerMove`, `pointerUp`
+- `mouseWheel`
+- `dragStart`, `drag`, `dragEnd`
+- `pinchStart`, `pinch`, `pinchEnd`
+
+

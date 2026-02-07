@@ -162,7 +162,7 @@ export class BaseObject {
   _globalInput: InputEventCallback;
   globalInput: InputEventCallback;
 
-  constructor(engineOrGlobal: any, parent: BaseObject | null) {
+  constructor(engineOrGlobal: any, parent: BaseObject | null = null) {
     if (engineOrGlobal.global) {
       this.engine = engineOrGlobal;
       this.global = engineOrGlobal.global;
@@ -498,7 +498,6 @@ export class BaseObject {
   addCollider(collider: Collider) {
     this._colliderList.push(collider);
     if (!this.engine){
-      console.warn("Engine is not set, cannot add collider to collision engine");
       return;
     }
     this.engine.collisionEngine?.addObject(collider);
@@ -808,7 +807,6 @@ export class DomElement {
    */
   writeDom() {
     if (!this.element) {
-      console.warn("Element is not set, cannot write DOM properties");
       return;
     }
     setDomStyle(this.element, this._style);
@@ -832,7 +830,6 @@ export class DomElement {
    */
   writeTransform() {
     if (!this.element) {
-      console.warn("Element is not set, cannot write transform properties");
       return;
     }
     let transformStyle = {
@@ -870,22 +867,33 @@ export class DomElement {
         transform: "",
       };
     } else if (this._owner.transformMode == "offset") {
-      if (!this._owner.transformOrigin) {
-        throw new Error("Transform origin is not set");
-      }
       // If the transform mode is offset, the transform is applied relative to the position of a parent object.
-      transformStyle = {
-        transform: generateTransformString({
-          x: this._owner.transform.x - this._owner.transformOrigin.transform.x,
-          y: this._owner.transform.y - this._owner.transformOrigin.transform.y,
-          scaleX:
-            this._owner.transform.scaleX *
-            this._owner.transformOrigin.transform.scaleX,
-          scaleY:
-            this._owner.transform.scaleY *
-            this._owner.transformOrigin.transform.scaleY,
-        }),
-      };
+      // Use transformOrigin if set, otherwise default to parent
+      const origin = this._owner.transformOrigin ?? this._owner.parent;
+      if (!origin) {
+        // No transform origin or parent available, fall back to relative mode
+        const [newX, newY] = [
+          this._owner.transform.x - this.property.x,
+          this._owner.transform.y - this.property.y,
+        ];
+        transformStyle = {
+          transform: generateTransformString({
+            x: newX + this._owner.offset.x,
+            y: newY + this._owner.offset.y,
+            scaleX: this._owner.transform.scaleX,
+            scaleY: this._owner.transform.scaleY,
+          }),
+        };
+      } else {
+        transformStyle = {
+          transform: generateTransformString({
+            x: this._owner.transform.x - origin.transform.x,
+            y: this._owner.transform.y - origin.transform.y,
+            scaleX: this._owner.transform.scaleX * origin.transform.scaleX,
+            scaleY: this._owner.transform.scaleY * origin.transform.scaleY,
+          }),
+        };
+      }
     }
 
     if (
@@ -948,7 +956,7 @@ export class ElementObject extends BaseObject {
 
   inputEngine: InputControl;
 
-  constructor(engine: any, parent: BaseObject | null) {
+  constructor(engine: any, parent: BaseObject | null = null) {
     super(engine, parent);
     this._dom = new DomElement(engine, this, null);
     this.inScene = false;
@@ -1019,7 +1027,7 @@ export class ElementObject extends BaseObject {
     super.destroy();
   }
 
-  getDomProperty(stage: "READ_1" | "READ_2" | "READ_3" | null = null) {
+  getDomProperty(stage: "READ_1" | "READ_2" | "READ_3" | null = null): DomProperty {
     const index = stage == "READ_1" ? 0 : stage == "READ_2" ? 1 : 2;
     return this._domProperty[index];
   }
@@ -1027,7 +1035,7 @@ export class ElementObject extends BaseObject {
   copyDomProperty(
     fromStage: "READ_1" | "READ_2" | "READ_3",
     toStage: "READ_1" | "READ_2" | "READ_3",
-  ) {
+  ): void {
     const fromIndex = fromStage == "READ_1" ? 0 : fromStage == "READ_2" ? 1 : 2;
     const toIndex = toStage == "READ_1" ? 0 : toStage == "READ_2" ? 1 : 2;
     Object.assign(this._domProperty[toIndex], this._domProperty[fromIndex]);
@@ -1040,7 +1048,7 @@ export class ElementObject extends BaseObject {
    */
   saveDomPropertyToTransform(
     stage: "READ_1" | "READ_2" | "READ_3" | null = null,
-  ) {
+  ): void {
     let currentStage = stage ?? this.global.currentStage;
     currentStage = currentStage == "IDLE" ? "READ_2" : currentStage;
 

@@ -1,13 +1,25 @@
 {
-  "name": "snapline",
+  "name": "snapengine",
   "version": "0.1.0",
   "description": "",
-  "main": "./dist/snapline.umd.js",
-  "module": "./dist/snapline.mjs",
+  "type": "module",
+  "main": "./dist/snapengine.mjs",
+  "module": "./dist/snapengine.mjs",
   "exports": {
     ".": {
-      "import": "./dist/snapline.mjs",
-      "require": "./dist/snapline.umd.js"
+      "import": "./dist/snapengine.mjs"
+    },
+    "./debug": {
+      "import": "./dist/debug.mjs"
+    },
+    "./camera-control": {
+      "import": "./dist/camera-control.mjs"
+    },
+    "./animation": {
+      "import": "./dist/animation.mjs"
+    },
+    "./collision": {
+      "import": "./dist/collision.mjs"
     }
   },
   "scripts": {

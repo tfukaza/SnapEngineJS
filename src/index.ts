@@ -1,4 +1,4 @@
-import { Engine } from "./snapline";
+import { Engine } from "./engine";
 import { ElementObject, BaseObject } from "./object";
 import { GlobalManager } from "./global";
 import {
@@ -14,7 +14,6 @@ import { NodeComponent } from "./asset/node_ui/node";
 import { RectSelectComponent } from "./asset/node_ui/select";
 
 import { Background } from "./asset/background";
-import { CameraControl } from "./asset/cameraControl";
 
 export {
   Engine,
@@ -25,7 +24,6 @@ export {
   NodeComponent,
   RectSelectComponent,
   Background,
-  CameraControl,
   GlobalManager,
   type pointerDownProp,
   type pointerMoveProp,

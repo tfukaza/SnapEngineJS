@@ -1,0 +1,69 @@
+---
+title: Objects
+order: 2
+sectionTitle: SnapEngine
+sectionOrder: 1
+---
+
+Every entity in a SnapEngine container inherits from `BaseObject`. 
+This class does not have a visual representation itself, but provides the foundational functionality for all objects in the engine.
+<br/>
+
+BaseObjects can be added to an engine's container by instantiating them with a reference to the engine:
+
+```typescript
+import { Engine, BaseObject } from "snapengine";
+const engine = new Engine();
+const obj = new BaseObject(engine);
+```
+
+When an object is created, the global manager automatically assigns it a unique ID. This ID will be unique not only within the engine, but across all engines on the page.
+
+Objects that have a DOM element assigned to it should use the `ElementObject` class instead:
+
+```typescript
+import { Engine, ElementObject } from "snapengine";
+const engine = new Engine();
+const elemObj = new ElementObject(engine);
+elemObj.element = document.getElementById("my-element");
+```
+
+### Hierarchy and Transform Properties
+Every object can have a parent and multiple children, forming a hierarchical tree structure. 
+To set the parent of an object, simply assign the `parent` property when instantiating:
+
+```typescript
+const parentObj = new BaseObject(engine);
+const childObj = new BaseObject(engine, parentObj);
+```
+
+In addition, every object has built-in transform properties:
+
+```typescript
+obj.worldPosition = [100, 200];
+```
+
+Although not directly exposed, each object also maintains `local` position relative to its parent. 
+This concept may sound familiar, especially if you have experience with game engines or graphics programming.
+<br/>
+
+A key difference however is that unlike typical game engines, SnapEngine requires you to manually update the values of `local` properties when a child object is moved relative to its parent,
+by calling helper methods like `calculateLocalFromTransform()`:
+
+```typescript
+obj.worldPosition = [150, 250]; // Move object in world space
+obj.calculateLocalFromTransform(); // Update local position based on new world position
+```
+
+This is representative of a general design philosophy in SnapEngine: **Minimize the number of times we calculate transforms and other spatial properties.** 
+Why? Because unlike typical game engines where we have full control over the position of objects, in the DOM system we are at the mercy of the browser's layout engine. 
+Events like window resizing, CSS changes, or possibly even browser plugins can affect the layout of our objects unexpectedly. 
+This necessitates reading from the DOM constantly to maintain up-to-date positions of all objects, but in browsers, DOM reads are expensive.
+Instead, the engine must be very selective about when it reads or update transform properties, to avoid unnecessary performance hits.
+<br/>
+
+Similarly, we also want to avoid updating the position of child elements automatically when the parent moves, since otherwise
+we may trigger unexpected writes to the DOM, which can also be expensive.
+
+
+

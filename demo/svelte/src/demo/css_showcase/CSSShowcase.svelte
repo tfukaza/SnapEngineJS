@@ -25,8 +25,7 @@
         <h5>Heading 5</h5>
         <h6>Heading 6</h6>
         <p>
-          This is a paragraph using IBM Plex Mono. The design system uses Tomorrow for headings
-          and IBM Plex Mono for body text, creating a modern technical aesthetic.
+          This is a paragraph. 
         </p>
         <a href="#typography">This is a link element</a>
       </div>

@@ -1,7 +1,8 @@
 import { BaseObject, ElementObject, frameStats } from "./object";
+import type { Engine } from "./engine";
 
-export interface DebugRenderer {
-  enable(containerElement: HTMLElement): void;
+export interface DebugRendererInterface {
+  enable(engine: Engine): void;
   disable(): void;
   renderFrame(
     stats: frameStats,
@@ -11,14 +12,23 @@ export interface DebugRenderer {
   updateSize(width: number, height: number): void;
 }
 
-export class DebugRendererImpl implements DebugRenderer {
+export class DebugRenderer implements DebugRendererInterface {
   debugWindow: HTMLCanvasElement | null = null;
   debugCtx: CanvasRenderingContext2D | null = null;
+  #engine: Engine | null = null;
+  #subscriptionId = 'debugRenderer';
 
-  enable(containerElement: HTMLElement): void {
+  enable(engine: Engine): void {
     if (this.debugWindow) {
       return; // Already enabled
     }
+
+    const containerElement = engine.containerElement;
+    if (!containerElement) {
+      return;
+    }
+
+    this.#engine = engine;
 
     this.debugWindow = document.createElement("canvas");
     this.debugWindow.style.position = "absolute";
@@ -31,6 +41,11 @@ export class DebugRendererImpl implements DebugRenderer {
     this.debugWindow.style.pointerEvents = "none";
     containerElement.appendChild(this.debugWindow);
     this.debugCtx = this.debugWindow.getContext("2d");
+
+    // Subscribe to container resize events
+    engine.subscribeEvent('containerResized', this.#subscriptionId, (props) => {
+      this.updateSize(props.bounds.width, props.bounds.height);
+    });
   }
 
   disable(): void {
@@ -38,6 +53,12 @@ export class DebugRendererImpl implements DebugRenderer {
       this.debugWindow.remove();
       this.debugWindow = null;
       this.debugCtx = null;
+    }
+    
+    // Unsubscribe from resize events
+    if (this.#engine) {
+      this.#engine.unsubscribeEvent('containerResized', this.#subscriptionId);
+      this.#engine = null;
     }
   }
 

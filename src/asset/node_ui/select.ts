@@ -74,10 +74,9 @@ class RectSelectComponent extends ElementObject {
       }
     };
     this._selectHitBox.event.collider.onEndContact = (
-      thisObject: Collider,
+      _thisObject: Collider,
       otherObject: Collider,
     ) => {
-      console.debug("onEndContact", thisObject, otherObject);
       if (otherObject.parent instanceof NodeComponent) {
         let node = otherObject.parent as NodeComponent;
         node.setSelected(false);

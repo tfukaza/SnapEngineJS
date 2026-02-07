@@ -1,0 +1,188 @@
+---
+title: Animation
+order: 7
+sectionTitle: SnapEngine
+sectionOrder: 1
+---
+
+
+SnapEngine's animation module wraps the Web Animations API, providing keyframe-based animations for CSS properties and custom variables. It integrates with the engine's render loop for frame-accurate callbacks.
+
+
+## Basic Usage
+
+```typescript
+import { Engine, ElementObject } from 'snapengine';
+import { AnimationObject } from 'snapengine/animation';
+
+const engine = new Engine();
+engine.element = document.getElementById('container');
+engine.enableAnimationEngine();
+
+// Create an object
+const object = new ElementObject(engine, null);
+object.element = document.getElementById('box');
+
+// Create and play an animation
+const animation = new AnimationObject(
+  object.element,
+  { transform: ['translateX(0px)', 'translateX(200px)'] },
+  { duration: 1000, easing: 'ease-out' }
+);
+
+object.addAnimation(animation);
+animation.play();
+```
+
+## AnimationObject
+
+### Constructor
+
+```typescript
+new AnimationObject(target, keyframes, options)
+```
+
+| Parameter | Type | Description |
+|-----------|------|-------------|
+| `target` | `Element \| null` | The DOM element to animate. Use `null` for variable-only animations. |
+| `keyframes` | `Record<string, cssValue>` | CSS properties or custom variables to animate |
+| `options` | `keyframeProperty` | Animation timing and callbacks |
+
+### Keyframes
+
+Keyframes define the values to animate between. Each property can be an array of values:
+
+```typescript
+// Animate from 0 to 100px over the duration
+{ x: [0, 100] }
+
+// Multi-step animation
+{ opacity: [1, 0.5, 0, 0.5, 1] }
+
+// CSS transform
+{ transform: ['scale(1)', 'scale(1.5)', 'scale(1)'] }
+```
+
+### Options
+
+```typescript
+interface keyframeProperty {
+  duration?: number;           // Animation duration in ms (default: 1000)
+  delay?: number;              // Delay before starting (default: 0)
+  easing?: string | string[];  // Easing function(s)
+  offset?: number[];           // Keyframe positions (0-1)
+  tick?: (vars: Record<string, number>) => void;  // Called each frame
+  finish?: () => void;         // Called when animation completes
+  persist?: boolean;           // Keep final state (default: false)
+}
+```
+
+### Easing Functions
+
+Supports all CSS easing functions:
+
+```typescript
+// Single easing for entire animation
+{ easing: 'ease-in-out' }
+
+// Per-keyframe easing
+{ easing: ['ease-in', 'linear', 'ease-out'] }
+```
+
+Common values: `'linear'`, `'ease'`, `'ease-in'`, `'ease-out'`, `'ease-in-out'`, or cubic-bezier functions.
+
+### Keyframe Offsets
+
+Control when keyframes occur within the animation:
+
+```typescript
+// Default: evenly distributed
+{ $value: [0, 50, 100] }  // At 0%, 50%, 100%
+
+// Custom timing
+{
+  $value: [0, 50, 100],
+  offset: [0, 0.2, 1]  // At 0%, 20%, 100%
+}
+```
+
+## Custom Variables
+
+Prefix property names with `$` to create animatable custom variables. These don't affect CSS but can be read via the `tick` callback:
+
+```typescript
+const animation = new AnimationObject(null,
+  { $progress: [0, 100], $scale: [1, 2] },
+  {
+    duration: 2000,
+    tick: (vars) => {
+      console.log(`Progress: ${vars.$progress}%`);
+      console.log(`Scale: ${vars.$scale}`);
+      
+      // Use values to update anything
+      myObject.transform.x = vars.$progress * 5;
+      myObject.requestTransform();
+    }
+  }
+);
+```
+
+This is useful for:
+- Animating non-CSS properties
+- Coordinating multiple elements
+- Creating complex animation effects
+- Driving physics simulations
+
+## Playback Control
+
+```typescript
+animation.play();    // Start or resume
+animation.pause();   // Pause at current position
+animation.reverse(); // Reverse playback direction
+animation.cancel();  // Stop and reset
+
+// Set playback position
+animation.currentTime = 500;  // Jump to 500ms
+animation.progress = 0.5;     // Jump to 50%
+```
+
+
+## SequenceObject
+
+Group multiple animations to control them together:
+
+```typescript
+import { AnimationObject, SequenceObject } from 'snapengine/animation';
+
+const sequence = new SequenceObject();
+
+// Add animations that play simultaneously
+sequence.add(new AnimationObject(elem1,
+  { opacity: [0, 1] },
+  { duration: 500 }
+));
+
+sequence.add(new AnimationObject(elem2,
+  { transform: ['translateY(-20px)', 'translateY(0)'] },
+  { duration: 500, delay: 100 }
+));
+
+// Control all at once
+sequence.play();
+sequence.pause();
+sequence.reverse();
+```
+
+### SequenceObject API
+
+```typescript
+class SequenceObject {
+  add(animation: AnimationInterface): void;
+  play(): void;
+  pause(): void;
+  cancel(): void;
+  reverse(): void;
+  currentTime: number;  // Set playback position (ms)
+  progress: number;     // Set progress (0-1)
+}
+```

@@ -145,20 +145,17 @@ class ConnectorComponent extends ElementObject {
     if (prop.event.button != 0) {
       return;
     }
-    console.debug(`Pointer down on connector ${this.gid}`);
     this.inputEngine.resetDragMembers();
     if (currentIncomingLines.length > 0) {
       this.startPickUpLine(currentIncomingLines[0], prop);
       return;
     }
     if (this.#config.allowDragOut) {
-      console.debug("Starting drag out line");
       this.startDragOutLine(prop);
     }
   }
 
   deleteLine(i: number): LineComponent | null {
-    console.debug(`Deleting line ${this.gid} at index ${i}`);
     if (this.#outgoingLines.length == 0) {
       return null;
     }
@@ -284,7 +281,6 @@ class ConnectorComponent extends ElementObject {
   }
 
   runDragOutLine(prop: dragProp) {
-    console.debug(`Running drag out line ${this.gid}`);
     if (this.#state != ConnectorState.DRAGGING) {
       return;
     }
@@ -319,7 +315,6 @@ class ConnectorComponent extends ElementObject {
       return;
     }
     if (targetConnector == null) {
-      console.debug(`Error: targetConnector is null`);
       return;
     }
     if (targetConnector.gid == this.gid) {
@@ -331,13 +326,11 @@ class ConnectorComponent extends ElementObject {
   }
 
   endDragOutLine(_: dragEndProp) {
-    console.debug(`Ending drag out line ${this.gid}`);
     this.inputEngine.resetDragMembers();
     if (
       this.#targetConnector &&
       this.#targetConnector instanceof ConnectorComponent
     ) {
-      console.debug(`Connecting ${this.gid} to ${this.#targetConnector.gid}`);
       const target = this.#targetConnector;
       if (target == null) {
         console.error(`Error: target is null`);
@@ -354,7 +347,6 @@ class ConnectorComponent extends ElementObject {
 
       this.#outgoingLines[0].setLineEnd(target.transform.x, target.transform.y);
     } else {
-      console.debug(`Deleting line ${this.gid} at index 0`);
       this.deleteLine(0);
     }
     if (this.parent) {
@@ -391,22 +383,15 @@ class ConnectorComponent extends ElementObject {
     connector: ConnectorComponent,
     line: LineComponent | null,
   ): boolean {
-    console.debug(`Connecting ${this.gid} to connector ${connector.gid}`);
     const currentIncomingLines = connector.incomingLines.filter(
       (i) => !i._requestDelete,
     );
 
     if (currentIncomingLines.some((i) => i.start == this)) {
-      console.warn(
-        `Connector ${connector} already has a line connected to this connector`,
-      );
       return false;
     }
 
     if (connector.config.maxConnectors === currentIncomingLines.length) {
-      console.warn(
-        `Connector ${connector.name} already has max number of connectors (${connector.config.maxConnectors}) connected`,
-      );
       return false;
     }
 
@@ -429,7 +414,6 @@ class ConnectorComponent extends ElementObject {
   }
 
   disconnectFromConnector(connector: ConnectorComponent) {
-    console.debug(`Disconnecting ${this.gid} from connector ${connector.gid}`);
     for (const line of this.#outgoingLines) {
       if (line.target == connector) {
         line._requestDelete = true;

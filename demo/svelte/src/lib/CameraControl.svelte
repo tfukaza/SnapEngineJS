@@ -17,7 +17,10 @@
 
   let cameraControlElement: HTMLDivElement | null = null;
   const engine: Engine = getContext("engine");
-  const cameraControlInstance = new CameraControlObject(engine, zoomLock, panLock);
+  const cameraControlInstance = new CameraControlObject(engine, {
+    zoomLock: zoomLock ?? false,
+    panLock: panLock ?? false,
+  });
 
   cameraControl = cameraControlInstance;
   setContext("cameraControl", cameraControlInstance);
