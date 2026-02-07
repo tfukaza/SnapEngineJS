@@ -76,7 +76,7 @@
     align-items: center;
 
     a {
-      font-size: 32px;
+      font-size: 20px;
       font-family: 'Doto', sans-serif;
     }
   }

@@ -456,6 +456,7 @@
               duration: 350,
               easing: "cubic-bezier(0.4, 0, 0.2, 1)",
               delay: isReflow ? 200 : 0,
+              persist: isReflow,
               // Update READ_3 positions on each animation frame so lines can track
               // getBoundingClientRect() returns the visual position including CSS transforms
               tick: () => {

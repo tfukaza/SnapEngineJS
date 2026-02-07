@@ -9,8 +9,7 @@
 
 <section class="two-column interactivity-explainer">
   <div class="interactivity-intro">
-    <h2>…what’s an “Interactivity Engine”?</h2>
-    <p>It’s a collection of utilities for adding interactive elements to web apps.</p>
+    <h2>A collection of utilities for adding interactive elements to web apps</h2>
   </div>
 
   <InputHandlingCard />
@@ -36,7 +35,7 @@
     margin: clamp(20px, 10vh, 200px) auto;
 
     h2 {
-      // font-size: clamp(2.5rem, 5vw, 3.5rem);
+      font-size: clamp(1.5rem, 3vw, 3.5rem);
       margin-bottom: 1rem;
     }
 
