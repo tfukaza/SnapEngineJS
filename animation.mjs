@@ -158,7 +158,6 @@ class AnimationObject {
             fill: "both"
           })
         );
-        console.log("Created interval animation", intervalDuration, intervalDelay, intervalEasing, intervalKeys);
         animation.onfinish = () => {
           animation.cancel();
         };

@@ -1,15 +1,30 @@
 var __defProp = Object.defineProperty;
+var __typeError = (msg) => {
+  throw TypeError(msg);
+};
 var __defNormalProp = (obj, key, value) => key in obj ? __defProp(obj, key, { enumerable: true, configurable: true, writable: true, value }) : obj[key] = value;
 var __publicField = (obj, key, value) => __defNormalProp(obj, typeof key !== "symbol" ? key + "" : key, value);
-class DebugRendererImpl {
+var __accessCheck = (obj, member, msg) => member.has(obj) || __typeError("Cannot " + msg);
+var __privateGet = (obj, member, getter) => (__accessCheck(obj, member, "read from private field"), getter ? getter.call(obj) : member.get(obj));
+var __privateAdd = (obj, member, value) => member.has(obj) ? __typeError("Cannot add the same private member more than once") : member instanceof WeakSet ? member.add(obj) : member.set(obj, value);
+var __privateSet = (obj, member, value, setter) => (__accessCheck(obj, member, "write to private field"), setter ? setter.call(obj, value) : member.set(obj, value), value);
+var _engine, _subscriptionId;
+class DebugRenderer {
   constructor() {
     __publicField(this, "debugWindow", null);
     __publicField(this, "debugCtx", null);
+    __privateAdd(this, _engine, null);
+    __privateAdd(this, _subscriptionId, "debugRenderer");
   }
-  enable(containerElement) {
+  enable(engine) {
     if (this.debugWindow) {
       return;
     }
+    const containerElement = engine.containerElement;
+    if (!containerElement) {
+      return;
+    }
+    __privateSet(this, _engine, engine);
     this.debugWindow = document.createElement("canvas");
     this.debugWindow.style.position = "absolute";
     this.debugWindow.style.top = "0";
@@ -21,12 +36,19 @@ class DebugRendererImpl {
     this.debugWindow.style.pointerEvents = "none";
     containerElement.appendChild(this.debugWindow);
     this.debugCtx = this.debugWindow.getContext("2d");
+    engine.subscribeEvent("containerResized", __privateGet(this, _subscriptionId), (props) => {
+      this.updateSize(props.bounds.width, props.bounds.height);
+    });
   }
   disable() {
     if (this.debugWindow) {
       this.debugWindow.remove();
       this.debugWindow = null;
       this.debugCtx = null;
+    }
+    if (__privateGet(this, _engine)) {
+      __privateGet(this, _engine).unsubscribeEvent("containerResized", __privateGet(this, _subscriptionId));
+      __privateSet(this, _engine, null);
     }
   }
   updateSize(width, height) {
@@ -252,6 +274,8 @@ class DebugRendererImpl {
     }
   }
 }
+_engine = new WeakMap();
+_subscriptionId = new WeakMap();
 export {
-  DebugRendererImpl
+  DebugRenderer
 };
