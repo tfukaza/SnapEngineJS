@@ -340,6 +340,18 @@ class InputControl {
 
   #isEventWithinEngine(target: EventTarget | null) {
     const container = this.engine?.containerElement;
+    // For the global InputControl, engine is not a real Engine instance,
+    // so containerElement will be undefined. In that case, check against
+    // all registered engines' containers.
+    if (container == null && this._isGlobal && this.global) {
+      for (const engine of this.global.engines) {
+        if (engine.containerElement && target instanceof Node && engine.containerElement.contains(target)) {
+          return true;
+        }
+      }
+      // If no engines have containers yet, allow the event
+      return this.global.engines.size === 0;
+    }
     if (container == null) {
       return true;
     }
@@ -351,6 +363,27 @@ class InputControl {
 
   #isCoordinateWithinEngine(screenX: number, screenY: number) {
     const rect = this.engine?.containerBounds;
+    // For the global InputControl, engine is not a real Engine instance,
+    // so containerBounds will be undefined. In that case, check against
+    // all registered engines' bounds.
+    if (rect == null && this._isGlobal && this.global) {
+      for (const engine of this.global.engines) {
+        const bounds = engine.containerBounds;
+        if (bounds &&
+          screenX >= bounds.left &&
+          screenX <= bounds.right &&
+          screenY >= bounds.top &&
+          screenY <= bounds.bottom
+        ) {
+          return true;
+        }
+      }
+      return false;
+    }
+    if (rect == null) {
+      console.warn("Engine container bounds not found. Coordinate-based event handling may not work correctly.");
+      return false;
+    }
     return (
       screenX >= rect.left &&
       screenX <= rect.right &&

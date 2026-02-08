@@ -23,7 +23,6 @@
     $effect(() => {
         if (engine && !debugHelper) {
              debugHelper = new BaseObject(engine, null);
-             canvasComponent?.enableDebug();
         }
     });
 
@@ -414,8 +413,6 @@
 
 
 <style lang="scss">
-    @use "../../../../app.scss";
-
      li {
         list-style-type: none;
     }

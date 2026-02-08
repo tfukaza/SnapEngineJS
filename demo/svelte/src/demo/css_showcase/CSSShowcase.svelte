@@ -423,8 +423,6 @@
 
 
 <style lang="scss">
-  @use "../../../../app.scss";
-
   .css-showcase {
     width: 100%;
     height: 100%;

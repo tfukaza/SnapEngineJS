@@ -19,6 +19,8 @@
     debug?: boolean;
   } = $props();
   let canvas: HTMLDivElement | null = null;
+  let mounted = $state(false);
+  let pendingDebugEnable = $state(false);
 
   const resolvedEngine = (engine ?? getEngine(id)) as Engine;
   engine = resolvedEngine;
@@ -29,22 +31,39 @@
   onMount(() => {
     resolvedEngine.assignDom(canvas as HTMLElement);
     resolvedEngine.camera?.setCameraPosition(0, 0);
+    mounted = true;
+
+    // Apply any debug state that was requested before mount
+    if (pendingDebugEnable) {
+      resolvedEngine.setDebugRenderer(new DebugRenderer());
+      pendingDebugEnable = false;
+    }
   });
 
   $effect(() => {
     if (debug) {
-      resolvedEngine.setDebugRenderer(new DebugRenderer());
+      if (mounted) {
+        resolvedEngine.setDebugRenderer(new DebugRenderer());
+      } else {
+        pendingDebugEnable = true;
+      }
     } else {
       resolvedEngine.disableDebug();
+      pendingDebugEnable = false;
     }
   });
 
   export function enableDebug() {
-    resolvedEngine.setDebugRenderer(new DebugRenderer());
+    if (mounted) {
+      resolvedEngine.setDebugRenderer(new DebugRenderer());
+    } else {
+      pendingDebugEnable = true;
+    }
   }
 
   export function disableDebug() {
     resolvedEngine.disableDebug();
+    pendingDebugEnable = false;
   }
 </script>
 

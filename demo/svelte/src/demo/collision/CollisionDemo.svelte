@@ -6,9 +6,9 @@
   // import CollisionDot from "./CollisionDot.svelte";
   // import CollisionLine from "./CollisionLine.svelte";
   import { BaseObject } from "@snap-engine/core";
-  import type { Engine } from "@snap-engine/core";
+  import type { Engine as EngineType } from "@snap-engine/core";
 
-  let engine: Engine | null = $state(null);
+  let engine: EngineType | null = $state(null);
   let boundaryObjects: BaseObject[] = [];
 
   // Boundary dimensions
@@ -101,7 +101,6 @@
 </Engine>
 
 <style>
-  @use "../../../../app.scss";
   #collision-demo {
       position: absolute;
       top: 0;

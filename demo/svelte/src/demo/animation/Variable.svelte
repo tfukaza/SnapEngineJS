@@ -46,8 +46,5 @@
 <Exhibit {props} >
   <div bind:this={object.element} style="top: 50%; left: 50%; position: absolute; transform: translate(-50%, -50%);"></div>
 </Exhibit>
-
-  <style lang="scss">
-    @use "../../../../app.scss";
-  </style>
+  
   

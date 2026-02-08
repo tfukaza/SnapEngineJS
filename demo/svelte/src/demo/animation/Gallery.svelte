@@ -16,8 +16,6 @@
   </Engine>
     
   <style lang="scss">
-    @use "../../../../app.scss";
-
     .gallery {
       width: 100%;
       height: 100%;

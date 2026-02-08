@@ -120,8 +120,6 @@
 </div>
 
 <style lang="scss">
-  @use "../../app.scss";
-
   .landing-container {
     width: 100%;
     height: 100vh;

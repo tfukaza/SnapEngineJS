@@ -1,13 +1,21 @@
 <script lang="ts">
     import DragInstance from "./DragInstance.svelte";
+
+    let dragInstance1: DragInstance | null = null;
+    let dragInstance2: DragInstance | null = null;
+
+    export function setDebug(enabled: boolean) {
+        dragInstance1?.setDebug(enabled);
+        dragInstance2?.setDebug(enabled);
+    }
 </script>
 
 <div class="split-view">
     <div class="pane">
-        <DragInstance canvasId="drag-demo-canvas-1" />
+        <DragInstance bind:this={dragInstance1} canvasId="drag-demo-canvas-1" />
     </div>
     <div class="pane">
-        <DragInstance canvasId="drag-demo-canvas-2" />
+        <DragInstance bind:this={dragInstance2} canvasId="drag-demo-canvas-2" />
     </div>
 </div>
 
