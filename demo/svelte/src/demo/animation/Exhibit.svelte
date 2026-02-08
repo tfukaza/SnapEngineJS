@@ -21,7 +21,7 @@
 </div>
 
 <style lang="scss">
-  @import "../../../../app.scss";
+  @use "../../../../app.scss";
 
   .exhibit {
 

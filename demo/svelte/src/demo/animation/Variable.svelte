@@ -48,6 +48,6 @@
 </Exhibit>
 
   <style lang="scss">
-    @import "../../../../app.scss";
+    @use "../../../../app.scss";
   </style>
   

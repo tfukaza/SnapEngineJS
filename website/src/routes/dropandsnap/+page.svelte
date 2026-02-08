@@ -341,7 +341,7 @@
 </section>
 
 <style lang="scss">
-  @import "../../lib/landing/landing.scss";
+  @use "../../lib/landing/landing.scss";
   
   .debug-toggle {
     position: fixed;

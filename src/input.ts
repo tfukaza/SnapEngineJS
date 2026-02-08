@@ -657,9 +657,9 @@ class InputControl {
 
       const gestureKey = `${pointer_0.id}-${pointer_1.id}`;
 
-      const startMiddleX = (pointer_0.startX + pointer_1.startX) / 2;
-      const startMiddleY = (pointer_0.startY + pointer_1.startY) / 2;
-      const startMiddle = this.getCoordinates(startMiddleX, startMiddleY);
+      // const startMiddleX = (pointer_0.startX + pointer_1.startX) / 2;
+      // const startMiddleY = (pointer_0.startY + pointer_1.startY) / 2;
+      // const startMiddle = this.getCoordinates(startMiddleX, startMiddleY);
       const startDistance = Math.sqrt(
         Math.pow(pointer_0.startX - pointer_1.startX, 2) +
           Math.pow(pointer_0.startY - pointer_1.startY, 2),

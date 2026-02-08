@@ -83,7 +83,7 @@
 
   <style lang="scss">
 
-    @import "../../../../app.scss";
+    @use "../../../../app.scss";
 
     .circle {
       width: 32px;

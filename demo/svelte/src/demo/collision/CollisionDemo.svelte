@@ -101,7 +101,7 @@
 </Engine>
 
 <style>
-  @import "../../../../app.scss";
+  @use "../../../../app.scss";
   #collision-demo {
       position: absolute;
       top: 0;

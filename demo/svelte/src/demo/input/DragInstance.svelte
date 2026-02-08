@@ -409,12 +409,12 @@
                 {/each}
             </div>
         </div>
-    </Engine>
+    </EngineComponent>
 </div>
 
 
 <style lang="scss">
-    @import "../../../../app.scss";
+    @use "../../../../app.scss";
 
      li {
         list-style-type: none;

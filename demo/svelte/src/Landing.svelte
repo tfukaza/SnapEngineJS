@@ -120,7 +120,7 @@
 </div>
 
 <style lang="scss">
-  @import "../../app.scss";
+  @use "../../app.scss";
 
   .landing-container {
     width: 100%;

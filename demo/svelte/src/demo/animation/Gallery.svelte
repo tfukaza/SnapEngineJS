@@ -16,7 +16,7 @@
   </Engine>
     
   <style lang="scss">
-    @import "../../../../app.scss";
+    @use "../../../../app.scss";
 
     .gallery {
       width: 100%;
