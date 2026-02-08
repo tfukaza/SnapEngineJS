@@ -1,0 +1,28 @@
+{
+  "name": "@drop-and-snap/svelte",
+  "version": "0.1.0",
+  "description": "Svelte components for drag-and-drop system",
+  "type": "module",
+  "svelte": "./src/index.ts",
+  "exports": {
+    ".": {
+      "svelte": "./src/index.ts"
+    },
+    "./ItemContainer.svelte": "./src/ItemContainer.svelte",
+    "./Item.svelte": "./src/Item.svelte"
+  },
+  "keywords": [
+    "drag-and-drop",
+    "svelte",
+    "ui",
+    "snapengine"
+  ],
+  "author": "Tomoki Fukazawa",
+  "license": "MIT",
+  "dependencies": {
+    "@drop-and-snap/core": "*"
+  },
+  "peerDependencies": {
+    "svelte": "^5.0.0"
+  }
+}

@@ -1,0 +1,20 @@
+{
+  "name": "@drop-and-snap/react",
+  "version": "0.1.0",
+  "description": "React components for drag-and-drop system",
+  "type": "module",
+  "keywords": [
+    "drag-and-drop",
+    "react",
+    "ui",
+    "snapengine"
+  ],
+  "author": "Tomoki Fukazawa",
+  "license": "MIT",
+  "dependencies": {
+    "@drop-and-snap/core": "*"
+  },
+  "peerDependencies": {
+    "react": "^18.0.0"
+  }
+}

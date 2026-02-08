@@ -1,12 +1,11 @@
 <script lang="ts">
-  import Canvas from "@svelte-demo/lib/Canvas.svelte";
-  import CameraControlComponent from "@svelte-demo/lib/CameraControl.svelte";
-  import type { CameraControl as CameraControlApi } from "@snapline/asset/cameraControl";
+  import { Engine, Camera as CameraControlComponent } from "@snapengine-asset-base/svelte";
+  import type { CameraControl as CameraControlApi } from "@snapengine-asset-base/core";
   import { debugState } from "$lib/landing/debugState.svelte";
 
   let cameraControl: CameraControlApi | null = null;
   const ZOOM_STEP = 0.12;
-  let canvasComponent: Canvas | null = null;
+  let canvasComponent: Engine | null = null;
 
   function zoom(delta: number) {
     if (!cameraControl) return;
@@ -32,7 +31,7 @@
 
 <p class="panel-label">▼ Camera Pan and Zoom v0.1</p>
 <div id="camera-control-demo">
-  <Canvas id="camera-control-node-demo" bind:this={canvasComponent} debug={debugState.enabled}>
+  <Engine id="camera-control-node-demo" bind:this={canvasComponent} debug={debugState.enabled}>
     <CameraControlComponent bind:cameraControl>
       <div class="image-stage">
         <div class="photo-credit">
@@ -53,7 +52,7 @@
         />
       </div>
     </CameraControlComponent>
-  </Canvas>
+  </Engine>
   <div class="card zoom-controls" aria-label="Zoom controls">
     <button
       type="button"

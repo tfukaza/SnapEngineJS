@@ -1,11 +1,11 @@
 <script lang="ts">
     import { onMount, tick } from "svelte";
-    import Canvas from "@svelte-demo/lib/Canvas.svelte";
-    import Node from "@svelte-demo/lib/node_ui/Node.svelte";
-    import { NodeComponent } from "@snapline/asset/node_ui/node";
+    import { Engine } from "@snapengine-asset-base/svelte";
+    import { Node } from "@snapline/svelte";
+    import { NodeComponent } from "@snapline/core";
     import EmojiConnector from "./EmojiConnector.svelte";
     import EmojiLine from "./EmojiLine.svelte";
-    import { getEngine } from "@svelte-demo/lib/engine.svelte";
+    import { getEngine } from "@snapengine-asset-base/svelte";
     import { debugState } from "$lib/landing/debugState.svelte";
 
     export type EmojiWordConnection = {
@@ -174,7 +174,7 @@
 </script>
 
 <div class="emoji-word-connectors">
-    <Canvas id="emoji-word-canvas" {engine} debug={debugState.enabled}>
+    <Engine id="emoji-word-canvas" {engine} debug={debugState.enabled}>
         <div class="emoji-column">
             {#each emojiNodes as item (item.id)}
                 <div class="emoji-chip">
@@ -215,7 +215,7 @@
                 </div>
             {/each}
         </div>
-    </Canvas>
+    </Engine>
 </div>
 
 <style lang="scss">

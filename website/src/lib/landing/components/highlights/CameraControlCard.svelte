@@ -1,13 +1,12 @@
 <script lang="ts">
-  import Canvas from "@svelte-demo/lib/Canvas.svelte";
-  import CameraControlComponent from "@svelte-demo/lib/CameraControl.svelte";
-  import type { CameraControl as CameraControlApi } from "@snapline/asset/cameraControl";
+  import { Engine, Camera as CameraControlComponent } from "@snapengine-asset-base/svelte";
+  import type { CameraControl as CameraControlApi } from "@snapengine-asset-base/core";
   import HighlightCardShell from "./HighlightCardShell.svelte";
   import { debugState } from "$lib/landing/debugState.svelte";
   import { onMount } from "svelte";
 
   let cameraControl: CameraControlApi | null = null;
-  let canvasComponent: Canvas | null = null;
+  let canvasComponent: Engine | null = null;
   const ZOOM_STEP = 0.12;
 
   function zoom(delta: number) {
@@ -29,7 +28,7 @@
   description="Zoom and pan any DOM element."
 >
   <div class="camera-card slot shallow">
-        <Canvas id="camera-control-highlight" bind:this={canvasComponent} debug={debugState.enabled}>
+        <Engine id="camera-control-highlight" bind:this={canvasComponent} debug={debugState.enabled}>
           <CameraControlComponent bind:cameraControl>
             <div class="dot-grid-background"></div>
             <div class="image-stage">
@@ -41,7 +40,7 @@
               />
             </div>
           </CameraControlComponent>
-        </Canvas>
+        </Engine>
   </div>
 
   <div class="zoom-controls card" aria-label="Zoom controls">

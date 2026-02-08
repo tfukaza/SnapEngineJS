@@ -1,12 +1,12 @@
 <script lang="ts">
-  import Canvas from "../../lib/Canvas.svelte";
+  import { Engine } from "@snapengine-asset-base/svelte";
   import { onMount, onDestroy } from "svelte";
   import CollisionBox from "./CollisionBox.svelte";
   import CollisionCircle from "./CollisionCircle.svelte";
   // import CollisionDot from "./CollisionDot.svelte";
   // import CollisionLine from "./CollisionLine.svelte";
-  import { BaseObject } from "../../../../../src/object";
-  import type { Engine } from "../../../../../src/index";
+  import { BaseObject } from "snap-engine";
+  import type { Engine } from "snap-engine";
 
   let engine: Engine | null = $state(null);
   let boundaryObjects: BaseObject[] = [];
@@ -65,7 +65,7 @@
   });
 </script>
 
-<Canvas id="collision-demo-canvas" bind:engine={engine}>
+<Engine id="collision-demo-canvas" bind:engine={engine}>
   <div id="collision-demo">
     <CollisionCircle title="Circle E" initialX={boundaryLeft + 350} initialY={boundaryTop + 50} radius={40} />
     <CollisionBox title="Box A" initialX={boundaryLeft + 50} initialY={boundaryTop + 50} />
@@ -98,7 +98,7 @@
     
     <div class="slot boundary" style={`left: ${boundaryLeft}px; top: ${boundaryTop}px;`}></div>
   </div>
-</Canvas>
+</Engine>
 
 <style>
   @import "../../../../app.scss";

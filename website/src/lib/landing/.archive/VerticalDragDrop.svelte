@@ -1,7 +1,6 @@
 <script lang="ts">
-  import Canvas from "@svelte-demo/lib/Canvas.svelte";
-  import Item from "@svelte-demo/demo/drag_drop/Item.svelte";
-  import Container from "@svelte-demo/demo/drag_drop/ItemContainer.svelte";
+  import { Engine } from "@snapengine-asset-base/svelte";
+  import { Item, ItemContainer as Container } from "@drop-and-snap/svelte";
   import { debugState } from "$lib/landing/debugState.svelte";
 
   const items = [
@@ -41,7 +40,7 @@
 
   const brailleChar = "⠿";
 
-  let canvasComponent: Canvas | null = null;
+  let canvasComponent: Engine | null = null;
 
   export function enableDebug() {
     canvasComponent?.enableDebug();
@@ -52,7 +51,7 @@
   }
 </script>
 <p class="panel-label">▼ Vertical Drag v0.1</p>
-<Canvas id="vertical-drag-drop-canvas" bind:this={canvasComponent} debug={debugState.enabled}>
+<Engine id="vertical-drag-drop-canvas" bind:this={canvasComponent} debug={debugState.enabled}>
   <div class="vertical-drag-drop">
     <Container config={{ direction: "column", groupID: "vertical-landing" }}>
       {#each decoratedItems as item (item.label)}
@@ -68,7 +67,7 @@
       {/each}
     </Container>
   </div>
-</Canvas>
+</Engine>
 
 <style lang="scss">
 

@@ -1,23 +1,23 @@
 <script lang="ts">
-    import Canvas from "../../lib/Canvas.svelte";
-    import type {Engine} from "../../../../index";
-    import {ElementObject, BaseObject} from "../../../../../src/object";
+    import { Engine as EngineComponent } from "@snapengine-asset-base/svelte";
+    import type {Engine} from "snap-engine";
+    import {ElementObject, BaseObject} from "snap-engine";
     import type {
-        dragProp, 
-        dragStartProp, 
-        dragEndProp, 
-        pointerDownProp, 
-        pointerUpProp, 
-        pinchProp, 
+        dragProp,
+        dragStartProp,
+        dragEndProp,
+        pointerDownProp,
+        pointerUpProp,
+        pinchProp,
         pinchStartProp,
-        pinchEndProp, 
-        pointerMoveProp} from "../../../../../src/input";
+        pinchEndProp,
+        pointerMoveProp} from "snap-engine";
     import { onMount, onDestroy } from "svelte";
 
     let { canvasId = "drag-demo-canvas" } = $props();
 
     let engine: Engine | null = $state(null);
-    let canvasComponent: Canvas | null = null;
+    let canvasComponent: EngineComponent | null = null;
     let debugHelper: BaseObject | null = null;
 
     $effect(() => {
@@ -386,7 +386,7 @@
 </script>
 
 <div class="drag-demo-wrapper">
-    <Canvas
+    <EngineComponent
         id={canvasId}
         bind:this={canvasComponent}
         bind:engine={engine}
@@ -409,7 +409,7 @@
                 {/each}
             </div>
         </div>
-    </Canvas>
+    </Engine>
 </div>
 
 

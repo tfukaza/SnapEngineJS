@@ -104,11 +104,21 @@ const config = {
 		// See https://svelte.dev/docs/kit/adapters for more information about adapters.
 		adapter: adapter(),
 		alias: {
+			'@snapline/svelte': '../assets/snapline/svelte/src/index.ts',
+			'@snapline/core': '../assets/snapline/core/src/index.ts',
 			'@snapline': '../src',
 			'@svelte-demo': '../demo/svelte/src',
 			'@demo-root': '../demo',
 			'@docs': '../docs',
-			'@components': './src/lib/components'
+			'@components': './src/lib/components',
+			'@snapengine-asset-base/svelte': '../assets/snapengine-asset-base/svelte/src/index.ts',
+			'@snapengine-asset-base/core': '../assets/snapengine-asset-base/core/src/index.ts',
+			'@drop-and-snap/svelte': '../assets/drop-and-snap/svelte/src/index.ts',
+			'@drop-and-snap/core': '../assets/drop-and-snap/core/src/index.ts',
+			'snap-engine/animation': '../src/animation.ts',
+			'snap-engine/debug': '../src/debug.ts',
+			'snap-engine/collision': '../src/collision.ts',
+			'snap-engine': '../src/index.ts'
 		}
 	}
 };

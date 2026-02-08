@@ -1,7 +1,5 @@
 <script lang="ts">
-    import Node from "../../lib/node_ui/Node.svelte";
-    import Connector from "../../lib/node_ui/Connector.svelte";
-    import Line from "../../lib/node_ui/Line.svelte";
+    import { Node, Connector, Line } from "@snapline/svelte";
     import { onMount } from "svelte";
     
     let { title = "Node" } = $props();

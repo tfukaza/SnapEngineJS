@@ -1,10 +1,9 @@
 <script lang="ts">
   import { onMount, tick } from "svelte";
 
-  import { NodeComponent } from "@snapline/asset/node_ui/node";
-  import type { ConnectorComponent } from "@snapline/index";
-  import Connector from "@svelte-demo/lib/node_ui/Connector.svelte";
-  import Node from "@svelte-demo/lib/node_ui/Node.svelte";
+  import { NodeComponent } from "@snapline/core";
+  import type { ConnectorComponent } from "@snapline/core";
+  import { Connector, Node } from "@snapline/svelte";
 
   import Line from "./Line.svelte";
   import "$lib/node_ui.scss";

@@ -2,13 +2,13 @@
   import { onMount, onDestroy } from "svelte";
   import type { Action } from "svelte/action";
   import {
-    Engine,
+    Engine as EngineClass,
     ElementObject,
     BaseObject,
   } from "@snapline/index";
   import { AnimationObject } from "@snapline/animation";
   import HighlightCardShell from "./HighlightCardShell.svelte";
-  import Canvas from "@svelte-demo/lib/Canvas.svelte";
+  import { Engine } from "@snapengine-asset-base/svelte";
   import { debugState } from "$lib/landing/debugState.svelte";
 
   type OperationType = "read" | "write";
@@ -66,7 +66,7 @@
   }
 
   let optimize = $state(false);
-  let engine = $state<Engine | null>(null);
+  let engine = $state<EngineClass | null>(null);
   let controller = $state<BaseObject | null>(null);
 
   $effect(() => {
@@ -145,7 +145,7 @@
     // visible: boolean = true;
 
     constructor(
-      engine: Engine,
+      engine: EngineClass,
       parent: BaseObject | null,
       element: SVGLineElement,
       id: string,
@@ -196,7 +196,7 @@
     }
   }
 
-  type NodeDeps = { engine: Engine | null; controller: BaseObject | null };
+  type NodeDeps = { engine: EngineClass | null; controller: BaseObject | null };
 
   const operationRef: Action<
     HTMLElement,
@@ -546,7 +546,7 @@
   title="DOM Optimization"
   description="Batch DOM reads and writes to avoid layout thrash."
 >
-  <Canvas 
+  <Engine
     bind:engine 
     id="dom-optimization-highlight" 
     debug={debugState.enabled}
@@ -609,7 +609,7 @@
       {/each}
     </svg>
   </div>
-  </Canvas>
+  </Engine>
 </HighlightCardShell>
 
 <style lang="scss">

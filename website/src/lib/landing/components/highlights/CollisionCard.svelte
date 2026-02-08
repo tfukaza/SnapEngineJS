@@ -1,12 +1,12 @@
 <script lang="ts">
-  import Canvas from "@svelte-demo/lib/Canvas.svelte";
+  import { Engine } from "@snapengine-asset-base/svelte";
   import CollisionBox from "@svelte-demo/demo/collision/CollisionBox.svelte";
   import CollisionCircle from "@svelte-demo/demo/collision/CollisionCircle.svelte";
-  import type { Engine } from "@snapline/index";
+  import type { Engine as EngineType } from "@snapline/index";
   import HighlightCardShell from "./HighlightCardShell.svelte";
   import { debugState } from "$lib/landing/debugState.svelte";
 
-  let engine: Engine | null = $state(null);
+  let engine: EngineType | null = $state(null);
   let collisionCount = $state(0);
   let isColliding = $state(false);
   let containerEl: HTMLDivElement | null = $state(null);
@@ -93,7 +93,7 @@
 
   <div class="collision-demo-container" bind:this={containerEl}>
     <div class="dot-grid-background"></div>
-    <Canvas id="collision-card-canvas" bind:engine={engine} debug={debugState.enabled}>
+    <Engine id="collision-card-canvas" bind:engine={engine} debug={debugState.enabled}>
       <div class="collision-demo">
        
         <div class="collision-grid">
@@ -125,7 +125,7 @@
           onCollisionEnd={handleCollisionEnd}
         />
       </div>
-    </Canvas>
+    </Engine>
   </div>
     <div class="collision-counter card" class:active={isColliding}>
     <span class="count pixel-font">{collisionCount}</span>

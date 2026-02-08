@@ -1,0 +1,21 @@
+{
+  "name": "@snapzap/react",
+  "version": "0.1.0",
+  "description": "React components for camera control and background",
+  "type": "module",
+  "keywords": [
+    "camera",
+    "background",
+    "react",
+    "ui",
+    "snapengine"
+  ],
+  "author": "Tomoki Fukazawa",
+  "license": "MIT",
+  "dependencies": {
+    "@snapzap/core": "*"
+  },
+  "peerDependencies": {
+    "react": "^18.0.0"
+  }
+}

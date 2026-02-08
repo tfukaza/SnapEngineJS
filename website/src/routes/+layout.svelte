@@ -1,5 +1,6 @@
 <script lang="ts">
   import "../../../demo/app.scss";
+  import "$lib/fonts.css";
   let { children } = $props();
 </script>
 
@@ -77,7 +78,7 @@
 
     a {
       font-size: 20px;
-      font-family: 'Doto', sans-serif;
+      font-family: 'Geist Pixel Circle', 'Doto', sans-serif;
     }
   }
 

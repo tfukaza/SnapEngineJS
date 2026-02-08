@@ -1,10 +1,9 @@
 <script lang="ts">
-    import Canvas from "../../lib/Canvas.svelte";
-    import Item from "./Item.svelte";
-    import Container from "./ItemContainer.svelte";
+    import { Engine } from "@snapengine-asset-base/svelte";
+    import { Item, ItemContainer as Container } from "@drop-and-snap/svelte";
 </script>
 
-<Canvas id="drag-drop-demo-canvas">
+<Engine id="drag-drop-demo-canvas">
 <div class="gallery">
     <!-- Vertical Column -->
     <div class="demo-box">
@@ -86,7 +85,7 @@
         </div>
     </div>
 </div>
-</Canvas>
+</Engine>
 
 <style lang="scss">
     @import "../../../../app.scss";

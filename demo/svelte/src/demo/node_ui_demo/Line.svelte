@@ -1,6 +1,6 @@
 <script lang="ts">
   import { onMount } from "svelte";
-  import type { LineComponent } from "../../../../../src/asset/node_ui/line";
+  import type { LineComponent } from "@snapline/core";
   import {blur} from "svelte/transition";
 
   let { line }: { line: LineComponent } = $props();

@@ -1,0 +1,16 @@
+{
+  "extends": "../../../tsconfig.json",
+  "compilerOptions": {
+    "outDir": "./dist",
+    "rootDir": "./src",
+    "baseUrl": ".",
+    "paths": {
+      "snap-engine": ["../../../src/index.ts"],
+      "snap-engine/animation": ["../../../src/animation.ts"],
+      "snap-engine/collision": ["../../../src/collision.ts"],
+      "snap-engine/debug": ["../../../src/debug.ts"],
+      "@snapline/core": ["../core/src/index.ts"]
+    }
+  },
+  "include": ["src/**/*"]
+}

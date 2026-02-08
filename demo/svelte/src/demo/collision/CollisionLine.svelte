@@ -1,9 +1,9 @@
 <script lang="ts">
   import { getContext, onMount, onDestroy } from "svelte";
-  import { ElementObject } from "../../../../../src/index";
-  import { PointCollider } from "../../../../../src/collision";
-  import type { Engine } from "../../../../../src/index";
-  import type { dragProp, dragStartProp, dragEndProp } from "../../../../../src/input";
+  import { ElementObject } from "snap-engine";
+  import { PointCollider } from "snap-engine/collision";
+  import type { Engine } from "snap-engine";
+  import type { dragProp, dragStartProp, dragEndProp } from "snap-engine";
 
   let { title = "Line", initialX1 = 0, initialY1 = 0, initialX2 = 100, initialY2 = 100 } = $props();
 

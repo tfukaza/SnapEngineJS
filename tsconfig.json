@@ -14,6 +14,8 @@
     "noUnusedLocals": true,
     "noUnusedParameters": true,
     "noImplicitReturns": true,
+    "declaration": true,
+    "declarationMap": true,
     "skipLibCheck": true,
     "rootDirs": ["src", "demo"],
     "outDir": "out-tsc",

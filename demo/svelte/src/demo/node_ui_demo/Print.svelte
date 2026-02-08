@@ -1,7 +1,6 @@
 <script lang="ts">
-  import { NodeComponent } from "./../../../../../src/asset/node_ui/node";
-  import Connector from "../../lib/node_ui/Connector.svelte";
-  import Node from "../../lib/node_ui/Node.svelte";
+  import { NodeComponent } from "@snapline/core";
+  import { Connector, Node } from "@snapline/svelte";
   import DemoLine from "./Line.svelte";
   import { onMount } from "svelte";
 

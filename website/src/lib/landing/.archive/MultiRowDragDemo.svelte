@@ -1,7 +1,6 @@
 <script lang="ts">
-  import Canvas from "@svelte-demo/lib/Canvas.svelte";
-  import Item from "@svelte-demo/demo/drag_drop/Item.svelte";
-  import Container from "@svelte-demo/demo/drag_drop/ItemContainer.svelte";
+  import { Engine } from "@snapengine-asset-base/svelte";
+  import { Item, ItemContainer as Container } from "@drop-and-snap/svelte";
   import { debugState } from "$lib/landing/debugState.svelte";
 
   type MathToken = {
@@ -79,7 +78,7 @@
 
   const availableTokens: MathToken[] = [...numberTokens, ...operatorTokens];
 
-  let canvasComponent: Canvas | null = null;
+  let canvasComponent: Engine | null = null;
 
   export function enableDebug() {
     canvasComponent?.enableDebug();
@@ -90,7 +89,7 @@
   }
 </script>
 
-<Canvas id="multi-row-drag-demo" bind:this={canvasComponent} debug={debugState.enabled}>
+<Engine id="multi-row-drag-demo" bind:this={canvasComponent} debug={debugState.enabled}>
   <div class="card multi-drop-demo">
     <div class="areas-wrapper">
       <div class="top-row">
@@ -120,7 +119,7 @@
       </div>
     </div>
   </div>
-</Canvas>
+</Engine>
 
 <style lang="scss">
   /* svelte-ignore css-unused-selector */

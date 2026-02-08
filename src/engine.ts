@@ -11,7 +11,6 @@ import {
 import type { CollisionEngine } from "./collision";
 import type { AnimationInterface } from "./animation";
 import type { DebugRenderer } from "./debug";
-import type { CameraControl } from "./asset/cameraControl";
 
 export interface EngineConfig {}
 
