@@ -2,8 +2,8 @@
   import {
     NodeComponent,
     ConnectorComponent,
-  } from "@snapline/core";
-  import type { Engine } from "snap-engine";
+  } from "@snap-engine/snapline";
+  import type { Engine } from "@snap-engine/core";
   import { getContext, onDestroy } from "svelte";
 
   let {

@@ -1,6 +1,6 @@
 <script lang="ts">
   import { onDestroy, onMount } from "svelte";
-  import { Engine } from "@snapengine-asset-base/svelte";
+  import { Engine } from "@snap-engine/base-svelte";
   import SvgLine from "$lib/SvgLine.svelte";
   import { ElementObject } from "@snapline/object";
   import type { Engine as EngineType } from "@snapline/index";

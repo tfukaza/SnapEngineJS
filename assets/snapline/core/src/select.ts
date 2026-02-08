@@ -1,6 +1,6 @@
-import { BaseObject, ElementObject } from "snap-engine";
-import type { pointerDownProp, pointerMoveProp, pointerUpProp } from "snap-engine";
-import { RectCollider, Collider } from "snap-engine/collision";
+import { BaseObject, ElementObject } from "@snap-engine/core";
+import type { pointerDownProp, pointerMoveProp, pointerUpProp } from "@snap-engine/core";
+import { RectCollider, Collider } from "@snap-engine/core/collision";
 import { NodeComponent } from "./node";
 
 class RectSelectComponent extends ElementObject {

@@ -1,6 +1,6 @@
-import { BaseObject, ElementObject, getDomProperty } from "snap-engine";
+import { BaseObject, ElementObject, getDomProperty } from "@snap-engine/core";
 import { ItemObject } from "./item";
-import { AnimationObject } from "snap-engine/animation";
+import { AnimationObject } from "@snap-engine/core/animation";
 
 const BUFFER = 20;
 

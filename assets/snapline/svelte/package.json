@@ -1,5 +1,5 @@
 {
-  "name": "@snapline/svelte",
+  "name": "@snap-engine/snapline-svelte",
   "version": "0.1.0",
   "description": "Svelte components for node graph UI",
   "type": "module",
@@ -22,7 +22,7 @@
   "author": "Tomoki Fukazawa",
   "license": "MIT",
   "dependencies": {
-    "@snapline/core": "*"
+    "@snap-engine/snapline": "*"
   },
   "peerDependencies": {
     "svelte": "^5.0.0"

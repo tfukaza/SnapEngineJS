@@ -6,19 +6,19 @@ Drag-and-drop list reordering system with support for multiple containers and fl
 
 ## Packages
 
-### @drop-and-snap/core
+### @snap-engine/drop-and-snap
 **Location:** `core/src/`
 **Language:** TypeScript
-**Dependencies:** `snap-engine`
+**Dependencies:** `@snap-engine/core`
 
 **Exports:**
 - `ItemContainer` - Container for draggable items
 - `ItemObject` - Individual draggable item
 
-### @drop-and-snap/svelte
+### @snap-engine/drop-and-snap-svelte
 **Location:** `svelte/src/`
 **Language:** Svelte 5
-**Dependencies:** `@drop-and-snap/core`, `snap-engine`
+**Dependencies:** `@snap-engine/drop-and-snap`, `@snap-engine/core`
 
 **Exports:**
 - `ItemContainer.svelte` - Container component
@@ -104,9 +104,9 @@ Items can only move between containers sharing the same `groupID`. This enables:
 ## Dependencies
 
 ```
-snap-engine
+@snap-engine/core
     ↓
-@drop-and-snap/core
+@snap-engine/drop-and-snap
     ↓
-@drop-and-snap/svelte
+@snap-engine/drop-and-snap-svelte
 ```

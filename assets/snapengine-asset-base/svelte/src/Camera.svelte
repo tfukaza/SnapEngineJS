@@ -1,7 +1,7 @@
 <script lang="ts">
   import { onMount, getContext, setContext } from "svelte";
-  import { CameraControl as CameraControlObject } from "@snapengine-asset-base/core";
-  import type { Engine } from "snap-engine";
+  import { CameraControl as CameraControlObject } from "@snap-engine/base";
+  import type { Engine } from "@snap-engine/core";
 
   let {
     children,

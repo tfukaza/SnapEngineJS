@@ -6,10 +6,10 @@ Node-based graph UI system for creating visual programming interfaces, node edit
 
 ## Packages
 
-### @snapline/core
+### @snap-engine/snapline
 **Location:** `core/src/`
 **Language:** TypeScript
-**Dependencies:** `snap-engine`
+**Dependencies:** `@snap-engine/core`
 
 **Exports:**
 - `NodeComponent` - Graph node with connectors
@@ -18,10 +18,10 @@ Node-based graph UI system for creating visual programming interfaces, node edit
 - `RectSelectComponent` - Rectangle selection tool
 - `GlobalManager` - Shared state manager
 
-### @snapline/svelte
+### @snap-engine/snapline-svelte
 **Location:** `svelte/src/`
 **Language:** Svelte 5
-**Dependencies:** `@snapline/core`, `snap-engine`
+**Dependencies:** `@snap-engine/snapline`, `@snap-engine/core`
 
 **Exports:**
 - `Node.svelte` - Node component
@@ -166,11 +166,11 @@ snapline/
 ## Dependencies
 
 ```
-snap-engine
+@snap-engine/core
     ↓
-@snapline/core
+@snap-engine/snapline
     ↓
-@snapline/svelte
+@snap-engine/snapline-svelte
 ```
 
 ## Notes

@@ -1,9 +1,9 @@
 <script lang="ts">
   import { onMount, getContext, onDestroy } from "svelte";
-  import { ItemContainer } from "@drop-and-snap/core";
-  import type { ClickAction } from "@drop-and-snap/core";
-  import { ItemObject } from "@drop-and-snap/core";
-  import type { Engine } from "snap-engine";
+  import { ItemContainer } from "@snap-engine/drop-and-snap";
+  import type { ClickAction } from "@snap-engine/drop-and-snap";
+  import { ItemObject } from "@snap-engine/drop-and-snap";
+  import type { Engine } from "@snap-engine/core";
 
 
   let { children, style = "", className = "", onClickAction = null, metadata = {} }: { children: any; style?: string; className?: string; onClickAction?: ClickAction | null; metadata?: Record<string, unknown> } = $props();

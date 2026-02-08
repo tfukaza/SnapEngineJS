@@ -1,7 +1,7 @@
 <script lang="ts">
-    import { Engine as EngineComponent } from "@snapengine-asset-base/svelte";
-    import type {Engine} from "snap-engine";
-    import {ElementObject, BaseObject} from "snap-engine";
+    import { Engine as EngineComponent } from "@snap-engine/base-svelte";
+    import type {Engine} from "@snap-engine/core";
+    import {ElementObject, BaseObject} from "@snap-engine/core";
     import type {
         dragProp,
         dragStartProp,
@@ -11,7 +11,7 @@
         pinchProp,
         pinchStartProp,
         pinchEndProp,
-        pointerMoveProp} from "snap-engine";
+        pointerMoveProp} from "@snap-engine/core";
     import { onMount, onDestroy } from "svelte";
 
     let { canvasId = "drag-demo-canvas" } = $props();

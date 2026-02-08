@@ -1,8 +1,8 @@
 <script lang="ts">
-  import { Item, ItemContainer as Container } from "@drop-and-snap/svelte";
+  import { Item, ItemContainer as Container } from "@snap-engine/drop-and-snap-svelte";
   import "@demo-root/app.scss";
   import { getContext, onMount } from "svelte";
-  import { CameraControl } from "@snapengine-asset-base/core";
+  import { CameraControl } from "@snap-engine/base";
   import { AnimationObject } from "@snapline/animation";
   import { fade } from "svelte/transition";
 

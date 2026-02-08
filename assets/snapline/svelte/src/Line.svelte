@@ -1,5 +1,5 @@
 <script lang="ts">
-    import type { LineComponent } from "@snapline/core";
+    import type { LineComponent } from "@snap-engine/snapline";
     import { onMount } from "svelte";
     let { line }: { line: LineComponent } = $props();
 

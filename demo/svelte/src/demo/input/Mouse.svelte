@@ -1,5 +1,5 @@
 <script lang="ts">
-    // import type {Engine} from "snap-engine";
+    // import type {Engine} from "@snap-engine/core";
     // import { getContext } from "svelte";
 
     // let engine:Engine = getContext("engine");

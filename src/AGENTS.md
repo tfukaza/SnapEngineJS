@@ -4,7 +4,7 @@
 
 The `src/` directory contains the core SnapEngine library - a framework-agnostic interactivity engine for DOM-based applications.
 
-**Package:** `snap-engine`
+**Package:** `@snap-engine/core`
 **Build output:** `dist/`
 **Build tool:** Vite with TypeScript
 
@@ -197,17 +197,17 @@ dist/
 
 **External consumers:**
 ```typescript
-import { Engine, ElementObject } from "snap-engine";
-import { AnimationObject } from "snap-engine/animation";
-import { RectCollider } from "snap-engine/collision";
-import { DebugRenderer } from "snap-engine/debug";
+import { Engine, ElementObject } from "@snap-engine/core";
+import { AnimationObject } from "@snap-engine/core/animation";
+import { RectCollider } from "@snap-engine/core/collision";
+import { DebugRenderer } from "@snap-engine/core/debug";
 ```
 
 **Asset packages:**
 Must use package imports, never relative paths:
 ```typescript
 // ✅ Correct
-import { Engine } from "snap-engine";
+import { Engine } from "@snap-engine/core";
 
 // ❌ Wrong
 import { Engine } from "../../../src/index";
@@ -224,7 +224,7 @@ import { Engine } from "../../../src/index";
 ## Notes
 
 - This is the only built package in the monorepo
-- Asset packages import from this as `snap-engine`
+- Asset packages import from this as `@snap-engine/core`
 - TypeScript path mappings in asset packages point to `src/` for development
 - Published package provides built bundles from `dist/`
 

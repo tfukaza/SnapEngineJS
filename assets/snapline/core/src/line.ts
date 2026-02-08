@@ -1,4 +1,4 @@
-import { ElementObject, BaseObject } from "snap-engine";
+import { ElementObject, BaseObject } from "@snap-engine/core";
 import { ConnectorComponent } from "./connector";
 
 class LineComponent extends ElementObject {

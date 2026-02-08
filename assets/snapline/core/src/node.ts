@@ -1,4 +1,4 @@
-import { BaseObject, ElementObject } from "snap-engine";
+import { BaseObject, ElementObject } from "@snap-engine/core";
 import { ConnectorComponent } from "./connector";
 import { LineComponent } from "./line";
 import type {
@@ -7,8 +7,8 @@ import type {
   dragStartProp,
   dragProp,
   dragEndProp,
-} from "snap-engine";
-import { RectCollider } from "snap-engine/collision";
+} from "@snap-engine/core";
+import { RectCollider } from "@snap-engine/core/collision";
 
 export interface NodeConfig {
   lockPosition?: boolean;

@@ -6,20 +6,20 @@ Common foundational components used across all SnapEngine products. Essential bu
 
 ## Packages
 
-### @snapengine-asset-base/core
+### @snap-engine/base
 **Location:** `core/src/`
 **Language:** TypeScript
-**Dependencies:** `snap-engine`
+**Dependencies:** `@snap-engine/core`
 
 **Exports:**
 - `CameraControl` - Camera pan/zoom control class
 - `CameraControlConfig` - Configuration type
 - `Background` - Infinite scrolling background grid
 
-### @snapengine-asset-base/svelte
+### @snap-engine/base-svelte
 **Location:** `svelte/src/`
 **Language:** Svelte 5
-**Dependencies:** `@snapengine-asset-base/core`, `snap-engine`
+**Dependencies:** `@snap-engine/base`, `@snap-engine/core`
 
 **Exports:**
 - `Engine.svelte` - Main engine wrapper component
@@ -111,13 +111,13 @@ snapengine-asset-base/
 
 - **Engine.svelte** was renamed from `Canvas.svelte` for clarity
 - **Camera.svelte** was renamed from `CameraControl.svelte` for brevity
-- TypeScript class remains `CameraControl` to avoid conflicts with snap-engine's `Camera` class
+- TypeScript class remains `CameraControl` to avoid conflicts with @snap-engine/core's `Camera` class
 
 ## Typical Usage Pattern
 
 ```svelte
 <script>
-  import { Engine, Camera, Background } from "@snapengine-asset-base/svelte";
+  import { Engine, Camera, Background } from "@snap-engine/base-svelte";
 </script>
 
 <Engine id="app">
@@ -131,9 +131,9 @@ snapengine-asset-base/
 ## Dependencies
 
 ```
-snap-engine
+@snap-engine/core
     ↓
-@snapengine-asset-base/core
+@snap-engine/base
     ↓
-@snapengine-asset-base/svelte
+@snap-engine/base-svelte
 ```

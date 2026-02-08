@@ -28,17 +28,17 @@ SnapEngineJS/
 
 ## Core Engine (`src/`)
 
-**Package:** `snap-engine`
+**Package:** `@snap-engine/core`
 **Purpose:** Core interactivity engine
 **Build:** Yes → `dist/`
 
 See `src/AGENTS.md` for module details.
 
 **Entry points:**
-- `snap-engine` - Main export
-- `snap-engine/animation` - Animation system
-- `snap-engine/collision` - Collision detection
-- `snap-engine/debug` - Debug utilities
+- `@snap-engine/core` - Main export
+- `@snap-engine/core/animation` - Animation system
+- `@snap-engine/core/collision` - Collision detection
+- `@snap-engine/core/debug` - Debug utilities
 
 ## Asset Packages (`assets/`)
 
@@ -48,33 +48,35 @@ Organized as npm workspaces following a consistent pattern:
 - `react/` - React component wrappers (future)
 
 ### 1. SnapEngine Asset Base
-- **Packages:** `@snapengine-asset-base/core`, `@snapengine-asset-base/svelte`
+- **Packages:** `@snap-engine/base`, `@snap-engine/base-svelte`
 - **Purpose:** Common components (Engine, Camera, Background)
 - **Status:** Active
 - See `assets/snapengine-asset-base/AGENTS.md`
 
 ### 2. DropAndSnap
-- **Packages:** `@drop-and-snap/core`, `@drop-and-snap/svelte`
+- **Packages:** `@snap-engine/drop-and-snap`, `@snap-engine/drop-and-snap-svelte`
 - **Purpose:** Drag-and-drop list reordering
 - **Status:** Active
 - See `assets/drop-and-snap/AGENTS.md`
 
 ### 3. SnapLine
-- **Packages:** `@snapline/core`, `@snapline/svelte`
+- **Packages:** `@snap-engine/snapline`, `@snap-engine/snapline-svelte`
 - **Purpose:** Node graph UI system
 - **Status:** Active
 - See `assets/snapline/AGENTS.md`
 
 ### 4. SnapZap
-- **Packages:** `@snapzap/*` (placeholders)
+- **Packages:** `@snap-engine/snapzap-*` (placeholders)
 - **Purpose:** Future enhancements
 - **Status:** Placeholder
 
 ## Package Naming
 
-- **Core engine:** `snap-engine`
-- **Asset base:** `@snapengine-asset-base/{core|svelte|react}`
-- **Products:** `@{product-name}/{core|svelte|react}`
+All packages use the `@snap-engine` organization:
+
+- **Core engine:** `@snap-engine/core`
+- **Asset base:** `@snap-engine/base`, `@snap-engine/base-svelte`
+- **Products:** `@snap-engine/{product}`, `@snap-engine/{product}-svelte`, `@snap-engine/{product}-react`
 
 ## Import Patterns
 
@@ -82,8 +84,8 @@ Asset packages must import from published package names:
 
 ```typescript
 // ✅ Correct
-import { Engine } from "snap-engine";
-import { CameraControl } from "@snapengine-asset-base/core";
+import { Engine } from "@snap-engine/core";
+import { CameraControl } from "@snap-engine/base";
 
 // ❌ Wrong - no relative imports to src/
 import { Engine } from "../../../src/index";
@@ -107,13 +109,13 @@ import { Engine } from "../../../src/index";
 ```
 {product-name}/
 ├── core/
-│   ├── package.json          # @{product}/core
-│   ├── tsconfig.json         # Path mappings to snap-engine
+│   ├── package.json          # @snap-engine/{product}
+│   ├── tsconfig.json         # Path mappings to @snap-engine/core
 │   └── src/
 │       ├── index.ts
 │       └── *.ts
 └── svelte/
-    ├── package.json          # @{product}/svelte
+    ├── package.json          # @snap-engine/{product}-svelte
     ├── tsconfig.json         # Path mappings
     └── src/
         ├── index.ts
@@ -129,10 +131,10 @@ Each asset package needs path mappings:
   "compilerOptions": {
     "baseUrl": ".",
     "paths": {
-      "snap-engine": ["../../../src/index.ts"],
-      "snap-engine/animation": ["../../../src/animation.ts"],
-      "snap-engine/collision": ["../../../src/collision.ts"],
-      "snap-engine/debug": ["../../../src/debug.ts"]
+      "@snap-engine/core": ["../../../src/index.ts"],
+      "@snap-engine/core/animation": ["../../../src/animation.ts"],
+      "@snap-engine/core/collision": ["../../../src/collision.ts"],
+      "@snap-engine/core/debug": ["../../../src/debug.ts"]
     }
   }
 }
@@ -171,7 +173,7 @@ npm test
 
 1. Create directory: `assets/{product-name}/{core,svelte}/`
 2. Create package.json for each sub-package
-3. Add tsconfig.json with snap-engine path mappings
+3. Add tsconfig.json with @snap-engine/core path mappings
 4. Create AGENTS.md documenting the package
 5. Update root package.json workspaces (if needed)
 6. Run `npm install`

@@ -1,6 +1,6 @@
 <script lang="ts">
-  import { NodeComponent } from "@snapline/core";
-  import { Connector, Node } from "@snapline/svelte";
+  import { NodeComponent } from "@snap-engine/snapline";
+  import { Connector, Node } from "@snap-engine/snapline-svelte";
   import DemoLine from "./Line.svelte";
   import { onMount } from "svelte";
 

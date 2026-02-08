@@ -2,9 +2,9 @@
   import { onMount } from "svelte";
   import { setContext } from "svelte";
   import { getEngine } from "./engineState.svelte";
-  import type { Engine } from "snap-engine";
-  import { DebugRenderer } from "snap-engine/debug";
-  import { CollisionEngine } from "snap-engine/collision";
+  import type { Engine } from "@snap-engine/core";
+  import { DebugRenderer } from "@snap-engine/core/debug";
+  import { CollisionEngine } from "@snap-engine/core/collision";
 
   let {
     id,

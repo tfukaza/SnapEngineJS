@@ -3,9 +3,9 @@ import type {
   pointerMoveProp,
   pointerUpProp,
   mouseWheelProp,
-} from "snap-engine";
-import { ElementObject } from "snap-engine";
-import { Camera } from "snap-engine";
+} from "@snap-engine/core";
+import { ElementObject } from "@snap-engine/core";
+import { Camera } from "@snap-engine/core";
 
 export type CameraControlConfig = {
   zoomLock?: boolean;

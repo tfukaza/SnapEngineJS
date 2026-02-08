@@ -1,12 +1,12 @@
-import { BaseObject, ElementObject } from "snap-engine";
+import { BaseObject, ElementObject } from "@snap-engine/core";
 import { ItemContainer, ClickAction } from "./container";
-import { AnimationObject } from "snap-engine/animation";
+import { AnimationObject } from "@snap-engine/core/animation";
 import type {
   dragStartProp,
   dragProp,
   dragEndProp,
-} from "snap-engine";
-import { mouseButtonBitmap } from "snap-engine";
+} from "@snap-engine/core";
+import { mouseButtonBitmap } from "@snap-engine/core";
 
 const BUFFER = 20;
 

@@ -1,8 +1,8 @@
 <script lang="ts">
   import { getContext, onMount, onDestroy } from "svelte";
-  import { RectCollider } from "snap-engine/collision";
-  import type { Engine } from "snap-engine";
-  import type { ElementObject } from "snap-engine";
+  import { RectCollider } from "@snap-engine/core/collision";
+  import type { Engine } from "@snap-engine/core";
+  import type { ElementObject } from "@snap-engine/core";
   import Drag from "../../lib/Drag.svelte";
 
   let { 

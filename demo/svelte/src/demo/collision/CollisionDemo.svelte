@@ -1,12 +1,12 @@
 <script lang="ts">
-  import { Engine } from "@snapengine-asset-base/svelte";
+  import { Engine } from "@snap-engine/base-svelte";
   import { onMount, onDestroy } from "svelte";
   import CollisionBox from "./CollisionBox.svelte";
   import CollisionCircle from "./CollisionCircle.svelte";
   // import CollisionDot from "./CollisionDot.svelte";
   // import CollisionLine from "./CollisionLine.svelte";
-  import { BaseObject } from "snap-engine";
-  import type { Engine } from "snap-engine";
+  import { BaseObject } from "@snap-engine/core";
+  import type { Engine } from "@snap-engine/core";
 
   let engine: Engine | null = $state(null);
   let boundaryObjects: BaseObject[] = [];

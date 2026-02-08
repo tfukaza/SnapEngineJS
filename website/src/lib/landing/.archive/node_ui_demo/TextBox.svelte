@@ -1,7 +1,7 @@
 <script lang="ts">
-  import { Connector, Node } from "@snapline/svelte";
+  import { Connector, Node } from "@snap-engine/snapline-svelte";
   import DemoLine from "./Line.svelte";
-  import { NodeComponent } from "@snapline/core";
+  import { NodeComponent } from "@snap-engine/snapline";
   import { onMount } from "svelte";
 
   let node: any = $state(null);

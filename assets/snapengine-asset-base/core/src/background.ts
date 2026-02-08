@@ -1,5 +1,5 @@
-import { BaseObject, ElementObject } from "snap-engine";
-import type { pointerMoveProp } from "snap-engine";
+import { BaseObject, ElementObject } from "@snap-engine/core";
+import type { pointerMoveProp } from "@snap-engine/core";
 
 class Background extends ElementObject {
   _tileSize: number = 40;

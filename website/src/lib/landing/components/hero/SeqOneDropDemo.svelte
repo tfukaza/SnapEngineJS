@@ -1,8 +1,8 @@
 <script lang="ts">
-  import { Engine } from "@snapengine-asset-base/svelte";
-  import { Item, ItemContainer as Container } from "@drop-and-snap/svelte";
-  import type { ItemContainer } from "@drop-and-snap/core";
-  import type { Engine as EngineType } from "snap-engine";
+  import { Engine } from "@snap-engine/base-svelte";
+  import { Item, ItemContainer as Container } from "@snap-engine/drop-and-snap-svelte";
+  import type { ItemContainer } from "@snap-engine/drop-and-snap";
+  import type { Engine as EngineType } from "@snap-engine/core";
   import { debugState } from "$lib/landing/debugState.svelte";
 
   type SeqToken = {

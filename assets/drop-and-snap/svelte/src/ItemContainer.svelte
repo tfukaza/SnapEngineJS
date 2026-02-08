@@ -1,9 +1,9 @@
 <script lang="ts">
-  import { ItemContainer } from "@drop-and-snap/core";
-  import type { ItemContainerConfig } from "@drop-and-snap/core";
+  import { ItemContainer } from "@snap-engine/drop-and-snap";
+  import type { ItemContainerConfig } from "@snap-engine/drop-and-snap";
 
   import { getContext, setContext, onDestroy } from "svelte";
-  import type { Engine } from "snap-engine";
+  import type { Engine } from "@snap-engine/core";
 
   let { config, children, container = $bindable() }: { config: ItemContainerConfig; children: any; container?: ItemContainer } =
     $props();

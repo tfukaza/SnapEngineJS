@@ -8,7 +8,7 @@
   } from "@snapline/index";
   import { AnimationObject } from "@snapline/animation";
   import HighlightCardShell from "./HighlightCardShell.svelte";
-  import { Engine } from "@snapengine-asset-base/svelte";
+  import { Engine } from "@snap-engine/base-svelte";
   import { debugState } from "$lib/landing/debugState.svelte";
 
   type OperationType = "read" | "write";

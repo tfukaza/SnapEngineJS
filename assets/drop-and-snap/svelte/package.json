@@ -1,5 +1,5 @@
 {
-  "name": "@drop-and-snap/svelte",
+  "name": "@snap-engine/drop-and-snap-svelte",
   "version": "0.1.0",
   "description": "Svelte components for drag-and-drop system",
   "type": "module",
@@ -20,7 +20,7 @@
   "author": "Tomoki Fukazawa",
   "license": "MIT",
   "dependencies": {
-    "@drop-and-snap/core": "*"
+    "@snap-engine/drop-and-snap": "*"
   },
   "peerDependencies": {
     "svelte": "^5.0.0"

@@ -1,8 +1,8 @@
 <script lang="ts">
   import { getContext, onMount, onDestroy } from "svelte";
-  import { ElementObject } from "snap-engine";
-  import type { Engine } from "snap-engine";
-  import type { dragProp, dragStartProp, dragEndProp } from "snap-engine";
+  import { ElementObject } from "@snap-engine/core";
+  import type { Engine } from "@snap-engine/core";
+  import type { dragProp, dragStartProp, dragEndProp } from "@snap-engine/core";
 
   let { 
     children, 

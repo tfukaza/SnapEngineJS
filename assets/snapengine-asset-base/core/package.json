@@ -1,5 +1,5 @@
 {
-  "name": "@snapengine-asset-base/core",
+  "name": "@snap-engine/base",
   "version": "0.1.0",
   "type": "module",
   "main": "./src/index.ts",

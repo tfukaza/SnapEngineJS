@@ -1,14 +1,14 @@
 <script lang="ts">
-  import { Select } from "@snapline/svelte";
+  import { Select } from "@snap-engine/snapline-svelte";
   // import Background from "@svelte-demo/lib/canvas/Background.svelte";
-  import { NodeComponent } from "@snapline/core";
+  import { NodeComponent } from "@snap-engine/snapline";
   import { Engine } from "@snapline/index";
   import Math from "./Math.svelte";
   import Print from "./Print.svelte";
   import TextBox from "./TextBox.svelte";
   import { onMount, getContext } from "svelte";
-  import type { ObjectData } from "@snapengine-asset-base/svelte";
-  import { CameraControl } from "@snapengine-asset-base/core";
+  import type { ObjectData } from "@snap-engine/base-svelte";
+  import { CameraControl } from "@snap-engine/base";
 
   let engine: Engine = getContext("engine");
 

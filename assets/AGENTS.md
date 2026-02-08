@@ -9,46 +9,46 @@ Asset packages extend SnapEngine with specialized functionality. Each follows a 
 ```
 {product-name}/
 ├── core/                  # TypeScript core logic
-│   ├── package.json       # @{product}/core
-│   ├── tsconfig.json      # Path mappings to snap-engine
+│   ├── package.json       # @snap-engine/{product}
+│   ├── tsconfig.json      # Path mappings to @snap-engine/core
 │   └── src/
 │       ├── index.ts       # Exports
 │       └── *.ts           # Implementation
 ├── svelte/                # Svelte components
-│   ├── package.json       # @{product}/svelte
+│   ├── package.json       # @snap-engine/{product}-svelte
 │   ├── tsconfig.json      # Path mappings
 │   └── src/
 │       ├── index.ts       # Component exports
 │       └── *.svelte       # Components
 └── react/                 # React components (future)
-    └── package.json       # @{product}/react
+    └── package.json       # @snap-engine/{product}-react
 ```
 
 ## Available Packages
 
 ### 1. snapengine-asset-base/
-- **Packages:** `@snapengine-asset-base/core`, `@snapengine-asset-base/svelte`
+- **Packages:** `@snap-engine/base`, `@snap-engine/base-svelte`
 - **Purpose:** Common base components (Engine, Camera, Background)
 - **Components:** Engine.svelte, Camera.svelte, Background.svelte
 - **Classes:** CameraControl, Background
 - **Status:** ✅ Active
 
 ### 2. drop-and-snap/
-- **Packages:** `@drop-and-snap/core`, `@drop-and-snap/svelte`
+- **Packages:** `@snap-engine/drop-and-snap`, `@snap-engine/drop-and-snap-svelte`
 - **Purpose:** Drag-and-drop list reordering
 - **Components:** ItemContainer, Item
 - **Classes:** ItemContainer, ItemObject
 - **Status:** ✅ Active
 
 ### 3. snapline/
-- **Packages:** `@snapline/core`, `@snapline/svelte`
+- **Packages:** `@snap-engine/snapline`, `@snap-engine/snapline-svelte`
 - **Purpose:** Node-based graph UI
 - **Components:** Node, Connector, Line, Select
 - **Classes:** NodeComponent, ConnectorComponent, LineComponent, RectSelectComponent
 - **Status:** ✅ Active
 
 ### 4. snapzap/
-- **Packages:** `@snapzap/*`
+- **Packages:** `@snap-engine/snapzap-*`
 - **Purpose:** Reserved for future enhancements
 - **Status:** 📋 Placeholder
 
@@ -57,7 +57,7 @@ Asset packages extend SnapEngine with specialized functionality. Each follows a 
 ### Core Package (`package.json`)
 ```json
 {
-  "name": "@{product-name}/core",
+  "name": "@snap-engine/{product}",
   "version": "0.1.0",
   "type": "module",
   "main": "./src/index.ts",
@@ -70,7 +70,7 @@ Asset packages extend SnapEngine with specialized functionality. Each follows a 
 ### Svelte Package (`package.json`)
 ```json
 {
-  "name": "@{product-name}/svelte",
+  "name": "@snap-engine/{product}-svelte",
   "version": "0.1.0",
   "type": "module",
   "svelte": "./src/index.ts",
@@ -78,7 +78,7 @@ Asset packages extend SnapEngine with specialized functionality. Each follows a 
     ".": { "svelte": "./src/index.ts" }
   },
   "dependencies": {
-    "@{product-name}/core": "*"
+    "@snap-engine/{product}": "*"
   }
 }
 ```
@@ -90,10 +90,10 @@ Asset packages extend SnapEngine with specialized functionality. Each follows a 
   "compilerOptions": {
     "baseUrl": ".",
     "paths": {
-      "snap-engine": ["../../../src/index.ts"],
-      "snap-engine/animation": ["../../../src/animation.ts"],
-      "snap-engine/collision": ["../../../src/collision.ts"],
-      "snap-engine/debug": ["../../../src/debug.ts"]
+      "@snap-engine/core": ["../../../src/index.ts"],
+      "@snap-engine/core/animation": ["../../../src/animation.ts"],
+      "@snap-engine/core/collision": ["../../../src/collision.ts"],
+      "@snap-engine/core/debug": ["../../../src/debug.ts"]
     }
   }
 }
@@ -102,15 +102,15 @@ Asset packages extend SnapEngine with specialized functionality. Each follows a 
 ## Design Principles
 
 ### Separation of Concerns
-- **Core packages:** Framework-agnostic TypeScript, extends snap-engine
+- **Core packages:** Framework-agnostic TypeScript, extends @snap-engine/core
 - **Framework packages:** Thin wrappers for React, Svelte, etc.
 - **No build step:** Raw source exported, not built bundles
 
 ### Import Requirements
 ```typescript
 // ✅ Correct - use package names
-import { Engine } from "snap-engine";
-import { CameraControl } from "@snapengine-asset-base/core";
+import { Engine } from "@snap-engine/core";
+import { CameraControl } from "@snap-engine/base";
 
 // ❌ Wrong - no relative paths to src/
 import { Engine } from "../../../src/index";
@@ -143,25 +143,25 @@ import { Engine } from "../../../src/index";
 ## Package Dependencies
 
 ```
-snap-engine (built)
+@snap-engine/core (built)
     ↓
-@{product}/core
+@snap-engine/{product}
     ↓
-@{product}/svelte
+@snap-engine/{product}-svelte
 ```
 
 Special case - Asset Base:
 ```
-snap-engine
+@snap-engine/core
     ↓
-@snapengine-asset-base/core
+@snap-engine/base
     ↓
-@snapengine-asset-base/svelte
+@snap-engine/base-svelte
 ```
 
 ## Notes
 
 - Asset packages export raw TypeScript/Svelte source (not built)
-- Only snap-engine is built to `dist/`
+- Only @snap-engine/core is built to `dist/`
 - Each package should have AGENTS.md for structure documentation
 - API details belong in `doc/` directory, not AGENTS.md

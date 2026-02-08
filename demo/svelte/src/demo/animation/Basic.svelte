@@ -1,8 +1,8 @@
 <script lang="ts">
-  import type {Engine} from "snap-engine";
+  import type {Engine} from "@snap-engine/core";
   import { getContext, onMount, onDestroy } from "svelte";
-  import { ElementObject } from "snap-engine";
-  import { AnimationObject } from "snap-engine/animation";
+  import { ElementObject } from "@snap-engine/core";
+  import { AnimationObject } from "@snap-engine/core/animation";
   import Exhibit from "./Exhibit.svelte";
   import type { ExhibitProps } from "./Exhibit.svelte";
   

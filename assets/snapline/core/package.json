@@ -1,5 +1,5 @@
 {
-  "name": "@snapline/core",
+  "name": "@snap-engine/snapline",
   "version": "0.1.0",
   "description": "Core TypeScript logic for node graph UI",
   "type": "module",

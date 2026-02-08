@@ -1,5 +1,5 @@
 <script lang="ts">
-    import { Node, Connector, Line } from "@snapline/svelte";
+    import { Node, Connector, Line } from "@snap-engine/snapline-svelte";
     import { onMount } from "svelte";
     
     let { title = "Node" } = $props();

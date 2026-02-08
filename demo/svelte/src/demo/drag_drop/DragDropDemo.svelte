@@ -1,6 +1,6 @@
 <script lang="ts">
-    import { Engine } from "@snapengine-asset-base/svelte";
-    import { Item, ItemContainer as Container } from "@drop-and-snap/svelte";
+    import { Engine } from "@snap-engine/base-svelte";
+    import { Item, ItemContainer as Container } from "@snap-engine/drop-and-snap-svelte";
 </script>
 
 <Engine id="drag-drop-demo-canvas">

@@ -1,6 +1,6 @@
 <script lang="ts">
-    import { NodeComponent, LineComponent } from "@snapline/core";
-    import type { Engine } from "snap-engine";
+    import { NodeComponent, LineComponent } from "@snap-engine/snapline";
+    import type { Engine } from "@snap-engine/core";
     import Line from "./Line.svelte";
     import { onMount, setContext, getContext, onDestroy } from "svelte";
     import { blur } from "svelte/transition";

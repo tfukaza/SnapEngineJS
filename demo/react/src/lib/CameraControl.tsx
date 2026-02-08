@@ -1,5 +1,5 @@
 import { useContext, useRef, useEffect, createContext } from "react";
-import { CameraControl } from "@snapengine-asset-base/core";
+import { CameraControl } from "@snap-engine/base";
 import { EngineContext } from "./Canvas";
 
 // Create context for camera control so child components can access it

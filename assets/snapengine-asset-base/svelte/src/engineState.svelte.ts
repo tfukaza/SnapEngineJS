@@ -1,4 +1,4 @@
-import { ElementObject, Engine } from "snap-engine";
+import { ElementObject, Engine } from "@snap-engine/core";
 import type { Component } from "svelte";
 let engineDict: { [key: string]: Engine } = {};
 

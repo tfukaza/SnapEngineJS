@@ -1,10 +1,10 @@
-import { ElementObject, BaseObject } from "snap-engine";
-import type { frameStats } from "snap-engine";
+import { ElementObject, BaseObject } from "@snap-engine/core";
+import type { frameStats } from "@snap-engine/core";
 import { NodeComponent } from "./node";
 import { LineComponent } from "./line";
-import type { pointerDownProp, dragProp, dragEndProp } from "snap-engine";
-import { Collider, CircleCollider, PointCollider } from "snap-engine/collision";
-import { GlobalManager, EventProxyFactory } from "snap-engine";
+import type { pointerDownProp, dragProp, dragEndProp } from "@snap-engine/core";
+import { Collider, CircleCollider, PointCollider } from "@snap-engine/core/collision";
+import { GlobalManager, EventProxyFactory } from "@snap-engine/core";
 
 enum ConnectorState {
   IDLE,

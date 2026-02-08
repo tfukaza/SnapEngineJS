@@ -1,5 +1,5 @@
 {
-  "name": "@drop-and-snap/core",
+  "name": "@snap-engine/drop-and-snap",
   "version": "0.1.0",
   "description": "Core TypeScript logic for drag-and-drop system",
   "type": "module",

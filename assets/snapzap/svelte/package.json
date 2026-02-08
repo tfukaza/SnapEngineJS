@@ -1,5 +1,5 @@
 {
-  "name": "@snapzap/svelte",
+  "name": "@snap-engine/snapzap-svelte",
   "version": "0.1.0",
   "description": "Svelte components for camera control and background",
   "type": "module",
@@ -12,9 +12,6 @@
   ],
   "author": "Tomoki Fukazawa",
   "license": "MIT",
-  "dependencies": {
-    "@snapzap/core": "*"
-  },
   "peerDependencies": {
     "svelte": "^5.0.0"
   }
