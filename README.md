@@ -5,13 +5,13 @@ Interactivity engine for building complex interactive UIs on web applications.
 ## Installation
 
 ```bash
-npm install snapengine
+npm install snap-engine
 ```
 
 ## Quick Start
 
 ```typescript
-import { Engine, ElementObject } from 'snapengine';
+import { Engine, ElementObject } from 'snap-engine';
 
 // Create engine and attach to container
 const engine = new Engine();

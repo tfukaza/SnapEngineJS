@@ -1,6 +1,14 @@
 
 @import url('https://fonts.googleapis.com/css2?family=Doto:wght@100..900&family=Lato&family=Lekton:ital,wght@0,400;0,700;1,400&display=swap');
 
+@font-face {
+  font-family: 'Geist Pixel Circle';
+  src: url('/fonts/geist-pixel/GeistPixel-Circle.woff2') format('woff2');
+  font-weight: normal;
+  font-style: normal;
+  font-display: swap;
+}
+
 body {
   margin: 0;
   padding: 0;
@@ -46,7 +54,8 @@ body {
 }
 
 .pixel-font {
-  font-family: 'Doto', sans-serif;
+  font-family: 'Geist Pixel Circle', sans-serif;
+  font-weight: 500;
 }
 
 h1,
@@ -56,8 +65,8 @@ h4,
 h5,
 h6 {
   margin: 0;
-  font-weight: 800;
-  font-family: 'Doto', sans-serif;
+  font-weight: 500;
+  font-family: 'Geist Pixel Circle', sans-serif;
   color: #373738;
 }
 

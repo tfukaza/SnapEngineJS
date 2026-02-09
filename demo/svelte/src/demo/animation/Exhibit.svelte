@@ -21,8 +21,6 @@
 </div>
 
 <style lang="scss">
-  @import "../../../../app.scss";
-
   .exhibit {
 
     width: 400px;

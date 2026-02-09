@@ -1,9 +1,9 @@
 <script lang="ts">
   import { onDestroy, onMount } from "svelte";
-  import Canvas from "@svelte-demo/lib/Canvas.svelte";
+  import { Engine } from "@snap-engine/base-svelte";
   import SvgLine from "$lib/SvgLine.svelte";
   import { ElementObject } from "@snapline/object";
-  import type { Engine } from "@snapline/index";
+  import type { Engine as EngineType } from "@snapline/index";
   import type {
     pointerDownProp,
     pointerMoveProp,
@@ -119,8 +119,8 @@
     element: null,
     object: null,
   }));
-  let engine: Engine | null = $state(null);
-  let canvasComponent: Canvas | null = null;
+  let engine: EngineType | null = $state(null);
+  let canvasComponent: Engine | null = null;
   let pointer = $state({ x: 0.5, y: 0.5 });
   let activePanel: PanelId | null = $state(null);
   let isInteracting = $state(false);
@@ -249,7 +249,7 @@
     activePanel = null;
   }
 
-  function attachPanel(panel: PanelInstance, currentEngine: Engine) {
+  function attachPanel(panel: PanelInstance, currentEngine: EngineType) {
     if (panel.object || !panel.element) return;
     panel.object = new ElementObject(currentEngine, null);
     panel.object.element = panel.element;
@@ -266,7 +266,7 @@
       handleDragEnd(panel, prop);
   }
 
-  function initializeDemo(currentEngine: Engine) {
+  function initializeDemo(currentEngine: EngineType) {
     if (demoInitialized) return;
     const ready = panels.every((panel) => panel.element);
     if (!ready) return;
@@ -497,7 +497,7 @@
   description="Common API for multiple types of input devices."
 >
   <div class="pointer-demo-wrapper">
-    <Canvas id="input-handling-sync" bind:engine bind:this={canvasComponent} debug={debugState.enabled}>
+    <Engine id="input-handling-sync" bind:engine bind:this={canvasComponent} debug={debugState.enabled}>
       <div class="pointer-surface">
         <div
           class="panel-grid"
@@ -565,7 +565,7 @@
           {/if}
         </div>
       </div>
-    </Canvas>
+    </Engine>
   </div>
 </HighlightCardShell>
 
@@ -686,7 +686,7 @@
 
     p {
       margin: 0;
-      font-family: "Doto", monospace;
+      font-family: "Geist Pixel Circle", "Doto", monospace;
       font-weight: 900;
       font-size: 12px;
       color: #ffffff;

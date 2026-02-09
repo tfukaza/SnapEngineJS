@@ -6,27 +6,34 @@ import {
   pointerMoveProp,
   pointerUpProp,
   mouseWheelProp,
+  dragStartProp,
+  dragProp,
+  dragEndProp,
+  pinchStartProp,
+  pinchProp,
+  pinchEndProp,
+  mouseButtonBitmap,
 } from "./input";
-
-import { LineComponent } from "./asset/node_ui/line";
-import { ConnectorComponent } from "./asset/node_ui/connector";
-import { NodeComponent } from "./asset/node_ui/node";
-import { RectSelectComponent } from "./asset/node_ui/select";
-
-import { Background } from "./asset/background";
+import { getDomProperty, EventProxyFactory } from "./util";
+import { Camera } from "./camera";
 
 export {
   Engine,
   BaseObject,
   ElementObject,
-  LineComponent,
-  ConnectorComponent,
-  NodeComponent,
-  RectSelectComponent,
-  Background,
   GlobalManager,
+  Camera,
+  getDomProperty,
+  EventProxyFactory,
   type pointerDownProp,
   type pointerMoveProp,
   type pointerUpProp,
   type mouseWheelProp,
+  type dragStartProp,
+  type dragProp,
+  type dragEndProp,
+  type pinchStartProp,
+  type pinchProp,
+  type pinchEndProp,
+  mouseButtonBitmap,
 };

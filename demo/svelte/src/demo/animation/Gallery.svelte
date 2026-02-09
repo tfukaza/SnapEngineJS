@@ -1,23 +1,21 @@
 <script lang="ts">
-    import Canvas from "../../lib/Canvas.svelte";
+    import { Engine } from "@snap-engine/base-svelte";
     import Basic from "./Basic.svelte";
     import Variable from "./Variable.svelte";
     import Sequence from "./Sequence.svelte";
     import TimeControl from "./TimeControl.svelte";
   </script>
     
-  <Canvas id="gallery-demo-canvas">
+  <Engine id="gallery-demo-canvas">
     <div class="gallery">
       <Basic />
       <Variable />
       <Sequence />
       <TimeControl />
     </div>
-  </Canvas>
+  </Engine>
     
   <style lang="scss">
-    @import "../../../../app.scss";
-
     .gallery {
       width: 100%;
       height: 100%;

@@ -1,9 +1,6 @@
 <script lang="ts">
-  import {
-    Engine,
-    NodeComponent,
-    ConnectorComponent
-  } from "@snapline/index";
+  import { Engine } from "@snapline/index";
+  import { NodeComponent, ConnectorComponent } from "@snap-engine/snapline";
   import { getContext, onDestroy, onMount } from "svelte";
 
   let {

@@ -1,10 +1,9 @@
 <script lang="ts">
   import { onMount } from "svelte";
-  import Canvas from "@svelte-demo/lib/Canvas.svelte";
-  import CameraControlComponent from "@svelte-demo/lib/CameraControl.svelte";
+  import { Engine, Camera as CameraControlComponent } from "@snap-engine/base-svelte";
   import Drag from "@svelte-demo/lib/Drag.svelte";
   import type { ElementObject } from "@snapline/object";
-  import type { CameraControl as CameraControlApi } from "@snapline/asset/cameraControl";
+  import type { CameraControl as CameraControlApi } from "@snap-engine/base";
   import { debugState } from "$lib/landing/debugState.svelte";
 
   export type NodePoint = {
@@ -145,7 +144,7 @@
 </script>
 
 <div class="seq-two-pannable slot shallow">
-  <Canvas id="seq-two-pan-demo" debug={debugState.enabled}>
+  <Engine id="seq-two-pan-demo" debug={debugState.enabled}>
     <CameraControlComponent bind:cameraControl>
       <!-- <div class="pan-stage"> -->
   <div class="pan-grid" aria-hidden="true"></div>
@@ -206,7 +205,7 @@
         </div> -->
       <!-- </div> -->
     </CameraControlComponent>
-  </Canvas>
+  </Engine>
   <!-- <div class="pan-hint">Middle-drag to pan · Scroll to zoom</div> -->
 </div>
 

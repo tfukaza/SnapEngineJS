@@ -1,15 +1,15 @@
 <script lang="ts">
-  import Canvas from "../../lib/Canvas.svelte";
+  import { Engine } from "@snap-engine/base-svelte";
   import SimpleNode from "./SimpleNode.svelte";
 </script>
 
-<Canvas id="node-ui-demo-canvas">
+<Engine id="node-ui-demo-canvas">
   <div id="node-ui-demo">
     <SimpleNode title="Node A" />
     <SimpleNode title="Node B"  />
     <SimpleNode title="Node C"  />
   </div>
-</Canvas>
+</Engine>
 
 <style>
     #node-ui-demo {

@@ -1,9 +1,9 @@
 <script lang="ts">
   import { onDestroy } from "svelte";
-  import Canvas from "@svelte-demo/lib/Canvas.svelte";
+  import { Engine } from "@snap-engine/base-svelte";
   import { ElementObject } from "@snapline/object";
   import { AnimationObject } from "@snapline/animation";
-  import type { Engine } from "@snapline/index";
+  import type { Engine as EngineType } from "@snapline/index";
   import { debugState } from "$lib/landing/debugState.svelte";
 
   interface SliderPreset {
@@ -25,8 +25,8 @@
     }));
   });
 
-  let engine: Engine | null = $state(null);
-  let canvasComponent: Canvas | null = null;
+  let engine: EngineType | null = $state(null);
+  let canvasComponent: Engine | null = null;
   let isPlaying = $state(true);
   let progress = $state(0);
   const sliderValues = $derived.by(() => {
@@ -171,7 +171,7 @@
 </script>
 
 <div class="animation-control-wrapper">
-  <Canvas id="animation-control" bind:engine={engine} bind:this={canvasComponent} debug={debugState.enabled}>
+  <Engine id="animation-control" bind:engine={engine} bind:this={canvasComponent} debug={debugState.enabled}>
     <div class="animation-control card">
 
 
@@ -190,7 +190,7 @@
         {/each}
       </div>
     </div>
-  </Canvas>
+  </Engine>
   <div class="card timeline">
     <input
       id="wave-timeline"

@@ -1,5 +1,5 @@
 import { useContext, useRef, useEffect, createContext } from "react";
-import { CameraControl } from "../../../../src/asset/cameraControl";
+import { CameraControl } from "@snap-engine/base";
 import { EngineContext } from "./Canvas";
 
 // Create context for camera control so child components can access it
@@ -28,9 +28,11 @@ export default function CameraControlReact({
     }
 
     cameraControlRef.current = new CameraControl(
-      engine.global,
-      zoomLock,
-      panLock,
+      engine,
+      {
+        zoomLock: zoomLock,
+        panLock: panLock,
+      }
     );
 
     if (cameraControlElement.current) {

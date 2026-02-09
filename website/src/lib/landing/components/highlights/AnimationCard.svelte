@@ -1,9 +1,9 @@
 <script lang="ts">
   import { onDestroy } from "svelte";
-  import Canvas from "@svelte-demo/lib/Canvas.svelte";
+  import { Engine } from "@snap-engine/base-svelte";
   import { ElementObject } from "@snapline/object";
   import { AnimationObject } from "@snapline/animation";
-  import type { Engine } from "@snapline/index";
+  import type { Engine as EngineType } from "@snapline/index";
   import HighlightCardShell from "./HighlightCardShell.svelte";
   import { debugState } from "$lib/landing/debugState.svelte";
 
@@ -39,8 +39,8 @@
   const VARIABLE_KEYFRAMES = [1, 100];
 
   let counterValue = $state(VARIABLE_KEYFRAMES[0]);
-  let engine: Engine | null = $state(null);
-  let canvasComponent: Canvas | null = null;
+  let engine: EngineType | null = $state(null);
+  let canvasComponent: Engine | null = null;
   let animatedSquareRef: HTMLDivElement | null = $state(null);
   let squareObject: ElementObject | null = null;
   let isPlaying = $state(true);
@@ -424,7 +424,7 @@
   title="Animation Engine"
   description="WAAPI based animation engine that's lightweight and performant."
 >
-  <Canvas id="highlight-animation" bind:engine bind:this={canvasComponent} debug={debugState.enabled}>
+  <Engine id="highlight-animation" bind:engine bind:this={canvasComponent} debug={debugState.enabled}>
     <div class="animation-card">
       <div class="timeline grid-layout">
         <div class="timeline-content">
@@ -493,7 +493,7 @@
         </button> -->
       </div>
     </div>
-  </Canvas>
+  </Engine>
 </HighlightCardShell>
 
 <style lang="scss">
@@ -538,7 +538,7 @@
 
 
     span {
-      font-family: 'Doto', sans-serif;
+      font-family: 'Geist Pixel Circle', 'Doto', sans-serif;
       font-weight: 900;
     }
   }

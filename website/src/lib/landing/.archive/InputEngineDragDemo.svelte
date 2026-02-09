@@ -1,8 +1,8 @@
 <script lang="ts">
   import { onDestroy, onMount } from "svelte";
-  import Canvas from "@svelte-demo/lib/Canvas.svelte";
+  import { Engine } from "@snap-engine/base-svelte";
   import { ElementObject } from "@snapline/object";
-  import type { Engine } from "@snapline/index";
+  import type { Engine as EngineType } from "@snapline/index";
   import type { dragProp, dragStartProp, dragEndProp } from "@snapline/input";
   import { debugState } from "$lib/landing/debugState.svelte";
 
@@ -37,8 +37,8 @@
 
   let areas: AreaConfig[] = AREA_PRESETS.map((area) => ({ ...area }));
 
-  let engine: Engine | null = $state(null);
-  let canvasComponent: Canvas | null = null;
+  let engine: EngineType | null = $state(null);
+  let canvasComponent: Engine | null = null;
   let demoInitialized = $state(false);
 
   let activeLines: Record<string, DragLine> = $state({});
@@ -126,7 +126,7 @@
     activeLines[line.id] = line;
   }
 
-  function initializeDemo(currentEngine: Engine) {
+  function initializeDemo(currentEngine: EngineType) {
     if (demoInitialized || !containerElement) return;
 
     for (const area of areas) {
@@ -211,7 +211,7 @@
   }
 </script>
 
-<Canvas id="input-engine-demo" bind:engine={engine} bind:this={canvasComponent} debug={debugState.enabled}>
+<Engine id="input-engine-demo" bind:engine={engine} bind:this={canvasComponent} debug={debugState.enabled}>
   <div class="input-engine-demo card" bind:this={containerElement}>
     {#if overlayWidth && overlayHeight}
       <svg
@@ -260,7 +260,7 @@
       {/each}
     </div>
   </div>
-</Canvas>
+</Engine>
 
 <style lang="scss">
   .input-engine-demo {

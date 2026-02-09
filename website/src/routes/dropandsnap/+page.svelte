@@ -1,8 +1,7 @@
 <script lang="ts">
   import { onMount } from "svelte";
-  import Canvas from "@svelte-demo/lib/Canvas.svelte";
-  import Item from "@svelte-demo/demo/drag_drop/Item.svelte";
-  import Container from "@svelte-demo/demo/drag_drop/ItemContainer.svelte";
+  import { Engine } from "@snap-engine/base-svelte";
+  import { Item, ItemContainer as Container } from "@snap-engine/drop-and-snap-svelte";
   import { GlobalManager } from "@snapline/index";
 
   // Set max simultaneous drags to 1 for this demo (runs after engines are created)
@@ -135,7 +134,7 @@
   let sentenceDropZone = $state<HTMLElement>();
   let sentenceResult = $state("");
   let debug = $state(false);
-  let canvasComponent: Canvas | null = null;
+  let canvasComponent: Engine | null = null;
 
   function toggleDebug() {
     debug = !debug;
@@ -165,7 +164,7 @@
 </script>
 
 <section id="landing">
-  <Canvas id="dropandsnap-canvas" bind:this={canvasComponent} {debug}>
+  <Engine id="dropandsnap-canvas" bind:this={canvasComponent} {debug}>
 
       <div class="hero-section card ground">
         <div class="title-section">
@@ -193,13 +192,13 @@
         <p class="powered-by">Powered by SnapEngine</p>
       </div>
   
-  </Canvas>
+  </Engine>
 </section>   
 <section>
   <h2 id="drag-drop-header">Drag and Drop library for any UI element</h2>
 </section>
 <section>
-  <Canvas id="dropandsnap-examples-canvas" bind:this={canvasComponent} {debug}>
+  <Engine id="dropandsnap-examples-canvas" bind:this={canvasComponent} {debug}>
  
     <div class="examples-grid">
       <div class="example-card pm-example">
@@ -338,11 +337,11 @@
         </div>
       </div>
     </div>
-  </Canvas>
+  </Engine>
 </section>
 
 <style lang="scss">
-  @import "../../lib/landing/landing.scss";
+  @use "../../lib/landing/landing.scss";
   
   .debug-toggle {
     position: fixed;
@@ -476,7 +475,7 @@
   .title-text {
     font-size: 4rem;
     line-height: 1;
-    font-weight: 800;
+    // font-weight: 800;
 
     @media screen and (max-width: 700px) {
       font-size: 1.5rem;

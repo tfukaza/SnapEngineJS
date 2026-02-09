@@ -1,0 +1,18 @@
+{
+  "name": "@snap-engine/base-svelte",
+  "version": "0.1.0",
+  "type": "module",
+  "svelte": "./src/index.ts",
+  "exports": {
+    ".": {
+      "svelte": "./src/index.ts"
+    },
+    "./Engine.svelte": "./src/Engine.svelte",
+    "./Background.svelte": "./src/Background.svelte",
+    "./Camera.svelte": "./src/Camera.svelte",
+    "./engine": "./src/engineState.svelte.ts"
+  },
+  "dependencies": {
+    "@snap-engine/base": "*"
+  }
+}

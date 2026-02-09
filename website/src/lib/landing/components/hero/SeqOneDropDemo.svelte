@@ -1,9 +1,8 @@
 <script lang="ts">
-  import Canvas from "@svelte-demo/lib/Canvas.svelte";
-  import Item from "@svelte-demo/demo/drag_drop/Item.svelte";
-  import Container from "@svelte-demo/demo/drag_drop/ItemContainer.svelte";
-  import type { ItemContainer } from "@snapline/asset/drag_and_drop/container";
-  import type { Engine } from "@snapline/index";
+  import { Engine } from "@snap-engine/base-svelte";
+  import { Item, ItemContainer as Container } from "@snap-engine/drop-and-snap-svelte";
+  import type { ItemContainer } from "@snap-engine/drop-and-snap";
+  import type { Engine as EngineType } from "@snap-engine/core";
   import { debugState } from "$lib/landing/debugState.svelte";
 
   type SeqToken = {
@@ -16,13 +15,13 @@
     tokens?: SeqToken[];
     initialTopTokens?: SeqToken[];
     topContainer?: ItemContainer;
-    engine?: Engine | null;
+    engine?: EngineType | null;
   }
 
-  let { tokens = [], initialTopTokens = [], topContainer = $bindable(), engine = $bindable<Engine | null>(null) }: Props = $props();
+  let { tokens = [], initialTopTokens = [], topContainer = $bindable(), engine = $bindable<EngineType | null>(null) }: Props = $props();
 </script>
 
-<Canvas id="seq-drop-demo" bind:engine={engine} debug={debugState.enabled}>
+<Engine id="seq-drop-demo" bind:engine={engine} debug={debugState.enabled}>
   <div class="mini-drop-demo">
     <div class="mini-drop-top slot">
       <Container config={{ direction: "row", groupID: "seq-1-drop" }} bind:container={topContainer}>
@@ -52,7 +51,7 @@
       </Container>
     </div>
   </div>
-</Canvas>
+</Engine>
 
 <style lang="scss">
   :global(#seq-drop-demo) {

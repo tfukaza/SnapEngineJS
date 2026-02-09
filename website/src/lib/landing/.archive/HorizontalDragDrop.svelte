@@ -1,7 +1,6 @@
 <script lang="ts">
-  import Canvas from "@svelte-demo/lib/Canvas.svelte";
-  import Item from "@svelte-demo/demo/drag_drop/Item.svelte";
-  import Container from "@svelte-demo/demo/drag_drop/ItemContainer.svelte";
+  import { Engine } from "@snap-engine/base-svelte";
+  import { Item, ItemContainer as Container } from "@snap-engine/drop-and-snap-svelte";
   import { debugState } from "$lib/landing/debugState.svelte";
 
   const items = [
@@ -112,7 +111,7 @@
 
   const brailleChar = "⠿";
 
-  let canvasComponent: Canvas | null = null;
+  let canvasComponent: Engine | null = null;
 
   export function enableDebug() {
     canvasComponent?.enableDebug();
@@ -123,7 +122,7 @@
   }
 </script>
 
-<Canvas id="horizontal-drag-drop-canvas" bind:this={canvasComponent} debug={debugState.enabled}>
+<Engine id="horizontal-drag-drop-canvas" bind:this={canvasComponent} debug={debugState.enabled}>
   <div class="horizontal-drag-drop">
     <Container config={{ direction: "row", groupID: "horizontal-landing" }}>
   {#each scrambledDecoratedItems as item (item.label)}
@@ -142,7 +141,7 @@
       {/each}
     </Container>
   </div>
-</Canvas>
+</Engine>
 
 <style lang="scss">
 

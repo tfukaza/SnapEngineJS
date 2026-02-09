@@ -7,7 +7,7 @@
   import SeqOneDropDemo from "./hero/SeqOneDropDemo.svelte";
   import SeqPanel from "./hero/SeqPanel.svelte";
   import { AnimationObject, SequenceObject } from "@snapline/animation";
-  import type { ItemContainer } from "@snapline/asset/drag_and_drop/container";
+  import type { ItemContainer } from "@snap-engine/drop-and-snap";
   import type { Engine } from "@snapline/index";
 
   const dragItems = [
@@ -630,7 +630,7 @@
     padding-left: 2rem;
 
     h1 {
-      // line-height: 0.9;
+      line-height: 0.9;
       margin: 0;
     }
   }
@@ -680,7 +680,7 @@
     }
 
     .preview-hero {
-      font-family: "Doto", system-ui;
+      font-family: "Geist Pixel Circle", system-ui;
       font-size: clamp(1rem, 1rem, 2rem);
 
       color: #f5f5f5;
