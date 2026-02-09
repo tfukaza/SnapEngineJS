@@ -12,6 +12,7 @@
 <nav class="nav-bar">
   <div class="nav-left">
     <a href="/" class="wordmark">SnapEngine</a>
+    <span class="alpha-badge">v0.1.0-alpha</span>
   </div>
   <div class="nav-right">
     <!-- <a href="#assets" class="nav-link">Assets</a> -->
@@ -75,11 +76,25 @@
   .nav-left {
     display: flex;
     align-items: center;
+    gap: 0.5rem;
 
     a {
       font-size: 20px;
       font-family: 'Geist Pixel Circle', 'Doto', sans-serif;
     }
+  }
+
+  .alpha-badge {
+    font-size: 0.65rem;
+    font-weight: 600;
+    color: #8b6914;
+    background: #f5e6c8;
+    border: 1px solid #e6d3a8;
+    padding: 0.1rem 0.45rem;
+    border-radius: 999px;
+    letter-spacing: 0.02em;
+    white-space: nowrap;
+    line-height: 1.4;
   }
 
   .wordmark {
