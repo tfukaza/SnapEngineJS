@@ -421,6 +421,12 @@ class InputControl {
     if (!isWithinEngine) {
       return;
     }
+    // Also check DOM containment to avoid intercepting events from elements
+    // that visually overlap the engine but aren't part of its DOM tree
+    // (e.g., an absolutely-positioned dropdown above the engine).
+    if (!this.#isEventWithinEngine(e.target)) {
+      return;
+    }
     e.preventDefault();
     e.stopPropagation();
     const coordinates = this.getCoordinates(e.clientX, e.clientY);

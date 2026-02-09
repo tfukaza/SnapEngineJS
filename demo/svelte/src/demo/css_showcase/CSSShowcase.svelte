@@ -1,6 +1,6 @@
 <script lang="ts">
   let checkboxChecked = $state(false);
-  let radioValue = $state("option1");
+  // let radioValue = $state("option1");
   let rangeValue = $state(50);
   let textValue = $state("");
   let numberValue = $state(42);
@@ -174,21 +174,21 @@
           <h3>Radio Buttons</h3>
           <div class="form-group">
             <label class="radio-label">
-              <input type="radio" name="demo-radio" value="option1" bind:group={radioValue} />
+              <input type="radio" name="demo-radio" value="option1"  />
               <span></span>
               Option One
             </label>
           </div>
           <div class="form-group">
             <label class="radio-label">
-              <input type="radio" name="demo-radio" value="option2" bind:group={radioValue} />
+              <input type="radio" name="demo-radio" value="option2" />
               <span></span>
               Option Two
             </label>
           </div>
           <div class="form-group">
             <label class="radio-label">
-              <input type="radio" name="demo-radio" value="option3" bind:group={radioValue} />
+              <input type="radio" name="demo-radio" value="option3"  />
               <span></span>
               Option Three
             </label>

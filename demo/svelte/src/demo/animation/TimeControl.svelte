@@ -72,7 +72,7 @@
 
   function handleInput(event: Event) {
     const input = event.target as HTMLInputElement;
-    object.animation.progress = parseFloat(input.value);
+    object.animation!.progress = parseFloat(input.value);
   }
 </script>
 

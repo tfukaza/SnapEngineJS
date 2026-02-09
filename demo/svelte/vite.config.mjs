@@ -24,6 +24,7 @@ export default defineConfig(({ command, mode }) => {
         "@snap-engine/snapline": path.resolve(root, "assets/snapline/core/src/index.ts"),
       },
     },
+    publicDir: path.resolve(__dirname, "../../website/static"),
     plugins: [svelte()],
     server: {
       port: 3001,

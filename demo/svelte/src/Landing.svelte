@@ -19,10 +19,10 @@
   const demoOptions: DemoOption[] = [
     { label: "Welcome Background", value: "welcome" },
     { label: "CSS Showcase", value: "css_showcase" },
-    { label: "Gallery", value: "gallery" },
-    { label: "Drag", value: "drag" },
-    { label: "Node UI", value: "node_ui" },
-    { label: "Drag & Drop", value: "drag_drop" },
+    { label: "Animation", value: "gallery" },
+    { label: "Input", value: "drag" },
+    { label: "Snap Line", value: "node_ui" },
+    { label: "Drop & Snap", value: "drag_drop" },
     { label: "Collision", value: "collision" },
   ];
 
@@ -39,6 +39,9 @@
   let selectedDemo = $state(getDemoFromUrl());
   let debugEnabled = $state(false);
   let dragDemoRef: DragDemo | null = $state(null);
+  let dragDropDemoRef: DragDropDemo | null = $state(null);
+
+  const debugSupportedDemos = ["drag", "drag_drop"];
 
   $effect(() => {
     if (typeof window !== "undefined") {
@@ -61,18 +64,20 @@
   });
 
   function toggleDebug(event: Event) {
-    if (selectedDemo !== "drag") {
+    if (!debugSupportedDemos.includes(selectedDemo)) {
       return;
     }
     const target = event.currentTarget as HTMLInputElement;
     debugEnabled = target.checked;
     dragDemoRef?.setDebug(debugEnabled);
+    dragDropDemoRef?.setDebug(debugEnabled);
   }
 
   $effect(() => {
-    if (selectedDemo !== "drag" && debugEnabled) {
+    if (!debugSupportedDemos.includes(selectedDemo) && debugEnabled) {
       debugEnabled = false;
       dragDemoRef?.setDebug(false);
+      dragDropDemoRef?.setDebug(false);
     }
   });
 </script>
@@ -86,12 +91,12 @@
       {/each}
     </select>
 
-    <label class="debug-toggle" class:disabled={selectedDemo !== "drag"}>
+    <label class="debug-toggle" class:disabled={!debugSupportedDemos.includes(selectedDemo)}>
       <input
         type="checkbox"
         onchange={toggleDebug}
         checked={debugEnabled}
-        disabled={selectedDemo !== "drag"}
+        disabled={!debugSupportedDemos.includes(selectedDemo)}
       />
       <span></span>
       Debug Mode
@@ -112,7 +117,7 @@
     {:else if selectedDemo === "node_ui"}
       <NodeUIDemo />
     {:else if selectedDemo === "drag_drop"}
-      <DragDropDemo />
+      <DragDropDemo bind:this={dragDropDemoRef} />
     {:else if selectedDemo === "collision"}
       <CollisionDemo />
     {/if}

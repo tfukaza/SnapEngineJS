@@ -9,6 +9,9 @@ import {
   dragStartProp,
   dragProp,
   dragEndProp,
+  pinchStartProp,
+  pinchProp,
+  pinchEndProp,
   mouseButtonBitmap,
 } from "./input";
 import { getDomProperty, EventProxyFactory } from "./util";
@@ -29,5 +32,8 @@ export {
   type dragStartProp,
   type dragProp,
   type dragEndProp,
+  type pinchStartProp,
+  type pinchProp,
+  type pinchEndProp,
   mouseButtonBitmap,
 };

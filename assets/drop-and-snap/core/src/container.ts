@@ -428,7 +428,16 @@ export class ItemContainer extends ElementObject {
     });
   }
 
-  removeAllGhost() {
+  removeAllGhost(animate: boolean = false) {
+    // Capture positions before ghost removal for animation
+    if (animate) {
+      this.queueUpdate("READ_1", () => {
+        for (const item of this.#itemList) {
+          item.readDom(true, "READ_1");
+        }
+      });
+    }
+
     this.queueUpdate("WRITE_1", () => {
       this.removeGhostItem();
     });
@@ -436,10 +445,40 @@ export class ItemContainer extends ElementObject {
       for (const item of this.#itemList) {
         item.readDom(false, "READ_2");
         item.saveDomPropertyToTransform("READ_2");
-        // item.calculateLocalFromTransform();
       }
       this.setItemRows(null);
       this.reorderItemList();
+
+      // Animate items filling the gap left by the removed ghost
+      if (animate) {
+        const reorderConfig = this.configuration.animation?.reorder;
+        if (reorderConfig) {
+          for (const item of this.#itemList) {
+            const prev = item.getDomProperty("READ_1");
+            const curr = item.getDomProperty("READ_2");
+            const dx = prev.x - curr.x;
+            const dy = prev.y - curr.y;
+
+            if (Math.abs(dx) >= 0.5 || Math.abs(dy) >= 0.5) {
+              const anim = new AnimationObject(
+                item.element,
+                {
+                  transform: [
+                    `translate3d(${dx}px, ${dy}px, 0px)`,
+                    `translate3d(0px, 0px, 0px)`,
+                  ],
+                },
+                {
+                  duration: reorderConfig.duration ?? 100,
+                  easing: reorderConfig.timing_function ?? "ease-out",
+                },
+              );
+              item.addAnimation(anim);
+              anim.play();
+            }
+          }
+        }
+      }
     });
     this.#spacerIndex = -1;
   }
@@ -469,8 +508,10 @@ export class ItemContainer extends ElementObject {
       i.readDom(true, "READ_1");
     }
 
-    // Capture start position of the incoming item
-    item.requestRead(false, true, "READ_1");
+    // Capture start position of the incoming item.
+    // accountTransform=true because the item may still have a stale style.transform
+    // from cursorDown's writeTransform() (offset mode) that hasn't been cleared yet.
+    item.requestRead(true, true, "READ_1");
 
     // We need to append the element to the new container's element
     item.requestWrite(
@@ -521,6 +562,16 @@ export class ItemContainer extends ElementObject {
     });
     item.queueUpdate("WRITE_2", () => {
       item.writeDom();
+    });
+
+    // After the animation completes and DOM is settled, re-read positions
+    // into READ_1 so the next click-move starts from the correct position.
+    // Use accountTransform=true in case any inline style.transform is still applied.
+    this.queueUpdate("READ_3", () => {
+      for (const i of this.#itemList) {
+        i.readDom(true, "READ_3");
+        i.copyDomProperty("READ_3", "READ_1");
+      }
     });
   }
 

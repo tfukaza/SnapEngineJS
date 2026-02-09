@@ -227,7 +227,7 @@ export class ItemObject extends ElementObject {
     if (!this.#containerObject) {
       throw new Error("ItemObject has no container set.");
     }
-    this.#containerObject.removeAllGhost();
+    this.#containerObject.removeAllGhost(true);
     this.#containerObject.dragItem = null;
     this.#containerObject = newContainer;
 
