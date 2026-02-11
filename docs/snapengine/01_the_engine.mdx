@@ -5,13 +5,11 @@ sectionTitle: SnapEngine
 sectionOrder: 1
 ---
 
-Whenever you make anything with SnapEngine, you must first create an `Engine` instance. 
-Each `Engine` manages its own camera, objects, and features (collision detection, debug overlay, etc.). 
+When you make anything with SnapEngine, you must first create an `Engine` instance. 
 You can spawn multiple `Engine` instances on a single page, and for the most part they operate in isolation from each other.
 <br/>
 
-An engine will always need a container element assigned to it. This element will be the area where the engine will perform 
-most of its functionalities, such as input handling and rendering. 
+An engine will always need a container element assigned to it. This element defines the engine’s active area for input handling and rendering.
 
 ```typescript
 import { Engine } from "snapengine";
@@ -21,8 +19,8 @@ engine.element = container;
 ```
 
 You may have noticed the `element` property is set after instantiating the `Engine`. 
-This is because SnapEngine is designed to be integrated into frontend frameworks like React or Svelte,
-many of which are designed to generate the DOM elements after the component logic runs. 
+This is because SnapEngine is designed to integrate with frontend frameworks like React or Svelte,
+many of which create DOM elements after the component logic runs.
 
 ```svelte
 <script lang="ts">
@@ -48,8 +46,24 @@ export function EngineComponent() {
    return <div ref={containerRef} className="engine-container"></div>;
 }
 ```
+```html
+<div id="engine-container" class="engine-container"></div>
+<script type="module">
+   import { Engine } from "snapengine";
+
+   const container = document.getElementById("engine-container");
+   const engine = new Engine();
+   if (container) {
+      engine.element = container;
+   }
+</script>
+```
+> [!WARNING]
+> Until `element` is set, the engine and any objects within it won’t be able to function properly.
+
+## Global Manager
 
 In addition, all `Engine` instances share a single global object called the `GlobalManager`. 
-This singleton is responsible for orchestrating the render loop, managing global input events, and holding the shared render queues. 
-The `GlobalManager` is automatically created when the first `Engine` is instantiated, so you don't need to worry about it.
+The `GlobalManager` is automatically created when the first `Engine` is instantiated, and every subsequent `Engine` instance will reference the same `GlobalManager` automatically.
+This singleton manages the shared render loop, global input events, etc., which we will cover in more detail in later sections.
 

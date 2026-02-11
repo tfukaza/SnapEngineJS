@@ -4,6 +4,7 @@ import { mdsvex, escapeSvelte } from 'mdsvex';
 import { fileURLToPath } from 'url';
 import { dirname, join } from 'path';
 import { createHighlighter } from 'shiki';
+import { remarkAlerts } from './src/lib/markdown/remarkAlerts.js';
 import { remarkCodeTabs } from './src/lib/markdown/remarkCodeTabs.js';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
@@ -84,7 +85,7 @@ const config = {
 		mdsvex({
 			extensions: ['.md', '.mdx'],
 			layout: mdsvexLayout,
-			remarkPlugins: [remarkCodeTabs],
+			remarkPlugins: [remarkAlerts, remarkCodeTabs],
 			highlight: {
 				highlighter: (code, lang = 'plaintext') => {
 					const html = escapeSvelte(
