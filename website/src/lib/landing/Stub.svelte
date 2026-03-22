@@ -1,7 +1,7 @@
 <script lang="ts">
 
   import { onMount, getContext } from "svelte";
-  import { CameraControl } from "@snapline/asset/cameraControl";
+  import { CameraControl } from "@snap-engine/asset-base";
   import { AnimationObject } from "@snapline/animation";
 
   let cameraControl: CameraControl = getContext("cameraControl");

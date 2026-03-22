@@ -1,0 +1,37 @@
+{
+  "name": "@snap-engine/snapline-svelte",
+  "version": "0.1.0",
+  "description": "Svelte components for node graph UI",
+  "type": "module",
+  "svelte": "./src/index.ts",
+  "exports": {
+    ".": {
+      "svelte": "./src/index.ts"
+    },
+    "./Node.svelte": "./src/Node.svelte",
+    "./Connector.svelte": "./src/Connector.svelte",
+    "./Line.svelte": "./src/Line.svelte",
+    "./Select.svelte": "./src/Select.svelte"
+  },
+  "keywords": [
+    "node-graph",
+    "svelte",
+    "ui",
+    "snapengine"
+  ],
+  "author": "Tomoki Fukazawa",
+  "license": "MIT",
+  "dependencies": {
+    "@snap-engine/snapline": "^0.1.0"
+  },
+  "files": [
+    "src",
+    "README.md"
+  ],
+  "publishConfig": {
+    "access": "public"
+  },
+  "peerDependencies": {
+    "svelte": "^5.0.0"
+  }
+}

@@ -1,27 +1,39 @@
 {
-  "name": "snapengine",
+  "name": "@snap-engine/core",
   "version": "0.1.0",
-  "description": "",
+  "description": "Interactivity engine for the web",
   "type": "module",
-  "main": "./dist/snapengine.mjs",
-  "module": "./dist/snapengine.mjs",
+  "workspaces": [
+    "assets/asset-base/*",
+    "assets/snapsort/*",
+    "assets/snapline/*",
+    "assets/snapzap/*"
+  ],
+  "main": "./src/index.ts",
+  "types": "./src/index.ts",
   "exports": {
     ".": {
-      "import": "./dist/snapengine.mjs"
+      "types": "./src/index.ts",
+      "import": "./src/index.ts"
     },
     "./debug": {
-      "import": "./dist/debug.mjs"
-    },
-    "./camera-control": {
-      "import": "./dist/camera-control.mjs"
+      "types": "./src/debug.ts",
+      "import": "./src/debug.ts"
     },
     "./animation": {
-      "import": "./dist/animation.mjs"
+      "types": "./src/animation.ts",
+      "import": "./src/animation.ts"
     },
     "./collision": {
-      "import": "./dist/collision.mjs"
+      "types": "./src/collision.ts",
+      "import": "./src/collision.ts"
     }
   },
+  "files": [
+    "src",
+    "README.md",
+    "LICENSE"
+  ],
   "scripts": {
     "dev:vanilla": "FRAMEWORK=vanilla vite build --mode development --watch & npm run server:vanilla",
     "dev:react": "FRAMEWORK=react vite build --mode development --watch & npm run server:react",
@@ -36,18 +48,27 @@
     "lint": "eslint src --ext .ts",
     "build": "vite build --mode production",
     "build:dev": "FRAMEWORK=test npx vite build --mode development",
+    "prepublishOnly": "npm run lint",
     "wdio": "wdio run ./wdio.conf.ts"
   },
+  "keywords": [
+    "ui",
+    "interactive",
+    "typescript"
+  ],
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/tfukaza/node-editor.git"
+    "url": "git+https://github.com/tfukaza/SnapEngineJS.git"
   },
-  "author": "",
-  "license": "ISC",
+  "author": "Tomoki Fukazawa",
+  "license": "MIT",
   "bugs": {
-    "url": "https://github.com/tfukaza/node-editor/issues"
+    "url": "https://github.com/tfukaza/SnapEngineJS/issues"
   },
-  "homepage": "https://github.com/tfukaza/node-editor#readme",
+  "homepage": "https://github.com/tfukaza/SnapEngineJS#readme",
+  "publishConfig": {
+    "access": "public"
+  },
   "devDependencies": {
     "@eslint/js": "^9.6.0",
     "@playwright/test": "^1.45.2",
@@ -73,6 +94,7 @@
     "typescript": "^5.5.3",
     "typescript-eslint": "^7.15.0",
     "uglify-js": "^3.17.4",
-    "vite": "^6.0.0"
+    "vite": "^6.0.0",
+    "vite-plugin-dts": "^4.5.4"
   }
 }

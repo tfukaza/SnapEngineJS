@@ -33,6 +33,7 @@ dist-ssr
 # Generated build files
 *.mjs
 *.umd.js
+demo/svelte/src/snapengine/
 
 # Exceptions
 !vite.config.mjs

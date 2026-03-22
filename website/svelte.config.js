@@ -4,6 +4,7 @@ import { mdsvex, escapeSvelte } from 'mdsvex';
 import { fileURLToPath } from 'url';
 import { dirname, join } from 'path';
 import { createHighlighter } from 'shiki';
+import { remarkAlerts } from './src/lib/markdown/remarkAlerts.js';
 import { remarkCodeTabs } from './src/lib/markdown/remarkCodeTabs.js';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
@@ -84,7 +85,7 @@ const config = {
 		mdsvex({
 			extensions: ['.md', '.mdx'],
 			layout: mdsvexLayout,
-			remarkPlugins: [remarkCodeTabs],
+			remarkPlugins: [remarkAlerts, remarkCodeTabs],
 			highlight: {
 				highlighter: (code, lang = 'plaintext') => {
 					const html = escapeSvelte(
@@ -104,11 +105,21 @@ const config = {
 		// See https://svelte.dev/docs/kit/adapters for more information about adapters.
 		adapter: adapter(),
 		alias: {
+			'@snap-engine/snapline-svelte': '../assets/snapline/svelte/src/index.ts',
+			'@snap-engine/snapline': '../assets/snapline/core/src/index.ts',
 			'@snapline': '../src',
 			'@svelte-demo': '../demo/svelte/src',
 			'@demo-root': '../demo',
 			'@docs': '../docs',
-			'@components': './src/lib/components'
+			'@components': './src/lib/components',
+			'@snap-engine/asset-base-svelte': '../assets/asset-base/svelte/src/index.ts',
+			'@snap-engine/asset-base': '../assets/asset-base/core/src/index.ts',
+			'@snap-engine/snapsort-svelte': '../assets/snapsort/svelte/src/index.ts',
+			'@snap-engine/snapsort': '../assets/snapsort/core/src/index.ts',
+			'@snap-engine/core/animation': '../src/animation.ts',
+			'@snap-engine/core/debug': '../src/debug.ts',
+			'@snap-engine/core/collision': '../src/collision.ts',
+			'@snap-engine/core': '../src/index.ts'
 		}
 	}
 };

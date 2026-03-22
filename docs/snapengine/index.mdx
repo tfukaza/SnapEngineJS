@@ -5,5 +5,33 @@ sectionTitle: SnapEngine
 sectionOrder: 1
 ---
 
-## TBD: Installation and Setup
+> [!NOTE]
+> SnapEngine is currently in alpha. APIs may change between versions.
+
+## Installation
+
+The SnapEngine project is split into multiple packages, so you only need to install the ones you require. 
+The core engine is available as `@snap-engine/core`:
+
+```bash
+npm install @snap-engine/core
+```
+
+SnapEngine and all of its assets are TypeScript-based, so it will install the necessary type definitions automatically.
+
+## Importing
+
+Import the modules you need from the `@snap-engine/core` package:
+
+```ts
+import { Engine } from "@snap-engine/core";
+```
+
+Additional modules are available as subpath imports:
+
+```ts
+import { DebugRenderer } from "@snap-engine/core/debug";
+import { Animation } from "@snap-engine/core/animation";
+import { CollisionSystem } from "@snap-engine/core/collision";
+```
 

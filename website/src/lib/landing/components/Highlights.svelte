@@ -23,7 +23,6 @@
 <style lang="scss">
   @use "../landing.scss";
   @import url("https://fonts.googleapis.com/css2?family=Micro+5&display=swap");
-  @import url("https://fonts.googleapis.com/css2?family=Pixelify+Sans&display=swap");
 
   .interactivity-explainer {
     margin-top: clamp(3rem, 6vw, 6rem);

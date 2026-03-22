@@ -1,5 +1,5 @@
 <script lang="ts">
-  // Data for DropAndSnap card preview
+  // Data for SnapSort card preview
   const dsKanbanTodo = [
     { id: "ds-k1", text: "Fix Scroll Bug", tag: "Bug", color: "#e74c3c", user: "JS" },
     { id: "ds-k2", text: "New Icon Set", tag: "Design", color: "#9b59b6", user: "AL" },
@@ -41,7 +41,7 @@
       </div>
       <a href="/dropandsnap" class="asset-card drop-snap-card card ground">
         <div class="card-content-wrapper">
-          <h3>DropAndSnap</h3>
+          <h3>SnapSort</h3>
           <p>Sortable lists and items.</p>
         </div>
 

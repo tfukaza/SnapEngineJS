@@ -1,5 +1,5 @@
 <script lang="ts">
-  import type { LineComponent } from "@snapline/index";
+  import type { LineComponent } from "@snap-engine/snapline";
   import { onMount } from "svelte";
   import SvgLine from "$lib/SvgLine.svelte";
 

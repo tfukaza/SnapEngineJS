@@ -1,8 +1,8 @@
 <script lang="ts">
-  import type {Engine} from "../../../../index";
+  import type {Engine} from "@snap-engine/core";
   import { getContext, onMount, onDestroy } from "svelte";
-  import { ElementObject } from "../../../../../src/object";
-  import { AnimationObject } from "../../../../../src/animation";
+  import { ElementObject } from "@snap-engine/core";
+  import { AnimationObject } from "@snap-engine/core/animation";
   import Exhibit from "./Exhibit.svelte";
   import type { ExhibitProps } from "./Exhibit.svelte";
   
@@ -46,8 +46,5 @@
 <Exhibit {props} >
   <div bind:this={object.element} style="top: 50%; left: 50%; position: absolute; transform: translate(-50%, -50%);"></div>
 </Exhibit>
-
-  <style lang="scss">
-    @import "../../../../app.scss";
-  </style>
+  
   

@@ -1,182 +1,231 @@
-# Source Directory Guide
+# Core Engine Source Directory
 
-This document describes the structure and purpose of each module in the `src/` directory of SnapLine.
+## Overview
 
-> **Note**: For high-level engine concepts (render pipeline, coordinate systems, API usage), see `doc/overview.md` in the project root.
+The `src/` directory contains the core SnapEngine library - a framework-agnostic interactivity engine for DOM-based applications.
+
+**Package:** `@snap-engine/core`
+**Build output:** `dist/`
+**Build tool:** Vite with TypeScript
 
 ## Directory Structure
 
 ```
 src/
 ├── index.ts          # Public API exports
-├── snapline.ts       # Engine class - main entry point
-├── global.ts         # GlobalManager singleton - shared state & render loop
-├── object.ts         # BaseObject & ElementObject - core entity classes
-├── camera.ts         # Camera - coordinate systems & viewport management
-├── input.ts          # Input handling - pointer, drag events
-├── collision.ts      # Collision detection engine & collider shapes
-├── animation.ts      # Web Animations API wrapper
-├── debug.ts          # Debug overlay renderer
-├── util.ts           # Utility functions (DOM helpers, transform parsing)
-└── asset/            # Pre-built components
-    ├── background.ts
-    ├── cameraControl.ts
-    ├── node_ui/      # Node-based UI components
-    └── drag_and_drop/ # Drag-and-drop system
+├── engine.ts         # Engine class
+├── global.ts         # GlobalManager singleton
+├── object.ts         # BaseObject & ElementObject
+├── camera.ts         # Camera system
+├── input.ts          # Input handling
+├── collision.ts      # Collision detection (optional)
+├── animation.ts      # Animation system (optional)
+├── debug.ts          # Debug renderer (optional)
+└── util.ts           # Utilities
 ```
 
-## Core Modules
+**Note:** Asset components (Camera control, Background, Node UI, Drag-and-drop) have been moved to `assets/` workspace packages.
+
+## Entry Points
+
+Defined in `vite.config.mjs`:
+
+- **Main:** `index.ts` → `dist/snapengine.mjs`
+  - Core exports: Engine, BaseObject, ElementObject, Camera, input types, utilities
+- **Animation:** `animation.ts` → `dist/animation.mjs`
+  - AnimationObject, SequenceObject
+- **Collision:** `collision.ts` → `dist/collision.mjs`
+  - CollisionEngine, RectCollider, CircleCollider, etc.
+- **Debug:** `debug.ts` → `dist/debug.mjs`
+  - DebugRenderer
+
+## Module Overview
 
 ### `index.ts`
-Public API entry point. All exports that external consumers can import come from here. When adding new public APIs, export them from this file.
+Public API entry point. All external-facing exports.
 
-### `snapline.ts`
-**Engine Class** - The main orchestrator for a single canvas/container.
+**Main exports:**
+- `Engine`, `BaseObject`, `ElementObject`, `Camera`
+- Input types (dragProp, pointerDownProp, etc.)
+- Utilities (getDomProperty, EventProxyFactory)
 
-Responsibilities:
-- Manages a container DOM element and its camera
-- Holds references to optional subsystems (collision, animation, debug)
-- Processes render stages delegated by GlobalManager
-- Provides `enableX()` methods for lazy-loading features
+### `engine.ts`
+Engine class - main orchestrator for a container.
 
-Key methods:
-- `assignDom(container)` - Initialize with a DOM container
-- `enableDebug()` - Enable debug overlay (dynamically imports debug.ts)
-- `enableCameraControl()` - Enable pan/zoom controls
-- `enableCollisionEngine()` - Enable collision detection
-- `enableAnimationEngine()` - Enable animation processing
+**Responsibilities:**
+- Manages container DOM and camera
+- Holds collision engine and debug renderer
+- Processes render stages
 
 ### `global.ts`
-**GlobalManager Singleton** - Central coordinator for all engine instances.
+GlobalManager singleton - central coordinator.
 
-Responsibilities:
-- Maintains the 6-stage render queue (read1, write1, read2, write2, read3, write3)
-- Runs the `requestAnimationFrame` loop
-- Tracks all registered Engine instances
-- Manages global object table and ID generation
-- Provides input engine instances per-engine
-
-The render loop processes stages in order across ALL engines before moving to the next stage. This prevents layout thrashing even when multiple engines exist.
+**Responsibilities:**
+- 6-stage render pipeline (READ_1, WRITE_1, READ_2, WRITE_2, READ_3, WRITE_3)
+- requestAnimationFrame loop
+- Engine instance registry
+- Global object table
+- Shared state
 
 ### `object.ts`
-**BaseObject & ElementObject** - Core entity classes.
+Core entity classes.
 
-**BaseObject**: Abstract base for all entities.
-- Transform properties (position, scale)
+**BaseObject:**
+- Transform properties
 - Parent-child hierarchy
-- Event subscription (global and input events)
-- Collider and animation management
-- `queueUpdate(stage, callback)` for scheduling DOM operations
-- Debug marker helpers
+- Event subscriptions
+- Render stage queueing
 
-**ElementObject**: Extends BaseObject with DOM element support.
-- Owns a `DomElement` wrapper for DOM manipulation
-- DOM property caching per render stage (`_domProperty[0..2]`)
-- `readDom()` / `writeDom()` / `writeTransform()` methods
-- Convenience methods: `requestRead()`, `requestWrite()`, `requestTransform()`
-- Style, classList, and dataAttribute management
-
-**DomElement**: Internal class managing a single HTML element's state.
+**ElementObject:**
+- Extends BaseObject
+- DOM element management
+- DOM property caching
+- Transform modes
 
 ### `camera.ts`
-**Camera Class** - Viewport and coordinate system management.
+Camera and coordinate systems.
 
-Maintains three coordinate spaces:
-- **Screen**: Raw browser viewport pixels
-- **Camera**: Relative to container element
-- **World**: Logical scene coordinates (pan/zoom independent)
+**Coordinate spaces:**
+- Screen (browser viewport)
+- Camera (container-relative)
+- World (scene coordinates)
 
-Key methods:
-- `getCameraFromScreen()` / `getScreenFromCamera()`
-- `getWorldFromCamera()` / `getCameraFromWorld()`
-- `setCameraPosition()` / `setCameraCenterPosition()`
-- `handleScroll()` - Zoom towards a point
-- `handlePanStart/Drag/End()` - Pan gesture handling
+**Features:**
+- Coordinate conversions
+- Pan and zoom
+- Transform management
 
 ### `input.ts`
-**Input System** - Unified pointer event handling.
+Unified input handling.
 
-**GlobalInputControl**: Engine-wide input manager.
-- Subscribes to container pointer events
-- Normalizes mouse and touch into unified events
-- Manages drag gesture detection
-- Dispatches to subscribed objects
+**GlobalInputControl:**
+- Container-level events
+- Mouse and touch normalization
+- Drag gesture detection
 
-**InputControl**: Per-object input handler.
-- Attaches to specific DOM elements
-- Fires element-specific pointer events
-- Supports drag gestures with configurable thresholds
+**InputControl:**
+- Element-specific events
+- Per-object input handling
 
-Event types: `pointerDown`, `pointerMove`, `pointerUp`, `mouseWheel`, `dragStart`, `drag`, `dragEnd`, `pinchStart`, `pinch`, `pinchEnd`
+**Event types:**
+- pointerDown, pointerMove, pointerUp
+- mouseWheel
+- dragStart, drag, dragEnd
+- pinchStart, pinch, pinchEnd
 
 ### `collision.ts`
-**Collision System** - Shape-based collision detection.
+Collision detection system.
 
-**CollisionEngine**: Manages collision detection each frame.
-- Supports multiple collider shapes
-- Tracks collision state for begin/end contact events
+**CollisionEngine:**
+- Frame-based detection
+- State tracking
+- Collision callbacks
 
-**Collider**: Base class for collision shapes.
-- `RectCollider`: Axis-aligned bounding box
-- `CircleCollider`: Circle shape
-- `LineCollider`: Line segment
-- `PointCollider`: Single point
-
-Events: `onCollide` (continuous), `onBeginContact`, `onEndContact`
+**Collider shapes:**
+- RectCollider
+- CircleCollider
+- LineCollider
+- PointCollider
 
 ### `animation.ts`
-**Animation System** - Web Animations API wrapper.
+Web Animations API wrapper.
 
-**AnimationObject**: Single animation instance.
-- Wraps native `Element.animate()`
-- Supports CSS properties and custom variables (`$varName`)
-- Custom variables allow animating non-CSS values via `tick` callback
-- Configurable easing per keyframe
+**AnimationObject:**
+- CSS property animation
+- Custom variables
+- Easing per keyframe
 
-**SequenceObject**: Sequential animation chain.
-- Plays animations one after another
-- `add()` to queue animations
+**SequenceObject:**
+- Sequential animation chain
 
 ### `debug.ts`
-**Debug Renderer** - Visual debugging overlay.
+Visual debugging overlay.
 
-Renders to a canvas positioned over the container:
+**Features:**
+- Canvas-based rendering
 - Object bounding boxes
-- Collider shapes
-- Coordinate grid
-- Custom debug markers (points, rects, circles, text)
-
-Dynamically imported by `engine.enableDebug()` to keep bundle size small when not used.
+- Collider visualization
+- Custom debug markers
 
 ### `util.ts`
-**Utility Functions**
+Utility functions for DOM operations and transforms.
 
-## Asset Modules (`asset/`)
+## Render Pipeline
 
-Pre-built components for common UI patterns.
+6-stage pipeline preventing layout thrashing:
 
-### `asset/background.ts`
-**Background** - Tiled background that follows camera.
+1. **READ_1** - Primary DOM reads
+2. **WRITE_1** - Primary DOM writes
+3. **READ_2** - Secondary reads
+4. **WRITE_2** - Transform updates
+5. **READ_3** - Final reads
+6. **WRITE_3** - Final writes
 
-Auto-updates position when camera moves. Useful for grid patterns in node editors.
+**Usage:**
+```typescript
+object.queueUpdate("READ_1", callback);
+object.queueUpdate("WRITE_2", callback);
+```
 
-### `asset/cameraControl.ts`
-**CameraControl** - Interactive pan/zoom controls.
+## Build Configuration
 
-- Middle mouse button for panning
-- Scroll wheel for zooming
-- Automatically updates camera and repaints
+**Entry points (vite.config.mjs):**
+- snapengine (main)
+- debug (optional)
+- animation (optional)
+- collision (optional)
 
-### `asset/node_ui/`
-Components for node-based editors (like visual programming tools).
+**TypeScript:** Declarations generated to `dist/` via vite-plugin-dts
 
-- `node.ts` - **NodeComponent**: Draggable node with connectors
-- `connector.ts` - **ConnectorComponent**: Input/output ports on nodes
-- `line.ts` - **LineComponent**: Bezier curves connecting nodes
-- `select.ts` - **RectSelectComponent**: Rectangle selection tool
+**Output:** ES modules (.mjs)
 
-### `asset/drag_and_drop/`
-Components for sortable lists and drag-drop interfaces.
+## Package Structure
 
-- `container.ts` - **ItemContainer**: Sortable container with spacer animation
-- `item.ts` - **ItemObject**: Draggable item within containers
+```
+dist/
+├── snapengine.mjs     # Main bundle
+├── snapengine.d.ts    # Type declarations
+├── animation.mjs      # Animation module
+├── animation.d.ts
+├── collision.mjs      # Collision module
+├── collision.d.ts
+├── debug.mjs          # Debug module
+└── debug.d.ts
+```
+
+## Import Patterns
+
+**External consumers:**
+```typescript
+import { Engine, ElementObject } from "@snap-engine/core";
+import { AnimationObject } from "@snap-engine/core/animation";
+import { RectCollider } from "@snap-engine/core/collision";
+import { DebugRenderer } from "@snap-engine/core/debug";
+```
+
+**Asset packages:**
+Must use package imports, never relative paths:
+```typescript
+// ✅ Correct
+import { Engine } from "@snap-engine/core";
+
+// ❌ Wrong
+import { Engine } from "../../../src/index";
+```
+
+## Key Principles
+
+- **Framework-agnostic:** Works with vanilla JS, React, Svelte, etc.
+- **Built package:** Compiled to dist/, not raw source
+- **Stage-based rendering:** Prevents layout thrashing
+- **Single render loop:** All engines share one RAF loop
+- **Optional features:** Collision, animation, debug are separate imports
+
+## Notes
+
+- This is the only built package in the monorepo
+- Asset packages import from this as `@snap-engine/core`
+- TypeScript path mappings in asset packages point to `src/` for development
+- Published package provides built bundles from `dist/`
+
+For API documentation, see `doc/` directory.

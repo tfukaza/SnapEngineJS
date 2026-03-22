@@ -1,0 +1,27 @@
+{
+  "name": "@snap-engine/asset-base",
+  "version": "0.1.0",
+  "type": "module",
+  "main": "./src/index.ts",
+  "exports": {
+    ".": "./src/index.ts",
+    "./camera": "./src/camera.ts",
+    "./background": "./src/background.ts"
+  },
+  "description": "Shared foundational asset classes for SnapEngine",
+  "types": "./src/index.ts",
+  "files": [
+    "src",
+    "README.md"
+  ],
+  "publishConfig": {
+    "access": "public"
+  },
+  "keywords": [
+    "ui",
+    "camera",
+    "background"
+  ],
+  "author": "Tomoki Fukazawa",
+  "license": "MIT"
+}

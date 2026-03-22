@@ -2,6 +2,7 @@ const framework = process.env.FRAMEWORK;
 
 import { resolve } from "path";
 import { defineConfig } from "vite";
+import dts from "vite-plugin-dts";
 
 export default defineConfig(({ command, mode }) => {
   let outputDir = "dist";
@@ -22,8 +23,25 @@ export default defineConfig(({ command, mode }) => {
         throw new Error("Invalid FRAMEWORK_ENV");
     }
   }
+
+  const plugins = [];
+  if (mode === "production") {
+    plugins.push(
+      dts({
+        include: ["src"],
+        exclude: [
+          "src/asset/node_ui/**",
+          "src/asset/background.ts",
+          "src/asset/drag_and_drop/**",
+        ],
+        rollupTypes: true,
+      })
+    );
+  }
+
   return {
     logLevel: "info",
+    plugins,
     resolve: {
       alias: {
         "@": resolve(__dirname, "src"),
@@ -34,7 +52,6 @@ export default defineConfig(({ command, mode }) => {
         entry: {
           snapengine: resolve(__dirname, "src/index.ts"),
           debug: resolve(__dirname, "src/debug.ts"),
-          "camera-control": resolve(__dirname, "src/asset/cameraControl.ts"),
           animation: resolve(__dirname, "src/animation.ts"),
           collision: resolve(__dirname, "src/collision.ts"),
         },

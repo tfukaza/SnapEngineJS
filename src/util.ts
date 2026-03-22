@@ -102,25 +102,25 @@ function parseTransformString(transform: string) {
  * @param str The string to be converted.
  * @returns The converted string.
  */
-function camelCaseToKebab(str: string) {
-  return str.replace(/([A-Z])/g, "-$1").toLowerCase();
-}
+// function camelCaseToKebab(str: string) {
+//   return str.replace(/([A-Z])/g, "-$1").toLowerCase();
+// }
 
-function getDomStyle(dom: HTMLElement | SVGElement) {
-  const existingStyleString = dom.style.cssText;
-  if (existingStyleString == "") {
-    return {};
-  }
-  return existingStyleString
-    .split(";")
-    .map((item) => {
-      const [key, value] = item.split(":");
-      return { [key]: value };
-    })
-    .reduce((acc, curr) => {
-      return { ...acc, ...curr };
-    }, {});
-}
+// function getDomStyle(dom: HTMLElement | SVGElement) {
+//   const existingStyleString = dom.style.cssText;
+//   if (existingStyleString == "") {
+//     return {};
+//   }
+//   return existingStyleString
+//     .split(";")
+//     .map((item) => {
+//       const [key, value] = item.split(":");
+//       return { [key]: value };
+//     })
+//     .reduce((acc, curr) => {
+//       return { ...acc, ...curr };
+//     }, {});
+// }
 
 /**
  * Applies CSS styles to a DOM element.

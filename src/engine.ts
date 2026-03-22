@@ -11,7 +11,6 @@ import {
 import type { CollisionEngine } from "./collision";
 import type { AnimationInterface } from "./animation";
 import type { DebugRenderer } from "./debug";
-import type { CameraControl } from "./asset/cameraControl";
 
 export interface EngineConfig {}
 
@@ -157,16 +156,10 @@ class Engine {
   }
 
   /**
-   * Publish an event to all subscribers.
+   * Update the cached container bounds from an element's bounding rect.
    * @internal
    */
-  #publishEvent(event: EngineEventType, element: HTMLElement) {
-    const callbacks = Object.values(this.#eventSubscribers[event]);
-    if (callbacks.length === 0) {
-      return;
-    }
-
-    // Compute and cache container bounds only if there are subscribers
+  #updateContainerBounds(element: HTMLElement) {
     const rect = element.getBoundingClientRect();
     this.containerBounds = {
       left: rect.left,
@@ -176,10 +169,24 @@ class Engine {
       width: rect.width,
       height: rect.height,
     };
+  }
+
+  /**
+   * Publish an event to all subscribers.
+   * @internal
+   */
+  #publishEvent(event: EngineEventType, element: HTMLElement) {
+    const callbacks = Object.values(this.#eventSubscribers[event]);
+    if (callbacks.length === 0) {
+      return;
+    }
+
+    // Ensure bounds are up-to-date for subscribers
+    this.#updateContainerBounds(element);
 
     const props: EngineEventProps = {
       element,
-      bounds: this.containerBounds,
+      bounds: this.containerBounds!,
     };
 
     for (const callback of callbacks) {
@@ -202,14 +209,19 @@ class Engine {
     }
     this.camera.containerDom = element;
 
+    // Always compute initial container bounds
+    this.#updateContainerBounds(element);
+
     // Set up resize observer
     this.#resizeObserver = new ResizeObserver(() => {
+      this.#updateContainerBounds(this.containerElement!);
       this.#publishEvent('containerResized', this.containerElement!);
     });
     this.#resizeObserver?.observe(element);
     this.#resizeObserver?.observe(window.document.body);
     // Set up scroll listener
     window.addEventListener('scroll', () => {
+      this.#updateContainerBounds(this.containerElement!);
       this.#publishEvent('containerMoved', this.containerElement!);
     });
 
