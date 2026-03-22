@@ -1,5 +1,5 @@
 {
-  "name": "@snap-engine/base-svelte",
+  "name": "@snap-engine/asset-base-svelte",
   "version": "0.1.0",
   "type": "module",
   "svelte": "./src/index.ts",
@@ -13,6 +13,6 @@
     "./engine": "./src/engineState.svelte.ts"
   },
   "dependencies": {
-    "@snap-engine/base": "*"
+  "@snap-engine/asset-base": "*"
   }
 }

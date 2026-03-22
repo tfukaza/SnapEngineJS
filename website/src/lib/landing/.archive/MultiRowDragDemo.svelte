@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { Engine } from "@snap-engine/base-svelte";
+  import { Engine } from "@snap-engine/asset-base-svelte";
   import { Item, ItemContainer as Container } from "@snap-engine/drop-and-snap-svelte";
   import { debugState } from "$lib/landing/debugState.svelte";
 

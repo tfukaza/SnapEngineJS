@@ -7,8 +7,8 @@
   import Print from "./Print.svelte";
   import TextBox from "./TextBox.svelte";
   import { onMount, getContext } from "svelte";
-  import type { ObjectData } from "@snap-engine/base-svelte";
-  import { CameraControl } from "@snap-engine/base";
+  import type { ObjectData } from "@snap-engine/asset-base-svelte";
+  import { CameraControl } from "@snap-engine/asset-base";
 
   let engine: Engine = getContext("engine");
 

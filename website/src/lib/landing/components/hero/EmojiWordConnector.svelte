@@ -1,11 +1,11 @@
 <script lang="ts">
     import { onMount, tick } from "svelte";
-    import { Engine } from "@snap-engine/base-svelte";
+    import { Engine } from "@snap-engine/asset-base-svelte";
     import { Node } from "@snap-engine/snapline-svelte";
     import { NodeComponent } from "@snap-engine/snapline";
     import EmojiConnector from "./EmojiConnector.svelte";
     import EmojiLine from "./EmojiLine.svelte";
-    import { getEngine } from "@snap-engine/base-svelte";
+    import { getEngine } from "@snap-engine/asset-base-svelte";
     import { debugState } from "$lib/landing/debugState.svelte";
 
     export type EmojiWordConnection = {

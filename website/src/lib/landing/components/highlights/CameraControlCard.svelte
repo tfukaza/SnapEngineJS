@@ -1,6 +1,6 @@
 <script lang="ts">
-  import { Engine, Camera as CameraControlComponent } from "@snap-engine/base-svelte";
-  import type { CameraControl as CameraControlApi } from "@snap-engine/base";
+  import { Engine, Camera as CameraControlComponent } from "@snap-engine/asset-base-svelte";
+  import type { CameraControl as CameraControlApi } from "@snap-engine/asset-base";
   import HighlightCardShell from "./HighlightCardShell.svelte";
   import { debugState } from "$lib/landing/debugState.svelte";
   import { onMount } from "svelte";

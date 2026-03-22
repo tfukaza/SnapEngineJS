@@ -26,8 +26,8 @@ Asset packages extend SnapEngine with specialized functionality. Each follows a 
 
 ## Available Packages
 
-### 1. snapengine-asset-base/
-- **Packages:** `@snap-engine/base`, `@snap-engine/base-svelte`
+### 1. asset-base/
+- **Packages:** `@snap-engine/asset-base`, `@snap-engine/asset-base-svelte`
 - **Purpose:** Common base components (Engine, Camera, Background)
 - **Components:** Engine.svelte, Camera.svelte, Background.svelte
 - **Classes:** CameraControl, Background
@@ -110,7 +110,7 @@ Asset packages extend SnapEngine with specialized functionality. Each follows a 
 ```typescript
 // ✅ Correct - use package names
 import { Engine } from "@snap-engine/core";
-import { CameraControl } from "@snap-engine/base";
+import { CameraControl } from "@snap-engine/asset-base";
 
 // ❌ Wrong - no relative paths to src/
 import { Engine } from "../../../src/index";
@@ -154,9 +154,9 @@ Special case - Asset Base:
 ```
 @snap-engine/core
     ↓
-@snap-engine/base
+@snap-engine/asset-base
     ↓
-@snap-engine/base-svelte
+@snap-engine/asset-base-svelte
 ```
 
 ## Notes

@@ -10,7 +10,7 @@ SnapEngine is an interactivity engine for the web, structured as an npm workspac
 SnapEngineJS/
 ├── src/                    # Core engine source (snap-engine package)
 ├── assets/                 # Asset packages (npm workspaces)
-│   ├── snapengine-asset-base/
+│   ├── asset-base/
 │   ├── drop-and-snap/
 │   ├── snapline/
 │   └── snapzap/
@@ -48,10 +48,10 @@ Organized as npm workspaces following a consistent pattern:
 - `react/` - React component wrappers (future)
 
 ### 1. SnapEngine Asset Base
-- **Packages:** `@snap-engine/base`, `@snap-engine/base-svelte`
+- **Packages:** `@snap-engine/asset-base`, `@snap-engine/asset-base-svelte`
 - **Purpose:** Common components (Engine, Camera, Background)
 - **Status:** Active
-- See `assets/snapengine-asset-base/AGENTS.md`
+- See `assets/asset-base/AGENTS.md`
 
 ### 2. DropAndSnap
 - **Packages:** `@snap-engine/drop-and-snap`, `@snap-engine/drop-and-snap-svelte`
@@ -75,7 +75,7 @@ Organized as npm workspaces following a consistent pattern:
 All packages use the `@snap-engine` organization:
 
 - **Core engine:** `@snap-engine/core`
-- **Asset base:** `@snap-engine/base`, `@snap-engine/base-svelte`
+- **Asset base:** `@snap-engine/asset-base`, `@snap-engine/asset-base-svelte`
 - **Products:** `@snap-engine/{product}`, `@snap-engine/{product}-svelte`, `@snap-engine/{product}-react`
 
 ## Import Patterns
@@ -85,7 +85,7 @@ Asset packages must import from published package names:
 ```typescript
 // ✅ Correct
 import { Engine } from "@snap-engine/core";
-import { CameraControl } from "@snap-engine/base";
+import { CameraControl } from "@snap-engine/asset-base";
 
 // ❌ Wrong - no relative imports to src/
 import { Engine } from "../../../src/index";
@@ -97,7 +97,7 @@ import { Engine } from "../../../src/index";
 ```json
 {
   "workspaces": [
-    "assets/snapengine-asset-base/*",
+    "assets/asset-base/*",
     "assets/drop-and-snap/*",
     "assets/snapline/*",
     "assets/snapzap/*"

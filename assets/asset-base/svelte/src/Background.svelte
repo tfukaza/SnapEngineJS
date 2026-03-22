@@ -1,6 +1,6 @@
 <script lang="ts">
     import { onMount, setContext, getContext } from "svelte";
-    import { Background } from "@snap-engine/base";
+    import { Background } from "@snap-engine/asset-base";
     import type { Engine } from "@snap-engine/core";
     let background: HTMLDivElement | null = null;
 

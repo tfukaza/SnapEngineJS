@@ -16,8 +16,8 @@ export default defineConfig(({ command, mode }) => {
         "@snap-engine/core/debug": path.resolve(__dirname, "src/snapengine/debug.mjs"),
         "@snap-engine/core": path.resolve(__dirname, "src/snapengine/snapengine.mjs"),
         // Asset packages (raw source)
-        "@snap-engine/base-svelte": path.resolve(root, "assets/snapengine-asset-base/svelte/src/index.ts"),
-        "@snap-engine/base": path.resolve(root, "assets/snapengine-asset-base/core/src/index.ts"),
+  "@snap-engine/asset-base-svelte": path.resolve(root, "assets/asset-base/svelte/src/index.ts"),
+  "@snap-engine/asset-base": path.resolve(root, "assets/asset-base/core/src/index.ts"),
         "@snap-engine/drop-and-snap-svelte": path.resolve(root, "assets/drop-and-snap/svelte/src/index.ts"),
         "@snap-engine/drop-and-snap": path.resolve(root, "assets/drop-and-snap/core/src/index.ts"),
         "@snap-engine/snapline-svelte": path.resolve(root, "assets/snapline/svelte/src/index.ts"),

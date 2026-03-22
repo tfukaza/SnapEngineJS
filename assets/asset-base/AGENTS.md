@@ -6,7 +6,7 @@ Common foundational components used across all SnapEngine products. Essential bu
 
 ## Packages
 
-### @snap-engine/base
+### @snap-engine/asset-base
 **Location:** `core/src/`
 **Language:** TypeScript
 **Dependencies:** `@snap-engine/core`
@@ -16,10 +16,10 @@ Common foundational components used across all SnapEngine products. Essential bu
 - `CameraControlConfig` - Configuration type
 - `Background` - Infinite scrolling background grid
 
-### @snap-engine/base-svelte
+### @snap-engine/asset-base-svelte
 **Location:** `svelte/src/`
 **Language:** Svelte 5
-**Dependencies:** `@snap-engine/base`, `@snap-engine/core`
+**Dependencies:** `@snap-engine/asset-base`, `@snap-engine/core`
 
 **Exports:**
 - `Engine.svelte` - Main engine wrapper component
@@ -31,7 +31,7 @@ Common foundational components used across all SnapEngine products. Essential bu
 ## File Structure
 
 ```
-snapengine-asset-base/
+asset-base/
 ├── core/
 │   ├── package.json
 │   ├── tsconfig.json
@@ -117,7 +117,7 @@ snapengine-asset-base/
 
 ```svelte
 <script>
-  import { Engine, Camera, Background } from "@snap-engine/base-svelte";
+  import { Engine, Camera, Background } from "@snap-engine/asset-base-svelte";
 </script>
 
 <Engine id="app">
@@ -133,7 +133,7 @@ snapengine-asset-base/
 ```
 @snap-engine/core
     ↓
-@snap-engine/base
+@snap-engine/asset-base
     ↓
-@snap-engine/base-svelte
+@snap-engine/asset-base-svelte
 ```

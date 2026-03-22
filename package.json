@@ -4,7 +4,7 @@
   "description": "Interactivity engine for the web",
   "type": "module",
   "workspaces": [
-    "assets/snapengine-asset-base/*",
+    "assets/asset-base/*",
     "assets/drop-and-snap/*",
     "assets/snapline/*",
     "assets/snapzap/*"
