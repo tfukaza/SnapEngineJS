@@ -12,6 +12,13 @@
     "./line": "./src/line.ts",
     "./select": "./src/select.ts"
   },
+  "files": [
+    "src",
+    "README.md"
+  ],
+  "publishConfig": {
+    "access": "public"
+  },
   "keywords": [
     "node-graph",
     "ui",

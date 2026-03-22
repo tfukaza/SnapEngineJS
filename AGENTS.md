@@ -11,7 +11,7 @@ SnapEngineJS/
 ├── src/                    # Core engine source (snap-engine package)
 ├── assets/                 # Asset packages (npm workspaces)
 │   ├── asset-base/
-│   ├── drop-and-snap/
+│   ├── snapsort/
 │   ├── snapline/
 │   └── snapzap/
 ├── demo/                   # Demo applications
@@ -53,11 +53,11 @@ Organized as npm workspaces following a consistent pattern:
 - **Status:** Active
 - See `assets/asset-base/AGENTS.md`
 
-### 2. DropAndSnap
-- **Packages:** `@snap-engine/drop-and-snap`, `@snap-engine/drop-and-snap-svelte`
+### 2. SnapSort
+- **Packages:** `@snap-engine/snapsort`, `@snap-engine/snapsort-svelte`
 - **Purpose:** Drag-and-drop list reordering
 - **Status:** Active
-- See `assets/drop-and-snap/AGENTS.md`
+- See `assets/snapsort/AGENTS.md`
 
 ### 3. SnapLine
 - **Packages:** `@snap-engine/snapline`, `@snap-engine/snapline-svelte`
@@ -98,7 +98,7 @@ import { Engine } from "../../../src/index";
 {
   "workspaces": [
     "assets/asset-base/*",
-    "assets/drop-and-snap/*",
+    "assets/snapsort/*",
     "assets/snapline/*",
     "assets/snapzap/*"
   ]

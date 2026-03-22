@@ -12,7 +12,7 @@
   "author": "Tomoki Fukazawa",
   "license": "MIT",
   "dependencies": {
-    "@snap-engine/snapline": "*"
+    "@snap-engine/snapline": "^0.1.0"
   },
   "peerDependencies": {
     "react": "^18.0.0"

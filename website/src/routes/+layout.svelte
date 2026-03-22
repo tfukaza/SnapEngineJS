@@ -45,7 +45,7 @@
         <div class="footer-column">
           <a href="/#assets"><h4>Assets</h4></a>
           <span class="footer-link-disabled">SnapZap</span>
-          <a href="/dropandsnap">DropAndSnap</a>
+          <a href="/dropandsnap">SnapSort</a>
           <span class="footer-link-disabled">SnapLine</span>
         </div>
       </div>

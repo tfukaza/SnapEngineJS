@@ -7,7 +7,7 @@
   import SeqOneDropDemo from "./hero/SeqOneDropDemo.svelte";
   import SeqPanel from "./hero/SeqPanel.svelte";
   import { AnimationObject, SequenceObject } from "@snapline/animation";
-  import type { ItemContainer } from "@snap-engine/drop-and-snap";
+  import type { ItemContainer } from "@snap-engine/snapsort";
   import type { Engine } from "@snapline/index";
 
   const dragItems = [

@@ -1,7 +1,7 @@
 <script lang="ts">
   import { onMount } from "svelte";
   import { Engine } from "@snap-engine/asset-base-svelte";
-  import { Item, ItemContainer as Container } from "@snap-engine/drop-and-snap-svelte";
+  import { Item, ItemContainer as Container } from "@snap-engine/snapsort-svelte";
   import { GlobalManager } from "@snapline/index";
 
   // Set max simultaneous drags to 1 for this demo (runs after engines are created)

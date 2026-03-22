@@ -7,5 +7,21 @@
     ".": "./src/index.ts",
     "./camera": "./src/camera.ts",
     "./background": "./src/background.ts"
-  }
+  },
+  "description": "Shared foundational asset classes for SnapEngine",
+  "types": "./src/index.ts",
+  "files": [
+    "src",
+    "README.md"
+  ],
+  "publishConfig": {
+    "access": "public"
+  },
+  "keywords": [
+    "ui",
+    "camera",
+    "background"
+  ],
+  "author": "Tomoki Fukazawa",
+  "license": "MIT"
 }

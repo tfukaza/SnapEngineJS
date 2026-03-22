@@ -13,6 +13,26 @@
     "./engine": "./src/engineState.svelte.ts"
   },
   "dependencies": {
-  "@snap-engine/asset-base": "*"
+    "@snap-engine/asset-base": "^0.1.0"
+  },
+  "description": "Svelte wrappers for SnapEngine shared asset components",
+  "files": [
+    "src",
+    "README.md"
+  ],
+  "publishConfig": {
+    "access": "public"
+  },
+  "keywords": [
+    "snapengine",
+    "svelte",
+    "ui",
+    "camera",
+    "background"
+  ],
+  "author": "Tomoki Fukazawa",
+  "license": "MIT",
+  "peerDependencies": {
+    "svelte": "^5.0.0"
   }
 }

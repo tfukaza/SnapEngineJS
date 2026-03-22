@@ -1,6 +1,6 @@
 <script lang="ts">
-  import { ItemContainer } from "@snap-engine/drop-and-snap";
-  import type { ItemContainerConfig } from "@snap-engine/drop-and-snap";
+  import { ItemContainer } from "@snap-engine/snapsort";
+  import type { ItemContainerConfig } from "@snap-engine/snapsort";
 
   import { getContext, setContext, onDestroy } from "svelte";
   import type { Engine } from "@snap-engine/core";

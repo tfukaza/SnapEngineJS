@@ -22,7 +22,14 @@
   "author": "Tomoki Fukazawa",
   "license": "MIT",
   "dependencies": {
-    "@snap-engine/snapline": "*"
+    "@snap-engine/snapline": "^0.1.0"
+  },
+  "files": [
+    "src",
+    "README.md"
+  ],
+  "publishConfig": {
+    "access": "public"
   },
   "peerDependencies": {
     "svelte": "^5.0.0"

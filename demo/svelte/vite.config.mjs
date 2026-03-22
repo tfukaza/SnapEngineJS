@@ -18,8 +18,8 @@ export default defineConfig(({ command, mode }) => {
         // Asset packages (raw source)
   "@snap-engine/asset-base-svelte": path.resolve(root, "assets/asset-base/svelte/src/index.ts"),
   "@snap-engine/asset-base": path.resolve(root, "assets/asset-base/core/src/index.ts"),
-        "@snap-engine/drop-and-snap-svelte": path.resolve(root, "assets/drop-and-snap/svelte/src/index.ts"),
-        "@snap-engine/drop-and-snap": path.resolve(root, "assets/drop-and-snap/core/src/index.ts"),
+  "@snap-engine/snapsort-svelte": path.resolve(root, "assets/snapsort/svelte/src/index.ts"),
+  "@snap-engine/snapsort": path.resolve(root, "assets/snapsort/core/src/index.ts"),
         "@snap-engine/snapline-svelte": path.resolve(root, "assets/snapline/svelte/src/index.ts"),
         "@snap-engine/snapline": path.resolve(root, "assets/snapline/core/src/index.ts"),
       },

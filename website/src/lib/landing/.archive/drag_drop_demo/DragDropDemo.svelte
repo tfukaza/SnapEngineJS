@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { Item, ItemContainer as Container } from "@snap-engine/drop-and-snap-svelte";
+  import { Item, ItemContainer as Container } from "@snap-engine/snapsort-svelte";
   import "@demo-root/app.scss";
   import { getContext, onMount } from "svelte";
   import { CameraControl } from "@snap-engine/asset-base";

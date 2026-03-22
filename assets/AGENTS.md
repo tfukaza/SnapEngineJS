@@ -33,8 +33,8 @@ Asset packages extend SnapEngine with specialized functionality. Each follows a 
 - **Classes:** CameraControl, Background
 - **Status:** ✅ Active
 
-### 2. drop-and-snap/
-- **Packages:** `@snap-engine/drop-and-snap`, `@snap-engine/drop-and-snap-svelte`
+### 2. snapsort/
+- **Packages:** `@snap-engine/snapsort`, `@snap-engine/snapsort-svelte`
 - **Purpose:** Drag-and-drop list reordering
 - **Components:** ItemContainer, Item
 - **Classes:** ItemContainer, ItemObject

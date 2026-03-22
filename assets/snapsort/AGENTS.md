@@ -1,4 +1,4 @@
-# DropAndSnap - Drag and Drop System
+# SnapSort - Drag and Drop System
 
 ## Purpose
 
@@ -6,7 +6,7 @@ Drag-and-drop list reordering system with support for multiple containers and fl
 
 ## Packages
 
-### @snap-engine/drop-and-snap
+### @snap-engine/snapsort
 **Location:** `core/src/`
 **Language:** TypeScript
 **Dependencies:** `@snap-engine/core`
@@ -15,10 +15,10 @@ Drag-and-drop list reordering system with support for multiple containers and fl
 - `ItemContainer` - Container for draggable items
 - `ItemObject` - Individual draggable item
 
-### @snap-engine/drop-and-snap-svelte
+### @snap-engine/snapsort-svelte
 **Location:** `svelte/src/`
 **Language:** Svelte 5
-**Dependencies:** `@snap-engine/drop-and-snap`, `@snap-engine/core`
+**Dependencies:** `@snap-engine/snapsort`, `@snap-engine/core`
 
 **Exports:**
 - `ItemContainer.svelte` - Container component
@@ -27,7 +27,7 @@ Drag-and-drop list reordering system with support for multiple containers and fl
 ## File Structure
 
 ```
-drop-and-snap/
+snapsort/
 ├── core/
 │   ├── package.json
 │   ├── tsconfig.json
@@ -106,7 +106,7 @@ Items can only move between containers sharing the same `groupID`. This enables:
 ```
 @snap-engine/core
     ↓
-@snap-engine/drop-and-snap
+@snap-engine/snapsort
     ↓
-@snap-engine/drop-and-snap-svelte
+@snap-engine/snapsort-svelte
 ```
