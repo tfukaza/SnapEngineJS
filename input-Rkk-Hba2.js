@@ -1027,6 +1027,14 @@ class ElementObject extends BaseObject {
     this.requestWrite(false, transformCallback, "WRITE_2");
   }
 }
+var mouseButtonBitmap = /* @__PURE__ */ ((mouseButtonBitmap2) => {
+  mouseButtonBitmap2[mouseButtonBitmap2["LEFT"] = 1] = "LEFT";
+  mouseButtonBitmap2[mouseButtonBitmap2["MIDDLE"] = 2] = "MIDDLE";
+  mouseButtonBitmap2[mouseButtonBitmap2["RIGHT"] = 4] = "RIGHT";
+  mouseButtonBitmap2[mouseButtonBitmap2["BACK"] = 8] = "BACK";
+  mouseButtonBitmap2[mouseButtonBitmap2["FORWARD"] = 16] = "FORWARD";
+  return mouseButtonBitmap2;
+})(mouseButtonBitmap || {});
 const GLOBAL_GID = "global";
 class InputControl {
   constructor(engine, isGlobal = true, ownerGID = null) {
@@ -1159,6 +1167,9 @@ class InputControl {
     var _a, _b, _c, _d, _e;
     const isWithinEngine = __privateMethod(this, _InputControl_instances, isCoordinateWithinEngine_fn).call(this, e.clientX, e.clientY);
     if (!isWithinEngine) {
+      return;
+    }
+    if (!__privateMethod(this, _InputControl_instances, isEventWithinEngine_fn).call(this, e.target)) {
       return;
     }
     e.preventDefault();
@@ -1346,9 +1357,6 @@ class InputControl {
       const pointer_0 = pointerList[i];
       const pointer_1 = pointerList[i + 1];
       const gestureKey = `${pointer_0.id}-${pointer_1.id}`;
-      const startMiddleX = (pointer_0.startX + pointer_1.startX) / 2;
-      const startMiddleY = (pointer_0.startY + pointer_1.startY) / 2;
-      this.getCoordinates(startMiddleX, startMiddleY);
       const startDistance = Math.sqrt(
         Math.pow(pointer_0.startX - pointer_1.startX, 2) + Math.pow(pointer_0.startY - pointer_1.startY, 2)
       );
@@ -1420,6 +1428,14 @@ isPointerTracked_fn = function(pointerId) {
 isEventWithinEngine_fn = function(target) {
   var _a;
   const container = (_a = this.engine) == null ? void 0 : _a.containerElement;
+  if (container == null && this._isGlobal && this.global) {
+    for (const engine of this.global.engines) {
+      if (engine.containerElement && target instanceof Node && engine.containerElement.contains(target)) {
+        return true;
+      }
+    }
+    return this.global.engines.size === 0;
+  }
   if (container == null) {
     return true;
   }
@@ -1431,6 +1447,19 @@ isEventWithinEngine_fn = function(target) {
 isCoordinateWithinEngine_fn = function(screenX, screenY) {
   var _a;
   const rect = (_a = this.engine) == null ? void 0 : _a.containerBounds;
+  if (rect == null && this._isGlobal && this.global) {
+    for (const engine of this.global.engines) {
+      const bounds = engine.containerBounds;
+      if (bounds && screenX >= bounds.left && screenX <= bounds.right && screenY >= bounds.top && screenY <= bounds.bottom) {
+        return true;
+      }
+    }
+    return false;
+  }
+  if (rect == null) {
+    console.warn("Engine container bounds not found. Coordinate-based event handling may not work correctly.");
+    return false;
+  }
   return screenX >= rect.left && screenX <= rect.right && screenY >= rect.top && screenY <= rect.bottom;
 };
 shouldHandlePointerEvent_fn = function(event, options = {}) {
@@ -1735,5 +1764,6 @@ export {
   InputControl as I,
   EventProxyFactory as a,
   detachAnimationFromOwner as d,
-  getDomProperty as g
+  getDomProperty as g,
+  mouseButtonBitmap as m
 };
