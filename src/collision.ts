@@ -68,8 +68,7 @@ class Collider {
   _element: HTMLElement | null;
   inputEngine: InputControl;
 
-  transform: ColliderProperty;
-  // local: ColliderProperty;
+  local: ColliderProperty;
 
   event: EventCallback;
 
@@ -88,18 +87,12 @@ class Collider {
     this.type = type;
     this.uuid = Symbol();
     this._element = null;
-    this.transform = {
+    this.local = {
       x: localX,
       y: localY,
       width: 0,
       height: 0,
     };
-    // this.local = {
-    //   x: localX,
-    //   y: localY,
-    //   width: 0,
-    //   height: 0,
-    // };
     this.event = new EventCallback(this.parent);
     this._iterationCollisions = new Set();
     this._currentCollisions = new Set();
@@ -109,24 +102,24 @@ class Collider {
 
   get worldPosition(): [number, number] {
     return [
-      this.parent.transform.x + this.transform.x,
-      this.parent.transform.y + this.transform.y,
+      this.parent.transform.x + this.local.x,
+      this.parent.transform.y + this.local.y,
     ];
   }
 
   set worldPosition([x, y]: [number, number]) {
-    this.transform.x = x - this.parent.transform.x;
-    this.transform.y = y - this.parent.transform.y;
+    this.local.x = x - this.parent.transform.x;
+    this.local.y = y - this.parent.transform.y;
   }
 
-  // get localPosition(): [number, number] {
-  //   return [this.local.x, this.local.y];
-  // }
+  get localPosition(): [number, number] {
+    return [this.local.x, this.local.y];
+  }
 
-  // set localPosition([x, y]: [number, number]) {
-  //   this.local.x = x;
-  //   this.local.y = y;
-  // }
+  set localPosition([x, y]: [number, number]) {
+    this.local.x = x;
+    this.local.y = y;
+  }
 
   set element(element: HTMLElement) {
     this._element = element;
@@ -143,10 +136,10 @@ class Collider {
       return;
     }
     const property = getDomProperty(this.parent.engine, this.element);
-    this.transform.x = property.x - this.parent.transform.x;
-    this.transform.y = property.y - this.parent.transform.y;
-    this.transform.width = property.width;
-    this.transform.height = property.height;
+    this.local.x = property.x - this.parent.transform.x;
+    this.local.y = property.y - this.parent.transform.y;
+    this.local.width = property.width;
+    this.local.height = property.height;
   }
 
   recalculate() {}
@@ -174,8 +167,8 @@ class RectCollider extends Collider {
     height: number,
   ) {
     super(engine, parent, "rect", localX, localY);
-    this.transform.width = width;
-    this.transform.height = height;
+    this.local.width = width;
+    this.local.height = height;
   }
 }
 
@@ -278,7 +271,7 @@ class CollisionEngine {
     });
     this.sortedXCoordinates.push({
       collider: object,
-      x: object.worldPosition[0] + (object.transform.width ?? 0),
+      x: object.worldPosition[0] + (object.local.width ?? 0),
       left: false,
     });
   }
@@ -308,7 +301,7 @@ class CollisionEngine {
         } else if (entry.collider.type === "rect") {
           entry.x =
             entry.collider.worldPosition[0] +
-            (entry.collider as RectCollider).transform.width;
+            (entry.collider as RectCollider).local.width;
         } else if (entry.collider.type === "point") {
           entry.x = entry.collider.worldPosition[0];
         }
@@ -427,8 +420,8 @@ class CollisionEngine {
     return (
       a.uuid !== b.uuid &&
       a.worldPosition[1] <
-        b.worldPosition[1] + (b as RectCollider).transform.height &&
-      a.worldPosition[1] + (a as RectCollider).transform.height >
+        b.worldPosition[1] + (b as RectCollider).local.height &&
+      a.worldPosition[1] + (a as RectCollider).local.height >
         b.worldPosition[1]
     );
   }
@@ -440,18 +433,18 @@ class CollisionEngine {
       rectX = rect.worldPosition[0];
     } else if (
       circle.worldPosition[0] >
-      rect.worldPosition[0] + rect.transform.width
+      rect.worldPosition[0] + rect.local.width
     ) {
-      rectX = rect.worldPosition[0] + rect.transform.width;
+      rectX = rect.worldPosition[0] + rect.local.width;
     }
 
     if (circle.worldPosition[1] < rect.worldPosition[1]) {
       rectY = rect.worldPosition[1];
     } else if (
       circle.worldPosition[1] >
-      rect.worldPosition[1] + rect.transform.height
+      rect.worldPosition[1] + rect.local.height
     ) {
-      rectY = rect.worldPosition[1] + rect.transform.height;
+      rectY = rect.worldPosition[1] + rect.local.height;
     }
 
     let distanceX = circle.worldPosition[0] - rectX;
@@ -463,9 +456,9 @@ class CollisionEngine {
   isRectPointIntersecting(rect: RectCollider, point: PointCollider) {
     return (
       point.worldPosition[0] >= rect.worldPosition[0] &&
-      point.worldPosition[0] <= rect.worldPosition[0] + rect.transform.width &&
+      point.worldPosition[0] <= rect.worldPosition[0] + rect.local.width &&
       point.worldPosition[1] >= rect.worldPosition[1] &&
-      point.worldPosition[1] <= rect.worldPosition[1] + rect.transform.height
+      point.worldPosition[1] <= rect.worldPosition[1] + rect.local.height
     );
   }
 

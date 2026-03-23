@@ -5,7 +5,7 @@ sectionTitle: SnapEngine
 sectionOrder: 1
 ---
 
-Every entity managed by an `Engine` inherits from `BaseObject`. 
+Every entity managed by an `Engine` inherits from `BaseObject`.
 This class does not have a visual representation itself, but provides the foundational functionality for all objects in the engine.
 <br/>
 
@@ -29,7 +29,7 @@ elemObj.element = document.getElementById("my-element");
 ```
 
 ### Object Hierarchy
-Every object can have a parent and multiple children, forming a hierarchical tree structure. 
+Every object can have a parent and multiple children, forming a hierarchical tree structure.
 To set the parent of an object, pass the parent as the second constructor argument:
 
 ```typescript
@@ -39,54 +39,54 @@ const childObj = new BaseObject(engine, parentObj);
 
 ### Transform Properties
 
-Every object also has built-in transform properties that allows you to specify it's position. 
+Every object has built-in transform properties that specify its position in world coordinates.
 ```typescript
-// Set the position of the object:
+// Set the world position of the object:
 obj.transform.x = 100;
 obj.transform.y = 200;
 // Or you can set using the shorthand:
 obj.worldPosition = [100, 200];
 ```
-> [!NOTE] 
-> Properties for scaling and rotation are currently being considered, but may not be implemented in the final release. 
+> [!NOTE]
+> Properties for scaling and rotation are currently being considered, but may not be implemented in the final release.
 
-The position is not in viewport coordinates, but rather in the world coordinate space of the engine. 
+The position is not in viewport coordinates, but rather in the world coordinate space of the engine.
 Details on world coordinates will be explained in the ["Camera Control" section](./04_camera), but for now just know that the world coordinate space essentially means position on screen.
 <br/>
 
-Even when an object has a parent, the position properties of the object are still in world coordinates, _not_ relative to the parent.
-To set positions relative to the parent, you can use the `localPosition` property:
+### Auto-sync Coordinate System
+
+SnapEngine uses a **reactive coordinate system** that automatically keeps world and local positions in sync. When you set an object's world position, its local position (relative to parent) is automatically computed, and vice versa.
 
 ```typescript
-// Set the local position of the object relative to its parent:
-obj.local.x = 50;
-obj.local.y = 50;
-// Or using the shorthand:
+// Setting world position automatically updates local position
+obj.worldPosition = [150, 250];
+console.log(obj.localPosition); // Automatically computed based on parent
+
+// Setting local position automatically updates world position
 obj.localPosition = [50, 50];
+console.log(obj.worldPosition); // Automatically computed: parent.world + local
 ```
 
-This concept may sound familiar, especially if you have experience with game engines or graphics programming.
-A key difference, however, is that unlike typical game engines, SnapEngine requires you to manually update the values of transform and local properties 
-when a child object is moved relative to its parent, by calling helper methods like `calculateLocalFromTransform()`:
+When a parent moves, all children's world positions cascade automatically while preserving their local offsets:
 
 ```typescript
-obj.worldPosition = [150, 250]; // Move object in world space
-obj.calculateLocalFromTransform(); // Update local position based on new world position and world position of parent
+const parent = new BaseObject(engine);
+const child = new BaseObject(engine, parent);
+child.localPosition = [50, 50];
+
+parent.worldPosition = [100, 100];
+console.log(child.worldPosition); // [150, 150] - automatically updated
+console.log(child.localPosition); // [50, 50] - preserved
 ```
 
-This is representative of a general design philosophy in SnapEngine: **Be explicit about when to set, get or recalculate transforms and other spatial properties.** 
-Why? Because unlike typical game engines where we have full control over the position of objects, in the DOM system we are at the mercy of the browser's layout engine. 
-In addition to our own code, events like window resizing, CSS changes, or possibly even browser plugins can affect the layout of our objects unexpectedly. 
-This necessitates reading from the DOM constantly to maintain up-to-date positions of all objects, but in browsers, DOM reads are expensive.
-Instead, the engine must be very selective about when it reads or updates transform properties to avoid unnecessary performance hits.
-Similarly, we also want to avoid updating the position of child elements automatically when the parent moves, since otherwise
-we might trigger unexpected writes to the DOM, which can also be expensive.
-<br/>
+If an object has no parent, its local and world positions are identical.
 
-On the note of being different than typical game engines, **the transform properties of objects are not automatically applied to the actual DOM element of the object** - 
+For `ElementObject` instances that need to read their position from the DOM, use `calculateLocalFromDom()` to compute local offsets based on DOM-reported positions:
+
+```typescript
+elemObj.calculateLocalFromDom("READ_1"); // Sets local based on DOM positions, auto-syncs world
+```
+
+On the note of being different than typical game engines, **the transform properties of objects are not automatically applied to the actual DOM element of the object** -
 this must be done explicitly as well. We will cover how to do this in the ["Render Queues" section](./03_rendering).
-
-
-
-
-

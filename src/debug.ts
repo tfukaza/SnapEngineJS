@@ -219,8 +219,8 @@ export class DebugRenderer implements DebugRendererInterface {
       this.debugCtx.lineWidth = 1;
       const [colliderCameraX, colliderCameraY] =
         engine.camera?.getCameraFromWorld(
-          object.transform.x + collisionObject.transform.x,
-          object.transform.y + collisionObject.transform.y,
+          object.transform.x + collisionObject.local.x,
+          object.transform.y + collisionObject.local.y,
         ) ?? [0, 0];
       if (collisionObject.type == "circle") {
         this.debugCtx.arc(
@@ -235,8 +235,8 @@ export class DebugRenderer implements DebugRendererInterface {
         this.debugCtx.rect(
           colliderCameraX,
           colliderCameraY,
-          collisionObject.transform.width,
-          collisionObject.transform.height,
+          collisionObject.local.width,
+          collisionObject.local.height,
         );
         this.debugCtx.stroke();
       } else if (collisionObject.type == "point") {

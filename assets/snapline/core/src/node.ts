@@ -64,7 +64,6 @@ class NodeComponent extends ElementObject {
         for (const connector of Object.values(this._connectors)) {
           connector.readDom(false, "READ_1");
           connector.calculateLocalFromDom("READ_1");
-          connector.calculateTransformFromLocal();
         }
       });
       for (const line of [

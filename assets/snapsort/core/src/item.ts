@@ -180,7 +180,7 @@ export class ItemObject extends ElementObject {
         top: "0px",
         left: "0px",
       };
-      this.transformMode = "offset";
+      this.transformMode = "origin";
       this.transformOrigin = this.container as unknown as BaseObject; // TODO: Take padding into account
 
       this.writeDom();

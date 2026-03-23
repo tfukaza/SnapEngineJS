@@ -159,18 +159,18 @@ Note that `readDom()` and `getDomProperty()` manages the location of the element
 We will cover the difference later in the Camera documentation. 
 <br/>
 
-If you want to convert the screen space position to world space and save it to the object's `transform` properties, you can use `saveDomPropertyToTransform(stage)`:
+If you want to convert the screen space position to world space and save it to the object's `transform` properties, you can use `syncFromDom(stage)`:
 ```typescript
 object.queueUpdate("READ_1", () => {
     object.readDom(); // Reads DOM and caches to READ_1 slot
-    object.saveDomPropertyToTransform("READ_1"); // Converts screen position to world position and saves to transform properties
+    object.syncFromDom("READ_1"); // Converts screen position to world position and saves to transform properties
 });
 ```
 
-`readDom()` can also take an optional boolean parameter `accountTransform` (default: `false`). 
-When set to `true`, the method will factor in the object's current transform properties when reading the DOM element's position. 
+`readDom()` can also take an optional boolean parameter `subtractAppliedTransform` (default: `false`).
+When set to `true`, the method will factor in the object's current transform properties when reading the DOM element's position.
 In other words, it will read the DOM element's position as if any current transform properties have not been applied yet.
-This may be useful in situations where you want to get the "real" position of the element on screen, e.g. getting the original position of a 
+This may be useful in situations where you want to get the "real" position of the element on screen, e.g. getting the original position of a
 loading spinner that is being animated using CSS transforms.
 
 ```typescript
@@ -183,8 +183,8 @@ object.queueUpdate("READ_1", () => {
 
 ## Convenience Methods
 
-`requestRead(accountTransform?, saveTransform?, stage?)` essentially combines 
-`readDom(accountTransform)`, `saveDomPropertyToTransform()` and `queueUpdate()` into a single method call.
+`requestRead(subtractAppliedTransform?, syncToWorldPosition?, stage?, recursive?)` essentially combines
+`readDom(subtractAppliedTransform)`, `syncFromDom()` and `queueUpdate()` into a single method call.
 ```typescript
 let queueEntry = object.requestRead(true, true, "READ_1");
 ```

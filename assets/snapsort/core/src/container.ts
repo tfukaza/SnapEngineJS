@@ -376,7 +376,7 @@ export class ItemContainer extends ElementObject {
     this.queueUpdate("READ_1", () => {
       for (const item of this.#itemList) {
         item.readDom(true, "READ_1");
-        item.saveDomPropertyToTransform("READ_1");
+        item.syncFromDom("READ_1");
       }
     });
 
@@ -390,7 +390,7 @@ export class ItemContainer extends ElementObject {
     this.queueUpdate("READ_2", () => {
       for (const item of this.#itemList) {
         item.readDom(true, "READ_2");
-        item.saveDomPropertyToTransform("READ_2");
+        item.syncFromDom("READ_2");
       }
       caller.copyDomProperty("READ_1", "READ_2");
       this.reorderItemList();
@@ -415,7 +415,7 @@ export class ItemContainer extends ElementObject {
     this.queueUpdate("READ_3", () => {
       for (const item of this.#itemList) {
         item.readDom(true, "READ_3");
-        item.saveDomPropertyToTransform("READ_3");
+        item.syncFromDom("READ_3");
       }
       this.reorderItemList();
       this.setItemRows(caller);
@@ -444,7 +444,7 @@ export class ItemContainer extends ElementObject {
     this.queueUpdate("READ_2", () => {
       for (const item of this.#itemList) {
         item.readDom(false, "READ_2");
-        item.saveDomPropertyToTransform("READ_2");
+        item.syncFromDom("READ_2");
       }
       this.setItemRows(null);
       this.reorderItemList();
@@ -1173,10 +1173,10 @@ export class ItemContainer extends ElementObject {
    */
   captureState(stage: "READ_1" | "READ_2" | "READ_3" = "READ_1") {
     this.readDom(true, stage);
-    this.saveDomPropertyToTransform(stage);
+    this.syncFromDom(stage);
     for (const item of this.#itemList) {
       item.readDom(true, stage);
-      item.saveDomPropertyToTransform(stage);
+      item.syncFromDom(stage);
     }
   }
 

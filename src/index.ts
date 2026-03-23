@@ -1,5 +1,5 @@
 import { Engine } from "./engine";
-import { ElementObject, BaseObject } from "./object";
+import { ElementObject, BaseObject, ReactiveTransform } from "./object";
 import { GlobalManager } from "./global";
 import {
   pointerDownProp,
@@ -21,6 +21,7 @@ export {
   Engine,
   BaseObject,
   ElementObject,
+  ReactiveTransform,
   GlobalManager,
   Camera,
   getDomProperty,
