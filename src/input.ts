@@ -454,6 +454,22 @@ class InputControl {
 
     this.globalPointerDict[e.pointerId] = pointerData;
 
+    // Register the gesture and enforce drag limits BEFORE firing dragStart.
+    // This ensures that if enforceMaxDragLimit cancels an older drag (firing dragEnd),
+    // the old drag's cleanup completes before the new drag's setup begins.
+    if (this.globalGestureDict[e.pointerId]) {
+      this.globalGestureDict[e.pointerId].memberList.push(this);
+    } else {
+      this.globalGestureDict[e.pointerId] = {
+        type: "drag",
+        state: "drag",
+        memberList: [this, ...this.#dragMemberList],
+        initiatorID: this._isGlobal ? GLOBAL_GID : this._ownerGID ?? "",
+      };
+      // Enforce max simultaneous drags limit
+      this.globalInputEngine?.enforceMaxDragLimit();
+    }
+
     this.event.dragStart?.({
       gid: this._isGlobal ? GLOBAL_GID : this._ownerGID,
       pointerId: e.pointerId,
@@ -468,18 +484,6 @@ class InputControl {
       true,
       "pointerDown",
     );
-    if (this.globalGestureDict[e.pointerId]) {
-      this.globalGestureDict[e.pointerId].memberList.push(this);
-    } else {
-      this.globalGestureDict[e.pointerId] = {
-        type: "drag",
-        state: "drag",
-        memberList: [this, ...this.#dragMemberList],
-        initiatorID: this._isGlobal ? GLOBAL_GID : this._ownerGID ?? "",
-      };
-      // Enforce max simultaneous drags limit
-      this.globalInputEngine?.enforceMaxDragLimit();
-    }
   }
 
   /**

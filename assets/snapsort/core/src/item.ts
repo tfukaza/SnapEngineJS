@@ -23,6 +23,7 @@ export class ItemObject extends ElementObject {
   #metadata: Record<string, unknown> = {};
 
   #prevContainer: ItemContainer | null = null;
+  #pendingDrop: boolean = false;
 
   constructor(engine: any, parent: BaseObject | null) {
     super(engine, parent);
@@ -157,6 +158,21 @@ export class ItemObject extends ElementObject {
     // Disable camera control while dragging
     this.global.data.allowCameraControl = false;
 
+    // Pointer transfer: if a drop is pending (cursorUp just ran in the same frame),
+    // cancel the drop and continue dragging with the new pointer instead of
+    // running a full teardown + setup which would cause interleaved queue operations.
+    if (this.#pendingDrop) {
+      this.#pendingDrop = false;
+      // Item is still in drag state (absolute position, removed from list, ghost placed).
+      // Calculate the new mouse offset from the current world position so the item
+      // stays exactly where it is. The next cursorMove will use this offset to track
+      // the new pointer seamlessly.
+      this.container.dragItem = this;
+      this.#mouseOffsetX = prop.start.x - this.worldPosition[0];
+      this.#mouseOffsetY = prop.start.y - this.worldPosition[1];
+      return;
+    }
+
     this.queueUpdate("READ_1", () => {
       // Record the initial position of the container and its items
       this.container.captureState("READ_1");
@@ -275,72 +291,79 @@ export class ItemObject extends ElementObject {
   }
 
   cursorUp(_prop: dragEndProp) {
-    // Re-enable camera control after drag ends
-    this.global.data.allowCameraControl = true;
-
     if (this.container.dragItem !== this) {
       return;
     }
 
-    // TODO: A better way would be to get the last cached position
-    // and store it into READ_1
-    this.element!.style.position = "relative";
+    // Mark the drop as pending. If cursorDown fires for this item in the same frame
+    // (e.g., pointer transfer due to maxSimultaneousDrags), it will cancel this flag
+    // and the deferred cleanup below will be skipped, avoiding interleaved queue operations.
+    this.#pendingDrop = true;
 
-    this.container.dragItem = null;
-    this.transformMode = "none";
-    this.style = {
-      cursor: "grab",
-      position: "relative",
-      zIndex: "0",
-      top: "",
-      left: "",
-      width: "",
-      height: "",
-    };
-
-    const hasMoved =
-      Math.abs(_prop.end.screenX - _prop.start.screenX) > 1 ||
-      Math.abs(_prop.end.screenY - _prop.start.screenY) > 1;
-
-    if (!hasMoved) {
-      const action = this.onClickAction || this.container.onClickAction;
-      if (action && action.action === "moveTo") {
-        const targetContainer = this.global.data["dragAndDropContainers"]?.find(
-          (c: ItemContainer) => c.name === action.target,
-        );
-        if (targetContainer) {
-          this.moveToContainer(targetContainer);
-          return;
-        }
-      }
-    }
-
-
-    this.container.addItemAfter(this, this.orderedItemList[this.#dropIndex ?? 0]);
-    this.container.removeAllGhost();
-
+    // Capture values needed by the deferred cleanup
+    const dropProp = _prop;
+    const dropIndex = this.#dropIndex;
     const endX = this.worldPosition[0];
     const endY = this.worldPosition[1];
-    this.requestRead(true, true, "READ_1");
 
-    this.requestWrite(
-      true,
-      () => {
-        this.container.element?.insertBefore(
-          this.element as HTMLElement,
-          (this.#dropIndex ?? 0) >= this.orderedItemList.length - 1 ||
-            this.orderedItemList.length == 0 ||
-            this.orderedItemList[this.#dropIndex ?? 0] == null
-            ? (null as unknown as HTMLElement)
-            : this.orderedItemList[this.#dropIndex ?? 0].element,
-        );
-        this.writeDom();
-        this.writeTransform();
-      },
-      "WRITE_1",
-    );
+    // Defer all cleanup to WRITE_1 so it can be cancelled by a pointer transfer.
+    // In the normal case (no transfer), this runs in the same frame with no visual difference.
+    this.queueUpdate("WRITE_1", () => {
+      if (!this.#pendingDrop) return; // Cancelled by pointer transfer
+
+      // Re-enable camera control after drag ends
+      this.global.data.allowCameraControl = true;
+
+      this.element!.style.position = "relative";
+      this.container.dragItem = null;
+      this.transformMode = "none";
+      this.style = {
+        cursor: "grab",
+        position: "relative",
+        zIndex: "0",
+        top: "",
+        left: "",
+        width: "",
+        height: "",
+      };
+
+      const hasMoved =
+        Math.abs(dropProp.end.screenX - dropProp.start.screenX) > 1 ||
+        Math.abs(dropProp.end.screenY - dropProp.start.screenY) > 1;
+
+      if (!hasMoved) {
+        const action = this.onClickAction || this.container.onClickAction;
+        if (action && action.action === "moveTo") {
+          const targetContainer = this.global.data["dragAndDropContainers"]?.find(
+            (c: ItemContainer) => c.name === action.target,
+          );
+          if (targetContainer) {
+            this.#pendingDrop = false;
+            this.moveToContainer(targetContainer);
+            return;
+          }
+        }
+      }
+
+      this.container.addItemAfter(this, this.orderedItemList[dropIndex ?? 0]);
+      this.container.removeAllGhost();
+
+      this.container.element?.insertBefore(
+        this.element as HTMLElement,
+        (dropIndex ?? 0) >= this.orderedItemList.length - 1 ||
+          this.orderedItemList.length == 0 ||
+          this.orderedItemList[dropIndex ?? 0] == null
+          ? (null as unknown as HTMLElement)
+          : this.orderedItemList[dropIndex ?? 0].element,
+      );
+      this.writeDom();
+      this.writeTransform();
+    });
 
     this.container.queueUpdate("READ_2", () => {
+      if (!this.#pendingDrop) return; // Cancelled by pointer transfer
+      this.#pendingDrop = false;
+
       this.readDom(false, "READ_2");
       const animConfig = this.container.configuration.animation?.drop;
       if (animConfig) {
