@@ -237,6 +237,9 @@ export class ItemObject extends ElementObject {
     sourceContainer.dragItem = null;
 
     this.#applyIdleStyle();
+    // Clear the residual CSS transform from the drag so it doesn't interfere
+    // with the receiveItem animation or persist after it ends.
+    this.element!.style.transform = "";
 
     sourceContainer.sendItem(this);
     targetContainer.receiveItem(this);
@@ -384,7 +387,9 @@ export class ItemObject extends ElementObject {
     // Defer all cleanup so it can be cancelled by a pointer transfer.
     // In the normal case (no transfer), this runs in the same frame with no visual difference.
     this.#pendingDropEntries.push(this.queueUpdate("READ_1", () => {
-      this.readDom(true, "READ_1");
+      // Capture the visual world position (including CSS transform).
+      // receiveItem uses READ_1 as the click-to-move animation start point.
+      this.readDom(false, "READ_1");
     }));
 
     this.#pendingDropEntries.push(this.queueUpdate("WRITE_1", () => {
