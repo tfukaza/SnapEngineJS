@@ -153,6 +153,12 @@ export class queueEntry {
       this.callback = [callback.bind(this.object)];
     }
   }
+  /**
+   * Cancels this queue entry so its callbacks will not be executed.
+   */
+  cancel() {
+    this.callback = null;
+  }
 }
 
 export interface frameStats {

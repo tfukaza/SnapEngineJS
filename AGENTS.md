@@ -178,6 +178,18 @@ npm test
 5. Update root package.json workspaces (if needed)
 6. Run `npm install`
 
+## Coding Conventions
+
+// Comments: Use single-line `//` comments. Only use `/** */` for JSDoc function documentation.
+
+// Privacy: Use `#` (JS private class fields) for private fields and methods, not the `private` keyword.
+
+// Naming: camelCase for all variables, functions, methods, and properties.
+
+// API style: Prefer property-style access (getters/setters) over explicit get/set methods.
+// Example: `obj.worldPosition = [x, y]` not `obj.setWorldPosition(x, y)`.
+// This keeps the API minimal and clean-looking.
+
 ## Key Principles
 
 - **Separation:** Core TypeScript logic separate from framework wrappers
