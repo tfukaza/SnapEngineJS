@@ -107,15 +107,9 @@ export class ItemObject extends ElementObject {
   debug_all_items() {
     for (const item of this.container.itemList ?? []) {
       const prop1 = item.getDomProperty("READ_1");
-      item.addDebugRect(
-        prop1.x + prop1.width / 2 - 4,
-        prop1.y + prop1.height / 2 - 4,
-        8,
-        8,
-        "orange",
-        true,
-        `center-read1-${item.gid}`
-      );
+      const cx = prop1.x + prop1.width / 2;
+      const cy = prop1.y + prop1.height / 2;
+      item.addDebugCircle(cx, cy, 4, "rgba(255, 165, 0, 0.6)", true, `center-read1-${item.gid}`);
     }
   }
 
@@ -323,6 +317,9 @@ export class ItemObject extends ElementObject {
     this.#containerObject.dragItem = null;
     this.#containerObject = newContainer;
 
+    // Capture fresh positions for the target container's items so that
+    // the drop index calculation uses accurate layout data.
+    this.#containerObject.captureState(stage);
     this.#containerObject.setItemRows(this);
     this.#containerObject.dragItem = this;
     this.transformOrigin = this.#containerObject as unknown as BaseObject;

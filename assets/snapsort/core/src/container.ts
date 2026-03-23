@@ -33,7 +33,7 @@ export class ItemContainer extends ElementObject {
   #itemRows: ItemObject[][] = [];
   #dragItem: ItemObject | null = null;
   #spacerDomElement: HTMLElement | null = null;
-  #spacerIndex: number = 0;
+  #spacerIndex: number = -1;
   #config: ItemContainerConfig;
   #lastClosestRowIndex: number = -1;
 
@@ -76,8 +76,6 @@ export class ItemContainer extends ElementObject {
       };
     }
 
-    this.#spacerIndex = 0;
-
     this.style = {
       position: "relative",
     };
@@ -86,6 +84,15 @@ export class ItemContainer extends ElementObject {
       this.global.data["dragAndDropContainers"] = [];
     }
     this.global.data["dragAndDropContainers"].push(this);
+
+    // Capture initial positions once the DOM element is assigned so that
+    // cross-container drags work immediately after page load.
+    this.event.dom.onAssignDom = function (this: ItemContainer) {
+      this.queueUpdate("READ_1", () => {
+        this.captureState("READ_1");
+        this.setItemRows(null);
+      });
+    };
   }
 
   destroy() {
@@ -228,11 +235,19 @@ export class ItemContainer extends ElementObject {
         prop.y,
         prop.width,
         prop.height,
-        "blue",
+        "rgba(0, 120, 255, 0.6)",
         true,
         "closest-container",
         false,
-        4,
+        3,
+      );
+      this.addDebugText(
+        prop.x + 4,
+        prop.y + 14,
+        `target: ${closestContainer.name ?? "unnamed"}`,
+        "rgba(0, 120, 255, 0.9)",
+        true,
+        "closest-container-label",
       );
     }
 
@@ -711,28 +726,45 @@ export class ItemContainer extends ElementObject {
         : prev;
     });
 
-    // Draw a debug rectangle indicating the height of each row
+    // Draw a debug indicator for each row boundary
     for (const row of rowBoundaries) {
-      const color = row.index === closestRow.index ? "green" : "red";
+      const isActive = row.index === closestRow.index;
+      const color = isActive ? "rgba(0, 200, 0, 0.7)" : "rgba(200, 0, 0, 0.3)";
       if (isColumn) {
         this.addDebugRect(
           row.start,
-          10,
+          4,
           row.end - row.start,
-          10,
+          8,
           color,
           true,
           `row-boundary-${row.index}`,
         );
+        this.addDebugText(
+          row.start + 2,
+          24,
+          `row ${row.index}`,
+          color,
+          true,
+          `row-label-${row.index}`,
+        );
       } else {
         this.addDebugRect(
-          10,
+          4,
           row.start,
-          10,
+          8,
           row.end - row.start,
           color,
           true,
           `row-boundary-${row.index}`,
+        );
+        this.addDebugText(
+          16,
+          row.start + 14,
+          `row ${row.index}`,
+          color,
+          true,
+          `row-label-${row.index}`,
         );
       }
     }
@@ -768,11 +800,11 @@ export class ItemContainer extends ElementObject {
           minCross,
           closestRow.end - closestRow.start,
           maxCross - minCross,
-          "green",
+          "rgba(0, 200, 0, 0.4)",
           true,
           "closest-row-rect",
           false,
-          4,
+          3,
         );
       } else {
         this.addDebugRect(
@@ -780,11 +812,11 @@ export class ItemContainer extends ElementObject {
           closestRow.start,
           maxCross - minCross,
           closestRow.end - closestRow.start,
-          "green",
+          "rgba(0, 200, 0, 0.4)",
           true,
           "closest-row-rect",
           false,
-          4,
+          3,
         );
       }
     }
@@ -880,19 +912,25 @@ export class ItemContainer extends ElementObject {
     const thisWorldX = item.transform.x + readProp.width / 2;
     const thisWorldY = item.transform.y + readProp.height / 2;
 
-    this.addDebugRect(thisWorldX - 5, thisWorldY - 5, 10, 10, "purple", true, "item-center");
+    this.addDebugCircle(thisWorldX, thisWorldY, 6, "rgba(160, 0, 255, 0.8)", true, "item-center");
+    this.addDebugText(thisWorldX + 10, thisWorldY - 4, "drag center", "rgba(160, 0, 255, 0.8)", true, "item-center-label");
 
     if (this.#spacerDomElement) {
       const spacerProp = getDomProperty(this.engine, this.#spacerDomElement);
+      const ghostX = spacerProp.x + spacerProp.width / 2;
+      const ghostY = spacerProp.y + spacerProp.height / 2;
       this.addDebugRect(
-        spacerProp.x + spacerProp.width / 2 - 5,
-        spacerProp.y + spacerProp.height / 2 - 5,
-        10,
-        10,
-        "cyan",
+        spacerProp.x,
+        spacerProp.y,
+        spacerProp.width,
+        spacerProp.height,
+        "rgba(0, 210, 210, 0.4)",
         true,
-        "ghost-center"
+        "ghost-rect",
+        false,
+        2,
       );
+      this.addDebugText(spacerProp.x + 4, spacerProp.y + 14, "ghost", "rgba(0, 180, 180, 0.9)", true, "ghost-label");
     }
 
     const closestContainer = this.getClosestContainer(
@@ -901,6 +939,7 @@ export class ItemContainer extends ElementObject {
     );
 
     if (closestContainer && closestContainer !== this) {
+      this.addDebugText(4, 88, `handoff → ${closestContainer.name ?? "?"}`, "rgba(255, 200, 0, 0.9)", true, "handoff-label");
       item.handoffToContainer(closestContainer, stage);
       return closestContainer.determineDropIndex(item, stage);
     }
@@ -909,6 +948,8 @@ export class ItemContainer extends ElementObject {
     let dropIndex = item.dropIndex;
     let rowDropIndex = item.rowDropIndex;
 
+    // Clear debug markers for items in this container (but not other containers,
+    // so handoff debug info stays visible on the source container).
     for (const i of this.itemList) {
       i.clearAllDebugMarkers();
     }
@@ -917,6 +958,14 @@ export class ItemContainer extends ElementObject {
     const isColumn = this.direction === "column";
     const primaryPos = isColumn ? thisWorldX : thisWorldY;
     const secondaryPos = isColumn ? thisWorldY : thisWorldX;
+
+    // Draw a line showing the secondaryPos used for insert/slide decisions
+    const containerProp = this.getDomProperty(stage);
+    if (isColumn) {
+      this.addDebugLine(containerProp.x, secondaryPos, containerProp.x + containerProp.width, secondaryPos, "rgba(255, 255, 0, 0.5)", true, "secondary-pos-line", 1);
+    } else {
+      this.addDebugLine(secondaryPos, containerProp.y, secondaryPos, containerProp.y + containerProp.height, "rgba(255, 255, 0, 0.5)", true, "secondary-pos-line", 1);
+    }
 
     let {
       rowList,
@@ -947,22 +996,38 @@ export class ItemContainer extends ElementObject {
     let leftItemRight: number | undefined;
     let rightItemLeft: number | undefined;
 
+    this.addDebugText(4, 40, `${isNewRow ? "mode: INSERT" : "mode: SLIDE"}  stage: ${stage}  secPos: ${Math.round(secondaryPos)}`, "rgba(255, 255, 255, 0.8)", true, "drop-mode");
+
     if (isNewRow && this.#itemList.length > 0) {
-      // Gap Insertion Logic
+      // Gap Insertion Logic — used when entering a new row or container
       const rowItems = rowList[closestRowIndex];
-      // print the bounds of each item in the row as a string to the console
       let insertIndex = 0;
-      for (const rowItem of rowItems) {
+      for (let i = 0; i < rowItems.length; i++) {
+        const rowItem = rowItems[i];
         const prop = rowItem.getDomProperty(stage);
         const center = isColumn
         ? (rowItem.transform.y ?? 0) + prop.height / 2
         : (rowItem.transform.x ?? 0) + prop.width / 2;
+
+        // Visualize each item's center and the comparison against secondaryPos
+        const passed = secondaryPos >= center;
+        const markerColor = passed ? "rgba(0, 200, 0, 0.6)" : "rgba(200, 0, 0, 0.6)";
+        if (isColumn) {
+          rowItem.addDebugLine(rowItem.transform.x, center, rowItem.transform.x + prop.width, center, markerColor, true, `insert-center-${i}`, 2);
+          rowItem.addDebugText(rowItem.transform.x + prop.width + 4, center + 4, `[${i}] c=${Math.round(center)} ${passed ? "PASS" : "STOP"}`, markerColor, true, `insert-label-${i}`);
+        } else {
+          rowItem.addDebugLine(center, rowItem.transform.y, center, rowItem.transform.y + prop.height, markerColor, true, `insert-center-${i}`, 2);
+          rowItem.addDebugText(center + 4, rowItem.transform.y - 4, `[${i}] c=${Math.round(center)} ${passed ? "PASS" : "STOP"}`, markerColor, true, `insert-label-${i}`);
+        }
 
         if (secondaryPos < center) {
           break;
         }
         insertIndex++;
       }
+
+      // Show the resulting insert index
+      this.addDebugText(4, 56, `insertIdx: ${insertIndex} / ${rowItems.length}  items: ${this.#itemList.length}`, "rgba(255, 255, 255, 0.8)", true, "insert-index");
 
       rowDropIndex = insertIndex;
 
@@ -986,119 +1051,41 @@ export class ItemContainer extends ElementObject {
         this.findClosestItems(rowList[closestRowIndex], secondaryPos));
     }
 
-    // Draw a tall vertical line to indicate the left border of the item
+    // Visualize the neighboring items and their drop thresholds
     if (leftItem) {
-      const leftItemSize = isColumn
-        ? leftItem.getDomProperty(stage).height
-        : leftItem.getDomProperty(stage).width;
+      const leftProp = leftItem.getDomProperty(stage);
+      const leftItemSize = isColumn ? leftProp.height : leftProp.width;
       const leftBuffer = leftItemSize * 0.25;
       if (isColumn) {
-        leftItem.addDebugRect(
-          leftItem.transform.x,
-          leftItemRight ?? 0,
-          leftItem.getDomProperty(stage).width,
-          2,
-          "red",
-          true,
-          `leftItem-${leftItem.gid}`,
-        );
-        leftItem.addDebugRect(
-          leftItem.transform.x,
-          (leftItemRight ?? 0) - leftItemSize / 2 + leftBuffer,
-          leftItem.getDomProperty(stage).width,
-          2,
-          "orange",
-          true,
-          `leftItem-buffer-${leftItem.gid}`,
-        );
+        leftItem.addDebugRect(leftItem.transform.x, leftItemRight ?? 0, leftProp.width, 2, "rgba(255, 80, 80, 0.7)", true, `leftItem-${leftItem.gid}`);
+        leftItem.addDebugRect(leftItem.transform.x, (leftItemRight ?? 0) - leftItemSize / 2 + leftBuffer, leftProp.width, 2, "rgba(255, 165, 0, 0.7)", true, `leftItem-buffer-${leftItem.gid}`);
+        leftItem.addDebugText(leftItem.transform.x + 4, (leftItemRight ?? 0) - leftItemSize / 2 + leftBuffer - 4, "threshold", "rgba(255, 165, 0, 0.7)", true, `leftItem-label-${leftItem.gid}`);
       } else {
-        leftItem.addDebugRect(
-          leftItemRight ?? 0,
-          leftItem.transform.y,
-          2,
-          leftItem.getDomProperty(stage).height,
-          "red",
-          true,
-          `leftItem-${leftItem.gid}`,
-        );
-        leftItem.addDebugRect(
-          (leftItemRight ?? 0) - leftItemSize / 2 + leftBuffer,
-          leftItem.transform.y,
-          2,
-          leftItem.getDomProperty(stage).height,
-          "orange",
-          true,
-          `leftItem-buffer-${leftItem.gid}`,
-        );
+        leftItem.addDebugRect(leftItemRight ?? 0, leftItem.transform.y, 2, leftProp.height, "rgba(255, 80, 80, 0.7)", true, `leftItem-${leftItem.gid}`);
+        leftItem.addDebugRect((leftItemRight ?? 0) - leftItemSize / 2 + leftBuffer, leftItem.transform.y, 2, leftProp.height, "rgba(255, 165, 0, 0.7)", true, `leftItem-buffer-${leftItem.gid}`);
+        leftItem.addDebugText((leftItemRight ?? 0) - leftItemSize / 2 + leftBuffer + 4, leftItem.transform.y + 14, "threshold", "rgba(255, 165, 0, 0.7)", true, `leftItem-label-${leftItem.gid}`);
       }
     }
-
     if (rightItem) {
-      const rightItemSize = isColumn
-        ? rightItem.getDomProperty(stage).height
-        : rightItem.getDomProperty(stage).width;
+      const rightProp = rightItem.getDomProperty(stage);
+      const rightItemSize = isColumn ? rightProp.height : rightProp.width;
       const rightBuffer = rightItemSize * 0.25;
       if (isColumn) {
-        rightItem.addDebugRect(
-          rightItem.transform.x,
-          rightItemLeft ?? 0,
-          rightItem.getDomProperty(stage).width,
-          2,
-          "red",
-          true,
-          `rightItem-${rightItem.gid}`,
-        );
-        rightItem.addDebugRect(
-          rightItem.transform.x,
-          (rightItemLeft ?? 0) + rightItemSize / 2 - rightBuffer,
-          rightItem.getDomProperty(stage).width,
-          2,
-          "orange",
-          true,
-          `rightItem-buffer-${rightItem.gid}`,
-        );
+        rightItem.addDebugRect(rightItem.transform.x, rightItemLeft ?? 0, rightProp.width, 2, "rgba(255, 80, 80, 0.7)", true, `rightItem-${rightItem.gid}`);
+        rightItem.addDebugRect(rightItem.transform.x, (rightItemLeft ?? 0) + rightItemSize / 2 - rightBuffer, rightProp.width, 2, "rgba(255, 165, 0, 0.7)", true, `rightItem-buffer-${rightItem.gid}`);
+        rightItem.addDebugText(rightItem.transform.x + 4, (rightItemLeft ?? 0) + rightItemSize / 2 - rightBuffer - 4, "threshold", "rgba(255, 165, 0, 0.7)", true, `rightItem-label-${rightItem.gid}`);
       } else {
-        rightItem.addDebugRect(
-          rightItemLeft ?? 0,
-          rightItem.transform.y,
-          2,
-          rightItem.getDomProperty(stage).height,
-          "red",
-          true,
-          `rightItem-${rightItem.gid}`,
-        );
-        rightItem.addDebugRect(
-          (rightItemLeft ?? 0) + rightItemSize / 2 - rightBuffer,
-          rightItem.transform.y,
-          2,
-          rightItem.getDomProperty(stage).height,
-          "orange",
-          true,
-          `rightItem-buffer-${rightItem.gid}`,
-        );
+        rightItem.addDebugRect(rightItemLeft ?? 0, rightItem.transform.y, 2, rightProp.height, "rgba(255, 80, 80, 0.7)", true, `rightItem-${rightItem.gid}`);
+        rightItem.addDebugRect((rightItemLeft ?? 0) + rightItemSize / 2 - rightBuffer, rightItem.transform.y, 2, rightProp.height, "rgba(255, 165, 0, 0.7)", true, `rightItem-buffer-${rightItem.gid}`);
+        rightItem.addDebugText((rightItemLeft ?? 0) + rightItemSize / 2 - rightBuffer + 4, rightItem.transform.y + 14, "threshold", "rgba(255, 165, 0, 0.7)", true, `rightItem-label-${rightItem.gid}`);
       }
     }
 
+    // Crosshair line showing the dragged item's secondary axis position
     if (isColumn) {
-      this.addDebugRect(
-        item.transform.x,
-        thisWorldY,
-        item.getDomProperty(stage).width,
-        2,
-        "blue",
-        true,
-        `thisItem-${item.gid}`,
-      );
+      this.addDebugRect(item.transform.x, thisWorldY, item.getDomProperty(stage).width, 1, "rgba(0, 120, 255, 0.5)", true, `thisItem-${item.gid}`);
     } else {
-      this.addDebugRect(
-        thisWorldX,
-        item.transform.y,
-        2,
-        item.getDomProperty(stage).height,
-        "blue",
-        true,
-        `thisItem-${item.gid}`,
-      );
+      this.addDebugRect(thisWorldX, item.transform.y, 1, item.getDomProperty(stage).height, "rgba(0, 120, 255, 0.5)", true, `thisItem-${item.gid}`);
     }
 
     if (!isNewRow) {
@@ -1157,6 +1144,8 @@ export class ItemContainer extends ElementObject {
     } else {
       dropIndex = cumulativeLength + rowDropIndex;
     }
+
+    this.addDebugText(4, 72, `drop: ${dropIndex}  rowDrop: ${rowDropIndex}  row: ${closestRowIndex}`, "rgba(255, 255, 255, 0.8)", true, "drop-result");
 
     return {
       dropIndex,

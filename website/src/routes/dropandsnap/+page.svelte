@@ -145,6 +145,12 @@
     }
   }
 
+  function handleKeydown(e: KeyboardEvent) {
+    if (e.key === "d" || e.key === "D") {
+      toggleDebug();
+    }
+  }
+
   function checkSentence() {
     if (!sentenceDropZone) return;
     const words = Array.from(
@@ -162,6 +168,8 @@
     }
   }
 </script>
+
+<svelte:window onkeydown={handleKeydown} />
 
 <section id="landing">
   <Engine id="dropandsnap-canvas" bind:this={canvasComponent} {debug}>
