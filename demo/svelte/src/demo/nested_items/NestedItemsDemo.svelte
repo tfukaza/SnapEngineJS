@@ -1,16 +1,61 @@
 <script lang="ts">
     import { Engine } from "@snap-engine/asset-base-svelte";
     import { Item, ItemContainer as Container } from "@snap-engine/snapsort-svelte";
+    import type { Engine as EngineClass } from "@snap-engine/core";
 
     let engineComponent: Engine | null = null;
+    let engineInstance: EngineClass | null = $state(null);
     let debugMode = $state(false);
+
+    const DEBUG_TAGS = [
+        { id: "grid", label: "Grid" },
+        { id: "hitboxes", label: "Hitboxes" },
+        { id: "dom-read-1", label: "DOM Read 1 (red)" },
+        { id: "dom-read-2", label: "DOM Read 2 (green)" },
+        { id: "dom-read-3", label: "DOM Read 3 (blue)" },
+        { id: "rows", label: "Rows" },
+        { id: "item-positions", label: "Item Positions" },
+        { id: "containers", label: "Containers" },
+        { id: "drop-index", label: "Drop Index" },
+        { id: "collisions", label: "Collisions" },
+        { id: "animations", label: "Animations" },
+    ] as const;
+
+    let enabledTags = $state<Record<string, boolean>>(
+        Object.fromEntries(DEBUG_TAGS.map(t => [t.id, true]))
+    );
+
+    function applyTagFilter() {
+        const renderer = engineInstance?.debugRenderer;
+        if (!renderer) return;
+        const allEnabled = DEBUG_TAGS.every(t => enabledTags[t.id]);
+        if (allEnabled) {
+            renderer.enabledTags = null;
+        } else {
+            renderer.enabledTags = new Set(
+                DEBUG_TAGS.filter(t => enabledTags[t.id]).map(t => t.id)
+            );
+        }
+    }
+
+    function onTagChange(id: string) {
+        enabledTags[id] = !enabledTags[id];
+        applyTagFilter();
+    }
+
+    function toggleAll(on: boolean) {
+        for (const tag of DEBUG_TAGS) {
+            enabledTags[tag.id] = on;
+        }
+        applyTagFilter();
+    }
 
     export function setDebug(enabled: boolean) {
         debugMode = enabled;
     }
 </script>
 
-<Engine id="nested-items-demo-canvas" debug={debugMode} bind:this={engineComponent}>
+<Engine id="nested-items-demo-canvas" debug={debugMode} bind:this={engineComponent} bind:engine={engineInstance}>
 <div class="demos-layout">
 
     <!-- Demo 1: Flat list (baseline — should work as before) -->
@@ -88,19 +133,19 @@
                 </Item>
                 <Container config={{ direction: "column", groupID: "layers" }} locked={false}>
                     <div class="group-label">Hero Section</div>
-                    <Item className="layer-item nested">
+                    <Item className="layer-item">
                         <div class="layer-row">
                             <span class="layer-icon">○</span>
                             <span class="layer-name">Avatar</span>
                         </div>
                     </Item>
-                    <Item className="layer-item nested">
+                    <Item className="layer-item">
                         <div class="layer-row">
                             <span class="layer-icon">T</span>
                             <span class="layer-name">Title</span>
                         </div>
                     </Item>
-                    <Item className="layer-item nested">
+                    <Item className="layer-item">
                         <div class="layer-row">
                             <span class="layer-icon">T</span>
                             <span class="layer-name">Subtitle</span>
@@ -125,6 +170,25 @@
 
 </div>
 </Engine>
+
+{#if debugMode}
+<div class="debug-sidebar">
+    <div class="debug-sidebar-header">
+        <h4>Debug Tags</h4>
+        <div class="debug-sidebar-actions">
+            <button onclick={() => toggleAll(true)}>All</button>
+            <button onclick={() => toggleAll(false)}>None</button>
+        </div>
+    </div>
+    {#each DEBUG_TAGS as tag}
+        <label class="debug-tag-item">
+            <input type="checkbox" checked={enabledTags[tag.id]} onchange={() => onTagChange(tag.id)} />
+            <span></span>
+            {tag.label}
+        </label>
+    {/each}
+</div>
+{/if}
 
 <style lang="scss">
     .demos-layout {
@@ -216,7 +280,6 @@
     }
 
     :global(.layer-item.nested) {
-        padding-left: 16px;
         opacity: 0.5;
     }
 
@@ -247,5 +310,63 @@
         text-transform: uppercase;
         color: var(--color-text-muted, #888);
         letter-spacing: 0.05em;
+    }
+
+    /* ---- Debug Sidebar ---- */
+
+    .debug-sidebar {
+        position: fixed;
+        top: 60px;
+        right: 12px;
+        width: 200px;
+        background: var(--color-surface, #fff);
+        border: 1px solid var(--color-border, #ccc);
+        border-radius: 8px;
+        padding: 8px 12px;
+        z-index: 2000;
+        pointer-events: auto;
+        box-shadow: 0 2px 8px rgba(0, 0, 0, 0.15);
+        font-size: 0.8em;
+    }
+
+    .debug-sidebar-header {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        margin-bottom: 8px;
+        padding-bottom: 6px;
+        border-bottom: 1px solid var(--color-border, #eee);
+
+        h4 {
+            margin: 0;
+            font-size: 1em;
+        }
+    }
+
+    .debug-sidebar-actions {
+        display: flex;
+        gap: 4px;
+
+        button {
+            padding: 2px 8px;
+            font-size: 0.75em;
+            border: 1px solid var(--color-border, #ccc);
+            border-radius: 4px;
+            background: var(--color-background, #fafafa);
+            cursor: pointer;
+
+            &:hover {
+                background: var(--color-border, #eee);
+            }
+        }
+    }
+
+    .debug-tag-item {
+        display: flex;
+        align-items: center;
+        gap: 6px;
+        padding: 3px 0;
+        cursor: pointer;
+        user-select: none;
     }
 </style>

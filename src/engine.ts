@@ -87,19 +87,25 @@ class Engine {
   debugMarkerList: Record<
     string,
     {
-      type: "point" | "rect" | "circle" | "text";
+      type: "point" | "rect" | "circle" | "text" | "line";
       gid: string;
       id: string;
       persistent: boolean;
       color: string;
+      tag?: string;
       x: number;
       y: number;
+      x2?: number;
+      y2?: number;
       width?: number;
       height?: number;
       radius?: number;
       text?: string;
+      filled?: boolean;
+      lineWidth?: number;
     }
   > = {}; // Debug markers by ID
+  debugEnabledTags: Set<string> | null = null; // null = show all, Set = filter to these tags
   #debugRenderer: DebugRenderer | null = null;
 
   // Event subscribers - allows multiple listeners per event type
@@ -258,6 +264,10 @@ class Engine {
     this.#debugRenderer.enable(this);
   }
 
+  get debugRenderer(): DebugRenderer | null {
+    return this.#debugRenderer;
+  }
+
   /**
    * Disables and removes the debug visualization overlay.
    */
@@ -331,12 +341,20 @@ class Engine {
   }
 
   /**
-   * Internal method to process post-render tasks (collisions, debug).
+   * Internal method to run collision detection.
+   * Called by GlobalManager's render loop before READ_1.
+   * @internal
+   */
+  _processCollisions(): void {
+    this.collisionEngine?.detectCollisions();
+  }
+
+  /**
+   * Internal method to process post-render tasks (debug).
    * Called by GlobalManager's render loop after all stages complete.
    * @internal
    */
   _processPostRender(timestamp: number): void {
-    this.collisionEngine?.detectCollisions();
     const stats: frameStats = { timestamp };
     const localObjectTable =
       this.global!.getEngineObjectTable(this, false) ?? {};

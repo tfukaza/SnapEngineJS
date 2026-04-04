@@ -1,5 +1,5 @@
 import { BaseObject, getDomProperty } from "@snap-engine/core";
-import { ItemObject, ClickAction } from "./item";
+import { ItemObject, ClickAction, forEachInContainer } from "./item";
 export type { ClickAction } from "./item";
 import { AnimationObject } from "@snap-engine/core/animation";
 
@@ -28,10 +28,11 @@ export class ItemContainer extends ItemObject {
   #itemList: ItemObject[] = [];
   #itemRows: ItemObject[][] = [];
   #dragItem: ItemObject | null = null;
-  #spacerDomElement: HTMLElement | null = null;
+  #ghostDomElement: HTMLElement | null = null;
   #spacerIndex: number = -1;
   #config: ItemContainerConfig;
   #lastClosestRowIndex: number = -1;
+  #depth: number = 0;
 
   constructor(
     engine: any,
@@ -140,8 +141,8 @@ export class ItemContainer extends ItemObject {
     this.#spacerIndex = value;
   }
 
-  get spacerDomElement() {
-    return this.#spacerDomElement;
+  get ghostDomElement() {
+    return this.#ghostDomElement;
   }
 
   get itemList() {
@@ -180,7 +181,7 @@ export class ItemContainer extends ItemObject {
   }
 
   removeItem(item: ItemObject) {
-    const initialLength = this.#itemList.length;
+    // const initialLength = this.#itemList.length;
     this.#itemList = this.#itemList.filter((i) => i !== item);
   }
 
@@ -194,9 +195,10 @@ export class ItemContainer extends ItemObject {
    * @param worldY
    * @returns
    */
-  getClosestContainer(worldX: number, worldY: number): ItemContainer | null {
-    let closestContainer = null;
+  getClosestContainer(item: ItemObject, worldX: number, worldY: number): ItemContainer | null {
+    let closestContainer = this.rootContainer;
     let closestDistance = Infinity;
+    let maxDepth = -1;
 
     for (let c of this.global.data["dragAndDropContainers"] || []) {
       const container: ItemContainer = c as ItemContainer;
@@ -208,6 +210,24 @@ export class ItemContainer extends ItemObject {
       if (container === this.#dragItem) {
         continue;
       }
+
+      const itemPoint = item.centerPointCollider;
+      const containerBox = container.hitboxCollider;
+      if (!itemPoint || !containerBox) {
+        continue;
+      }
+      
+      // Only consider containers that the item overlaps with.
+      if (!itemPoint.isCollidingWith(containerBox)) {
+        continue;
+      }
+
+      if (container.#depth > maxDepth) {
+        closestContainer = container;
+        maxDepth = container.#depth;
+        continue;
+      }
+
       const property = container.getDomProperty("READ_1");
       const left = property.x;
       const right = property.x + property.width;
@@ -234,26 +254,29 @@ export class ItemContainer extends ItemObject {
       }
     }
 
-    if (closestContainer) {
-      const prop = closestContainer.getDomProperty("READ_1");
+    // Draw all containers in the group
+    for (let c of this.global.data["dragAndDropContainers"] || []) {
+      const container: ItemContainer = c as ItemContainer;
+      if (container.groupID !== this.#config.groupID) continue;
+      if (container === this.#dragItem) continue;
+      const cProp = container.getDomProperty("READ_1");
+      const isClosest = container === closestContainer;
       this.addDebugRect(
-        prop.x,
-        prop.y,
-        prop.width,
-        prop.height,
-        "rgba(0, 120, 255, 0.6)",
+        cProp.x, cProp.y, cProp.width, cProp.height,
+        isClosest ? "rgba(0, 120, 255, 0.6)" : "rgba(150, 150, 150, 0.3)",
         true,
-        "closest-container",
+        `container-${container.gid}`,
         false,
-        3,
+        isClosest ? 3 : 1,
+        "containers",
       );
       this.addDebugText(
-        prop.x + 4,
-        prop.y + 14,
-        `target: ${closestContainer.name ?? "unnamed"}`,
-        "rgba(0, 120, 255, 0.9)",
+        cProp.x + 4, cProp.y + 14,
+        `${isClosest ? "target: " : ""}${container.name ?? "unnamed"}`,
+        isClosest ? "rgba(0, 120, 255, 0.9)" : "rgba(150, 150, 150, 0.6)",
         true,
-        "closest-container-label",
+        `container-label-${container.gid}`,
+        "containers",
       );
     }
 
@@ -278,6 +301,20 @@ export class ItemContainer extends ItemObject {
     });
   }
 
+  setAllDepth(depth: number, root: ItemContainer | null = null) {
+    this.#depth = depth;
+    // The root is this container itself when at depth 0, otherwise the root passed down from above.
+    const effectiveRoot = depth === 0 ? this : root;
+    this.setRootContainer(effectiveRoot);
+    for (const item of this.#itemList) {
+      if (item instanceof ItemContainer) {
+        item.setAllDepth(depth + 1, effectiveRoot);
+      } else {
+        item.setRootContainer(effectiveRoot);
+      }
+    }
+  }
+
   /**
    * Set the item rows based on the document position of the items.
    * It assumes the latest DOM positions of the container and all items has already been saved.
@@ -286,6 +323,8 @@ export class ItemContainer extends ItemObject {
 
     if (this.container) {
       this.container.setItemRows(this);
+    } else {
+      this.setAllDepth(0);
     }
 
     let rowList: ItemObject[][] = [];
@@ -308,10 +347,13 @@ export class ItemContainer extends ItemObject {
     this.#itemRows = rowList;
   }
 
-  addGhostItem(caller: ItemObject, itemIndex: number | null) {
-    if (this.#spacerDomElement) {
-      this.#spacerDomElement.remove();
-      this.#spacerDomElement = null;
+  
+
+  updateGhostItem(caller: ItemObject, itemIndex: number | null) {
+    const root = (this.rootContainer ?? this) as ItemContainer;
+    if (root.rootHasGhostItem()) {
+      console.log("Removing existing ghost item before adding new one");
+      root.rootRemoveGhostItem();
     }
     if (itemIndex === null || itemIndex === -1) {
       return;
@@ -334,20 +376,68 @@ export class ItemContainer extends ItemObject {
       return;
     }
     this.element.insertBefore(tmpDomElement, item ? item.element : null);
-    this.#spacerDomElement = tmpDomElement;
+    this.#ghostDomElement = tmpDomElement;
     this.#spacerIndex = itemIndex;
     this.reorderItemList();
   }
 
   removeGhostItem() {
-    if (this.#spacerDomElement) {
-      this.#spacerDomElement.remove();
-      this.#spacerDomElement = null;
+    if (this.#ghostDomElement) {
+      this.#ghostDomElement.remove();
+      this.#ghostDomElement = null;
 
       if (this.engine && this.engine.debugMarkerList) {
         delete this.engine.debugMarkerList[`${this.gid}-ghost-center`];
       }
     }
+  }
+
+  // Recursively removes ghost DOM elements from this container and all nested child containers.
+  rootRemoveGhostItem() {
+    this.removeGhostItem();
+    for (const item of this.#itemList) {
+      if (item instanceof ItemContainer) {
+        item.rootRemoveGhostItem();
+      }
+    }
+  }
+
+  // Recursively reads and syncs DOM properties for all items in this container and nested child containers.
+  readAllItemsDom(accountTransform: boolean, stage: "READ_1" | "READ_2" | "READ_3") {
+    this.readDom(accountTransform, stage);
+    this.syncFromDom(stage);
+    for (const item of this.#itemList) {
+      item.readDom(accountTransform, stage);
+      item.syncFromDom(stage);
+      if (item instanceof ItemContainer) {
+        item.readAllItemsDom(accountTransform, stage);
+      }
+    }
+    // this.captureState(stage);
+    this.setItemRows(this);
+  }
+
+  // Recursively copies a DOM property from one stage to another for all items in this container and nested child containers.
+  copyAllItemsDomProperty(from: "READ_1" | "READ_2" | "READ_3", to: "READ_1" | "READ_2" | "READ_3") {
+    for (const item of this.#itemList) {
+      item.copyDomProperty(from, to);
+      if (item instanceof ItemContainer) {
+        item.copyAllItemsDomProperty(from, to);
+      }
+    }
+  }
+
+  // Returns true if this container or any nested child container has an active ghost DOM element.
+  rootHasGhostItem(): boolean {
+    if (this.#ghostDomElement !== null) {
+      return true;
+    }
+    for (const item of this.#itemList) {
+      if (item instanceof ItemContainer && item.rootHasGhostItem()) {
+        return true;
+      }
+    }
+    return false;
   }
 
   /**
@@ -359,28 +449,71 @@ export class ItemContainer extends ItemObject {
     }
     const animConfig = this.configuration.animation.reorder;
     for (const item of this.#itemList) {
-      const prevPos = item.getDomProperty(fromStage);
-      const currPos = item.getDomProperty(toStage);
-      const dx = prevPos.x - currPos.x;
-      const dy = prevPos.y - currPos.y;
+      const read1 = item.getDomProperty("READ_1");
+      const read2 = item.getDomProperty("READ_2");
+      const read3 = item.getDomProperty("READ_3");
+      // const prevX = item.animationStartX - item.container.animationStartX;
+      // const prevY = item.animationStartY - item.container.animationStartY;
+      // const currX = item.animationEndX - item.container.animationStartX;
+      // const currY = item.animationEndY - item.container.animationStartY;
+      // const dx = prevPos.screenX - currPos.screenX;
+      // const dy = prevPos.screenY - currPos.screenY;
 
-      // console.log(`Item ${item.gid}: dx=${dx}, dy=${dy}`);
+      // Calculate the offset between the previous and current position of the item
+      const dx = read1.x - read3.x;
+      const dy = read1.y - read3.y;
+      let offsetX = 0;
+      let offsetY = 0;
+
+      // Account for the case where the item is moving to a different container, 
+      // in which case read 1 and read 2 will contain the position relative to the old container, while read 3 is relative to the new container.
+      if (item.container) {
+        const containerRead1 = item.container.getDomProperty("READ_1");
+        // const containerRead2 = item.container.getDomProperty("READ_2");
+        const containerRead3 = item.container.getDomProperty("READ_3");
+        const containerDx = containerRead1.x - containerRead3.x;
+        const containerDy = containerRead1.y - containerRead3.y;
+        // const offsetDX = read2.x - read1.x;
+        // const offsetDY = read2.y - read1.y;
+        offsetX = -containerDx;
+        offsetY = -containerDy;
+        // console.log(`Item ${item.gid} is moving to a different container, applying offset: offsetX=${offsetX}, offsetY=${offsetY}`);
+      }
+
+      console.log(`Item ${item.gid}: dx=${dx + offsetX}, dy=${dy + offsetY}`);
 
       // Only animate if there's significant movement
-      if (Math.abs(dx) >= 0.5 || Math.abs(dy) >= 0.5) {
+      if (Math.abs(dx + offsetX) >= 0.5 || Math.abs(dy + offsetY) >= 0.5) {
+        // Debug: draw line from start to end of animation
+        const startX = read1.x + read1.width / 2;
+        const startY = read1.y + read1.height / 2;
+        const endX = read3.x + read3.width / 2;
+        const endY = read3.y + read3.height / 2;
+        item.addDebugLine(startX, startY, endX, endY, "rgba(255, 180, 0, 0.6)", true, `anim-reorder-${item.gid}`, 1, "animations");
+        item.addDebugCircle(startX, startY, 3, "rgba(255, 180, 0, 0.6)", true, `anim-start-${item.gid}`, "animations");
+        item.addDebugCircle(endX, endY, 3, "rgba(0, 200, 100, 0.6)", true, `anim-end-${item.gid}`, "animations");
+
+        const calculateDelta = (t: number) => {
+          const currentDx = (dx + offsetX) * (1 - t);
+          const currentDy = (dy + offsetY) * (1 - t);
+          return `translate3d(${currentDx}px, ${currentDy}px, 0px)`;
+        }
+
         const animation = new AnimationObject(
           null,
           {
             $t: [0, 1],
           },
           {
-            duration: animConfig.duration ?? 100,
+            duration: 1000,//animConfig.duration ?? 100,
             easing: animConfig.timing_function ?? "ease-out",
             tick: (vars) => {
               const t = vars.$t;
-              const currentDx = dx * (1 - t);
-              const currentDy = dy * (1 - t);
-              item.element!.style.transform = `translate3d(${currentDx}px, ${currentDy}px, 0px)`;
+              item.element!.style.transform = calculateDelta(t);
+            },
+            start: () => {
+              console.log(`Starting animation for item ${item.gid}`);
+              item.element!.style.transform = calculateDelta(1);
             },
             finish: () => {
               item.element!.style.transform = "";
@@ -391,69 +524,130 @@ export class ItemContainer extends ItemObject {
         item.addAnimation(animation);
         animation.play();
       }
+      // if (item instanceof ItemContainer) {
+      //   item.animateItems(fromStage, toStage);
+      // }
     }
   }
 
   addGhostBeforeItem(
     caller: ItemObject,
-    _differentRow: boolean,
+    // _differentRow: boolean,
+    differentContainer: boolean,
+    prevContainer: ItemContainer,
   ) {
+    const root = (this.rootContainer ?? this) as ItemContainer;
     // Read the DOM positions before updating the ghost
     this.queueUpdate("READ_1", () => {
-      for (const item of this.#itemList) {
-        item.readDom(true, "READ_1");
-        item.syncFromDom("READ_1");
-      }
+      // accountTransform is true so we can get the position of the item 
+      // regardless of the animations applied to it.
+      root.readAllItemsDom(true, "READ_1");
+      forEachInContainer(root, (item) => {
+        const itemProp = item.getDomProperty("READ_1");
+        const containerProp = item.container.getDomProperty("READ_1");
+        // item.initialWorldX = itemProp.x;
+        // item.initialWorldY = itemProp.y;
+        item.animationStartX = itemProp.x;
+        item.animationStartY = itemProp.y;
+        // item.animationStartX = 0;
+        // item.animationStartY = 0;
+        item.animationEndX = 0;
+        item.animationEndY = 0;
+      });
     });
 
     // Remove the ghost item
     this.queueUpdate("WRITE_1", () => {
-      this.removeGhostItem();
+      // this.removeGhostItem();
+      // root.rootRemoveGhostItem();
       // add ghost to the new position
-      this.addGhostItem(caller, caller.dropIndex ?? 0);
+      // caller.element!.style.transform = ""; // Reset any transform on the caller to get accurate measurements
+      // caller.element!.style.transformOrigin = ""; // Reset any transition on the caller to avoid animation when moving the DOM element
+      this.updateGhostItem(caller, caller.dropIndex ?? 0);
+      // Item DOM stays in root container throughout the drag — no DOM move needed here.
     });
     // Save the DOM positions after the ghost item is removed
     this.queueUpdate("READ_2", () => {
-      for (const item of this.#itemList) {
-        item.readDom(true, "READ_2");
-        item.syncFromDom("READ_2");
-      }
-      caller.copyDomProperty("READ_1", "READ_2");
+      root.readAllItemsDom(true, "READ_2");
+      // Copy the updated values to READ_1 so animation uses the correct positions. 
+      // caller.copyDomProperty("READ_2", "READ_1");
+      // root.copyAllItemsDomProperty("READ_2", "READ_1");
       this.reorderItemList();
       this.setItemRows(caller);
       this.updateItemIndexes();
 
-      const savedDropIndex = caller.dropIndex;
+      // const savedDropIndex = caller.dropIndex;
       // Determine where the caller should be dropped
+      const currentContainer = caller.container.gid;
       let {
         dropIndex,
         rowDropIndex,
         closestRowIndex: _closestRowIndex,
+        container: _dropContainer,
       } = this.determineDropIndex(caller, "READ_2");
+      // console.log(`Container changed from ${caller.container.name} to ${_dropContainer.name}, dropIndex: ${dropIndex}, rowDropIndex: ${rowDropIndex}, closestRowIndex: ${_closestRowIndex}`);
+      const differentContainer = currentContainer !== _dropContainer.gid;
 
       this.queueUpdate("WRITE_2", () => {
-        this.addGhostItem(caller, dropIndex);
+        _dropContainer.updateGhostItem(caller, dropIndex);
+        // If the caller is moving to a different container, 
+        // we need to move its DOM element immediately.
+        if (differentContainer) {
+          console.log(`Moving item ${caller.gid} from container ${caller.container.name} to container ${_dropContainer.name}`);
+            _dropContainer!.element?.appendChild(caller.element!);
+        }
         caller.dropIndex = dropIndex;
         caller.rowDropIndex = rowDropIndex;
       });
     });
     this.queueUpdate("READ_3", () => {
-      for (const item of this.#itemList) {
-        item.readDom(true, "READ_3");
-        item.syncFromDom("READ_3");
-      }
+      root.readAllItemsDom(true, "READ_3");
       this.reorderItemList();
       this.setItemRows(caller);
       this.updateItemIndexes();
+
+      forEachInContainer(root, (item) => {
+        // If the caller is dropped into a different container, 
+        // we need to recalculate the animation start positions 
+        // relative to the new container's position after the ghost has been moved.
+        // const itemProp = item.getDomProperty("READ_2");
+        // const containerProp = item.container.getDomProperty("READ_2");
+        // item.animationStartX = item.initialWorldX - containerProp.x;
+        // item.animationStartY = item.initialWorldY - containerProp.y;
+        const finalItemProp = item.getDomProperty("READ_3");
+        const finalContainerProp = item.container.getDomProperty("READ_3");
+        item.animationEndX = finalItemProp.x;
+        item.animationEndY = finalItemProp.y;  
+
+      });
+
+      // If a container that lost or received an item needs to be animated, 
+      // we must read from READ_2 which has the correct size and position 
+      // after the ghost has been moved. 
+      // prevContainer.copyDomProperty("READ_2", "READ_1");
       // Animate items from READ_1 to READ_3 positions
-      this.animateItems("READ_1", "READ_3");
-      for (const item of this.#itemList) {
-        item.copyDomProperty("READ_3", "READ_1");
-      }
+      // Only animate items in this hierarchy to avoid "nested" animations.
+      // prevContainer.animateItems("READ_1", "READ_3");
+      
+      this.queueUpdate("WRITE_3", () => {
+        root.animateItems("READ_1", "READ_3");
+        // prevContainer.animateItems("READ_1", "READ_3");
+        forEachInContainer(root, (item) => {
+          if (item instanceof ItemContainer) {
+            item.animateItems("READ_1", "READ_3");
+          }
+        });
+        root.copyAllItemsDomProperty("READ_3", "READ_1");
+        // If the caller is dropped into a different container, 
+        // update the transform of the item once again with the updated offsets.
+        caller.writeTransform();
+      });
     });
+
   }
 
   removeAllGhost(animate: boolean = false) {
+    const root = (this.rootContainer ?? this) as ItemContainer;
     // Capture positions before ghost removal for animation
     if (animate) {
       this.queueUpdate("READ_1", () => {
@@ -467,10 +661,7 @@ export class ItemContainer extends ItemObject {
       this.removeGhostItem();
     });
     this.queueUpdate("READ_2", () => {
-      for (const item of this.#itemList) {
-        item.readDom(false, "READ_2");
-        item.syncFromDom("READ_2");
-      }
+      root.readAllItemsDom(false, "READ_2");
       this.setItemRows(null);
       this.reorderItemList();
 
@@ -485,6 +676,10 @@ export class ItemContainer extends ItemObject {
             const dy = prev.y - curr.y;
 
             if (Math.abs(dx) >= 0.5 || Math.abs(dy) >= 0.5) {
+              item.addDebugLine(prev.x + prev.width / 2, prev.y + prev.height / 2, curr.x + curr.width / 2, curr.y + curr.height / 2, "rgba(255, 180, 0, 0.6)", true, `anim-ghost-${item.gid}`, 1, "animations");
+              item.addDebugCircle(prev.x + prev.width / 2, prev.y + prev.height / 2, 3, "rgba(255, 180, 0, 0.6)", true, `anim-ghost-start-${item.gid}`, "animations");
+              item.addDebugCircle(curr.x + curr.width / 2, curr.y + curr.height / 2, 3, "rgba(0, 200, 100, 0.6)", true, `anim-ghost-end-${item.gid}`, "animations");
+
               const anim = new AnimationObject(
                 item.element,
                 {
@@ -547,6 +742,7 @@ export class ItemContainer extends ItemObject {
 
 
   receiveItem(item: ItemObject) {
+    const root = (this.rootContainer ?? this) as ItemContainer;
     // Capture start positions of existing items in this container
     for (const i of this.#itemList) {
       i.readDom(true, "READ_1");
@@ -586,6 +782,10 @@ export class ItemContainer extends ItemObject {
         const dy = prev.y - curr.y;
 
         if (Math.abs(dx) >= 0.5 || Math.abs(dy) >= 0.5) {
+          item.addDebugLine(prev.x + prev.width / 2, prev.y + prev.height / 2, curr.x + curr.width / 2, curr.y + curr.height / 2, "rgba(255, 180, 0, 0.6)", true, `anim-click-${item.gid}`, 1, "animations");
+          item.addDebugCircle(prev.x + prev.width / 2, prev.y + prev.height / 2, 3, "rgba(255, 180, 0, 0.6)", true, `anim-click-start-${item.gid}`, "animations");
+          item.addDebugCircle(curr.x + curr.width / 2, curr.y + curr.height / 2, 3, "rgba(0, 200, 100, 0.6)", true, `anim-click-end-${item.gid}`, "animations");
+
           const anim = new AnimationObject(
             item.element,
             {
@@ -612,14 +812,13 @@ export class ItemContainer extends ItemObject {
     // into READ_1 so the next click-move starts from the correct position.
     // Use accountTransform=true in case any inline style.transform is still applied.
     this.queueUpdate("READ_3", () => {
-      for (const i of this.#itemList) {
-        i.readDom(true, "READ_3");
-        i.copyDomProperty("READ_3", "READ_1");
-      }
+      root.readAllItemsDom(true, "READ_3");
+      root.copyAllItemsDomProperty("READ_3", "READ_1");
     });
   }
 
   sendItem(item: ItemObject) {
+    const root = (this.rootContainer ?? this) as ItemContainer;
     // Capture start positions of existing items (excluding the one leaving)
     this.queueUpdate("READ_1", () => {
       for (const i of this.#itemList) {
@@ -652,6 +851,10 @@ export class ItemContainer extends ItemObject {
           const dy = prev.y - curr.y;
 
           if (Math.abs(dx) >= 0.5 || Math.abs(dy) >= 0.5) {
+            i.addDebugLine(prev.x + prev.width / 2, prev.y + prev.height / 2, curr.x + curr.width / 2, curr.y + curr.height / 2, "rgba(255, 180, 0, 0.6)", true, `anim-send-${i.gid}`, 1, "animations");
+            i.addDebugCircle(prev.x + prev.width / 2, prev.y + prev.height / 2, 3, "rgba(255, 180, 0, 0.6)", true, `anim-send-start-${i.gid}`, "animations");
+            i.addDebugCircle(curr.x + curr.width / 2, curr.y + curr.height / 2, 3, "rgba(0, 200, 100, 0.6)", true, `anim-send-end-${i.gid}`, "animations");
+
             const anim = new AnimationObject(
               i.element,
               {
@@ -671,9 +874,7 @@ export class ItemContainer extends ItemObject {
         }
       }
 
-      for (const i of this.#itemList) {
-        i.copyDomProperty("READ_2", "READ_1");
-      }
+      root.copyAllItemsDomProperty("READ_2", "READ_1");
     });
   }
 
@@ -718,12 +919,12 @@ export class ItemContainer extends ItemObject {
       cumulativeLength += length;
     }
 
-    if (this.#spacerDomElement) {
-      const spacerRect = getDomProperty(this.engine, this.#spacerDomElement);
-      const spacerStart = isColumn ? spacerRect.x : spacerRect.y;
+    if (this.#ghostDomElement) {
+      const ghostRect = getDomProperty(this.engine, this.#ghostDomElement);
+      const spacerStart = isColumn ? ghostRect.x : ghostRect.y;
       const spacerEnd = isColumn
-        ? spacerRect.x + spacerRect.width
-        : spacerRect.y + spacerRect.height;
+        ? ghostRect.x + ghostRect.width
+        : ghostRect.y + ghostRect.height;
 
       let overlaps = false;
       for (const boundary of rowBoundaries) {
@@ -768,6 +969,9 @@ export class ItemContainer extends ItemObject {
           color,
           true,
           `row-boundary-${row.index}`,
+          true,
+          1,
+          "rows",
         );
         this.addDebugText(
           row.start + 2,
@@ -776,6 +980,7 @@ export class ItemContainer extends ItemObject {
           color,
           true,
           `row-label-${row.index}`,
+          "rows",
         );
       } else {
         this.addDebugRect(
@@ -786,6 +991,9 @@ export class ItemContainer extends ItemObject {
           color,
           true,
           `row-boundary-${row.index}`,
+          true,
+          1,
+          "rows",
         );
         this.addDebugText(
           16,
@@ -794,6 +1002,7 @@ export class ItemContainer extends ItemObject {
           color,
           true,
           `row-label-${row.index}`,
+          "rows",
         );
       }
     }
@@ -806,15 +1015,11 @@ export class ItemContainer extends ItemObject {
     for (const item of closestRowItems) {
       const prop = item.getDomProperty("READ_1");
       if (isColumn) {
-        // Main axis is X (start/end are X)
-        // Cross axis is Y
         const itemTop = item.transform.y ?? 0;
         const itemBottom = itemTop + prop.height;
         if (itemTop < minCross) minCross = itemTop;
         if (itemBottom > maxCross) maxCross = itemBottom;
       } else {
-        // Main axis is Y (start/end are Y)
-        // Cross axis is X
         const itemLeft = item.transform.x ?? 0;
         const itemRight = itemLeft + prop.width;
         if (itemLeft < minCross) minCross = itemLeft;
@@ -834,6 +1039,7 @@ export class ItemContainer extends ItemObject {
           "closest-row-rect",
           false,
           3,
+          "rows",
         );
       } else {
         this.addDebugRect(
@@ -846,6 +1052,7 @@ export class ItemContainer extends ItemObject {
           "closest-row-rect",
           false,
           3,
+          "rows",
         );
       }
     }
@@ -936,39 +1143,39 @@ export class ItemContainer extends ItemObject {
     };
   }
 
-  determineDropIndex(item: ItemObject, stage: "READ_1" | "READ_2" | "READ_3" = "READ_1"): { dropIndex: number, rowDropIndex: number, closestRowIndex: number } {
+  determineDropIndex(item: ItemObject, stage: "READ_1" | "READ_2" | "READ_3" = "READ_1"): { dropIndex: number, rowDropIndex: number, closestRowIndex: number, container: ItemContainer } {
     const readProp = item.getDomProperty(stage);
     const thisWorldX = item.transform.x + readProp.width / 2;
     const thisWorldY = item.transform.y + readProp.height / 2;
 
-    this.addDebugCircle(thisWorldX, thisWorldY, 6, "rgba(160, 0, 255, 0.8)", true, "item-center");
-    this.addDebugText(thisWorldX + 10, thisWorldY - 4, "drag center", "rgba(160, 0, 255, 0.8)", true, "item-center-label");
+    this.addDebugCircle(thisWorldX, thisWorldY, 6, "rgba(160, 0, 255, 0.8)", true, "item-center", "drop-index");
+    this.addDebugText(thisWorldX + 10, thisWorldY - 4, "drag center", "rgba(160, 0, 255, 0.8)", true, "item-center-label", "drop-index");
 
-    if (this.#spacerDomElement) {
-      const spacerProp = getDomProperty(this.engine, this.#spacerDomElement);
-      const ghostX = spacerProp.x + spacerProp.width / 2;
-      const ghostY = spacerProp.y + spacerProp.height / 2;
+    if (this.#ghostDomElement) {
+      const ghostProp = getDomProperty(this.engine, this.#ghostDomElement);
       this.addDebugRect(
-        spacerProp.x,
-        spacerProp.y,
-        spacerProp.width,
-        spacerProp.height,
+        ghostProp.x,
+        ghostProp.y,
+        ghostProp.width,
+        ghostProp.height,
         "rgba(0, 210, 210, 0.4)",
         true,
         "ghost-rect",
         false,
         2,
+        "drop-index",
       );
-      this.addDebugText(spacerProp.x + 4, spacerProp.y + 14, "ghost", "rgba(0, 180, 180, 0.9)", true, "ghost-label");
+      this.addDebugText(ghostProp.x + 4, ghostProp.y + 14, "ghost", "rgba(0, 180, 180, 0.9)", true, "ghost-label", "drop-index");
     }
 
     const closestContainer = this.getClosestContainer(
+      item,
       thisWorldX,
       thisWorldY,
     );
 
     if (closestContainer && closestContainer !== this) {
-      this.addDebugText(4, 88, `handoff → ${closestContainer.name ?? "?"}`, "rgba(255, 200, 0, 0.9)", true, "handoff-label");
+      this.addDebugText(4, 88, `handoff → ${closestContainer.name ?? "?"}`, "rgba(255, 200, 0, 0.9)", true, "handoff-label", "containers");
       item.handoffToContainer(closestContainer, stage);
       return closestContainer.determineDropIndex(item, stage);
     }
@@ -991,9 +1198,9 @@ export class ItemContainer extends ItemObject {
     // Draw a line showing the secondaryPos used for insert/slide decisions
     const containerProp = this.getDomProperty(stage);
     if (isColumn) {
-      this.addDebugLine(containerProp.x, secondaryPos, containerProp.x + containerProp.width, secondaryPos, "rgba(255, 255, 0, 0.5)", true, "secondary-pos-line", 1);
+      this.addDebugLine(containerProp.x, secondaryPos, containerProp.x + containerProp.width, secondaryPos, "rgba(255, 255, 0, 0.5)", true, "secondary-pos-line", 1, "drop-index");
     } else {
-      this.addDebugLine(secondaryPos, containerProp.y, secondaryPos, containerProp.y + containerProp.height, "rgba(255, 255, 0, 0.5)", true, "secondary-pos-line", 1);
+      this.addDebugLine(secondaryPos, containerProp.y, secondaryPos, containerProp.y + containerProp.height, "rgba(255, 255, 0, 0.5)", true, "secondary-pos-line", 1, "drop-index");
     }
 
     let {
@@ -1003,13 +1210,14 @@ export class ItemContainer extends ItemObject {
       overshoot: _overshoot,
     } = this.getClosestRow(primaryPos);
     if (rowList.length == 0 && !(closestRow as any).isSpacer) {
-      return { dropIndex: 0, rowDropIndex: 0, closestRowIndex: 0 };
+      return { dropIndex: 0, rowDropIndex: 0, closestRowIndex: 0, container: this };
     }
     if ((closestRow as any).isSpacer) {
       return {
         dropIndex: this.#spacerIndex,
         rowDropIndex: 0,
         closestRowIndex: -1,
+        container: this,
       };
     }
     let closestRowIndex = closestRow.index;
@@ -1025,7 +1233,7 @@ export class ItemContainer extends ItemObject {
     let leftItemRight: number | undefined;
     let rightItemLeft: number | undefined;
 
-    this.addDebugText(4, 40, `${isNewRow ? "mode: INSERT" : "mode: SLIDE"}  stage: ${stage}  secPos: ${Math.round(secondaryPos)}`, "rgba(255, 255, 255, 0.8)", true, "drop-mode");
+    this.addDebugText(4, 40, `${isNewRow ? "mode: INSERT" : "mode: SLIDE"}  stage: ${stage}  secPos: ${Math.round(secondaryPos)}`, "rgba(255, 255, 255, 0.8)", true, "drop-mode", "drop-index");
 
     if (isNewRow && this.#itemList.length > 0) {
       // Gap Insertion Logic — used when entering a new row or container
@@ -1042,11 +1250,11 @@ export class ItemContainer extends ItemObject {
         const passed = secondaryPos >= center;
         const markerColor = passed ? "rgba(0, 200, 0, 0.6)" : "rgba(200, 0, 0, 0.6)";
         if (isColumn) {
-          rowItem.addDebugLine(rowItem.transform.x, center, rowItem.transform.x + prop.width, center, markerColor, true, `insert-center-${i}`, 2);
-          rowItem.addDebugText(rowItem.transform.x + prop.width + 4, center + 4, `[${i}] c=${Math.round(center)} ${passed ? "PASS" : "STOP"}`, markerColor, true, `insert-label-${i}`);
+          rowItem.addDebugLine(rowItem.transform.x, center, rowItem.transform.x + prop.width, center, markerColor, true, `insert-center-${i}`, 2, "drop-index");
+          rowItem.addDebugText(rowItem.transform.x + prop.width + 4, center + 4, `[${i}] c=${Math.round(center)} ${passed ? "PASS" : "STOP"}`, markerColor, true, `insert-label-${i}`, "drop-index");
         } else {
-          rowItem.addDebugLine(center, rowItem.transform.y, center, rowItem.transform.y + prop.height, markerColor, true, `insert-center-${i}`, 2);
-          rowItem.addDebugText(center + 4, rowItem.transform.y - 4, `[${i}] c=${Math.round(center)} ${passed ? "PASS" : "STOP"}`, markerColor, true, `insert-label-${i}`);
+          rowItem.addDebugLine(center, rowItem.transform.y, center, rowItem.transform.y + prop.height, markerColor, true, `insert-center-${i}`, 2, "drop-index");
+          rowItem.addDebugText(center + 4, rowItem.transform.y - 4, `[${i}] c=${Math.round(center)} ${passed ? "PASS" : "STOP"}`, markerColor, true, `insert-label-${i}`, "drop-index");
         }
 
         if (secondaryPos < center) {
@@ -1056,7 +1264,7 @@ export class ItemContainer extends ItemObject {
       }
 
       // Show the resulting insert index
-      this.addDebugText(4, 56, `insertIdx: ${insertIndex} / ${rowItems.length}  items: ${this.#itemList.length}`, "rgba(255, 255, 255, 0.8)", true, "insert-index");
+      this.addDebugText(4, 56, `insertIdx: ${insertIndex} / ${rowItems.length}  items: ${this.#itemList.length}`, "rgba(255, 255, 255, 0.8)", true, "insert-index", "drop-index");
 
       rowDropIndex = insertIndex;
 
@@ -1086,13 +1294,13 @@ export class ItemContainer extends ItemObject {
       const leftItemSize = isColumn ? leftProp.height : leftProp.width;
       const leftBuffer = leftItemSize * 0.25;
       if (isColumn) {
-        leftItem.addDebugRect(leftItem.transform.x, leftItemRight ?? 0, leftProp.width, 2, "rgba(255, 80, 80, 0.7)", true, `leftItem-${leftItem.gid}`);
-        leftItem.addDebugRect(leftItem.transform.x, (leftItemRight ?? 0) - leftItemSize / 2 + leftBuffer, leftProp.width, 2, "rgba(255, 165, 0, 0.7)", true, `leftItem-buffer-${leftItem.gid}`);
-        leftItem.addDebugText(leftItem.transform.x + 4, (leftItemRight ?? 0) - leftItemSize / 2 + leftBuffer - 4, "threshold", "rgba(255, 165, 0, 0.7)", true, `leftItem-label-${leftItem.gid}`);
+        leftItem.addDebugRect(leftItem.transform.x, leftItemRight ?? 0, leftProp.width, 2, "rgba(255, 80, 80, 0.7)", true, `leftItem-${leftItem.gid}`, true, 1, "drop-index");
+        leftItem.addDebugRect(leftItem.transform.x, (leftItemRight ?? 0) - leftItemSize / 2 + leftBuffer, leftProp.width, 2, "rgba(255, 165, 0, 0.7)", true, `leftItem-buffer-${leftItem.gid}`, true, 1, "drop-index");
+        leftItem.addDebugText(leftItem.transform.x + 4, (leftItemRight ?? 0) - leftItemSize / 2 + leftBuffer - 4, "threshold", "rgba(255, 165, 0, 0.7)", true, `leftItem-label-${leftItem.gid}`, "drop-index");
       } else {
-        leftItem.addDebugRect(leftItemRight ?? 0, leftItem.transform.y, 2, leftProp.height, "rgba(255, 80, 80, 0.7)", true, `leftItem-${leftItem.gid}`);
-        leftItem.addDebugRect((leftItemRight ?? 0) - leftItemSize / 2 + leftBuffer, leftItem.transform.y, 2, leftProp.height, "rgba(255, 165, 0, 0.7)", true, `leftItem-buffer-${leftItem.gid}`);
-        leftItem.addDebugText((leftItemRight ?? 0) - leftItemSize / 2 + leftBuffer + 4, leftItem.transform.y + 14, "threshold", "rgba(255, 165, 0, 0.7)", true, `leftItem-label-${leftItem.gid}`);
+        leftItem.addDebugRect(leftItemRight ?? 0, leftItem.transform.y, 2, leftProp.height, "rgba(255, 80, 80, 0.7)", true, `leftItem-${leftItem.gid}`, true, 1, "drop-index");
+        leftItem.addDebugRect((leftItemRight ?? 0) - leftItemSize / 2 + leftBuffer, leftItem.transform.y, 2, leftProp.height, "rgba(255, 165, 0, 0.7)", true, `leftItem-buffer-${leftItem.gid}`, true, 1, "drop-index");
+        leftItem.addDebugText((leftItemRight ?? 0) - leftItemSize / 2 + leftBuffer + 4, leftItem.transform.y + 14, "threshold", "rgba(255, 165, 0, 0.7)", true, `leftItem-label-${leftItem.gid}`, "drop-index");
       }
     }
     if (rightItem) {
@@ -1100,21 +1308,21 @@ export class ItemContainer extends ItemObject {
       const rightItemSize = isColumn ? rightProp.height : rightProp.width;
       const rightBuffer = rightItemSize * 0.25;
       if (isColumn) {
-        rightItem.addDebugRect(rightItem.transform.x, rightItemLeft ?? 0, rightProp.width, 2, "rgba(255, 80, 80, 0.7)", true, `rightItem-${rightItem.gid}`);
-        rightItem.addDebugRect(rightItem.transform.x, (rightItemLeft ?? 0) + rightItemSize / 2 - rightBuffer, rightProp.width, 2, "rgba(255, 165, 0, 0.7)", true, `rightItem-buffer-${rightItem.gid}`);
-        rightItem.addDebugText(rightItem.transform.x + 4, (rightItemLeft ?? 0) + rightItemSize / 2 - rightBuffer - 4, "threshold", "rgba(255, 165, 0, 0.7)", true, `rightItem-label-${rightItem.gid}`);
+        rightItem.addDebugRect(rightItem.transform.x, rightItemLeft ?? 0, rightProp.width, 2, "rgba(255, 80, 80, 0.7)", true, `rightItem-${rightItem.gid}`, true, 1, "drop-index");
+        rightItem.addDebugRect(rightItem.transform.x, (rightItemLeft ?? 0) + rightItemSize / 2 - rightBuffer, rightProp.width, 2, "rgba(255, 165, 0, 0.7)", true, `rightItem-buffer-${rightItem.gid}`, true, 1, "drop-index");
+        rightItem.addDebugText(rightItem.transform.x + 4, (rightItemLeft ?? 0) + rightItemSize / 2 - rightBuffer - 4, "threshold", "rgba(255, 165, 0, 0.7)", true, `rightItem-label-${rightItem.gid}`, "drop-index");
       } else {
-        rightItem.addDebugRect(rightItemLeft ?? 0, rightItem.transform.y, 2, rightProp.height, "rgba(255, 80, 80, 0.7)", true, `rightItem-${rightItem.gid}`);
-        rightItem.addDebugRect((rightItemLeft ?? 0) + rightItemSize / 2 - rightBuffer, rightItem.transform.y, 2, rightProp.height, "rgba(255, 165, 0, 0.7)", true, `rightItem-buffer-${rightItem.gid}`);
-        rightItem.addDebugText((rightItemLeft ?? 0) + rightItemSize / 2 - rightBuffer + 4, rightItem.transform.y + 14, "threshold", "rgba(255, 165, 0, 0.7)", true, `rightItem-label-${rightItem.gid}`);
+        rightItem.addDebugRect(rightItemLeft ?? 0, rightItem.transform.y, 2, rightProp.height, "rgba(255, 80, 80, 0.7)", true, `rightItem-${rightItem.gid}`, true, 1, "drop-index");
+        rightItem.addDebugRect((rightItemLeft ?? 0) + rightItemSize / 2 - rightBuffer, rightItem.transform.y, 2, rightProp.height, "rgba(255, 165, 0, 0.7)", true, `rightItem-buffer-${rightItem.gid}`, true, 1, "drop-index");
+        rightItem.addDebugText((rightItemLeft ?? 0) + rightItemSize / 2 - rightBuffer + 4, rightItem.transform.y + 14, "threshold", "rgba(255, 165, 0, 0.7)", true, `rightItem-label-${rightItem.gid}`, "drop-index");
       }
     }
 
     // Crosshair line showing the dragged item's secondary axis position
     if (isColumn) {
-      this.addDebugRect(item.transform.x, thisWorldY, item.getDomProperty(stage).width, 1, "rgba(0, 120, 255, 0.5)", true, `thisItem-${item.gid}`);
+      this.addDebugRect(item.transform.x, thisWorldY, item.getDomProperty(stage).width, 1, "rgba(0, 120, 255, 0.5)", true, `thisItem-${item.gid}`, true, 1, "item-positions");
     } else {
-      this.addDebugRect(thisWorldX, item.transform.y, 1, item.getDomProperty(stage).height, "rgba(0, 120, 255, 0.5)", true, `thisItem-${item.gid}`);
+      this.addDebugRect(thisWorldX, item.transform.y, 1, item.getDomProperty(stage).height, "rgba(0, 120, 255, 0.5)", true, `thisItem-${item.gid}`, true, 1, "item-positions");
     }
 
     if (!isNewRow) {
@@ -1174,14 +1382,28 @@ export class ItemContainer extends ItemObject {
       dropIndex = cumulativeLength + rowDropIndex;
     }
 
-    this.addDebugText(4, 72, `drop: ${dropIndex}  rowDrop: ${rowDropIndex}  row: ${closestRowIndex}`, "rgba(255, 255, 255, 0.8)", true, "drop-result");
+    this.addDebugText(4, 72, `drop: ${dropIndex}  rowDrop: ${rowDropIndex}  row: ${closestRowIndex}`, "rgba(255, 255, 255, 0.8)", true, "drop-result", "drop-index");
 
     return {
       dropIndex,
       rowDropIndex,
       closestRowIndex,
+      container: this,
     };
   }
+
+  getDepth() {
+    return this.#depth;
+  }
+
+  // calculateDepth() {
+  //   if (!this.container) {
+  //     this.#depth = 0;
+  //   } else {
+  //     this.#depth = this.container.calculateDepth() + 1;
+  //   }
+  //   return this.#depth;
+  // }
 
   /**
    * Saves the current DOM properties to the transform for all items in the container.
@@ -1192,6 +1414,9 @@ export class ItemContainer extends ItemObject {
   captureState(stage: "READ_1" | "READ_2" | "READ_3" = "READ_1") {
     if (this.container) {
       this.container.captureState(stage);
+      // this.#depth = this.container.getDepth() + 1;
+    } else {
+      // this.#depth = 0;
     }
     this.readDom(true, stage);
     this.syncFromDom(stage);

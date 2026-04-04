@@ -585,6 +585,7 @@ export class BaseObject {
     color: string = "red",
     persistent: boolean = false,
     id: string = "",
+    tag?: string,
   ) {
     if (!this.engine) return;
     this.engine.debugMarkerList[`${this.gid}-${id}`] = {
@@ -595,6 +596,7 @@ export class BaseObject {
       y,
       persistent,
       id: `${this.gid}-${id}`,
+      tag,
     };
   }
 
@@ -608,6 +610,7 @@ export class BaseObject {
     id: string = "",
     filled: boolean = true,
     lineWidth: number = 1,
+    tag?: string,
   ) {
     if (!this.engine) return;
     this.engine.debugMarkerList[`${this.gid}-${id}`] = {
@@ -622,6 +625,7 @@ export class BaseObject {
       id: `${this.gid}-${id}`,
       filled,
       lineWidth,
+      tag,
     };
   }
 
@@ -634,6 +638,7 @@ export class BaseObject {
     persistent: boolean = false,
     id: string = "",
     lineWidth: number = 2,
+    tag?: string,
   ) {
     if (!this.engine) return;
     this.engine.debugMarkerList[`${this.gid}-${id}`] = {
@@ -647,6 +652,7 @@ export class BaseObject {
       persistent,
       id: `${this.gid}-${id}`,
       lineWidth,
+      tag,
     };
   }
 
@@ -657,6 +663,7 @@ export class BaseObject {
     color: string = "red",
     persistent: boolean = false,
     id: string = "",
+    tag?: string,
   ) {
     if (!this.engine) return;
     this.engine.debugMarkerList[`${this.gid}-${id}`] = {
@@ -668,6 +675,7 @@ export class BaseObject {
       radius,
       persistent,
       id: `${this.gid}-${id}`,
+      tag,
     };
   }
 
@@ -678,6 +686,7 @@ export class BaseObject {
     color: string = "red",
     persistent: boolean = false,
     id: string = "",
+    tag?: string,
   ) {
     if (!this.engine) return;
     this.engine.debugMarkerList[`${this.gid}-${id}`] = {
@@ -689,6 +698,7 @@ export class BaseObject {
       text,
       persistent,
       id: `${this.gid}-${id}`,
+      tag,
     };
   }
 
@@ -732,6 +742,18 @@ interface DomProperty extends TransformProperty {
   width: number;
   screenX: number;
   screenY: number;
+  margin: {
+    top: number;
+    right: number;
+    bottom: number;
+    left: number;
+  };
+  padding: {
+    top: number;
+    right: number;
+    bottom: number;
+    left: number;
+  };
 }
 
 export interface DomInsertMode {
@@ -787,6 +809,18 @@ export class DomElement {
       scaleY: 1,
       screenX: 0,
       screenY: 0,
+      margin: {
+        top: 0,
+        right: 0,
+        bottom: 0,
+        left: 0,
+      },
+      padding: {
+        top: 0,
+        right: 0,
+        bottom: 0,
+        left: 0,
+      },
     };
     this._transformApplied = {
       x: 0,
@@ -876,6 +910,8 @@ export class DomElement {
     this.property.y = property.y - transformApplied.y;
     this.property.screenX = property.screenX;
     this.property.screenY = property.screenY;
+    this.property.margin = property.margin;
+    this.property.padding = property.padding;
   }
 
   /**
@@ -1040,38 +1076,31 @@ export class ElementObject extends BaseObject {
     this._requestRead = false;
     this._requestDelete = false;
     this._requestPostWrite = false;
-    this._domProperty = [
-      {
-        x: 0,
-        y: 0,
-        height: 0,
-        width: 0,
-        scaleX: 1,
-        scaleY: 1,
-        screenX: 0,
-        screenY: 0,
+    this._domProperty = [];
+    for (let i = 0; i < 3; i++) {
+      this._domProperty.push({
+      x: 0,
+      y: 0,
+      height: 0,
+      width: 0,
+      scaleX: 1,
+      scaleY: 1,
+      screenX: 0,
+      screenY: 0,
+      margin: {
+        top: 0,
+        right: 0,
+        bottom: 0,
+        left: 0,
       },
-      {
-        x: 0,
-        y: 0,
-        height: 0,
-        width: 0,
-        scaleX: 1,
-        scaleY: 1,
-        screenX: 0,
-        screenY: 0,
+      padding: {
+        top: 0,
+        right: 0,
+        bottom: 0,
+        left: 0,
       },
-      {
-        x: 0,
-        y: 0,
-        height: 0,
-        width: 0,
-        scaleX: 1,
-        scaleY: 1,
-        screenX: 0,
-        screenY: 0,
-      },
-    ];
+      });
+    }
     this.transformMode = "direct";
     this.transformOrigin = null;
     this._callback = {

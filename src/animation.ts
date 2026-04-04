@@ -32,6 +32,7 @@ export interface keyframeProperty {
   duration?: number;
   delay?: number;
   tick?: (value: Record<string, number>) => void;
+  start?: () => void;
   finish?: () => void;
   persist?: boolean;
 }
@@ -262,6 +263,7 @@ class AnimationObject implements AnimationInterface {
 
   play() {
     this.#animation!.play();
+    this.property.start?.();
     for (let i = 0; i < this.#varAnimation!.length; i++) {
       this.#varAnimation![i].play();
     }

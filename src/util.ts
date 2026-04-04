@@ -19,6 +19,16 @@ import { TransformProperty } from "./object";
  */
 function getDomProperty(engine: any, dom: HTMLElement) {
   const rect = dom.getBoundingClientRect();
+  const css = window.getComputedStyle(dom);
+  const margin_top = parseFloat(css.marginTop) || 0;
+  const margin_right = parseFloat(css.marginRight) || 0;
+  const margin_bottom = parseFloat(css.marginBottom) || 0;
+  const margin_left = parseFloat(css.marginLeft) || 0;
+  const padding_top = parseFloat(css.paddingTop) || 0;
+  const padding_right = parseFloat(css.paddingRight) || 0;
+  const padding_bottom = parseFloat(css.paddingBottom) || 0;
+  const padding_left = parseFloat(css.paddingLeft) || 0;
+
   if (engine == null || engine.camera == null) {
     return {
       height: rect.height,
@@ -29,6 +39,18 @@ function getDomProperty(engine: any, dom: HTMLElement) {
       cameraY: rect.top,
       screenX: rect.left,
       screenY: rect.top,
+      margin: {
+        top: margin_top,
+        right: margin_right,
+        bottom: margin_bottom,
+        left: margin_left,
+      },
+      padding: {
+        top: padding_top,
+        right: padding_right,
+        bottom: padding_bottom,
+        left: padding_left,
+      },
     };
   }
   const [cameraX, cameraY] = engine.camera.getCameraFromScreen(
@@ -52,6 +74,18 @@ function getDomProperty(engine: any, dom: HTMLElement) {
     cameraY: cameraY,
     screenX: rect.left,
     screenY: rect.top,
+    margin: {
+      top: margin_top,
+      right: margin_right,
+      bottom: margin_bottom,
+      left: margin_left,
+    },
+    padding: {
+      top: padding_top,
+      right: padding_right,
+      bottom: padding_bottom,
+      left: padding_left,
+    },
   };
 }
 

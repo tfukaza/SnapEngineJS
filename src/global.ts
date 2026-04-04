@@ -150,6 +150,11 @@ class GlobalManager {
       // Process each stage for ALL engines before moving to the next stage
       // This prevents layout thrashing by batching DOM reads and writes
 
+      // Collision detection before any queue processing
+      for (const engine of this.engines) {
+        engine._processCollisions();
+      }
+
       // READ_1 stage for all engines
       this.currentStage = "READ_1";
       for (const engine of this.engines) {

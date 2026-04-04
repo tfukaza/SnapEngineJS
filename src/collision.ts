@@ -142,6 +142,41 @@ class Collider {
     this.local.height = property.height;
   }
 
+  /**
+   * Returns true if this collider is currently intersecting the given collider.
+   * Updated every frame by the collision engine — no manual check needed.
+   *
+   * @example
+   * ```typescript
+   * if (itemA.hitbox.isCollidingWith(itemB.hitbox)) { ... }
+   * if (item.centerPoint.isCollidingWith(container.hitbox)) { ... }
+   * ```
+   */
+  isCollidingWith(other: Collider): boolean {
+    return this._currentCollisions.has(other);
+  }
+
+  /**
+   * Returns a readonly set of all colliders currently intersecting this one.
+   * Updated every frame by the collision engine.
+   */
+  get currentCollisions(): ReadonlySet<Collider> {
+    return this._currentCollisions;
+  }
+
+  /**
+   * Returns the number of colliders currently intersecting this one.
+   * Updated every frame by the collision engine.
+   *
+   * @example
+   * ```typescript
+   * if (item.hitbox.collisionCount > 0) { ... }
+   * ```
+   */
+  get collisionCount(): number {
+    return this._currentCollisions.size;
+  }
+
   recalculate() {}
 }
 
@@ -315,10 +350,23 @@ class CollisionEngine {
     });
   }
 
+  #colliderCenterX(c: Collider): number {
+    const [wx, _] = c.worldPosition;
+    if (c.type === "rect") return wx + c.local.width / 2;
+    return wx; // circle and point are already centered
+  }
+
+  #colliderCenterY(c: Collider): number {
+    const [_, wy] = c.worldPosition;
+    if (c.type === "rect") return wy + c.local.height / 2;
+    return wy;
+  }
+
   detectCollisions() {
     this.updateXCoordinates();
     this.sortXCoordinates();
     let localCollisions: Set<Collider> = new Set();
+    let collisionIdx = 0;
     // Sweep through the sorted X coordinates
     for (const entry of this.sortedXCoordinates) {
       if (entry.left) {
@@ -327,6 +375,18 @@ class CollisionEngine {
           if (this.isIntersecting(entry.collider, collider)) {
             this.onColliderCollide(entry.collider, collider);
             this.onColliderCollide(collider, entry.collider);
+
+            // Debug: draw line between colliding collider centers
+            const ax = this.#colliderCenterX(entry.collider);
+            const ay = this.#colliderCenterY(entry.collider);
+            const bx = this.#colliderCenterX(collider);
+            const by = this.#colliderCenterY(collider);
+            entry.collider.parent.addDebugLine(
+              ax, ay, bx, by,
+              "rgba(255, 50, 50, 0.35)", false,
+              `collision-${collisionIdx++}`,
+              1, "collisions",
+            );
           }
         }
         localCollisions.add(entry.collider);

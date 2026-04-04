@@ -17,6 +17,13 @@ export class DebugRenderer implements DebugRendererInterface {
   debugCtx: CanvasRenderingContext2D | null = null;
   #engine: Engine | null = null;
   #subscriptionId = 'debugRenderer';
+  enabledTags: Set<string> | null = null; // null = show all, Set = only show these tags
+
+  isTagEnabled(tag: string | undefined): boolean {
+    if (this.enabledTags === null) return true;
+    if (tag === undefined) return true; // untagged markers always show
+    return this.enabledTags.has(tag);
+  }
 
   enable(engine: Engine): void {
     if (this.debugWindow) {
@@ -84,7 +91,9 @@ export class DebugRenderer implements DebugRendererInterface {
       this.debugWindow.height,
     );
 
-    this.renderDebugGrid(engine);
+    if (this.isTagEnabled("grid")) {
+      this.renderDebugGrid(engine);
+    }
 
     for (const object of Object.values(objectTable)) {
       this.debugObjectBoundingBox(object, engine);
@@ -99,6 +108,7 @@ export class DebugRenderer implements DebugRendererInterface {
       type: "point" | "rect" | "circle" | "text" | "line";
       persistent: boolean;
       color: string;
+      tag?: string;
       x: number;
       y: number;
       x2?: number;
@@ -110,6 +120,9 @@ export class DebugRenderer implements DebugRendererInterface {
       filled?: boolean;
       lineWidth?: number;
     }>) {
+      if (!this.isTagEnabled(marker.tag)) {
+        continue;
+      }
       const [cameraX, cameraY] = engine.camera?.getCameraFromWorld(
         marker.x,
         marker.y,
@@ -174,13 +187,15 @@ export class DebugRenderer implements DebugRendererInterface {
       ...object.worldPosition,
     ) ?? [0, 0];
 
-    // If object has a dom, draw a rectangle around the object's width and height, with a 1px black border
+    // If object has a dom, draw a rectangle around the object's width and height
     if (object.hasOwnProperty("_dom")) {
       let elementObject = object as ElementObject;
 
       const colors = ["#FF0000A0", "#00FF00A0", "#0000FFA0"];
       const stages = ["READ_1", "READ_2", "READ_3"];
+      const tagNames = ["dom-read-1", "dom-read-2", "dom-read-3"];
       for (let i = 0; i < 3; i++) {
+        if (!this.isTagEnabled(tagNames[i])) continue;
         const property = elementObject.getDomProperty(stages[i] as any);
         this.debugCtx.stroke();
         this.debugCtx.beginPath();
@@ -200,16 +215,21 @@ export class DebugRenderer implements DebugRendererInterface {
       }
 
       // Black rectangle represents the object's transform property
-      this.debugCtx.beginPath();
-      this.debugCtx.strokeStyle = "black";
-      this.debugCtx.lineWidth = 1;
-      this.debugCtx.rect(
-        cameraX,
-        cameraY,
-        elementObject._dom.property.width,
-        elementObject._dom.property.height,
-      );
+      if (this.isTagEnabled("dom-read-1") || this.isTagEnabled("dom-read-2") || this.isTagEnabled("dom-read-3")) {
+        this.debugCtx.beginPath();
+        this.debugCtx.strokeStyle = "black";
+        this.debugCtx.lineWidth = 1;
+        this.debugCtx.rect(
+          cameraX,
+          cameraY,
+          elementObject._dom.property.width,
+          elementObject._dom.property.height,
+        );
+        this.debugCtx.stroke();
+      }
     }
+
+    if (!this.isTagEnabled("hitboxes")) return;
 
     const COLLIDER_BLUE = "rgba(0, 247, 255, 0.5)";
 

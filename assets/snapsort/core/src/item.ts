@@ -1,13 +1,28 @@
 import { BaseObject, ElementObject } from "@snap-engine/core";
 import type { ItemContainer } from "./container";
 import { AnimationObject } from "@snap-engine/core/animation";
-import { RectCollider } from "@snap-engine/core/collision";
+import { RectCollider, PointCollider } from "@snap-engine/core/collision";
 import type {
   dragStartProp,
   dragProp,
   dragEndProp,
 } from "@snap-engine/core";
 import { mouseButtonBitmap } from "@snap-engine/core";
+
+/**
+ * Apply a function to every item and container within the given container, recursively.
+ */
+export function forEachInContainer(
+  container: ItemContainer,
+  fn: (item: ItemObject) => void,
+) {
+  for (const item of container.itemList) {
+    fn(item);
+    if ('itemList' in item) {
+      forEachInContainer(item as ItemContainer, fn);
+    }
+  }
+}
 
 export interface ClickAction {
   action: "moveTo";
@@ -29,10 +44,20 @@ export class ItemObject extends ElementObject {
   #metadata: Record<string, unknown> = {};
   #locked: boolean = false;
   #hitbox: RectCollider;
+  #centerPoint: PointCollider;
+  #rootContainer: ItemContainer | null = null;
 
-  #prevContainer: ItemContainer | null = null;
   #pendingDrop: boolean = false;
   #pendingDropEntries: ReturnType<typeof this.queueUpdate>[] = [];
+
+  // Position relative to the container, used for calculating 
+  // transform coordinates during animation. 
+  initialWorldX: number = 0;
+  initialWorldY: number = 0;
+  animationStartX: number = 0;
+  animationStartY: number = 0;
+  animationEndX: number = 0;
+  animationEndY: number = 0;
 
   constructor(engine: any, parent: BaseObject | null) {
     super(engine, parent);
@@ -41,10 +66,18 @@ export class ItemObject extends ElementObject {
     this.event.input.dragEnd = this.cursorUp;
     this.transformMode = "none";
     this.#containerObject = null;
-    this.#prevContainer = null;
     this.#metadata = {};
     this.#hitbox = new RectCollider(engine, this, 0, 0, 0, 0);
     this.addCollider(this.#hitbox);
+    this.#centerPoint = new PointCollider(engine, this, 0, 0);
+    this.addCollider(this.#centerPoint);
+
+    this.initialWorldX = 0;
+    this.initialWorldY = 0;
+    this.animationStartX = 0;
+    this.animationStartY = 0;
+    this.animationEndX = 0;
+    this.animationEndY = 0;
   }
 
   get locked(): boolean {
@@ -123,12 +156,43 @@ export class ItemObject extends ElementObject {
     this.#indexInList = value;
   }
 
+  get centerPointCollider() {
+    return this.#centerPoint;
+  }
+
+  get hitboxCollider() {
+    return this.#hitbox;
+  }
+
+  static #containerColors = new Map<string, string>();
+
+  static #colorForContainer(gid: string): string {
+    let color = ItemObject.#containerColors.get(gid);
+    if (!color) {
+      // Hash the gid string to a hue value
+      let hash = 0;
+      for (let i = 0; i < gid.length; i++) {
+        hash = ((hash << 5) - hash + gid.charCodeAt(i)) | 0;
+      }
+      const hue = ((hash % 360) + 360) % 360;
+      color = `hsl(${hue}, 80%, 55%)`;
+      ItemObject.#containerColors.set(gid, color);
+    }
+    return color;
+  }
+
   debug_all_items() {
-    for (const item of this.container.itemList ?? []) {
-      const prop1 = item.getDomProperty("READ_1");
-      const cx = prop1.x + prop1.width / 2;
-      const cy = prop1.y + prop1.height / 2;
-      item.addDebugCircle(cx, cy, 4, "rgba(255, 165, 0, 0.6)", true, `center-read1-${item.gid}`);
+    const containers: ItemContainer[] = this.global.data["dragAndDropContainers"] ?? [];
+    const groupID = this.container.groupID;
+    for (const container of containers) {
+      if (container.groupID !== groupID) continue;
+      const color = ItemObject.#colorForContainer(container.gid);
+      for (const item of container.itemList ?? []) {
+        const prop1 = item.getDomProperty("READ_1");
+        const cx = prop1.x + prop1.width / 2;
+        const cy = prop1.y + prop1.height / 2;
+        item.addDebugCircle(cx, cy, 4, color, true, `center-read1-${item.gid}`, "item-positions");
+      }
     }
   }
 
@@ -136,13 +200,31 @@ export class ItemObject extends ElementObject {
     return this.container.direction === "column";
   }
 
+  /**
+   * The top-level container that this item ultimately belongs to.
+   * For items in a root container this is the container itself;
+   * for items in nested containers it is the outermost ancestor container.
+   * Set automatically by setAllDepth() whenever the nesting hierarchy changes.
+   */
+  get rootContainer(): ItemContainer | null {
+    return this.#rootContainer;
+  }
+
+  setRootContainer(root: ItemContainer | null) {
+    this.#rootContainer = root;
+  }
+
   get hitbox(): RectCollider {
     return this.#hitbox;
   }
 
+  get centerPoint(): PointCollider {
+    return this.#centerPoint;
+  }
+
   /**
-   * Override readDom to keep the hitbox collider in sync with the DOM
-   * position and size every time DOM properties are read.
+   * Override readDom to keep the hitbox collider and center point collider
+   * in sync with the DOM position and size every time DOM properties are read.
    */
   readDom(
     subtractAppliedTransform: boolean = false,
@@ -154,6 +236,8 @@ export class ItemObject extends ElementObject {
     this.#hitbox.local.y = 0;
     this.#hitbox.local.width = prop.width;
     this.#hitbox.local.height = prop.height;
+    this.#centerPoint.local.x = prop.width / 2;
+    this.#centerPoint.local.y = prop.height / 2;
   }
 
   // ---------------------------------------------------------------------------
@@ -331,7 +415,7 @@ export class ItemObject extends ElementObject {
         this.#beginDrag(prop);
       });
 
-      this.container.addGhostBeforeItem(this, false);
+      this.container.addGhostBeforeItem(this, false, this.container);
       return;
     }
 
@@ -350,24 +434,35 @@ export class ItemObject extends ElementObject {
 
     // Add ghost at the initial drop index
     // This can be here because Js is single threaded and this will be queued after the above WRITE_1 callback.
-    this.container.addGhostBeforeItem(this, false);
+    this.container.addGhostBeforeItem(this, false, this.container);
   }
 
+  /**
+   * Transfer the control of this item to a new container.
+   * Aside from that, the drag and drop logic should continue uninterrupted.
+   * @param newContainer The target container to receive this item.
+   * @param stage The stage at which to capture the new container's state for accurate drop index calculation. Defaults to "READ_1".
+   */
   handoffToContainer(newContainer: ItemContainer, stage: "READ_1" | "READ_2" | "READ_3" = "READ_1") {
     if (!this.#containerObject) {
       throw new Error("ItemObject has no container set.");
     }
-    this.#containerObject.removeAllGhost(true);
+    console.log(`Handing off item ${this.gid} from container ${this.#containerObject.name} to container ${newContainer.name}`);
+    // this.#containerObject.removeAllGhost(true);
     this.#containerObject.dragItem = null;
     this.#containerObject = newContainer;
-
+    this.#containerObject.dragItem = this;
     // Capture fresh positions for the target container's items so that
     // the drop index calculation uses accurate layout data.
-    this.#containerObject.captureState(stage);
-    this.#containerObject.setItemRows(this);
-    this.#containerObject.dragItem = this;
+    // It's OK to do this since this is called in a READ stage.
+    // this.#containerObject.captureState(stage);
+    // this.#containerObject.setItemRows(this);
+    // this.#rootContainer!.captureState(stage);
+    // this.#rootContainer!.setItemRows(this);
     this.transformOrigin = this.#containerObject as unknown as BaseObject;
-    this.#containerObject!.element?.appendChild(this.element!);
+
+    // this.transformOrigin = this.#containerObject as unknown as BaseObject;
+    // this.#containerObject!.element?.appendChild(this.element!);
   }
 
 
@@ -390,19 +485,19 @@ export class ItemObject extends ElementObject {
     // We must NOT read the DOM properties while dragging, as it may read positions of items during animation
     // which can lead to incorrect drop index calculation.
     // this.container.captureState("READ_1");
-
-    let { dropIndex, rowDropIndex, closestRowIndex } =
+    const currentContainer = this.container;
+    let { dropIndex, rowDropIndex, closestRowIndex, container: dropContainer } =
       this.container.determineDropIndex(this, "READ_1");
+    const dropContainerGid = dropContainer.gid;
 
-    if (dropIndex != this.container.spacerIndex) {
-      this.#prevContainer = this.#containerObject;
-      const differentRow =
-        this.#currentRow != closestRowIndex ||
-        this.#containerObject !== this.#prevContainer;
+    if (dropIndex != this.container.spacerIndex || currentContainer.gid !== dropContainerGid) {
+      // const differentRow =
+      //   this.#currentRow != closestRowIndex ||
+      //   this.#containerObject !== dropContainer;
       this.#currentRow = closestRowIndex;
       this.#dropIndex = dropIndex;
       this.#rowDropIndex = rowDropIndex;
-      this.container.addGhostBeforeItem(this, differentRow);
+      this.container.addGhostBeforeItem(this, currentContainer.gid !== dropContainerGid, currentContainer);
     } else {
     }
   }
@@ -473,6 +568,14 @@ export class ItemObject extends ElementObject {
         const dy = endY - curr.y;
 
         if (Math.abs(dx) >= 0.5 || Math.abs(dy) >= 0.5) {
+          const startCx = endX + curr.width / 2;
+          const startCy = endY + curr.height / 2;
+          const endCx = curr.x + curr.width / 2;
+          const endCy = curr.y + curr.height / 2;
+          this.addDebugLine(startCx, startCy, endCx, endCy, "rgba(255, 180, 0, 0.6)", true, `anim-drop-${this.gid}`, 1, "animations");
+          this.addDebugCircle(startCx, startCy, 3, "rgba(255, 180, 0, 0.6)", true, `anim-drop-start-${this.gid}`, "animations");
+          this.addDebugCircle(endCx, endCy, 3, "rgba(0, 200, 100, 0.6)", true, `anim-drop-end-${this.gid}`, "animations");
+
           const anim = new AnimationObject(
             this.element,
             {
