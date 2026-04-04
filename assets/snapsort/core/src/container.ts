@@ -1,13 +1,9 @@
-import { BaseObject, ElementObject, getDomProperty } from "@snap-engine/core";
-import { ItemObject } from "./item";
+import { BaseObject, getDomProperty } from "@snap-engine/core";
+import { ItemObject, ClickAction } from "./item";
+export type { ClickAction } from "./item";
 import { AnimationObject } from "@snap-engine/core/animation";
 
 const BUFFER = 20;
-
-export interface ClickAction {
-  action: "moveTo";
-  target: string;
-}
 
 export interface AnimationConfig {
   timing_function?: string;
@@ -28,7 +24,7 @@ export interface ItemContainerConfig {
   animation?: ContainerAnimations | null; // Animation configuration
 }
 
-export class ItemContainer extends ElementObject {
+export class ItemContainer extends ItemObject {
   #itemList: ItemObject[] = [];
   #itemRows: ItemObject[][] = [];
   #dragItem: ItemObject | null = null;
@@ -43,6 +39,7 @@ export class ItemContainer extends ElementObject {
     config?: ItemContainerConfig,
   ) {
     super(engine, parent);
+    this.locked = true;
     this.#config = config || {};
     this.#itemList = [];
     if (!this.#config.groupID) {
@@ -112,8 +109,8 @@ export class ItemContainer extends ElementObject {
     return this.#config.name;
   }
 
-  get onClickAction() {
-    return this.#config.onClickAction;
+  get onClickAction(): ClickAction | null {
+    return this.#config.onClickAction ?? null;
   }
 
   // get animation(): ContainerAnimations | null | undefined {
@@ -200,6 +197,10 @@ export class ItemContainer extends ElementObject {
     for (let c of this.global.data["dragAndDropContainers"] || []) {
       const container: ItemContainer = c as ItemContainer;
       if (container.groupID !== this.#config.groupID) {
+        continue;
+      }
+      // Skip the item currently being dragged (it's an ItemContainer following the cursor)
+      if (container === this.#dragItem) {
         continue;
       }
       const property = container.getDomProperty("READ_1");
@@ -421,7 +422,6 @@ export class ItemContainer extends ElementObject {
       } = this.determineDropIndex(caller, "READ_2");
 
       this.queueUpdate("WRITE_2", () => {
-        // console.debug("different row WRITE_2");
         this.addGhostItem(caller, dropIndex);
         caller.dropIndex = dropIndex;
         caller.rowDropIndex = rowDropIndex;
@@ -505,7 +505,12 @@ export class ItemContainer extends ElementObject {
 
   addItemAfter(item: ItemObject, afterItem: ItemObject) {
     const index = this.#itemList.indexOf(afterItem);
-    this.#itemList.splice(index + 1, 0, item);
+    if (index === -1) {
+      // afterItem not found (e.g. dropIndex was past the end) — append
+      this.#itemList.push(item);
+    } else {
+      this.#itemList.splice(index + 1, 0, item);
+    }
     item.setContainer(this);
     this.#dragItem = null;
   }

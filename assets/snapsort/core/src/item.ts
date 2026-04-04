@@ -1,5 +1,5 @@
 import { BaseObject, ElementObject } from "@snap-engine/core";
-import { ItemContainer, ClickAction } from "./container";
+import type { ItemContainer } from "./container";
 import { AnimationObject } from "@snap-engine/core/animation";
 import type {
   dragStartProp,
@@ -7,6 +7,11 @@ import type {
   dragEndProp,
 } from "@snap-engine/core";
 import { mouseButtonBitmap } from "@snap-engine/core";
+
+export interface ClickAction {
+  action: "moveTo";
+  target: string;
+}
 
 const BUFFER = 20;
 
@@ -21,6 +26,7 @@ export class ItemObject extends ElementObject {
   #currentRow: number = 0;
   #onClickAction: ClickAction | null = null;
   #metadata: Record<string, unknown> = {};
+  #locked: boolean = false;
 
   #prevContainer: ItemContainer | null = null;
   #pendingDrop: boolean = false;
@@ -35,6 +41,14 @@ export class ItemObject extends ElementObject {
     this.#containerObject = null;
     this.#prevContainer = null;
     this.#metadata = {};
+  }
+
+  get locked(): boolean {
+    return this.#locked;
+  }
+
+  set locked(value: boolean) {
+    this.#locked = value;
   }
 
   get metadata(): Record<string, unknown> {
@@ -252,6 +266,8 @@ export class ItemObject extends ElementObject {
    * @param prop The drag start event properties.
    */
   cursorDown(prop: dragStartProp) {
+    if (this.#locked) return;
+
     // Disable camera control while dragging
     this.global.data.allowCameraControl = false;
 
@@ -396,6 +412,11 @@ export class ItemObject extends ElementObject {
       this.#pendingDrop = false;
       this.global.data.allowCameraControl = true;
       this.container.dragItem = null;
+      this.container.clearAllDebugMarkers();
+      for (const i of this.container.itemList) {
+        i.clearAllDebugMarkers();
+      }
+      this.clearAllDebugMarkers();
 
       const hasMoved =
         Math.abs(dropProp.end.screenX - dropProp.start.screenX) > 1 ||
