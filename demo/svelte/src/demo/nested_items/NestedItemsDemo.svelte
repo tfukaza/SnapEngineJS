@@ -39,7 +39,7 @@
         <div class="demo-body">
             <Container config={{ direction: "column", groupID: "nested-group" }}>
                 <Item className="demo-item"><p>Item 1</p></Item>
-                <Container config={{ direction: "column", groupID: "sub-group-a" }} locked={false}>
+                <Container config={{ direction: "column", groupID: "nested-group" }} locked={false}>
                     <Item className="demo-item sub-item"><p>Sub A1</p></Item>
                     <Item className="demo-item sub-item"><p>Sub A2</p></Item>
                     <Item className="demo-item sub-item"><p>Sub A3</p></Item>
@@ -58,11 +58,11 @@
         </div>
         <div class="demo-body">
             <Container config={{ direction: "column", groupID: "drag-nested-group" }}>
-                <Container config={{ direction: "column", groupID: "sub-group-b" }} locked={false}>
+                <Container config={{ direction: "column", groupID: "drag-nested-group" }} locked={false}>
                     <Item className="demo-item sub-item"><p>Group 1 - A</p></Item>
                     <Item className="demo-item sub-item"><p>Group 1 - B</p></Item>
                 </Container>
-                <Container config={{ direction: "column", groupID: "sub-group-c" }} locked={false}>
+                <Container config={{ direction: "column", groupID: "drag-nested-group" }} locked={false}>
                     <Item className="demo-item sub-item"><p>Group 2 - A</p></Item>
                     <Item className="demo-item sub-item"><p>Group 2 - B</p></Item>
                     <Item className="demo-item sub-item"><p>Group 2 - C</p></Item>
@@ -86,7 +86,7 @@
                         <span class="layer-name">Header</span>
                     </div>
                 </Item>
-                <Container config={{ direction: "column", groupID: "layer-sub-hero" }} locked={false}>
+                <Container config={{ direction: "column", groupID: "layers" }} locked={false}>
                     <div class="group-label">Hero Section</div>
                     <Item className="layer-item nested">
                         <div class="layer-row">
@@ -192,6 +192,10 @@
         border-color: var(--color-accent, #5856D6);
         background: transparent;
         opacity: 0.5;
+    }
+
+    :global(.container .container) {
+        padding-left: 12px;
     }
 
     /* ---- Layers Panel ---- */

@@ -185,7 +185,11 @@ export class ItemContainer extends ItemObject {
   }
 
   /**
-   * Get the closest container to the given world coordinates.
+   * Get the container that is closest to the given world coordinates.
+   * If there are multiple containers that is nested at the same level, 
+   * the one with the closest edge will be returned.
+   * If the world coordinate overlaps with a container that has more deeply nested 
+   * than the others, it will take precedence.
    * @param worldX
    * @param worldY
    * @returns
@@ -196,6 +200,7 @@ export class ItemContainer extends ItemObject {
 
     for (let c of this.global.data["dragAndDropContainers"] || []) {
       const container: ItemContainer = c as ItemContainer;
+      // Only look at containers in the same group
       if (container.groupID !== this.#config.groupID) {
         continue;
       }
@@ -278,6 +283,11 @@ export class ItemContainer extends ItemObject {
    * It assumes the latest DOM positions of the container and all items has already been saved.
    */
   setItemRows(caller: ItemObject | null) {
+
+    if (this.container) {
+      this.container.setItemRows(this);
+    }
+
     let rowList: ItemObject[][] = [];
     let prevVal = undefined;
     const isColumn = this.direction === "column";
@@ -510,6 +520,20 @@ export class ItemContainer extends ItemObject {
       this.#itemList.push(item);
     } else {
       this.#itemList.splice(index + 1, 0, item);
+    }
+    item.setContainer(this);
+    this.#dragItem = null;
+  }
+
+  /**
+   * Insert an item at a specific index in the item list.
+   * If the index is past the end, the item is appended.
+   */
+  insertItemAt(item: ItemObject, index: number) {
+    if (index >= this.#itemList.length) {
+      this.#itemList.push(item);
+    } else {
+      this.#itemList.splice(index, 0, item);
     }
     item.setContainer(this);
     this.#dragItem = null;
@@ -1166,6 +1190,9 @@ export class ItemContainer extends ItemObject {
    * @param stage
    */
   captureState(stage: "READ_1" | "READ_2" | "READ_3" = "READ_1") {
+    if (this.container) {
+      this.container.captureState(stage);
+    }
     this.readDom(true, stage);
     this.syncFromDom(stage);
     for (const item of this.#itemList) {

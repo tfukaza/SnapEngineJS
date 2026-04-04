@@ -1,6 +1,7 @@
 import { BaseObject, ElementObject } from "@snap-engine/core";
 import type { ItemContainer } from "./container";
 import { AnimationObject } from "@snap-engine/core/animation";
+import { RectCollider } from "@snap-engine/core/collision";
 import type {
   dragStartProp,
   dragProp,
@@ -27,6 +28,7 @@ export class ItemObject extends ElementObject {
   #onClickAction: ClickAction | null = null;
   #metadata: Record<string, unknown> = {};
   #locked: boolean = false;
+  #hitbox: RectCollider;
 
   #prevContainer: ItemContainer | null = null;
   #pendingDrop: boolean = false;
@@ -41,6 +43,8 @@ export class ItemObject extends ElementObject {
     this.#containerObject = null;
     this.#prevContainer = null;
     this.#metadata = {};
+    this.#hitbox = new RectCollider(engine, this, 0, 0, 0, 0);
+    this.addCollider(this.#hitbox);
   }
 
   get locked(): boolean {
@@ -69,7 +73,8 @@ export class ItemObject extends ElementObject {
 
   get container(): ItemContainer {
     if (!this.#containerObject) {
-      throw new Error("ItemObject has no container set.");
+      console.warn("ItemObject has no container set.");
+      return null; 
     }
     return this.#containerObject;
   }
@@ -129,6 +134,26 @@ export class ItemObject extends ElementObject {
 
   get isColumn() {
     return this.container.direction === "column";
+  }
+
+  get hitbox(): RectCollider {
+    return this.#hitbox;
+  }
+
+  /**
+   * Override readDom to keep the hitbox collider in sync with the DOM
+   * position and size every time DOM properties are read.
+   */
+  readDom(
+    subtractAppliedTransform: boolean = false,
+    stage: "READ_1" | "READ_2" | "READ_3" | null = null,
+  ) {
+    super.readDom(subtractAppliedTransform, stage);
+    const prop = this.getDomProperty(stage);
+    this.#hitbox.local.x = 0;
+    this.#hitbox.local.y = 0;
+    this.#hitbox.local.width = prop.width;
+    this.#hitbox.local.height = prop.height;
   }
 
   // ---------------------------------------------------------------------------
@@ -212,15 +237,15 @@ export class ItemObject extends ElementObject {
    */
   #dropItemAtIndex(item: ItemObject, dropIndex: number | null) {
     item.#applyIdleStyle();
-    this.container.addItemAfter(item, this.orderedItemList[dropIndex ?? 0]);
+    const idx = dropIndex ?? 0;
+    // Insert at dropIndex in both the list and DOM (matching ghost position)
+    this.container.insertItemAt(item, idx);
     this.container.removeGhostItem();
+    // DOM: insert before the item that follows in the list, or append if last
+    const nextItem = idx + 1 < this.orderedItemList.length ? this.orderedItemList[idx + 1] : null;
     this.container.element?.insertBefore(
       item.element as HTMLElement,
-      (dropIndex ?? 0) >= this.orderedItemList.length - 1 ||
-        this.orderedItemList.length == 0 ||
-        this.orderedItemList[dropIndex ?? 0] == null
-        ? (null as unknown as HTMLElement)
-        : this.orderedItemList[dropIndex ?? 0].element,
+      nextItem ? nextItem.element : null,
     );
     item.writeDom();
     item.writeTransform();
