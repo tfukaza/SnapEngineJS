@@ -14,6 +14,7 @@ import { UUID } from "crypto";
 export interface DomEvent {
   onAssignDom: null | (() => void);
   onResize: null | (() => void);
+  onAfterReadDom: null | ((stage: "READ_1" | "READ_2" | "READ_3") => void);
 }
 
 class EventCallback {
@@ -76,6 +77,7 @@ class EventCallback {
     this._dom = {
       onAssignDom: null,
       onResize: null,
+      onAfterReadDom: null,
     };
     this.dom = EventProxyFactory<BaseObject, DomEvent>(this._object, this._dom);
   }
@@ -272,6 +274,16 @@ export class BaseObject {
         return true;
       },
     });
+  }
+
+  appendChild(child: BaseObject) {
+    this.children.push(child);
+    child.parent = this;
+  }
+
+  removeChild(child: BaseObject) {
+    this.children = this.children.filter((c) => c !== child);
+    child.parent = null;
   }
 
   destroy() {
@@ -639,6 +651,9 @@ export class BaseObject {
     id: string = "",
     lineWidth: number = 2,
     tag?: string,
+    arrowEnd?: boolean,
+    arrowStart?: boolean,
+    arrowSize?: number,
   ) {
     if (!this.engine) return;
     this.engine.debugMarkerList[`${this.gid}-${id}`] = {
@@ -653,6 +668,9 @@ export class BaseObject {
       id: `${this.gid}-${id}`,
       lineWidth,
       tag,
+      arrowEnd,
+      arrowStart,
+      arrowSize,
     };
   }
 
@@ -919,6 +937,7 @@ export class DomElement {
    */
   writeDom() {
     if (!this.element) {
+      console.warn("Element is not set, cannot write to DOM");
       return;
     }
     setDomStyle(this.element, this._style);
@@ -1237,6 +1256,7 @@ export class ElementObject extends BaseObject {
     } else if (currentStage == "READ_3") {
       Object.assign(this._domProperty[2], this._dom.property);
     }
+    this.event.dom.onAfterReadDom?.(currentStage as "READ_1" | "READ_2" | "READ_3");
   }
 
   writeDom() {

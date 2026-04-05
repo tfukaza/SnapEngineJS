@@ -119,6 +119,9 @@ export class DebugRenderer implements DebugRendererInterface {
       text?: string;
       filled?: boolean;
       lineWidth?: number;
+      arrowEnd?: boolean;
+      arrowStart?: boolean;
+      arrowSize?: number;
     }>) {
       if (!this.isTagEnabled(marker.tag)) {
         continue;
@@ -168,6 +171,29 @@ export class DebugRenderer implements DebugRendererInterface {
         this.debugCtx.moveTo(cameraX, cameraY);
         this.debugCtx.lineTo(cameraX2, cameraY2);
         this.debugCtx.stroke();
+
+        // Draw arrowheads if requested
+        const size = marker.arrowSize ?? 8;
+        const angle = Math.atan2(cameraY2 - cameraY, cameraX2 - cameraX);
+        if (marker.arrowEnd) {
+          this.debugCtx.beginPath();
+          this.debugCtx.fillStyle = marker.color;
+          this.debugCtx.moveTo(cameraX2, cameraY2);
+          this.debugCtx.lineTo(cameraX2 - size * Math.cos(angle - Math.PI / 6), cameraY2 - size * Math.sin(angle - Math.PI / 6));
+          this.debugCtx.lineTo(cameraX2 - size * Math.cos(angle + Math.PI / 6), cameraY2 - size * Math.sin(angle + Math.PI / 6));
+          this.debugCtx.closePath();
+          this.debugCtx.fill();
+        }
+        if (marker.arrowStart) {
+          const reverseAngle = angle + Math.PI;
+          this.debugCtx.beginPath();
+          this.debugCtx.fillStyle = marker.color;
+          this.debugCtx.moveTo(cameraX, cameraY);
+          this.debugCtx.lineTo(cameraX - size * Math.cos(reverseAngle - Math.PI / 6), cameraY - size * Math.sin(reverseAngle - Math.PI / 6));
+          this.debugCtx.lineTo(cameraX - size * Math.cos(reverseAngle + Math.PI / 6), cameraY - size * Math.sin(reverseAngle + Math.PI / 6));
+          this.debugCtx.closePath();
+          this.debugCtx.fill();
+        }
       }
     }
 
