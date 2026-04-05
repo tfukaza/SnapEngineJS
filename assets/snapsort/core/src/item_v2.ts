@@ -357,6 +357,7 @@ export class ItemObjectV2 extends ElementObject {
   }
 
   dragStart(prop: dragStartProp) {
+    if (this.#locked) return;
     // Set the root container for all items, and queue READ to update the state of all containers and items.
     this.#findRootContainer();
     // Get the current index of the item in its container.

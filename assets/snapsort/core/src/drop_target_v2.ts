@@ -3,176 +3,288 @@ import type { ItemObjectV2 } from "./item_v2";
 // Sub-tags for drop index calculation debug visuals
 const TAG_LAYOUT = "drop-layout";         // virtual layout: height bars, layout start lines, ghost positions
 const TAG_COLLISIONS = "drop-collisions"; // collision: hitboxes, collision lines, DOM boxes, center points
-const TAG_CANDIDATES = "drop-candidates"; // candidates: result lines, arrows, shift arrows, best pick
+const TAG_CANDIDATES = "drop-candidates"; // candidates: result lines, best pick
 
 function nestingDepth(node: ItemObjectV2): number {
   return node.depth;
 }
 
+/** Get layout direction for a container. ItemContainerV2 has a direction getter; default to "column". */
+function getDirection(node: ItemObjectV2): "column" | "row" {
+  return ('direction' in node && typeof (node as any).direction === 'string')
+    ? (node as any).direction
+    : "column";
+}
+
+/** Euclidean distance between two points. */
+function euclidean(x1: number, y1: number, x2: number, y2: number): number {
+  return Math.sqrt((x1 - x2) ** 2 + (y1 - y2) ** 2);
+}
+
+export interface VirtualDimensions {
+  width: number;
+  height: number;
+}
+
 export interface DropCandidate {
   container: ItemObjectV2;
   index: number;
-  ghostCenter: number;
+  ghostCenterX: number;
+  ghostCenterY: number;
   distance: number;
   priority: number; // Higher priority wins on ties. Normal candidates = 0, special cases = 999.
 }
 
 /**
- * Recursively compute the virtual height of a container by summing
- * the heights of its children (recursing into sub-containers).
+ * Recursively compute the virtual dimensions (width and height) of a container
+ * by simulating its flex layout, including wrapping for row containers.
  * Excludes the dragged item and ghost items.
  */
-export function virtualHeight(container: ItemObjectV2, draggedItem: ItemObjectV2): number {
-  let total = 0;
-  for (const child of container.itemOrderedList) {
-    if (child === draggedItem || child.isGhost) continue;
-    if (child.itemOrderedList.length > 0) {
-      total += virtualHeight(child, draggedItem);
-    } else {
-      const prop = child.getDomProperty("READ_1");
-      if (prop) total += prop.height;
-    }
-  }
-  return total;
-}
+export function virtualDimensions(container: ItemObjectV2, draggedItem: ItemObjectV2): VirtualDimensions {
+  const isColumn = getDirection(container) === "column";
+  const containerProp = container.getDomProperty("READ_1");
 
-/**
- * Recursively simulate the vertical layout of a container. During the walk,
- * only try ghost placement at slots adjacent to items in the colliding set:
- * before each colliding item, and after the last colliding item.
- */
-export function virtualLayoutRecursive(
-  container: ItemObjectV2,
-  cursor: number,
-  draggedItem: ItemObjectV2,
-  ghostSize: number,
-  collidingSet: Set<ItemObjectV2>,
-  // results: DropCandidate[],
-  dragCenter: number,
-) {
-  // Exclude both the dragged item and the real ghost — the virtual layout simulates
-  // inserting a virtual ghost at each candidate position from scratch.
   const items = container.itemOrderedList.filter(
     (i) => i !== draggedItem && !i.isGhost,
   );
 
-  // let c = cursor;
-  // let lastWasColliding = false;
+  if (isColumn) {
+    // Column: stack vertically. Width = max child width, height = sum of child heights.
+    let totalHeight = 0;
+    let maxWidth = 0;
+    for (const child of items) {
+      let childW: number, childH: number;
+      if (child.itemOrderedList.length > 0) {
+        const dims = virtualDimensions(child, draggedItem);
+        childW = dims.width;
+        childH = dims.height;
+      } else {
+        const prop = child.getDomProperty("READ_1");
+        childW = prop ? prop.width : 0;
+        childH = prop ? prop.height : 0;
+      }
+      totalHeight += childH;
+      maxWidth = Math.max(maxWidth, childW);
+    }
+    return { width: maxWidth, height: totalHeight };
+  } else {
+    // Row with wrapping: place items left-to-right, wrap when exceeding container width.
+    const containerWidth = containerProp ? containerProp.width : Infinity;
+    let rowCursorX = 0;
+    let rowMaxHeight = 0;
+    let totalHeight = 0;
+    let maxRowWidth = 0;
 
-  console.debug(`[virtual-layout] container=${container.gid} cursor=${Math.round(cursor)} items=${items.length}`);
+    for (const child of items) {
+      let childW: number, childH: number;
+      if (child.itemOrderedList.length > 0) {
+        const dims = virtualDimensions(child, draggedItem);
+        childW = dims.width;
+        childH = dims.height;
+      } else {
+        const prop = child.getDomProperty("READ_1");
+        childW = prop ? prop.width : 0;
+        childH = prop ? prop.height : 0;
+      }
 
-  // Debug: draw a horizontal line and label where this container's virtual layout starts
+      // Wrap to next row if this item doesn't fit
+      if (rowCursorX > 0 && rowCursorX + childW > containerWidth) {
+        totalHeight += rowMaxHeight;
+        maxRowWidth = Math.max(maxRowWidth, rowCursorX);
+        rowCursorX = 0;
+        rowMaxHeight = 0;
+      }
+
+      rowCursorX += childW;
+      rowMaxHeight = Math.max(rowMaxHeight, childH);
+    }
+    // Final row
+    totalHeight += rowMaxHeight;
+    maxRowWidth = Math.max(maxRowWidth, rowCursorX);
+
+    return { width: maxRowWidth, height: totalHeight };
+  }
+}
+
+/**
+ * Recursively simulate the layout of a container, including wrapping for row containers.
+ * Only try ghost placement at slots adjacent to items in the colliding set.
+ *
+ * @param container   The container to lay out
+ * @param startX      The X origin of this container's content area
+ * @param startY      The Y origin of this container's content area
+ * @param draggedItem The item being dragged (excluded from layout)
+ * @param dragGhostW  Width of the ghost element (dragged item's width)
+ * @param dragGhostH  Height of the ghost element (dragged item's height)
+ * @param collidingSet Items currently colliding with the dragged item
+ * @param dragCenterX Dragged item's center X
+ * @param dragCenterY Dragged item's center Y
+ */
+export function virtualLayoutRecursive(
+  container: ItemObjectV2,
+  startX: number,
+  startY: number,
+  draggedItem: ItemObjectV2,
+  dragGhostW: number,
+  dragGhostH: number,
+  collidingSet: Set<ItemObjectV2>,
+  dragCenterX: number,
+  dragCenterY: number,
+): { results: DropCandidate[]; endX: number; endY: number } {
+  const isColumn = getDirection(container) === "column";
   const containerProp = container.getDomProperty("READ_1");
-  const layoutLineLeft = containerProp ? containerProp.x : 0;
-  const layoutLineRight = containerProp ? containerProp.x + containerProp.width : 200;
-  container.addDebugLine(
-    layoutLineLeft, cursor, layoutLineRight, cursor,
-    "rgba(0, 200, 180, 0.5)", true, `vlayout-start-${container.gid}`, 1, TAG_LAYOUT,
+  const containerWidth = containerProp ? containerProp.width : Infinity;
+
+  const items = container.itemOrderedList.filter(
+    (i) => i !== draggedItem && !i.isGhost,
   );
-  container.addDebugText(
-    layoutLineLeft - 2, cursor - 4,
-    `layout ${container.gid} y=${Math.round(cursor)}`,
-    "rgba(0, 200, 180, 0.7)", true, `vlayout-start-label-${container.gid}`, TAG_LAYOUT,
-  );
+
+  console.debug(`[virtual-layout] container=${container.gid} dir=${isColumn ? "col" : "row"} start=(${Math.round(startX)},${Math.round(startY)}) items=${items.length}`);
 
   let results: DropCandidate[] = [];
-  let totalSize = cursor;
 
-  // Clear stale ghost candidate rects from previous frame
+  // Clear stale ghost candidate rects
   for (let j = 0; j < items.length; j++) {
     container.clearDebugMarker(`vlayout-ghost-before-${container.gid}-${j}`);
     container.clearDebugMarker(`vlayout-ghost-after-${container.gid}-${j}`);
   }
 
-  // Walk through items in order, checking for collisions and recursing into sub-containers
-  for (let j = 0; j < items.length; j++) {
-    const item = items[j];
-    const isColliding = collidingSet.has(item);
+  if (isColumn) {
+    // Column layout: single cursor moving down
+    let cursorY = startY;
 
-    if (isColliding) {
-      // Try placing ghost BEFORE this colliding item/sub container
-      const ghostCenter = totalSize + ghostSize / 2;
-      const dist = Math.abs(ghostCenter - dragCenter);
-      results.push({ container, index: j, ghostCenter, distance: dist, priority: 0 });
-      // Debug: draw virtual ghost position (semi-transparent rect)
-      container.addDebugRect(
-        layoutLineLeft, totalSize, layoutLineRight - layoutLineLeft, ghostSize,
-        "rgba(250, 204, 21, 0.15)", true, `vlayout-ghost-before-${container.gid}-${j}`, true, 1, TAG_LAYOUT,
-      );
+    for (let j = 0; j < items.length; j++) {
+      const item = items[j];
+      const isColliding = collidingSet.has(item);
+
+      if (isColliding) {
+        const gcx = startX + containerWidth / 2;
+        const gcy = cursorY + dragGhostH / 2;
+        const dist = euclidean(gcx, gcy, dragCenterX, dragCenterY);
+        results.push({ container, index: j, ghostCenterX: gcx, ghostCenterY: gcy, distance: dist, priority: 0 });
+        container.addDebugRect(
+          startX, cursorY, containerWidth, dragGhostH,
+          "rgba(250, 204, 21, 0.15)", true, `vlayout-ghost-before-${container.gid}-${j}`, true, 1, TAG_LAYOUT,
+        );
+      }
+
+      // Get child dimensions and advance cursor
+      const itemStartY = cursorY;
+      let childH: number;
+      if (item.itemOrderedList.length > 0) {
+        const sub = virtualLayoutRecursive(item, startX, cursorY, draggedItem, dragGhostW, dragGhostH, collidingSet, dragCenterX, dragCenterY);
+        results.push(...sub.results);
+        childH = sub.endY - cursorY;
+      } else {
+        const prop = item.getDomProperty("READ_1");
+        childH = prop ? prop.height : 0;
+      }
+      cursorY += childH;
+
+      // Debug: vertical bar for this item's height
+      const rootProp = container.rootContainer?.getDomProperty("READ_1");
+      const barX = (rootProp ? rootProp.x : startX) - 6 + container.depth * 10;
+      item.addDebugLine(barX, itemStartY, barX, cursorY, "rgba(180, 100, 255, 0.7)", true, `vlayout-height-${item.gid}`, 2, TAG_LAYOUT);
+      item.addDebugText(barX - 30, itemStartY + childH / 2 + 4, `${Math.round(childH)}`, "rgba(180, 100, 255, 0.7)", true, `vlayout-height-label-${item.gid}`, TAG_LAYOUT);
+
+      if (isColliding) {
+        const gcx = startX + containerWidth / 2;
+        const gcy = cursorY + dragGhostH / 2;
+        const dist = euclidean(gcx, gcy, dragCenterX, dragCenterY);
+        results.push({ container, index: j + 1, ghostCenterX: gcx, ghostCenterY: gcy, distance: dist, priority: 0 });
+        container.addDebugRect(
+          startX, cursorY, containerWidth, dragGhostH,
+          "rgba(250, 204, 21, 0.15)", true, `vlayout-ghost-after-${container.gid}-${j}`, true, 1, TAG_LAYOUT,
+        );
+      }
     }
 
-    // Continue building the virtual layout
-    const itemStartY = totalSize;
-    if (item.itemOrderedList.length > 0) {
-      // For sub container, recurse to get the total size, and also collect candidates from inside it.
-      const { results: subResults, totalSize: subTotalSize } = virtualLayoutRecursive(
-        item, totalSize, draggedItem, ghostSize, collidingSet, dragCenter);
-      results.push(...subResults);
-      // subTotalSize is totalSize before the recursion + the virtual height of the sub container.
-      totalSize = subTotalSize;
-    } else {
-      const prop = item.getDomProperty("READ_1");
-      totalSize += prop.height;
+    return { results, endX: startX + containerWidth, endY: cursorY };
+
+  } else {
+    // Row layout with wrapping
+    let cursorX = startX;
+    let cursorY = startY;
+    let rowMaxH = 0;
+
+    for (let j = 0; j < items.length; j++) {
+      const item = items[j];
+      const isColliding = collidingSet.has(item);
+
+      // Get child dimensions
+      let childW: number, childH: number;
+      if (item.itemOrderedList.length > 0) {
+        const dims = virtualDimensions(item, draggedItem);
+        childW = dims.width;
+        childH = dims.height;
+      } else {
+        const prop = item.getDomProperty("READ_1");
+        childW = prop ? prop.width : 0;
+        childH = prop ? prop.height : 0;
+      }
+
+      // Wrap check: if this item doesn't fit, move to next row
+      if (cursorX > startX && cursorX + childW > startX + containerWidth) {
+        cursorY += rowMaxH;
+        cursorX = startX;
+        rowMaxH = 0;
+      }
+
+      if (isColliding) {
+        const gcx = cursorX + dragGhostW / 2;
+        const gcy = cursorY + dragGhostH / 2;
+        const dist = euclidean(gcx, gcy, dragCenterX, dragCenterY);
+        results.push({ container, index: j, ghostCenterX: gcx, ghostCenterY: gcy, distance: dist, priority: 0 });
+        container.addDebugRect(
+          cursorX, cursorY, dragGhostW, dragGhostH,
+          "rgba(250, 204, 21, 0.15)", true, `vlayout-ghost-before-${container.gid}-${j}`, true, 1, TAG_LAYOUT,
+        );
+      }
+
+      // Place item and advance
+      const itemStartX = cursorX;
+      if (item.itemOrderedList.length > 0) {
+        const sub = virtualLayoutRecursive(item, cursorX, cursorY, draggedItem, dragGhostW, dragGhostH, collidingSet, dragCenterX, dragCenterY);
+        results.push(...sub.results);
+      }
+      cursorX += childW;
+      rowMaxH = Math.max(rowMaxH, childH);
+
+      // Debug: horizontal bar for this item's width
+      const rootProp = container.rootContainer?.getDomProperty("READ_1");
+      const barY = (rootProp ? rootProp.y : startY) - 6 + container.depth * 10;
+      item.addDebugLine(itemStartX, barY, cursorX, barY, "rgba(180, 100, 255, 0.7)", true, `vlayout-height-${item.gid}`, 2, TAG_LAYOUT);
+      item.addDebugText(itemStartX + childW / 2 - 8, barY - 8, `${Math.round(childW)}`, "rgba(180, 100, 255, 0.7)", true, `vlayout-height-label-${item.gid}`, TAG_LAYOUT);
+
+      if (isColliding) {
+        const gcx = cursorX + dragGhostW / 2;
+        const gcy = cursorY + dragGhostH / 2;
+        const dist = euclidean(gcx, gcy, dragCenterX, dragCenterY);
+        results.push({ container, index: j + 1, ghostCenterX: gcx, ghostCenterY: gcy, distance: dist, priority: 0 });
+        container.addDebugRect(
+          cursorX, cursorY, dragGhostW, dragGhostH,
+          "rgba(250, 204, 21, 0.15)", true, `vlayout-ghost-after-${container.gid}-${j}`, true, 1, TAG_LAYOUT,
+        );
+      }
     }
 
-    // Debug: vertical bar showing this item's height in the virtual layout
-    // Use a fixed X anchor (left edge of root layout line) offset by depth
-    const rootProp = container.rootContainer?.getDomProperty("READ_1");
-    const barXBase = rootProp ? rootProp.x : (containerProp ? containerProp.x : 0);
-    const itemHeight = totalSize - itemStartY;
-    const barX = barXBase - 6 + container.depth * 10;
-    item.addDebugLine(
-      barX, itemStartY, barX, totalSize,
-      "rgba(180, 100, 255, 0.7)", true, `vlayout-height-${item.gid}`, 2, TAG_LAYOUT,
-    );
-    item.addDebugText(
-      barX - 30, itemStartY + itemHeight / 2 + 4,
-      `${Math.round(itemHeight)}`,
-      "rgba(180, 100, 255, 0.7)", true, `vlayout-height-label-${item.gid}`, TAG_LAYOUT,
-    );
-
-    if (isColliding) {
-      // Try placing the ghost AFTER the last colliding item.
-      // While this may result in duplicate candidates, it also ensures
-      // we don't miss any valid drop targets, especially in cases where the colliding set
-      // is in the middle of the container and not adjacent to the start or end.
-      const ghostCenter = totalSize + ghostSize / 2;
-      const dist = Math.abs(ghostCenter - dragCenter);
-      results.push({ container, index: j + 1, ghostCenter, distance: dist, priority: 0 });
-      // Debug: draw virtual ghost position (semi-transparent rect)
-      container.addDebugRect(
-        layoutLineLeft, totalSize, layoutLineRight - layoutLineLeft, ghostSize,
-        "rgba(250, 204, 21, 0.15)", true, `vlayout-ghost-after-${container.gid}-${j}`, true, 1, TAG_LAYOUT,
-      );
-    }
-
-    // lastWasColliding = isColliding;
+    // Final row height
+    cursorY += rowMaxH;
+    return { results, endX: cursorX, endY: cursorY };
   }
-
-  // Try placing ghost AFTER the last item if it was colliding
-  // if (lastWasColliding) {
-  //   const ghostCenter = totalSize + ghostSize / 2;
-  //   const dist = Math.abs(ghostCenter - dragCenter);
-  //   results.push({ container, index: items.length, ghostCenter, distance: dist });
-  // }
-
-  return {
-    results,
-    totalSize
-  };
 }
 
 /**
- * Walk the hierarchy looking for sub-containers. For each sub-container, check if
- * the dragged item's center is in the "edge zone" (between the container's top/bottom
- * and the center of its first/last child). If so, add a high-priority candidate for
- * inserting at index 0 or at the end of that sub-container.
+ * Walk the hierarchy looking for sub-containers and add high-priority candidates
+ * for inserting at the start/end edges.
  */
 function addSubContainerEdgeCandidates(
   node: ItemObjectV2,
   draggedItem: ItemObjectV2,
-  dragCenter: number,
-  ghostSize: number,
+  dragCenterX: number,
+  dragCenterY: number,
+  ghostW: number,
+  ghostH: number,
   collidingSet: Set<ItemObjectV2>,
   candidates: DropCandidate[],
 ) {
@@ -181,7 +293,6 @@ function addSubContainerEdgeCandidates(
   );
 
   for (const child of items) {
-    // Only consider sub-containers (nodes with children)
     if (child.itemOrderedList.length === 0) continue;
 
     const subItems = child.itemOrderedList.filter(
@@ -192,42 +303,51 @@ function addSubContainerEdgeCandidates(
     const containerProp = child.getDomProperty("READ_1");
     if (!containerProp) continue;
 
-    const containerTop = containerProp.y;
-    const containerBottom = containerProp.y + containerProp.height;
+    const isColumn = getDirection(child) === "column";
 
-    // Top edge: dragged center is below container top but above the center of the first child
+    // Start edge
     const firstChild = subItems[0];
     const firstProp = firstChild.getDomProperty("READ_1");
     if (firstProp) {
-      const firstCenter = firstProp.y + firstProp.height / 2;
-      if (dragCenter >= containerTop && dragCenter < firstCenter) {
-        const ghostCenter = containerTop + ghostSize / 2;
-        const dist = Math.abs(ghostCenter - dragCenter);
-        candidates.push({ container: child, index: 0, ghostCenter, distance: dist, priority: 999 });
+      const firstCenterPrimary = isColumn
+        ? firstProp.y + firstProp.height / 2
+        : firstProp.x + firstProp.width / 2;
+      const dragPrimary = isColumn ? dragCenterY : dragCenterX;
+      const containerStart = isColumn ? containerProp.y : containerProp.x;
+
+      if (dragPrimary >= containerStart && dragPrimary < firstCenterPrimary) {
+        const gcx = isColumn ? containerProp.x + containerProp.width / 2 : containerProp.x + ghostW / 2;
+        const gcy = isColumn ? containerProp.y + ghostH / 2 : containerProp.y + containerProp.height / 2;
+        const dist = euclidean(gcx, gcy, dragCenterX, dragCenterY);
+        candidates.push({ container: child, index: 0, ghostCenterX: gcx, ghostCenterY: gcy, distance: dist, priority: 999 });
       }
     }
 
-    // Bottom edge: dragged center is above container bottom but below the center of the last child
+    // End edge
     const lastChild = subItems[subItems.length - 1];
     const lastProp = lastChild.getDomProperty("READ_1");
     if (lastProp) {
-      const lastCenter = lastProp.y + lastProp.height / 2;
-      if (dragCenter > lastCenter && dragCenter <= containerBottom) {
-        const ghostCenter = containerBottom - ghostSize / 2;
-        const dist = Math.abs(ghostCenter - dragCenter);
-        candidates.push({ container: child, index: subItems.length, ghostCenter, distance: dist, priority: 999 });
+      const lastCenterPrimary = isColumn
+        ? lastProp.y + lastProp.height / 2
+        : lastProp.x + lastProp.width / 2;
+      const dragPrimary = isColumn ? dragCenterY : dragCenterX;
+      const containerEnd = isColumn ? containerProp.y + containerProp.height : containerProp.x + containerProp.width;
+
+      if (dragPrimary > lastCenterPrimary && dragPrimary <= containerEnd) {
+        const gcx = isColumn ? containerProp.x + containerProp.width / 2 : containerProp.x + containerProp.width - ghostW / 2;
+        const gcy = isColumn ? containerProp.y + containerProp.height - ghostH / 2 : containerProp.y + containerProp.height / 2;
+        const dist = euclidean(gcx, gcy, dragCenterX, dragCenterY);
+        candidates.push({ container: child, index: subItems.length, ghostCenterX: gcx, ghostCenterY: gcy, distance: dist, priority: 999 });
       }
     }
 
-    // Recurse into deeper sub-containers
-    addSubContainerEdgeCandidates(child, draggedItem, dragCenter, ghostSize, collidingSet, candidates);
+    addSubContainerEdgeCandidates(child, draggedItem, dragCenterX, dragCenterY, ghostW, ghostH, collidingSet, candidates);
   }
 }
 
 /**
  * Determine the container and index to drop the item into based on
  * the current mouse position. Draws debug visuals and returns the best candidate.
- * Collision engine runs between READ_1 and WRITE_1, so we can use the READ_1 properties for layout calculations.
  */
 export function determineDropTarget(item: ItemObjectV2, root: ItemObjectV2): DropCandidate | null {
   // Collect colliding items
@@ -241,26 +361,24 @@ export function determineDropTarget(item: ItemObjectV2, root: ItemObjectV2): Dro
 
   let best: DropCandidate | null = null;
 
-  // Virtual layout: simulate entire root container hierarchy
-
-  // Get the position and size of the root container
   const rootProp = root.getDomProperty("READ_1");
-  // Get the position and size of the dragged item.
   const dragProp = item.getDomProperty("READ_1");
-  // Set the dimensions of the virtual ghost
-  const virtualGhostSize = dragProp.height;
-  const dragCenter = item.transform.y + dragProp.height / 2;
-  const layoutOrigin = rootProp ? rootProp.y : 0;
+  const dragGhostW = dragProp.width;
+  const dragGhostH = dragProp.height;
+  const dragCenterX = item.transform.x + dragProp.width / 2;
+  const dragCenterY = item.transform.y + dragProp.height / 2;
+  const layoutX = rootProp ? rootProp.x : 0;
+  const layoutY = rootProp ? rootProp.y : 0;
 
-  // Run the virtual layout algorithm to get candidate drop targets and their distances to the dragged item's center
-  const { results: virtualCandidates } = virtualLayoutRecursive(root, layoutOrigin, item, virtualGhostSize, collidingSet, dragCenter);
+  // Run the virtual layout algorithm
+  const { results: virtualCandidates } = virtualLayoutRecursive(
+    root, layoutX, layoutY, item, dragGhostW, dragGhostH, collidingSet, dragCenterX, dragCenterY,
+  );
   const candidates: DropCandidate[] = [];
   candidates.push(...virtualCandidates);
 
   // Special cases: sub-container edge insertion
-  // When dragging near the top/bottom edge of a sub-container, add high-priority
-  // candidates for inserting at index 0 (top) or last index (bottom) of that sub-container.
-  addSubContainerEdgeCandidates(root, item, dragCenter, virtualGhostSize, collidingSet, candidates);
+  addSubContainerEdgeCandidates(root, item, dragCenterX, dragCenterY, dragGhostW, dragGhostH, collidingSet, candidates);
 
   // Pick the candidate with minimum distance; on ties (within 1px), prefer higher priority, then deeper nesting
   for (const c of candidates) {
@@ -273,15 +391,9 @@ export function determineDropTarget(item: ItemObjectV2, root: ItemObjectV2): Dro
     }
   }
 
-  // Draw debug for every candidate — horizontal line at ghost center
-  const rootPropForDebug = root.getDomProperty("READ_1");
-  const debugLeft = rootPropForDebug ? rootPropForDebug.x : 0;
-  const debugRight = rootPropForDebug ? rootPropForDebug.x + rootPropForDebug.width : 200;
-
-  // Clear old candidate markers
+  // --- Debug: candidate markers ---
   for (let i = 0; i < 50; i++) {
-    root.clearDebugMarker(`drop-candidate-line-${i}`);
-    root.clearDebugMarker(`drop-candidate-arrow-${i}`);
+    root.clearDebugMarker(`drop-candidate-marker-${i}`);
     root.clearDebugMarker(`drop-candidate-label-${i}`);
   }
 
@@ -289,23 +401,11 @@ export function determineDropTarget(item: ItemObjectV2, root: ItemObjectV2): Dro
     const c = candidates[i];
     const isBest = best === c;
     const color = isBest ? "rgba(250, 204, 21, 0.8)" : "rgba(180, 180, 180, 0.5)";
-    const lineWidth = isBest ? 2 : 1;
-    const arrowLen = isBest ? 18 : 12;
 
-    // Horizontal line at ghost center
-    root.addDebugLine(
-      debugLeft, c.ghostCenter, debugRight, c.ghostCenter,
-      color, true, `drop-candidate-line-${i}`, lineWidth, TAG_CANDIDATES,
-    );
-    // Vertical arrow pointing down — items below shift downward when ghost is inserted here
-    const arrowX = debugRight - 10;
-    root.addDebugLine(
-      arrowX, c.ghostCenter, arrowX, c.ghostCenter + arrowLen,
-      color, true, `drop-candidate-arrow-${i}`, lineWidth, TAG_CANDIDATES,
-      true, false, isBest ? 8 : 6,
-    );
+    // Draw a small crosshair at the ghost center
+    root.addDebugCircle(c.ghostCenterX, c.ghostCenterY, isBest ? 6 : 4, color, true, `drop-candidate-marker-${i}`, TAG_CANDIDATES);
     root.addDebugText(
-      debugRight + 4, c.ghostCenter + 4,
+      c.ghostCenterX + 8, c.ghostCenterY + 4,
       `${isBest ? ">> " : ""}[${c.container.gid}:${c.index}] d=${Math.round(c.distance)}`,
       color, true, `drop-candidate-label-${i}`, TAG_CANDIDATES,
     );
@@ -321,29 +421,24 @@ export function determineDropTarget(item: ItemObjectV2, root: ItemObjectV2): Dro
     item.clearDebugMarker(`drop-result`);
   }
 
-  // --- Debug visuals ---
-  debugDropTargetTree(root, item, collidingSet, best);
+  // --- Debug: collision visuals ---
+  debugDropTargetTree(root, item, collidingSet);
 
-  // Draw the dragged item's hitbox — yellow outline
   const dragTx = item.transform.x;
   const dragTy = item.transform.y;
   const dragHb = item.hitbox;
-  const dragHbX = dragTx + dragHb.local.x;
-  const dragHbY = dragTy + dragHb.local.y;
   item.addDebugRect(
-    dragHbX, dragHbY, dragHb.local.width, dragHb.local.height,
+    dragTx + dragHb.local.x, dragTy + dragHb.local.y, dragHb.local.width, dragHb.local.height,
     "rgba(250, 204, 21, 0.6)", true, `drop-drag-hitbox`, false, 2, TAG_COLLISIONS,
   );
   item.addDebugText(
-    dragHbX + 2, dragHbY - 4,
+    dragTx + dragHb.local.x + 2, dragTy + dragHb.local.y - 4,
     `DRAGGING ${item.gid}`,
     "rgba(250, 204, 21, 0.9)", true, `drop-drag-label`, TAG_COLLISIONS,
   );
 
-  // Draw lines from dragged item's center to every colliding item's center
-  const dragCp = item.centerPoint;
-  const dragCpX = dragTx + dragCp.local.x;
-  const dragCpY = dragTy + dragCp.local.y;
+  const dragCpX = dragTx + item.centerPoint.local.x;
+  const dragCpY = dragTy + item.centerPoint.local.y;
 
   for (const other of item.hitbox.currentCollisions) {
     const otherParent = other.parent as ItemObjectV2;
@@ -352,25 +447,18 @@ export function determineDropTarget(item: ItemObjectV2, root: ItemObjectV2): Dro
 
     const otherTx = otherParent.transform.x;
     const otherTy = otherParent.transform.y;
-    const otherCp = otherParent.centerPoint;
-    const otherCpX = otherTx + otherCp.local.x;
-    const otherCpY = otherTy + otherCp.local.y;
+    const otherCpX = otherTx + otherParent.centerPoint.local.x;
+    const otherCpY = otherTy + otherParent.centerPoint.local.y;
 
-    // Orange line from dragged center to colliding item center
-    item.addDebugLine(
-      dragCpX, dragCpY, otherCpX, otherCpY,
-      "rgba(251, 146, 60, 0.7)", true, `drop-collision-line-${otherParent.gid}`, 2, TAG_COLLISIONS,
-    );
-    // Highlight colliding item's hitbox — orange outline
+    item.addDebugLine(dragCpX, dragCpY, otherCpX, otherCpY, "rgba(251, 146, 60, 0.7)", true, `drop-collision-line-${otherParent.gid}`, 2, TAG_COLLISIONS);
+
     const otherHb = otherParent.hitbox;
-    const otherHbX = otherTx + otherHb.local.x;
-    const otherHbY = otherTy + otherHb.local.y;
     otherParent.addDebugRect(
-      otherHbX, otherHbY, otherHb.local.width, otherHb.local.height,
+      otherTx + otherHb.local.x, otherTy + otherHb.local.y, otherHb.local.width, otherHb.local.height,
       "rgba(251, 146, 60, 0.5)", true, `drop-colliding-${otherParent.gid}`, false, 2, TAG_COLLISIONS,
     );
     otherParent.addDebugText(
-      otherHbX + 2, otherHbY + otherHb.local.height + 12,
+      otherTx + otherHb.local.x + 2, otherTy + otherHb.local.y + otherHb.local.height + 12,
       `COLLIDING ${otherParent.gid}`,
       "rgba(251, 146, 60, 0.9)", true, `drop-colliding-label-${otherParent.gid}`, TAG_COLLISIONS,
     );
@@ -380,16 +468,13 @@ export function determineDropTarget(item: ItemObjectV2, root: ItemObjectV2): Dro
 }
 
 /**
- * Draw debug visuals (DOM box, hitbox, center point, shift arrows) for every item
- * in the hierarchy. Clears stale collision markers for items no longer colliding.
+ * Draw debug visuals for every item in the hierarchy.
  */
 export function debugDropTargetTree(
   node: ItemObjectV2,
   draggedItem: ItemObjectV2,
   collidingItems: Set<ItemObjectV2>,
-  best: DropCandidate | null,
 ) {
-  // Get the filtered item list for this container (same filtering as virtual layout)
   const items = node.itemOrderedList.filter(
     (i) => i !== draggedItem && !i.isGhost,
   );
@@ -402,68 +487,24 @@ export function debugDropTargetTree(
     const tx = item.transform.x;
     const ty = item.transform.y;
 
-    // 1. DOM bounding box (from READ_1) — blue outline
-    item.addDebugRect(
-      prop.x, prop.y, prop.width, prop.height,
-      "rgba(60, 130, 246, 0.4)", true, `drop-dom-${item.gid}`, false, 1, TAG_COLLISIONS,
-    );
-    item.addDebugText(
-      prop.x + 2, prop.y - 4,
-      `${item.gid}`,
-      "rgba(60, 130, 246, 0.7)", true, `drop-dom-label-${item.gid}`, TAG_COLLISIONS,
-    );
+    item.addDebugRect(prop.x, prop.y, prop.width, prop.height, "rgba(60, 130, 246, 0.4)", true, `drop-dom-${item.gid}`, false, 1, TAG_COLLISIONS);
+    item.addDebugText(prop.x + 2, prop.y - 4, `${item.gid}`, "rgba(60, 130, 246, 0.7)", true, `drop-dom-label-${item.gid}`, TAG_COLLISIONS);
 
-    // 2. Hitbox (rect collider) — green outline, offset from transform position
     const hb = item.hitbox;
-    const hbX = tx + hb.local.x;
-    const hbY = ty + hb.local.y;
-    item.addDebugRect(
-      hbX, hbY, hb.local.width, hb.local.height,
-      "rgba(34, 197, 94, 0.4)", true, `drop-hitbox-${item.gid}`, false, 1, TAG_COLLISIONS,
-    );
+    item.addDebugRect(tx + hb.local.x, ty + hb.local.y, hb.local.width, hb.local.height, "rgba(34, 197, 94, 0.4)", true, `drop-hitbox-${item.gid}`, false, 1, TAG_COLLISIONS);
 
-    // 3. Center point collider — red dot
-    const cp = item.centerPoint;
-    const cpX = tx + cp.local.x;
-    const cpY = ty + cp.local.y;
+    const cpX = tx + item.centerPoint.local.x;
+    const cpY = ty + item.centerPoint.local.y;
     item.addDebugCircle(cpX, cpY, 4, "rgba(239, 68, 68, 0.8)", true, `drop-center-${item.gid}`, TAG_COLLISIONS);
 
-    // 4. Shift direction arrow — shows which way this item moves if the ghost is dropped
-    //    Items at or after the drop index shift DOWN, items before shift UP.
-    if (best && best.container === node) {
-      const arrowX = prop.x + prop.width + 6;
-      const arrowMidY = prop.y + prop.height / 2;
-      const arrowLen = 14;
-      if (j >= best.index) {
-        // This item is at or after the drop index — shifts DOWN
-        item.addDebugLine(
-          arrowX, arrowMidY - arrowLen / 2, arrowX, arrowMidY + arrowLen / 2,
-          "rgba(250, 120, 50, 0.8)", true, `drop-shift-arrow-${item.gid}`, 2, TAG_CANDIDATES,
-          true, false, 6,
-        );
-      } else {
-        // This item is before the drop index — shifts UP
-        item.addDebugLine(
-          arrowX, arrowMidY + arrowLen / 2, arrowX, arrowMidY - arrowLen / 2,
-          "rgba(100, 180, 255, 0.8)", true, `drop-shift-arrow-${item.gid}`, 2, TAG_CANDIDATES,
-          true, false, 6,
-        );
-      }
-    } else {
-      // No drop target in this container — clear any stale arrow
-      item.clearDebugMarker(`drop-shift-arrow-${item.gid}`);
-    }
-
-    // Clear collision markers if this item is no longer colliding
     if (!collidingItems.has(item)) {
       draggedItem.clearDebugMarker(`drop-collision-line-${item.gid}`);
       item.clearDebugMarker(`drop-colliding-${item.gid}`);
       item.clearDebugMarker(`drop-colliding-label-${item.gid}`);
     }
 
-    // Recurse into children (nested containers)
     if (item.children.length > 0) {
-      debugDropTargetTree(item, draggedItem, collidingItems, best);
+      debugDropTargetTree(item, draggedItem, collidingItems);
     }
   }
 }
