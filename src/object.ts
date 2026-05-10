@@ -46,7 +46,10 @@ class EventCallback {
           this._object.engine,
         );
         if (value == null) {
-          globalInputEngine?.unsubscribeGlobalCursorEvent(prop, this._object.gid);
+          globalInputEngine?.unsubscribeGlobalCursorEvent(
+            prop,
+            this._object.gid,
+          );
         } else {
           globalInputEngine?.subscribeGlobalCursorEvent(
             prop,
@@ -95,11 +98,11 @@ export class ReactiveTransform implements TransformProperty {
   private _y: number = 0;
   private _scaleX: number = 1;
   private _scaleY: number = 1;
-  _role: 'world' | 'local';
+  _role: "world" | "local";
   _owner: BaseObject | null = null;
   _syncing: boolean = false;
 
-  constructor(role: 'world' | 'local') {
+  constructor(role: "world" | "local") {
     this._role = role;
   }
 
@@ -107,7 +110,9 @@ export class ReactiveTransform implements TransformProperty {
     this._owner = owner;
   }
 
-  get x(): number { return this._x; }
+  get x(): number {
+    return this._x;
+  }
   set x(value: number) {
     this._x = value;
     if (!this._syncing && this._owner) {
@@ -115,7 +120,9 @@ export class ReactiveTransform implements TransformProperty {
     }
   }
 
-  get y(): number { return this._y; }
+  get y(): number {
+    return this._y;
+  }
   set y(value: number) {
     this._y = value;
     if (!this._syncing && this._owner) {
@@ -123,11 +130,19 @@ export class ReactiveTransform implements TransformProperty {
     }
   }
 
-  get scaleX(): number { return this._scaleX; }
-  set scaleX(value: number) { this._scaleX = value; }
+  get scaleX(): number {
+    return this._scaleX;
+  }
+  set scaleX(value: number) {
+    this._scaleX = value;
+  }
 
-  get scaleY(): number { return this._scaleY; }
-  set scaleY(value: number) { this._scaleY = value; }
+  get scaleY(): number {
+    return this._scaleY;
+  }
+  set scaleY(value: number) {
+    this._scaleY = value;
+  }
 
   _setRaw(x: number, y: number) {
     this._x = x;
@@ -228,9 +243,9 @@ export class BaseObject {
     this.parent = parent;
 
     this._colliderList = [];
-    this.transform = new ReactiveTransform('world');
+    this.transform = new ReactiveTransform("world");
     this.transform._bind(this);
-    this.local = new ReactiveTransform('local');
+    this.local = new ReactiveTransform("local");
     this.local._bind(this);
     this.displacement = {
       x: 0,
@@ -310,8 +325,8 @@ export class BaseObject {
     this.local.y = position[1];
   }
 
-  _syncFrom(source: 'world' | 'local') {
-    if (source === 'world') {
+  _syncFrom(source: "world" | "local") {
+    if (source === "world") {
       if (this.parent) {
         this.local._setRaw(
           this.transform.x - this.parent.transform.x,
@@ -415,27 +430,7 @@ export class BaseObject {
     queueID: string | null = null,
   ): queueEntry {
     const request = new queueEntry(this, callback, queueID);
-    let queue = this.global.read1Queue;
-    switch (stage) {
-      case "READ_1":
-        queue = this.global.read1Queue;
-        break;
-      case "WRITE_1":
-        queue = this.global.write1Queue;
-        break;
-      case "READ_2":
-        queue = this.global.read2Queue;
-        break;
-      case "WRITE_2":
-        queue = this.global.write2Queue;
-        break;
-      case "READ_3":
-        queue = this.global.read3Queue;
-        break;
-      case "WRITE_3":
-        queue = this.global.write3Queue;
-        break;
-    }
+    const queue = this.global.queue[stage];
     if (!queue.get(this.gid)) {
       queue.set(this.gid, new Map());
     }
@@ -523,7 +518,7 @@ export class BaseObject {
 
   /**
    * Convenience method to create and add an animation to this object.
-   * 
+   *
    * @deprecated Use addAnimation with AnimationObject instead.
    *
    * @param keyframe - The keyframe properties to animate
@@ -585,7 +580,7 @@ export class BaseObject {
 
   addCollider(collider: Collider) {
     this._colliderList.push(collider);
-    if (!this.engine){
+    if (!this.engine) {
       return;
     }
     this.engine.collisionEngine?.addObject(collider);
@@ -755,7 +750,7 @@ export function detachAnimationFromOwner(animation: AnimationInterface) {
   owner.removeAnimationReference(animation);
 }
 
-interface DomProperty extends TransformProperty {
+export interface DomProperty extends TransformProperty {
   height: number;
   width: number;
   screenX: number;
@@ -1098,26 +1093,26 @@ export class ElementObject extends BaseObject {
     this._domProperty = [];
     for (let i = 0; i < 3; i++) {
       this._domProperty.push({
-      x: 0,
-      y: 0,
-      height: 0,
-      width: 0,
-      scaleX: 1,
-      scaleY: 1,
-      screenX: 0,
-      screenY: 0,
-      margin: {
-        top: 0,
-        right: 0,
-        bottom: 0,
-        left: 0,
-      },
-      padding: {
-        top: 0,
-        right: 0,
-        bottom: 0,
-        left: 0,
-      },
+        x: 0,
+        y: 0,
+        height: 0,
+        width: 0,
+        scaleX: 1,
+        scaleY: 1,
+        screenX: 0,
+        screenY: 0,
+        margin: {
+          top: 0,
+          right: 0,
+          bottom: 0,
+          left: 0,
+        },
+        padding: {
+          top: 0,
+          right: 0,
+          bottom: 0,
+          left: 0,
+        },
       });
     }
     this.transformMode = "direct";
@@ -1138,11 +1133,7 @@ export class ElementObject extends BaseObject {
       },
     });
 
-    this.inputEngine = new InputControl(
-      this.engine,
-      false,
-      this.gid,
-    );
+    this.inputEngine = new InputControl(this.engine, false, this.gid);
   }
 
   destroy() {
@@ -1151,7 +1142,9 @@ export class ElementObject extends BaseObject {
     super.destroy();
   }
 
-  getDomProperty(stage: "READ_1" | "READ_2" | "READ_3" | null = null): DomProperty {
+  getDomProperty(
+    stage: "READ_1" | "READ_2" | "READ_3" | null = null,
+  ): DomProperty {
     const index = stage == "READ_1" ? 0 : stage == "READ_2" ? 1 : 2;
     return this._domProperty[index];
   }
@@ -1170,9 +1163,7 @@ export class ElementObject extends BaseObject {
    * Currently only saves the x and y properties.
    * This function assumes that the element position has already been read from the DOM.
    */
-  syncFromDom(
-    stage: "READ_1" | "READ_2" | "READ_3" | null = null,
-  ): void {
+  syncFromDom(stage: "READ_1" | "READ_2" | "READ_3" | null = null): void {
     let currentStage = stage ?? this.global.currentStage;
     currentStage = currentStage == "IDLE" ? "READ_2" : currentStage;
 
@@ -1256,7 +1247,9 @@ export class ElementObject extends BaseObject {
     } else if (currentStage == "READ_3") {
       Object.assign(this._domProperty[2], this._dom.property);
     }
-    this.event.dom.onAfterReadDom?.(currentStage as "READ_1" | "READ_2" | "READ_3");
+    this.event.dom.onAfterReadDom?.(
+      currentStage as "READ_1" | "READ_2" | "READ_3",
+    );
   }
 
   writeDom() {
@@ -1282,11 +1275,17 @@ export class ElementObject extends BaseObject {
     syncToWorldPosition: boolean = true,
     stage: "READ_1" | "READ_2" | "READ_3" = "READ_1",
     recursive: boolean = false,
+    queueID: string | null = null,
   ): queueEntry {
     const callback = () => {
-      this._readDomRecursive(subtractAppliedTransform, syncToWorldPosition, stage, recursive);
+      this._readDomRecursive(
+        subtractAppliedTransform,
+        syncToWorldPosition,
+        stage,
+        recursive,
+      );
     };
-    return this.queueUpdate(stage, callback, stage);
+    return this.queueUpdate(stage, callback, queueID && stage);
   }
 
   _readDomRecursive(
@@ -1302,7 +1301,12 @@ export class ElementObject extends BaseObject {
     if (recursive) {
       for (const child of this.children) {
         if (child instanceof ElementObject) {
-          child._readDomRecursive(subtractAppliedTransform, syncToWorldPosition, stage, recursive);
+          child._readDomRecursive(
+            subtractAppliedTransform,
+            syncToWorldPosition,
+            stage,
+            recursive,
+          );
         }
       }
     }
@@ -1335,7 +1339,7 @@ export class ElementObject extends BaseObject {
     const callback = () => {
       this.writeTransform();
     };
-    return this.queueUpdate(stage, callback, "transform");
+    return this.queueUpdate(stage, callback, `${this.gid}-transform`);
   }
 
   requestFLIP(writeCallback: () => void, transformCallback: () => void): void {

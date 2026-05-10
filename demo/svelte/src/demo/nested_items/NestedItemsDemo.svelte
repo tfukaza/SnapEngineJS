@@ -5,7 +5,7 @@
 
     let engineComponent: Engine | null = null;
     let engineInstance: EngineClass | null = $state(null);
-    let debugMode = $state(false);
+    let debugMode = $state(true);
 
     const DEBUG_TAGS = [
         { id: "grid", label: "Grid" },
@@ -17,12 +17,18 @@
         { id: "item-positions", label: "Item Positions" },
         { id: "containers", label: "Containers" },
         { id: "drop-index", label: "Drop Index" },
+        { id: "drop-layout", label: "Drop: Virtual Layout" },
+        { id: "drop-collisions", label: "Drop: Collisions" },
+        { id: "drop-candidates", label: "Drop: Candidates" },
+        { id: "drop-neighbors", label: "Drop: Neighbors (prev/next)" },
+        { id: "drop-tiebreak", label: "Drop: Tie-break (prev vs next)" },
+        { id: "drop-zones", label: "Drop: Zones" },
         { id: "collisions", label: "Collisions" },
         { id: "animations", label: "Animations" },
     ] as const;
 
     let enabledTags = $state<Record<string, boolean>>(
-        Object.fromEntries(DEBUG_TAGS.map(t => [t.id, true]))
+        Object.fromEntries(DEBUG_TAGS.map(t => [t.id, t.id.startsWith("drop-")]))
     );
 
     function applyTagFilter() {
@@ -50,40 +56,49 @@
         applyTagFilter();
     }
 
+    // Apply tag filter once the engine is ready
+    $effect(() => {
+        if (engineInstance) {
+            applyTagFilter();
+        }
+    });
+
     export function setDebug(enabled: boolean) {
         debugMode = enabled;
     }
 </script>
 
+<div class="page-layout">
+<div class="engine-area">
 <Engine id="nested-items-demo-canvas" debug={debugMode} bind:this={engineComponent} bind:engine={engineInstance}>
 <div class="demos-layout">
 
-    <!-- Demo 1: Flat list (baseline — should work as before) -->
+    <!-- Demo 1: Flat list -->
     <div class="demo-panel">
         <div class="demo-header">
-            <h3>Flat List (Baseline)</h3>
-            <p class="demo-description">Regular items in a container. Should work exactly as before.</p>
+            <h3>Flat List</h3>
+            <p class="demo-description">Regular items in a snapsort container.</p>
         </div>
         <div class="demo-body">
-            <Container config={{ direction: "column", groupID: "flat-group" }}>
+            <Container config={{ direction: "column", groupID: "flat-group" }} locked={true}>
                 <Item className="demo-item"><p>Item A</p></Item>
                 <Item className="demo-item"><p>Item B</p></Item>
                 <Item className="demo-item"><p>Item C</p></Item>
                 <Item className="demo-item"><p>Item D</p></Item>
-                <Item className="demo-item"><p style="height: 90px; display: flex; align-items: center;">Item E (tall)</p></Item>
             </Container>
         </div>
     </div>
 
-    <!-- Demo 2: Items + nested container (container moves like an item) -->
+    <!-- Demo 2: Nested containers -->
     <div class="demo-panel">
         <div class="demo-header">
             <h3>Nested Container</h3>
-            <p class="demo-description">A container mixed with items. The nested container should shift/animate like an item when others are dragged.</p>
+            <p class="demo-description">A container with nested sub-containers and items.</p>
         </div>
         <div class="demo-body">
-            <Container config={{ direction: "column", groupID: "nested-group" }}>
+            <Container config={{ direction: "column", groupID: "nested-group" }} locked={true}>
                 <Item className="demo-item"><p>Item 1</p></Item>
+                <Item className="demo-item"><p>Item 1.5</p></Item>
                 <Container config={{ direction: "column", groupID: "nested-group" }} locked={false}>
                     <Item className="demo-item sub-item"><p>Sub A1</p></Item>
                     <Item className="demo-item sub-item"><p>Sub A2</p></Item>
@@ -95,14 +110,14 @@
         </div>
     </div>
 
-    <!-- Demo 3: Draggable nested container -->
+    <!-- Demo 3: Draggable sub-containers -->
     <div class="demo-panel">
         <div class="demo-header">
             <h3>Draggable Sub-Containers</h3>
-            <p class="demo-description">Nested containers can be dragged around like items. Items inside them can also be reordered.</p>
+            <p class="demo-description">Nested containers that can be dragged and reordered.</p>
         </div>
         <div class="demo-body">
-            <Container config={{ direction: "column", groupID: "drag-nested-group" }}>
+            <Container config={{ direction: "column", groupID: "drag-nested-group" }} locked={true}>
                 <Container config={{ direction: "column", groupID: "drag-nested-group" }} locked={false}>
                     <Item className="demo-item sub-item"><p>Group 1 - A</p></Item>
                     <Item className="demo-item sub-item"><p>Group 1 - B</p></Item>
@@ -117,17 +132,77 @@
         </div>
     </div>
 
-    <!-- Demo 4: Layers panel style -->
+    <!-- Demo 4: Horizontal row list -->
+    <div class="demo-panel" style="width: 400px;">
+        <div class="demo-header">
+            <h3>Row Layout</h3>
+            <p class="demo-description">Items arranged horizontally in a row container.</p>
+        </div>
+        <div class="demo-body">
+            <Container config={{ direction: "row", groupID: "row-group" }} locked={true}>
+                <Item className="demo-item row-item"><p>R1</p></Item>
+                <Item className="demo-item row-item"><p>R2</p></Item>
+                <Item className="demo-item row-item"><p>R3</p></Item>
+                <Item className="demo-item row-item"><p>R4</p></Item>
+            </Container>
+        </div>
+    </div>
+
+    <!-- Demo 5: Nested row groups -->
+    <div class="demo-panel" style="width: 400px;">
+        <div class="demo-header">
+            <h3>Nested Row Groups</h3>
+            <p class="demo-description">Row items with a nested row sub-group that can be reordered.</p>
+        </div>
+        <div class="demo-body">
+            <Container config={{ direction: "row", groupID: "nested-row-group" }} locked={true}>
+                <Item className="demo-item row-item"><p>R1</p></Item>
+                <Container config={{ direction: "row", groupID: "nested-row-group" }} locked={false}>
+                    <Item className="demo-item row-item sub-item"><p>S1</p></Item>
+                    <Item className="demo-item row-item sub-item"><p>S2</p></Item>
+                    <Item className="demo-item row-item sub-item"><p>S3</p></Item>
+                </Container>
+                <Item className="demo-item row-item"><p>R2</p></Item>
+                <Item className="demo-item row-item"><p>R3</p></Item>
+            </Container>
+        </div>
+    </div>
+
+    <!-- Demo 6: Wrapping row -->
+    <div class="demo-panel" style="width: 280px;">
+        <div class="demo-header">
+            <h3>Wrapping Row</h3>
+            <p class="demo-description">Many row items that wrap into multiple lines.</p>
+        </div>
+        <div class="demo-body">
+            <Container config={{ direction: "row", groupID: "wrap-row" }} locked={true}>
+                <Item className="demo-item row-item"><p>W1</p></Item>
+                <Item className="demo-item row-item"><p>W2</p></Item>
+                <Item className="demo-item row-item"><p>W3</p></Item>
+                <Item className="demo-item row-item"><p>W4</p></Item>
+                <Item className="demo-item row-item"><p>W5</p></Item>
+                <Item className="demo-item row-item"><p>W6</p></Item>
+                <Item className="demo-item row-item"><p>W7</p></Item>
+                <Item className="demo-item row-item"><p>W8</p></Item>
+                <Item className="demo-item row-item"><p>W9</p></Item>
+                <Item className="demo-item row-item"><p>W10</p></Item>
+                <Item className="demo-item row-item"><p>W11</p></Item>
+                <Item className="demo-item row-item"><p>W12</p></Item>
+            </Container>
+        </div>
+    </div>
+
+    <!-- Demo 6: Layers panel style -->
     <div class="demo-panel">
         <div class="demo-header">
             <h3>Layers Panel</h3>
             <p class="demo-description">Figma-style layers. Groups are nested containers that can be reordered alongside regular layers.</p>
         </div>
         <div class="layers-panel">
-            <Container config={{ direction: "column", groupID: "layers" }}>
+            <Container config={{ direction: "column", groupID: "layers" }} locked={true}>
                 <Item className="layer-item">
                     <div class="layer-row">
-                        <span class="layer-icon">◻</span>
+                        <span class="layer-icon">&#x25FB;</span>
                         <span class="layer-name">Header</span>
                     </div>
                 </Item>
@@ -135,7 +210,7 @@
                     <div class="group-label">Hero Section</div>
                     <Item className="layer-item">
                         <div class="layer-row">
-                            <span class="layer-icon">○</span>
+                            <span class="layer-icon">&#x25CB;</span>
                             <span class="layer-name">Avatar</span>
                         </div>
                     </Item>
@@ -154,13 +229,13 @@
                 </Container>
                 <Item className="layer-item">
                     <div class="layer-row">
-                        <span class="layer-icon">◻</span>
+                        <span class="layer-icon">&#x25FB;</span>
                         <span class="layer-name">Card Grid</span>
                     </div>
                 </Item>
                 <Item className="layer-item">
                     <div class="layer-row">
-                        <span class="layer-icon">◻</span>
+                        <span class="layer-icon">&#x25FB;</span>
                         <span class="layer-name">Footer</span>
                     </div>
                 </Item>
@@ -170,6 +245,7 @@
 
 </div>
 </Engine>
+</div>
 
 {#if debugMode}
 <div class="debug-sidebar">
@@ -189,8 +265,22 @@
     {/each}
 </div>
 {/if}
+</div>
 
 <style lang="scss">
+    .page-layout {
+        display: flex;
+        width: 100%;
+        height: 100%;
+    }
+
+    .engine-area {
+        flex: 1;
+        min-width: 0;
+        height: 100%;
+        position: relative;
+    }
+
     .demos-layout {
         width: 100%;
         height: 100%;
@@ -252,13 +342,23 @@
         }
     }
 
+    :global(.ghost) {
+        background: rgba(0, 0, 0, 0.06);
+        border-radius: 6px;
+    }
+
     :global(.demo-item.sub-item) {
         border-color: var(--color-accent, #5856D6);
         background: transparent;
         opacity: 0.5;
     }
 
-    :global(.container .container) {
+    :global(.demo-item.row-item) {
+        min-width: 50px;
+        text-align: center;
+    }
+
+    :global(.snapsort-container .snapsort-container) {
         padding-left: 12px;
     }
 
@@ -277,10 +377,6 @@
         &:active {
             cursor: grabbing;
         }
-    }
-
-    :global(.layer-item.nested) {
-        opacity: 0.5;
     }
 
     .layer-row {
@@ -315,17 +411,14 @@
     /* ---- Debug Sidebar ---- */
 
     .debug-sidebar {
-        position: fixed;
-        top: 60px;
-        right: 12px;
         width: 200px;
+        flex-shrink: 0;
         background: var(--color-surface, #fff);
-        border: 1px solid var(--color-border, #ccc);
-        border-radius: 8px;
-        padding: 8px 12px;
-        z-index: 2000;
+        border-left: 1px solid var(--color-border, #ccc);
+        padding: 68px 12px 12px;
+        box-sizing: border-box;
+        overflow-y: auto;
         pointer-events: auto;
-        box-shadow: 0 2px 8px rgba(0, 0, 0, 0.15);
         font-size: 0.8em;
     }
 

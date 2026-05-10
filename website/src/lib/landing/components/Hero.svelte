@@ -126,8 +126,10 @@
 
   function updateDroppedColors() {
     if (seqOneTopContainer) {
-      const newColors = seqOneTopContainer.getItemsMetadata<{ color: string; name: string; id: string }>();
-      const colorsChanged = 
+      const newColors = seqOneTopContainer.itemOrderedList
+        .map((item) => (item as unknown as { metadata: { color: string; name: string; id: string } }).metadata)
+        .filter((m): m is { color: string; name: string; id: string } => !!m && typeof m === "object");
+      const colorsChanged =
         newColors.length !== droppedColors.length ||
         newColors.some((c, i) => c.id !== droppedColors[i]?.id);
       

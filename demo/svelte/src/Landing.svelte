@@ -11,7 +11,6 @@
   import CollisionDemo from "./demo/collision/CollisionDemo.svelte";
   import CSSShowcase from "./demo/css_showcase/CSSShowcase.svelte";
   import NestedItemsDemo from "./demo/nested_items/NestedItemsDemo.svelte";
-  import NestedItemsV2Demo from "./demo/nested_items_v2/NestedItemsV2Demo.svelte";
 
   type DemoOption = {
     label: string;
@@ -27,7 +26,6 @@
     { label: "Drop & Snap", value: "drag_drop" },
     { label: "Collision", value: "collision" },
     { label: "Nested Items", value: "nested_items" },
-    { label: "Nested Items V2", value: "nested_items_v2" },
   ];
 
   function getDemoFromUrl() {
@@ -45,9 +43,8 @@
   let dragDemoRef: DragDemo | null = $state(null);
   let dragDropDemoRef: DragDropDemo | null = $state(null);
   let nestedItemsDemoRef: NestedItemsDemo | null = $state(null);
-  let nestedItemsV2DemoRef: NestedItemsV2Demo | null = $state(null);
 
-  const debugSupportedDemos = ["drag", "drag_drop", "nested_items", "nested_items_v2"];
+  const debugSupportedDemos = ["drag", "drag_drop", "nested_items"];
 
   $effect(() => {
     if (typeof window !== "undefined") {
@@ -78,7 +75,6 @@
     dragDemoRef?.setDebug(debugEnabled);
     dragDropDemoRef?.setDebug(debugEnabled);
     nestedItemsDemoRef?.setDebug(debugEnabled);
-    nestedItemsV2DemoRef?.setDebug(debugEnabled);
   }
 
   $effect(() => {
@@ -87,7 +83,6 @@
       dragDemoRef?.setDebug(false);
       dragDropDemoRef?.setDebug(false);
       nestedItemsDemoRef?.setDebug(false);
-      nestedItemsV2DemoRef?.setDebug(false);
     }
   });
 </script>
@@ -132,8 +127,6 @@
       <CollisionDemo />
     {:else if selectedDemo === "nested_items"}
       <NestedItemsDemo bind:this={nestedItemsDemoRef} />
-    {:else if selectedDemo === "nested_items_v2"}
-      <NestedItemsV2Demo bind:this={nestedItemsV2DemoRef} />
     {/if}
   </div>
 </div>

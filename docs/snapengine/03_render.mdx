@@ -6,9 +6,8 @@ sectionOrder: 1
 ---
 
 To make interesting things happen on the web, you need to interact with the DOM.
-But we already mentioned in the previous section that DOM reads and writes can be expensive. 
-Even worse, firing many reads and writes one after another can cause **layout thrashing**. This occurs when you read something from the DOM after modifying it
-(like changing an element's size or adding a new element), forcing the the browser to recalculate the layout of the page.
+But DOM reads and writes can be expensive. Even worse, firing many reads and writes one after another can cause **layout thrashing**. This occurs when you read something from the DOM after modifying it
+(like changing an element's size or adding a new element), forcing the browser to recalculate the layout of the page.
 Rapidly alternating between reads and writes can lead to frequent layout recalculations, severely impacting performance. 
 Instead, we should batch all the reads and writes together, so the layout recalculation only happens once between all the reads and writes.
 <br/>
@@ -17,14 +16,9 @@ Libraries like `fastdom` exist to address this specific problem by providing an 
 and also synchronize them with the browser's rendering cycle using `requestAnimationFrame`.
 SnapEngine also has a similar system built-in, albeit with a twist - instead of a single read and write phase per frame,
 it has 3 pairs of read and write phases, designated `READ_1`, `WRITE_1`, `READ_2`, `WRITE_2`, `READ_3`, and `WRITE_3`. 
-This 6-phase design facilitates code that may need to interact with the DOM multiple times in a single frame,
-while also serving as a implicit message that if you find yourself needing more than 6 read/write phases, you may want to reconsider your logic.
-<br/>
+This 6-phase design facilitates code that may need to interact with the DOM multiple times in a single frame.
 
-In addition to the three read/write pairs, there are also specific points in the render pipeline where certain systems run:
-- Between `WRITE_2` and `READ_3`, the Animation system updates any active animations.
-- After `WRITE_3`, the Collision Detection system runs to update hitboxes, followed by the Debug Renderer if enabled.
-
+> [!WARNING] If you find yourself needing more than 6 read/write phases, you may want to reconsider your logic.
 <br/>
 
 Below is a summary of the render pipeline stages:
@@ -180,6 +174,11 @@ object.queueUpdate("READ_1", () => {
     console.log(props.screenX, props.screenY, props.width, props.height);
 });
 ```
+
+## Best Practices
+Developers are encouraged to avoid bloating render callbacks with 
+code that does not mutate the DOM. Otherwise, they will block the rendering pipeline and may induce latency into the UI.
+Non DOM update code should ideally be executed elsewhere, such as in input handling code
 
 ## Convenience Methods
 

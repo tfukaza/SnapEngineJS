@@ -1,6 +1,17 @@
 import { BaseObject, queueEntry } from "./object";
 import { GlobalInputControl } from "./input";
 
+type renderEntry = Map<string, Map<string, queueEntry>>;
+
+interface RenderQueue {
+  READ_1: renderEntry;
+  WRITE_1: renderEntry;
+  READ_2: renderEntry;
+  WRITE_2: renderEntry;
+  READ_3: renderEntry;
+  WRITE_3: renderEntry;
+}
+
 /**
  * Central state manager shared across all engine instances.
  *
@@ -41,12 +52,7 @@ class GlobalManager {
     | "WRITE_2"
     | "READ_3"
     | "WRITE_3";
-  read1Queue: Map<string, Map<string, queueEntry>>;
-  write1Queue: Map<string, Map<string, queueEntry>>;
-  read2Queue: Map<string, Map<string, queueEntry>>;
-  write2Queue: Map<string, Map<string, queueEntry>>;
-  read3Queue: Map<string, Map<string, queueEntry>>;
-  write3Queue: Map<string, Map<string, queueEntry>>;
+  queue: RenderQueue;
   // Registry of all engine instances
   engines: Set<any>;
 
@@ -59,12 +65,20 @@ class GlobalManager {
     this.#engineIds = new WeakMap();
 
     this.currentStage = "IDLE";
-    this.read1Queue = new Map();
-    this.write1Queue = new Map();
-    this.read2Queue = new Map();
-    this.write2Queue = new Map();
-    this.read3Queue = new Map();
-    this.write3Queue = new Map();
+    // this.read1Queue = new Map();
+    // this.write1Queue = new Map();
+    // this.read2Queue = new Map();
+    // this.write2Queue = new Map();
+    // this.read3Queue = new Map();
+    // this.write3Queue = new Map();
+    this.queue = {
+      READ_1: new Map(),
+      WRITE_1: new Map(),
+      READ_2: new Map(),
+      WRITE_2: new Map(),
+      READ_3: new Map(),
+      WRITE_3: new Map(),
+    };
 
     this.engines = new Set();
   }
@@ -153,9 +167,9 @@ class GlobalManager {
       // READ_1 stage for all engines
       this.currentStage = "READ_1";
       for (const engine of this.engines) {
-        engine._processStage("READ_1", this.read1Queue, timestamp);
+        engine._processStage("READ_1", this.queue.READ_1, timestamp);
       }
-      this.read1Queue = new Map();
+      this.queue.READ_1 = new Map();
 
       // Collision detection after READ_1 so colliders have up-to-date positions
       for (const engine of this.engines) {
@@ -165,23 +179,23 @@ class GlobalManager {
       // WRITE_1 stage for all engines
       this.currentStage = "WRITE_1";
       for (const engine of this.engines) {
-        engine._processStage("WRITE_1", this.write1Queue, timestamp);
+        engine._processStage("WRITE_1", this.queue.WRITE_1, timestamp);
       }
-      this.write1Queue = new Map();
+      this.queue.WRITE_1 = new Map();
 
       // READ_2 stage for all engines
       this.currentStage = "READ_2";
       for (const engine of this.engines) {
-        engine._processStage("READ_2", this.read2Queue, timestamp);
+        engine._processStage("READ_2", this.queue.READ_2, timestamp);
       }
-      this.read2Queue = new Map();
+      this.queue.READ_2 = new Map();
 
       // WRITE_2 stage for all engines
       this.currentStage = "WRITE_2";
       for (const engine of this.engines) {
-        engine._processStage("WRITE_2", this.write2Queue, timestamp);
+        engine._processStage("WRITE_2", this.queue.WRITE_2, timestamp);
       }
-      this.write2Queue = new Map();
+      this.queue.WRITE_2 = new Map();
 
       // Animation processing for all engines
       for (const engine of this.engines) {
@@ -191,16 +205,16 @@ class GlobalManager {
       // READ_3 stage for all engines
       this.currentStage = "READ_3";
       for (const engine of this.engines) {
-        engine._processStage("READ_3", this.read3Queue, timestamp);
+        engine._processStage("READ_3", this.queue.READ_3, timestamp);
       }
-      this.read3Queue = new Map();
+      this.queue.READ_3 = new Map();
 
       // WRITE_3 stage for all engines
       this.currentStage = "WRITE_3";
       for (const engine of this.engines) {
-        engine._processStage("WRITE_3", this.write3Queue, timestamp);
+        engine._processStage("WRITE_3", this.queue.WRITE_3, timestamp);
       }
-      this.write3Queue = new Map();
+      this.queue.WRITE_3 = new Map();
 
       this.currentStage = "IDLE";
 
@@ -210,6 +224,9 @@ class GlobalManager {
       }
 
       this.#animationFrameId = window.requestAnimationFrame(step);
+
+      // When rAF callback ends, and if there are no more Event callbacks,
+      // the browser can begin painting.
     };
 
     this.#animationFrameId = window.requestAnimationFrame(step);

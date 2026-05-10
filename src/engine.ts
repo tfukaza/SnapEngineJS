@@ -1,4 +1,4 @@
-import {StationaryCamera} from "./camera";
+import { StationaryCamera } from "./camera";
 import type { Camera } from "./camera";
 import { GlobalManager } from "./global";
 import {
@@ -14,13 +14,15 @@ import type { DebugRenderer } from "./debug";
 
 export interface EngineConfig {}
 
-const DEFAULT_ENGINE_CONFIG: EngineConfig = {
-};
+const DEFAULT_ENGINE_CONFIG: EngineConfig = {};
 
 /**
  * Available engine event types that can be subscribed to.
  */
-export type EngineEventType = 'containerAssigned' | 'containerResized' | 'containerMoved';
+export type EngineEventType =
+  | "containerAssigned"
+  | "containerResized"
+  | "containerMoved";
 
 /**
  * Container bounds data passed to engine event callbacks.
@@ -74,7 +76,6 @@ type AnimationProcessor = (timestamp: number) => void;
  * ```
  */
 class Engine {
-
   engineConfig: EngineConfig; // Engine configuration options
   global: GlobalManager | null = null; // Reference to the global manager
 
@@ -82,7 +83,7 @@ class Engine {
   containerBounds: ContainerBounds | null = null; // Cached bounding rect of the container
   camera: Camera | null = null; // Optional camera instance
   collisionEngine: CollisionEngine | null = null; // Optional collision engine instance
-  animationList: AnimationInterface[] = []; // List of active animations, if animation engine is enabled  
+  animationList: AnimationInterface[] = []; // List of active animations, if animation engine is enabled
   #animationProcessor: AnimationProcessor | null = null;
   debugMarkerList: Record<
     string,
@@ -109,14 +110,16 @@ class Engine {
   #debugRenderer: DebugRenderer | null = null;
 
   // Event subscribers - allows multiple listeners per event type
-  #eventSubscribers: Record<EngineEventType, Record<string, (props: EngineEventProps) => void>> = {
+  #eventSubscribers: Record<
+    EngineEventType,
+    Record<string, (props: EngineEventProps) => void>
+  > = {
     containerAssigned: {},
     containerResized: {},
     containerMoved: {},
   };
 
   #resizeObserver: ResizeObserver | null = null;
-
 
   constructor(config: EngineConfig = {}) {
     this.global = GlobalManager.getInstance();
@@ -130,11 +133,11 @@ class Engine {
   /**
    * Subscribe to an engine event with a unique identifier.
    * Multiple subscribers can listen to the same event.
-   * 
+   *
    * @param event - The event type to subscribe to
    * @param id - A unique identifier for this subscription (used for unsubscribing)
    * @param callback - The callback function to invoke when the event fires
-   * 
+   *
    * @example
    * ```typescript
    * engine.subscribeEvent('containerAssigned', 'myComponent', (props) => {
@@ -142,16 +145,20 @@ class Engine {
    * });
    * ```
    */
-  subscribeEvent(event: EngineEventType, id: string, callback: (props: EngineEventProps) => void) {
+  subscribeEvent(
+    event: EngineEventType,
+    id: string,
+    callback: (props: EngineEventProps) => void,
+  ) {
     this.#eventSubscribers[event][id] = callback;
   }
 
   /**
    * Unsubscribe from an engine event.
-   * 
+   *
    * @param event - The event type to unsubscribe from
    * @param id - The unique identifier used when subscribing
-   * 
+   *
    * @example
    * ```typescript
    * engine.unsubscribeEvent('containerAssigned', 'myComponent');
@@ -204,7 +211,7 @@ class Engine {
    * Initialize dom elements, and event listeners for the library.
    * This must be handled outside the constructor since many frontend frameworks
    * run Component constructors before the DOM element is available.
-   * 
+   *
    * @param element: The element acting as the container.
    */
   assignDom(element: HTMLElement) {
@@ -221,17 +228,17 @@ class Engine {
     // Set up resize observer
     this.#resizeObserver = new ResizeObserver(() => {
       this.#updateContainerBounds(this.containerElement!);
-      this.#publishEvent('containerResized', this.containerElement!);
+      this.#publishEvent("containerResized", this.containerElement!);
     });
     this.#resizeObserver?.observe(element);
     this.#resizeObserver?.observe(window.document.body);
     // Set up scroll listener
-    window.addEventListener('scroll', () => {
+    window.addEventListener("scroll", () => {
       this.#updateContainerBounds(this.containerElement!);
-      this.#publishEvent('containerMoved', this.containerElement!);
+      this.#publishEvent("containerMoved", this.containerElement!);
     });
 
-    this.#publishEvent('containerAssigned', element);
+    this.#publishEvent("containerAssigned", element);
   }
 
   set element(containerDom: HTMLElement) {
@@ -247,7 +254,7 @@ class Engine {
    * ```typescript
    * import { Engine } from 'snapengine';
    * import { DebugRenderer } from 'snapengine/debug';
-   * 
+   *
    * const engine = new Engine();
    * engine.element = document.getElementById('container');
    * engine.setDebugRenderer(new DebugRenderer());
@@ -280,7 +287,7 @@ class Engine {
 
   #processQueue(stage: string, queue: Map<string, Map<string, queueEntry>>) {
     // Keep a set of all objects that have been processed
-    let processedObjects: Set<BaseObject> = new Set();
+    const processedObjects: Set<BaseObject> = new Set();
     for (const queueEntry of queue.values()) {
       // Check if the object belongs to this engine
       // All entries in the inner map belong to the same object (same GID)
@@ -363,7 +370,7 @@ class Engine {
 
   /**
    * Sets a collision engine instance for collision detection.
-   * 
+   *
    * This method allows you to inject a collision engine from a separate import,
    * enabling true tree-shaking when collision detection is not used.
    *
@@ -373,11 +380,11 @@ class Engine {
    * ```typescript
    * import { Engine } from 'snapengine';
    * import { CollisionEngine, CircleCollider } from 'snapengine/collision';
-   * 
+   *
    * const engine = new Engine();
    * engine.element = document.getElementById('container');
    * engine.setCollisionEngine(new CollisionEngine());
-   * 
+   *
    * const collider = new CircleCollider(engine, object, 50);
    * object.addCollider(collider);
    * ```
@@ -394,16 +401,16 @@ class Engine {
    *
    * The animation engine processes animations each frame. This method only sets up
    * the processing loop - animation classes should be imported separately.
-   * 
+   *
    * @example
    * ```typescript
    * import { Engine } from 'snapengine';
    * import { AnimationObject } from 'snapengine/animation';
-   * 
+   *
    * const engine = new Engine();
    * engine.element = document.getElementById('container');
    * engine.enableAnimationEngine();
-   * 
+   *
    * const animation = new AnimationObject(element, { x: [0, 100] }, { duration: 1000 });
    * object.addAnimation(animation);
    * animation.play();

@@ -1,5 +1,6 @@
 import { Engine } from "./engine";
 import { ElementObject, BaseObject, ReactiveTransform } from "./object";
+import type { DomProperty } from "./object";
 import { GlobalManager } from "./global";
 import {
   pointerDownProp,
@@ -36,5 +37,6 @@ export {
   type pinchStartProp,
   type pinchProp,
   type pinchEndProp,
+  type DomProperty,
   mouseButtonBitmap,
 };

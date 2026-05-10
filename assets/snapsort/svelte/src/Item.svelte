@@ -1,29 +1,20 @@
 <script lang="ts">
   import { onMount, getContext, onDestroy } from "svelte";
   import { ItemContainer } from "@snap-engine/snapsort";
-  import type { ClickAction } from "@snap-engine/snapsort";
   import { ItemObject } from "@snap-engine/snapsort";
   import type { Engine } from "@snap-engine/core";
 
-
-  let { children, style = "", className = "", onClickAction = null, metadata = {} }: { children: any; style?: string; className?: string; onClickAction?: ClickAction | null; metadata?: Record<string, unknown> } = $props();
+  let { children, style = "", className = "", metadata = {} }: { children: any; style?: string; className?: string; metadata?: Record<string, unknown> } = $props();
   const engine: Engine = getContext("engine");
-  const itemContainer: ItemContainer = getContext("itemContainer");
 
+  const container: ItemContainer = getContext("container");
   let itemObject: ItemObject = new ItemObject(engine, null);
 
   onMount(() => {
-    itemContainer.addItem(itemObject);
-    if (onClickAction) {
-      itemObject.onClickAction = onClickAction;
+    if (container) {
+      container.addItem(itemObject);
     }
-    itemObject.metadata = metadata;
-  });
-
-  $effect(() => {
-    if (onClickAction) {
-      itemObject.onClickAction = onClickAction;
-    }
+    // itemObject.metadata = metadata;
   });
 
   $effect(() => {
@@ -35,44 +26,19 @@
   });
 </script>
 
-<div class="item-wrapper {className}" bind:this={itemObject.element} {style}>
-  <div class="item">
+<div class="snapsort-item-wrapper {className}" bind:this={itemObject.element} {style}>
+  <div class="snapsort-item">
     {@render children()}
   </div>
 </div>
 
 <style>
-  .item-wrapper {
+  .snapsort-item-wrapper {
     display: flex;
     flex-direction: column;
     align-items: center;
     justify-content: center;
     padding: var(--size-4);
     box-sizing: border-box;
-
   }
-
-  .item {
-    /* padding: var(--size-4) var(--size-8);
-    background-color: var(--color-background-tint);
-    box-sizing: border-box; */
-  }
-
-
-
-  /* @media (max-width: 600px) and (min-width: 401px) {
-    .item {
-      padding: var(--size-8);
-    }
-  }
-
-  @media (max-width: 400px) {
-    .item {
-      padding: 6px 8px 4px 8px;
-      border-radius: var(--size-12);
-      :global(p) {
-        font-size: 0.8rem;
-      }
-    }
-  } */
 </style>

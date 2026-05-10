@@ -380,6 +380,12 @@
     height: clamp(80vh, 80vh, 1200px);
   }
 
+  :global(.ghost) {
+    background: rgba(0, 0, 0, 0.06);
+    border-radius: 6px;
+    box-sizing: border-box;
+  }
+
  
   
   :global(#snap-canvas) {
