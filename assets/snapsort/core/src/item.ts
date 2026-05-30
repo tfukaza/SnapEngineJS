@@ -157,6 +157,8 @@ export class ItemObject extends ElementObject {
 
   /**
    * Return this item's children sorted by their DOM order.
+   *
+   * @returns Child objects ordered by their current element order in the DOM.
    */
   childrenInDomOrder(): BaseObject[] {
     return this.children.slice().sort((a, b) => {
@@ -217,6 +219,13 @@ export class ItemObject extends ElementObject {
     }
   }
 
+  /**
+   * Walk up to the root container and refresh the SnapSort tree state.
+   *
+   * The root queues the initial DOM read used by drag-start snapshot capture.
+   *
+   * @returns Nothing.
+   */
   #findRootContainer() {
     if (this.parent == null) {
       this.#updateState(this as unknown as ItemContainer);
@@ -227,6 +236,13 @@ export class ItemObject extends ElementObject {
     }
   }
 
+  /**
+   * Refresh root/depth metadata and live child ordering for this subtree.
+   *
+   * @param root Root container that owns the active SnapSort tree.
+   * @param depth Nesting depth of this item within the root tree.
+   * @returns Nothing.
+   */
   #updateState(root: ItemContainer | null, depth: number = 0) {
     // Set root container and depth
     this.#rootContainer = root;
@@ -241,6 +257,14 @@ export class ItemObject extends ElementObject {
     }
   }
 
+  /**
+   * Capture frozen DOM geometry and child order for this subtree.
+   *
+   * The drop algorithm reads this snapshot for the full drag so live ghost DOM
+   * movement cannot perturb candidate prediction.
+   *
+   * @returns Nothing.
+   */
   #captureDragSnapshotTree() {
     this.#dragSnapshot = cloneDomProperty(this.getDomProperty("READ_1"));
     this.#dragSnapshotOrderedList = this.#itemOrderedList.slice();
@@ -249,6 +273,12 @@ export class ItemObject extends ElementObject {
     }
   }
 
+  /**
+   * Clear frozen drag snapshots from this subtree after drag end.
+   *
+   * @param visited Items already cleared during this traversal.
+   * @returns Nothing.
+   */
   #clearDragSnapshotTree(visited: Set<ItemObject> = new Set()) {
     if (visited.has(this)) return;
     visited.add(this);
@@ -269,6 +299,8 @@ export class ItemObject extends ElementObject {
    * Temporarily move the DOM element of an item to the root container during dragging,
    * so it can be positioned absolutely within the root container without affecting the
    * layout of its original container.
+   *
+   * @returns Nothing.
    */
   #hoistElementToRoot() {
     if (this.#rootContainer) {
@@ -284,8 +316,9 @@ export class ItemObject extends ElementObject {
 
   /**
    * Move the DOM element of an item back to its original container.
-   * @param container
-   * @returns
+   *
+   * @param container Container that should receive the dragged element.
+   * @returns Nothing.
    */
   #lowerElementToContainer(container: ItemContainer) {
     const element = this.element;
@@ -297,11 +330,12 @@ export class ItemObject extends ElementObject {
 
   /**
    * Move an item to a different container and index, updating the DOM and internal state accordingly.
-   * @param container
-   * @param item
-   * @param index
+   *
+   * @param container Destination container.
+   * @param item Item to move.
+   * @param index Destination index in the destination container.
    * @param updateDom Whether to update the DOM structure. This should be false if the DOM is already in the correct structure (e.g. during drag), to avoid unnecessary DOM operations.
-   * @returns
+   * @returns Nothing.
    */
   moveItemToContainer(
     container: ItemContainer,
@@ -354,6 +388,11 @@ export class ItemObject extends ElementObject {
    * Insert an item at a specific index in the item list and DOM.
    * If the index is past the end, the item is appended.
    * Note that this assumes the #itemOrderedList is already in the correct order.
+   *
+   * @param container Container that receives the item.
+   * @param item Item to insert.
+   * @param index Index where the item should be inserted.
+   * @returns Nothing.
    */
   insertItemAt(container: ItemContainer, item: ItemObject, index: number) {
     console.debug(
@@ -387,8 +426,11 @@ export class ItemObject extends ElementObject {
 
   /**
    * Remove an item from the item list and DOM.
+   *
+   * @param container Container that currently owns the item.
    * @param item The item to remove.
    * @param deleteElement Whether to delete the DOM element of the item.
+   * @returns Nothing.
    */
   removeItemFrom(
     container: ItemContainer,
@@ -413,6 +455,17 @@ export class ItemObject extends ElementObject {
     }
   }
 
+  /**
+   * Translate a frozen snapshot insertion index into the current live list.
+   *
+   * The live list may contain a ghost and no longer contain the dragged item,
+   * so this maps through the snapshot item that should appear after the target.
+   *
+   * @param container Container whose index is being translated.
+   * @param snapshotIndex Candidate index from the frozen snapshot list.
+   * @param draggedItem Item currently being dragged and omitted from live flow.
+   * @returns Equivalent insertion index in the live item list.
+   */
   #liveIndexFromSnapshotIndex(
     container: ItemObject,
     snapshotIndex: number,
@@ -436,6 +489,12 @@ export class ItemObject extends ElementObject {
     return liveIndex === -1 ? liveItems.length : liveIndex;
   }
 
+  /**
+   * Read the ghost's current live container and index.
+   *
+   * @param ghostItem Current ghost item, or null if no ghost exists.
+   * @returns Current ghost position, or null when the ghost is detached.
+   */
   #ghostInsertionPosition(
     ghostItem: ItemObject | null,
   ): { index: number; container: ItemObject | null } | null {
@@ -451,9 +510,11 @@ export class ItemObject extends ElementObject {
   /**
    * Create or remove a ghost element at the specified container and index.
    * A null container means the ghost element should be removed.
+   *
    * @param original The original item being dragged.
    * @param container The container to place the ghost element in, or null to remove it.
    * @param index The index at which to place the ghost element.
+   * @returns Nothing.
    */
   #updateGhostElement(
     original: ItemObject,
@@ -535,6 +596,12 @@ export class ItemObject extends ElementObject {
     // this.reorderItemList();
   }
 
+  /**
+   * Compute the current drop target and move the ghost when the target changes.
+   *
+   * @param item Item currently being dragged.
+   * @returns Nothing.
+   */
   updateDropTarget(item: ItemObject) {
     const root = (this.#rootContainer as unknown as ItemObject) ?? this;
     const target = determineDropTarget(item, root);

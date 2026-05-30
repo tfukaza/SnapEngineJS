@@ -9,6 +9,9 @@ type DragSample = {
   mouse: { x: number; y: number };
   spacerCount: number;
   spacer: Rect | null;
+  spacerParentGid: string | null;
+  spacerParentKind: string | null;
+  spacerIndex: number | null;
   dragged: (Rect & { centerX: number; centerY: number }) | null;
   draggedCenterDelta: number | null;
 };
@@ -55,6 +58,7 @@ async function installSnapsortTrace(page: Page) {
     const shouldTrace = (node: unknown) =>
       node instanceof Element &&
       (node.id === "spacer" ||
+        node.classList.contains("snapsort-item") ||
         node.classList.contains("snapsort-item-wrapper") ||
         node.classList.contains("snapsort-container") ||
         node.closest?.(".snapsort-container") != null);
@@ -130,6 +134,7 @@ function center(rect: Rect) {
 }
 
 async function itemRect(item: Locator): Promise<Rect> {
+  await item.scrollIntoViewIfNeeded();
   const box = await item.boundingBox();
   if (!box) throw new Error("Expected item to have a bounding box.");
   return box;
@@ -137,7 +142,7 @@ async function itemRect(item: Locator): Promise<Rect> {
 
 async function itemByText(page: Page, text: string, index = 0) {
   const locator = page
-    .locator(".snapsort-item-wrapper")
+    .locator(".snapsort-item")
     .filter({ hasText: text })
     .nth(index);
   await expect(locator).toBeVisible();
@@ -146,7 +151,7 @@ async function itemByText(page: Page, text: string, index = 0) {
 
 async function demoBoxByHeading(page: Page, heading: string) {
   const box = page
-    .locator(".demo-box")
+    .locator(".demo-cell")
     .filter({ has: page.getByRole("heading", { name: heading }) });
   await expect(box).toBeVisible();
   return box;
@@ -154,7 +159,7 @@ async function demoBoxByHeading(page: Page, heading: string) {
 
 async function itemByTextIn(parent: Locator, text: string, index = 0) {
   const locator = parent
-    .locator(".snapsort-item-wrapper")
+    .locator(".snapsort-item")
     .filter({ hasText: text })
     .nth(index);
   await expect(locator).toBeVisible();
@@ -187,6 +192,29 @@ async function collectSample(
       const draggedElement = document.querySelector(
         `[data-engine-gid="${activeGid}"]`,
       );
+      const spacerElement = document.querySelector("#spacer");
+      const spacerParent = spacerElement?.parentElement ?? null;
+      const spacerSiblings = spacerParent
+        ? [...spacerParent.children].filter(
+            (child) =>
+              child.id === "spacer" ||
+              child.classList.contains("snapsort-item") ||
+              child.classList.contains("snapsort-container"),
+          )
+        : [];
+      const directSiblingTexts = spacerParent
+        ? [...spacerParent.children]
+            .filter((child) => child.id !== "spacer")
+            .map((child) => child.textContent?.trim().replace(/\s+/g, " ") ?? "")
+        : [];
+      const spacerParentKind =
+        directSiblingTexts.length === 0
+          ? null
+          : directSiblingTexts.every((text) => /^Sub A\d/.test(text))
+            ? "nested-inner"
+            : directSiblingTexts.some((text) => /Item 1\.5|Item 2|Item 3/.test(text))
+              ? "nested-outer"
+              : "other";
       const draggedRect = rectOf(draggedElement);
       const dragged = draggedRect
         ? {
@@ -199,7 +227,10 @@ async function collectSample(
         step,
         mouse,
         spacerCount: document.querySelectorAll("#spacer").length,
-        spacer: rectOf(document.querySelector("#spacer")),
+        spacer: rectOf(spacerElement),
+        spacerParentGid: spacerParent?.getAttribute("data-engine-gid") ?? null,
+        spacerParentKind,
+        spacerIndex: spacerElement ? spacerSiblings.indexOf(spacerElement) : null,
         dragged,
         draggedCenterDelta: dragged
           ? Math.hypot(dragged.centerX - mouse.x, dragged.centerY - mouse.y)
@@ -216,10 +247,12 @@ async function dragBy(
   text: string,
   index: number,
   delta: { x: number; y: number },
+  options: { steps?: number; assertCenter?: boolean; start?: { x: number; y: number } } = {},
 ): Promise<DragSample[]> {
   const sourceRect = await itemRect(source);
   const activeGid = await source.getAttribute("data-engine-gid");
-  const start = center(sourceRect);
+  const start = options.start ?? center(sourceRect);
+  const steps = options.steps ?? 160;
   await page.evaluate(
     ({ text, index, activeGid }) => {
       const win = window as unknown as {
@@ -238,13 +271,13 @@ async function dragBy(
   await page.mouse.down();
 
   const samples: DragSample[] = [];
-  for (let step = 1; step <= 18; step++) {
+  for (let step = 1; step <= steps; step++) {
     const mouse = {
-      x: start.x + (delta.x * step) / 18,
-      y: start.y + (delta.y * step) / 18,
+      x: start.x + (delta.x * step) / steps,
+      y: start.y + (delta.y * step) / steps,
     };
     await page.mouse.move(mouse.x, mouse.y);
-    await page.waitForTimeout(25);
+    await page.waitForTimeout(8);
     samples.push(await collectSample(page, step, mouse));
   }
 
@@ -278,6 +311,7 @@ async function expectStableDrag(
   samples: DragSample[],
   consoleMessages: string[],
   outputPath: string,
+  options: { assertCenter?: boolean } = {},
 ) {
   const trace = await page.evaluate(() => {
     const win = window as unknown as {
@@ -303,10 +337,12 @@ async function expectStableDrag(
     samples.filter((sample) => sample.spacerCount !== 1),
     "the spacer should not disappear or duplicate while dragging",
   ).toHaveLength(0);
-  expect(
-    Math.max(...samples.map((sample) => sample.draggedCenterDelta ?? 999)),
-    "dragged item center should remain close to the pointer",
-  ).toBeLessThan(12);
+  if (options.assertCenter !== false) {
+    expect(
+      Math.max(...samples.map((sample) => sample.draggedCenterDelta ?? 999)),
+      "dragged item center should remain close to the pointer",
+    ).toBeLessThan(12);
+  }
   expect(
     consoleMessages.filter((message) =>
       /Missing drag snapshot|Unhandled|TypeError|ReferenceError/i.test(message),
@@ -314,9 +350,268 @@ async function expectStableDrag(
   ).toHaveLength(0);
 }
 
+function expectNoSpacerBacktrack(samples: DragSample[], axis: "x" | "y") {
+  const positions = samples
+    .filter((sample) => sample.spacer)
+    .map((sample) => ({
+      step: sample.step,
+      value: sample.spacer![axis],
+    }));
+
+  for (let i = 1; i < positions.length; i++) {
+    expect(
+      positions[i].value + 8,
+      `spacer should not jump backward between steps ${positions[i - 1].step} and ${positions[i].step}`,
+    ).toBeGreaterThanOrEqual(positions[i - 1].value);
+  }
+}
+
+function expectNoNestedParentFlicker(samples: DragSample[]) {
+  const kinds = samples
+    .map((sample) => sample.spacerParentKind)
+    .filter((kind): kind is string => kind === "nested-inner" || kind === "nested-outer");
+  const firstInner = kinds.indexOf("nested-inner");
+  expect(firstInner, "drag should enter the nested sub-container").toBeGreaterThanOrEqual(0);
+
+  for (let i = firstInner + 1; i < kinds.length - 1; i++) {
+    expect(
+      !(kinds[i] === "nested-outer" && kinds[i + 1] === "nested-inner"),
+      "spacer should not briefly leave the nested container and re-enter on a smooth downward drag",
+    ).toBe(true);
+  }
+}
+
+function expectNoSpacerOscillation(samples: DragSample[]) {
+  const keys = samples
+    .filter((sample) => sample.spacer)
+    .map(
+      (sample) =>
+        `${Math.round(sample.spacer!.x)}:${Math.round(sample.spacer!.y)}:${sample.spacerIndex}`,
+    );
+
+  for (let i = 2; i < keys.length; i++) {
+    expect(
+      !(keys[i] === keys[i - 2] && keys[i] !== keys[i - 1]),
+      `spacer should not alternate between ${keys[i - 1]} and ${keys[i]} around sample ${i}`,
+    ).toBe(true);
+  }
+}
+
+function ghostInsertionTargets(consoleMessages: string[]) {
+  return consoleMessages.flatMap((message) => {
+    const match = message.match(
+      /\[updateGhostElement\] inserting ghost at container=([^\s]+) index=(\d+)/,
+    );
+    return match ? [`${match[1]}[${match[2]}]`] : [];
+  });
+}
+
+function expectGhostUpdatesStable(
+  consoleMessages: string[],
+  expectedMaxUpdates: number,
+) {
+  const targets = ghostInsertionTargets(consoleMessages);
+  expect(
+    targets.length,
+    `ghost should update only at stable slot transitions; saw ${targets.join(" -> ")}`,
+  ).toBeLessThanOrEqual(expectedMaxUpdates);
+
+  for (let i = 2; i < targets.length; i++) {
+    expect(
+      !(targets[i] === targets[i - 2] && targets[i] !== targets[i - 1]),
+      `ghost target should not oscillate: ${targets.join(" -> ")}`,
+    ).toBe(true);
+  }
+}
+
+function compressedSpacerStates(samples: DragSample[]) {
+  const states = samples
+    .filter(
+      (sample) =>
+        sample.spacerParentKind === "nested-inner" ||
+        sample.spacerParentKind === "nested-outer",
+    )
+    .map((sample) => `${sample.spacerParentKind}[${sample.spacerIndex}]`);
+
+  return states.filter((state, index) => index === 0 || state !== states[index - 1]);
+}
+
 test.describe("Snapsort drag-start snapshot layout", () => {
   test.beforeEach(async ({ page }) => {
     await installSnapsortTrace(page);
+  });
+
+  test("does not flicker the spacer backward while dragging down a vertical column", async ({
+    page,
+  }, testInfo) => {
+    const consoleMessages: string[] = [];
+    page.on("console", (message) => consoleMessages.push(message.text()));
+    await page.goto("/?demo=drop_snap_nested", { waitUntil: "networkidle" });
+
+    const verticalColumn = await demoBoxByHeading(page, "Vertical Column");
+    const item = await itemByTextIn(verticalColumn, "Item 1");
+    const target = await itemByTextIn(verticalColumn, "Item 4");
+    const itemCenter = center(await itemRect(item));
+    const targetCenter = center(await itemRect(target));
+    const samples = await dragBy(page, item, "Item 1", 0, {
+      x: 0,
+      y: targetCenter.y - itemCenter.y + 48,
+    });
+
+    await expectStableDrag(
+      page,
+      samples,
+      consoleMessages,
+      testInfo.outputPath("vertical-column-flicker-trace.json"),
+    );
+    expectNoSpacerBacktrack(samples, "y");
+    expectNoSpacerOscillation(samples);
+    expectGhostUpdatesStable(consoleMessages, 5);
+  });
+
+  test("does not flicker the spacer upward while dragging into a wrapped horizontal row", async ({
+    page,
+  }, testInfo) => {
+    const consoleMessages: string[] = [];
+    page.on("console", (message) => consoleMessages.push(message.text()));
+    await page.goto("/?demo=drop_snap_nested", { waitUntil: "networkidle" });
+
+    const horizontalRow = await demoBoxByHeading(page, "Horizontal Row");
+    const item = await itemByTextIn(horizontalRow, "Item 1");
+    const target = await itemByTextIn(horizontalRow, "Item 4");
+    const itemCenter = center(await itemRect(item));
+    const targetCenter = center(await itemRect(target));
+    const samples = await dragBy(page, item, "Item 1", 0, {
+      x: 0,
+      y: targetCenter.y - itemCenter.y,
+    });
+
+    await expectStableDrag(
+      page,
+      samples,
+      consoleMessages,
+      testInfo.outputPath("horizontal-row-wrap-flicker-trace.json"),
+    );
+    expectNoSpacerBacktrack(samples, "y");
+    expectNoSpacerOscillation(samples);
+    expectGhostUpdatesStable(consoleMessages, 3);
+  });
+
+  test("does not flicker out of a nested column after entering it", async ({
+    page,
+  }, testInfo) => {
+    const consoleMessages: string[] = [];
+    page.on("console", (message) => consoleMessages.push(message.text()));
+    await page.goto("/?demo=drop_snap_nested", { waitUntil: "networkidle" });
+
+    const nested = await demoBoxByHeading(page, "Nested Container");
+    const item = await itemByTextIn(nested, "Item 1");
+    const target = await itemByTextIn(nested, "Sub A3");
+    const samples = await dragTo(page, item, "Item 1", 0, target);
+
+    await expectStableDrag(
+      page,
+      samples,
+      consoleMessages,
+      testInfo.outputPath("nested-container-flicker-trace.json"),
+    );
+    expectNoNestedParentFlicker(samples);
+    expectGhostUpdatesStable(consoleMessages, 6);
+  });
+
+  test("can reach nested column boundary slots while dragging root item downward", async ({
+    page,
+  }, testInfo) => {
+    const consoleMessages: string[] = [];
+    page.on("console", (message) => consoleMessages.push(message.text()));
+    await page.goto("/?demo=drop_snap_nested", { waitUntil: "networkidle" });
+
+    const nested = await demoBoxByHeading(page, "Nested Container");
+    const item = await itemByTextIn(nested, "Item 1");
+    const item3 = await itemByTextIn(nested, "Item 3");
+    const itemCenter = center(await itemRect(item));
+    const item3Center = center(await itemRect(item3));
+    const samples = await dragBy(
+      page,
+      item,
+      "Item 1",
+      0,
+      {
+        x: 0,
+        y: item3Center.y - itemCenter.y + 96,
+      },
+      { steps: 240 },
+    );
+
+    await expectStableDrag(
+      page,
+      samples,
+      consoleMessages,
+      testInfo.outputPath("nested-boundary-slots-trace.json"),
+    );
+
+    const states = compressedSpacerStates(samples);
+    const ghostTargets = ghostInsertionTargets(consoleMessages);
+    await writeJson(testInfo.outputPath("nested-boundary-slots-states.json"), {
+      states,
+      ghostTargets,
+    });
+
+    expect(
+      states,
+      `ghost should visit nested container boundary slots; observed ${states.join(" -> ")}`,
+    ).toEqual(
+      expect.arrayContaining([
+        "nested-inner[0]",
+        "nested-inner[3]",
+      ]),
+    );
+    expect(
+      ghostTargets,
+      `ghost should visit root boundary slots; observed ${ghostTargets.join(" -> ")}`,
+    ).toEqual(expect.arrayContaining(["407[2]", "407[4]"]));
+  });
+
+  test("creates a spacer when dragging a sub-container as an item", async ({
+    page,
+  }, testInfo) => {
+    const consoleMessages: string[] = [];
+    page.on("console", (message) => consoleMessages.push(message.text()));
+    await page.goto("/?demo=drop_snap_nested", { waitUntil: "networkidle" });
+
+    const cell = await demoBoxByHeading(page, "Draggable Sub-Containers");
+    const source = cell
+      .locator(".snapsort-container .snapsort-container")
+      .filter({ hasText: "Group 1 - A" })
+      .first();
+    await expect(source).toBeVisible();
+    const target = await itemByTextIn(cell, "Loose Item");
+    const sourceRect = await itemRect(source);
+    const targetCenter = center(await itemRect(target));
+    const start = { x: sourceRect.x + 8, y: sourceRect.y + 8 };
+    const samples = await dragBy(
+      page,
+      source,
+      "Group 1",
+      0,
+      {
+        x: targetCenter.x - start.x,
+        y: targetCenter.y - start.y,
+      },
+      { start, assertCenter: false },
+    );
+
+    await expectStableDrag(
+      page,
+      samples,
+      consoleMessages,
+      testInfo.outputPath("drag-container-trace.json"),
+      { assertCenter: false },
+    );
+    expect(
+      samples.some((sample) => sample.spacerCount === 1 && sample.spacer),
+      "dragging a sub-container should create and move a spacer",
+    ).toBe(true);
   });
 
   test("keeps one stable spacer while reordering a flat nested-items list", async ({
@@ -324,7 +619,7 @@ test.describe("Snapsort drag-start snapshot layout", () => {
   }, testInfo) => {
     const consoleMessages: string[] = [];
     page.on("console", (message) => consoleMessages.push(message.text()));
-    await page.goto("/?demo=nested_items", { waitUntil: "networkidle" });
+    await page.goto("/?demo=drop_snap_nested", { waitUntil: "networkidle" });
     await page.screenshot({
       path: testInfo.outputPath("nested-flat-before.png"),
       fullPage: true,
@@ -350,7 +645,7 @@ test.describe("Snapsort drag-start snapshot layout", () => {
   }, testInfo) => {
     const consoleMessages: string[] = [];
     page.on("console", (message) => consoleMessages.push(message.text()));
-    await page.goto("/?demo=nested_items", { waitUntil: "networkidle" });
+    await page.goto("/?demo=drop_snap_nested", { waitUntil: "networkidle" });
     await page.screenshot({
       path: testInfo.outputPath("nested-subitem-before.png"),
       fullPage: true,
@@ -376,7 +671,7 @@ test.describe("Snapsort drag-start snapshot layout", () => {
   }, testInfo) => {
     const consoleMessages: string[] = [];
     page.on("console", (message) => consoleMessages.push(message.text()));
-    await page.goto("/?demo=drag_drop", { waitUntil: "networkidle" });
+    await page.goto("/?demo=drop_snap_nested", { waitUntil: "networkidle" });
     await page.screenshot({
       path: testInfo.outputPath("multi-area-before.png"),
       fullPage: true,
@@ -403,7 +698,7 @@ test.describe("Snapsort drag-start snapshot layout", () => {
   }, testInfo) => {
     const consoleMessages: string[] = [];
     page.on("console", (message) => consoleMessages.push(message.text()));
-    await page.goto("/?demo=drag_drop", { waitUntil: "networkidle" });
+    await page.goto("/?demo=drop_snap_nested", { waitUntil: "networkidle" });
     const doubleRow = await demoBoxByHeading(page, "Horizontal Double Row");
     await page.screenshot({
       path: testInfo.outputPath("wrapped-row-before.png"),
@@ -426,7 +721,7 @@ test.describe("Snapsort drag-start snapshot layout", () => {
     );
 
     const order = await doubleRow
-      .locator(".snapsort-item-wrapper")
+      .locator(".snapsort-item")
       .evaluateAll((elements) =>
         elements.map((element) => element.textContent?.trim()),
       );
