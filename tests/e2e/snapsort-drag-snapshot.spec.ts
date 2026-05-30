@@ -566,6 +566,51 @@ test.describe("Snapsort drag-start snapshot layout", () => {
     ).toHaveLength(0);
   });
 
+  test("animates displaced items when the ghost reorders", async ({
+    page,
+  }, testInfo) => {
+    const consoleMessages: string[] = [];
+    page.on("console", (message) => consoleMessages.push(message.text()));
+    await page.goto("/?demo=drop_snap_nested", { waitUntil: "networkidle" });
+
+    const verticalColumn = await demoBoxByHeading(page, "Vertical Column");
+    const item1 = await itemByTextIn(verticalColumn, "Item 1");
+    const item4 = await itemByTextIn(verticalColumn, "Item 4");
+    const item1Center = center(await itemRect(item1));
+    const item4Center = center(await itemRect(item4));
+
+    await page.mouse.move(item1Center.x, item1Center.y);
+    await page.mouse.down();
+    await page.mouse.move(item1Center.x, item4Center.y, { steps: 12 });
+
+    const animated = await page.waitForFunction(() => {
+      const items = [...document.querySelectorAll(".snapsort-item")].filter(
+        (element) =>
+          element.id !== "spacer" &&
+          !/Item 1/.test(element.textContent ?? ""),
+      );
+      return items.some((element) =>
+        /^translate3d\(/.test((element as HTMLElement).style.transform),
+      );
+    });
+    await page.mouse.up();
+    await page.waitForTimeout(120);
+
+    await writeJson(testInfo.outputPath("reorder-animation-trace.json"), {
+      animated: await animated.jsonValue(),
+      errors: consoleMessages.filter((message) =>
+        /Missing drag snapshot|Unhandled|TypeError|ReferenceError/i.test(message),
+      ),
+    });
+
+    expect(await animated.jsonValue()).toBe(true);
+    expect(
+      consoleMessages.filter((message) =>
+        /Missing drag snapshot|Unhandled|TypeError|ReferenceError/i.test(message),
+      ),
+    ).toHaveLength(0);
+  });
+
   test("does not flicker the spacer backward while dragging down a vertical column", async ({
     page,
   }, testInfo) => {

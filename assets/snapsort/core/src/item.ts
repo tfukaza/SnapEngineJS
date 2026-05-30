@@ -1,5 +1,5 @@
 import { BaseObject, ElementObject, cloneDomProperty } from "@snap-engine/core";
-import type { ItemContainer } from "./container";
+import type { AnimationConfig, ItemContainer } from "./container";
 import { RectCollider, PointCollider } from "@snap-engine/core/collision";
 import type {
   dragStartProp,
@@ -8,12 +8,20 @@ import type {
   DomProperty,
 } from "@snap-engine/core";
 import { determineDropTarget, resetDropSnapshotDebugDump } from "./drop_target";
+import { AnimationObject } from "@snap-engine/core/animation";
 
 /**
  * How much to enlarge an item's hitbox while it is being dragged. The hitbox
  * grows around the item's center, so a factor of 1 leaves it unchanged.
  */
 const DRAG_HITBOX_SCALE = 4;
+const MIN_FLIP_DISTANCE = 0.5;
+
+interface FlipSnapshot {
+  item: ItemObject;
+  first: DOMRect | null;
+  last: DOMRect | null;
+}
 
 export class ItemObject extends ElementObject {
   // Container element is the parent element
@@ -317,6 +325,199 @@ export class ItemObject extends ElementObject {
   }
 
   /**
+   * Read the configured reorder animation for a container.
+   *
+   * @param container Container whose animation configuration should be used.
+   * @returns Reorder animation config, or null when reorder animation is disabled.
+   */
+  #reorderAnimationConfig(
+    container: ItemContainer | null,
+  ): AnimationConfig | null {
+    if (!container) return null;
+    const config = container.configuration;
+    if (config.animation === null) return null;
+    return config.animation?.reorder ?? null;
+  }
+
+  /**
+   * Collect all currently visible SnapSort items in this subtree.
+   *
+   * @param node Root of the subtree to collect.
+   * @param exclude Item that should not be animated, usually the actively dragged item.
+   * @param items Accumulator for collected items.
+   * @returns Items that can participate in FLIP animation.
+   */
+  #collectFlipItems(
+    node: ItemObject,
+    exclude: ItemObject,
+    items: ItemObject[] = [],
+  ): ItemObject[] {
+    for (const child of node.#itemOrderedList) {
+      if (child !== exclude && !child.isGhost && child.element) {
+        items.push(child);
+      }
+      this.#collectFlipItems(child, exclude, items);
+    }
+    return items;
+  }
+
+  /**
+   * Capture the current visual position for all FLIP animation candidates.
+   *
+   * `getBoundingClientRect()` intentionally includes active transform
+   * animations, so interrupted reorder animations restart from the element's
+   * actual on-screen position instead of its previous layout destination.
+   *
+   * @param root Root of the SnapSort tree being mutated.
+   * @param exclude Item that should not be animated.
+   * @returns Items with current visual rectangles captured as first positions.
+   */
+  #captureFlipSnapshot(root: ItemObject, exclude: ItemObject): FlipSnapshot[] {
+    return root.#collectFlipItems(root, exclude).map((item) => ({
+      item,
+      first: item.element!.getBoundingClientRect(),
+      last: null,
+    }));
+  }
+
+  /**
+   * Capture the final visual positions after the DOM mutation.
+   *
+   * @param snapshot Items whose final positions should be measured.
+   * @returns Nothing.
+   */
+  #captureFlipLast(snapshot: FlipSnapshot[]) {
+    for (const entry of snapshot) {
+      entry.last = entry.item.element?.getBoundingClientRect() ?? null;
+    }
+  }
+
+  /**
+   * Start FLIP animations from captured visual snapshots to the current layout.
+   *
+   * This method only writes transforms and starts SnapEngine animations. All
+   * layout reads must have happened in earlier READ stages.
+   *
+   * @param snapshot Visual rectangles captured before and after the DOM mutation.
+   * @param animationConfig Reorder animation configuration.
+   * @returns Nothing.
+   */
+  #playFlipAnimations(
+    snapshot: FlipSnapshot[],
+    animationConfig: AnimationConfig,
+  ) {
+    const movingAncestors = new Set<ItemObject>();
+    const duration = animationConfig.duration ?? 160;
+    const easing = animationConfig.timing_function ?? "ease-out";
+
+    for (const { item, first, last } of snapshot) {
+      const hasMovingAncestor =
+        movingAncestors.size > 0 &&
+        (() => {
+          let parent = item.parent;
+          while (parent) {
+            if (parent instanceof ItemObject && movingAncestors.has(parent)) {
+              return true;
+            }
+            parent = parent.parent;
+          }
+          return false;
+        })();
+      if (hasMovingAncestor || !item.element || !first || !last) continue;
+
+      const dx = first.x - last.x;
+      const dy = first.y - last.y;
+      if (Math.abs(dx) < MIN_FLIP_DISTANCE && Math.abs(dy) < MIN_FLIP_DISTANCE) {
+        continue;
+      }
+
+      movingAncestors.add(item);
+      const transformAt = (t: number) =>
+        `translate3d(${dx * (1 - t)}px, ${dy * (1 - t)}px, 0px)`;
+      const animation = new AnimationObject(
+        null,
+        {
+          $t: [0, 1],
+        },
+        {
+          duration,
+          easing,
+          tick: (vars) => {
+            item.element!.style.transform = transformAt(vars.$t);
+          },
+          finish: () => {
+            item.element!.style.transform = "";
+          },
+        },
+      );
+      item.element.style.transform = transformAt(0);
+      item.addAnimation(animation);
+      animation.play();
+    }
+  }
+
+  /**
+   * Run a DOM mutation with optional FLIP animation for affected items.
+   *
+   * @param container Container whose reorder animation config controls the mutation.
+   * @param original Actively dragged item, excluded from reorder animation.
+   * @param mutate DOM mutation to perform between first and last measurements.
+   * @returns Nothing.
+   */
+  #withReorderAnimation(
+    container: ItemContainer | null,
+    original: ItemObject,
+    mutate: () => void,
+  ) {
+    const animationConfig = this.#reorderAnimationConfig(container);
+    const root = (this.#rootContainer as unknown as ItemObject) ?? this;
+
+    if (!animationConfig) {
+      mutate();
+      return;
+    }
+
+    let snapshot: FlipSnapshot[] = [];
+    const queuePrefix = `snapsort-flip-${root.gid}`;
+
+    root.queueUpdate(
+      "READ_2",
+      () => {
+        snapshot = this.#captureFlipSnapshot(root, original);
+      },
+      `${queuePrefix}-read-first`,
+    );
+
+    root.queueUpdate(
+      "WRITE_2",
+      () => {
+        for (const { item } of snapshot) {
+          item.cancelAnimations();
+          item.element!.style.transform = "";
+        }
+        mutate();
+      },
+      `${queuePrefix}-mutate`,
+    );
+
+    root.queueUpdate(
+      "READ_3",
+      () => {
+        this.#captureFlipLast(snapshot);
+      },
+      `${queuePrefix}-read-last`,
+    );
+
+    root.queueUpdate(
+      "WRITE_3",
+      () => {
+        this.#playFlipAnimations(snapshot, animationConfig);
+      },
+      `${queuePrefix}-play`,
+    );
+  }
+
+  /**
    * Temporarily move the DOM element of an item to the root container during dragging,
    * so it can be positioned absolutely within the root container without affecting the
    * layout of its original container.
@@ -585,23 +786,32 @@ export class ItemObject extends ElementObject {
       ghostItem.centerPoint.local.y = origProp.height / 2;
     }
 
-    // Remove ghost from its current container before re-inserting at the new position
+    const moveGhost = () => {
+      // Remove ghost from its current container before re-inserting at the new position
+      if (ghostItem.parent) {
+        console.debug(
+          `[updateGhostElement] removing ghost from current container=${(ghostItem.container as unknown as ItemObject)?.gid}`,
+        );
+        this.removeItemFrom(ghostItem.container, ghostItem, false);
+      } else {
+        console.debug(
+          `[updateGhostElement] ghost has no parent, skipping remove`,
+        );
+      }
+      // Insert the ghost item at the new position in the DOM and item list.
+      // This also sets the ghost item's container to the new container.
+      console.debug(
+        `[updateGhostElement] inserting ghost at container=${(container as unknown as ItemObject).gid} index=${index}`,
+      );
+      this.insertItemAt(container, ghostItem, index);
+    };
+
     if (ghostItem.parent) {
-      console.debug(
-        `[updateGhostElement] removing ghost from current container=${(ghostItem.container as unknown as ItemObject)?.gid}`,
-      );
-      this.removeItemFrom(ghostItem.container, ghostItem, false);
+      this.#withReorderAnimation(container, original, moveGhost);
     } else {
-      console.debug(
-        `[updateGhostElement] ghost has no parent, skipping remove`,
-      );
+      moveGhost();
     }
-    // Insert the ghost item at the new position in the DOM and item list.
-    // This also sets the ghost item's container to the new container.
-    console.debug(
-      `[updateGhostElement] inserting ghost at container=${(container as unknown as ItemObject).gid} index=${index}`,
-    );
-    this.insertItemAt(container, ghostItem, index);
+
     // Root is responsible for maintaining the ghost element and removing it when necessary
     this.#rootContainer!.ghostItem = ghostItem;
 
