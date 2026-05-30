@@ -1,5 +1,5 @@
 
-@import url('https://fonts.googleapis.com/css2?family=Doto:wght@100..900&family=Lato&family=Lekton:ital,wght@0,400;0,700;1,400&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=Doto:wght@100..900&family=Geist+Mono:ital,wght@0,100..900;1,100..900&family=Geist:wght@100..900&family=Lato&family=Lekton:ital,wght@0,400;0,700;1,400&display=swap');
 
 @font-face {
   font-family: 'Geist Pixel Circle';
@@ -16,7 +16,7 @@ body {
 }
 
 :root {
-  --color-primary: #fe620d;
+  --color-primary: #ff753a;
   --color-secondary: #323233;
   --color-secondary-1: #f34336;
   --color-secondary-2: #e8b72f;
@@ -27,7 +27,7 @@ body {
   --color-secondary-7: #00bbf9;
   --color-accent: #ff0e56;
   --color-background: #ffffff;
-  --color-background-tint: #f5f7f7;
+  --color-background-tint: #f6f7f7;
   --color-background-dark: #7f8286;
   --color-text: #555657;
 
@@ -66,27 +66,45 @@ h5,
 h6 {
   margin: 0;
   font-weight: 500;
-  font-family: 'Geist Pixel Circle', sans-serif;
   color: #373738;
 }
 
 h1 {
-  font-size: 4rem;
+  font-family: 'Geist Pixel Circle', sans-serif;
+  font-size: 72px;
   padding-bottom: var(--size-16);
 }
 
+h2,
+h3,
+h4,
+h5,
+h6 {
+  font-family: 'Geist', sans-serif;
+}
+
 h2 {
-  font-size: 3rem;
+  font-size: 36px;
   margin-bottom: var(--size-16);
 }
 
 h3 {
-  font-size: 1.5rem;
+  font-size: 24px;
   margin-bottom: var(--size-12);
 }
 
 h4 {
-  font-size: 1.5rem;
+  font-size: 20px;
+  margin-bottom: var(--size-8);
+}
+
+h5 {
+  font-size: 18px;
+  margin-bottom: var(--size-8);
+}
+
+h6 {
+  font-size: 16px;
   margin-bottom: var(--size-8);
 }
 
@@ -118,21 +136,6 @@ pre, code {
 }
 
 @media (max-width: 720px) {
-  h1 {
-    font-size: 3rem;
-  }
-
-  h2 {
-    font-size: 2.5rem;
-  }
-
-  h3 {
-    font-size: 1.5rem;
-  }
-  h4 {
-    font-size: 1.2rem;
-  }
-
 }
 
 
@@ -615,6 +618,7 @@ button,
 
   cursor: pointer;
   font-family: "Lato", sans-serif;
+  font-size: 1rem;
   position: relative;
 
   border-radius: var(--ui-radius);
@@ -684,7 +688,7 @@ button,
     filter: blur(0.2px);
   }
 
-  &:hover {
+  &:hover:not(:disabled) {
     box-shadow: 0px 0px 1px 0.5px rgba(1, 11, 38, 0.157) inset,
       1px 1px 1px 0.5px hsl(from var(--button-highlight-color) h s l / 0.7) inset,
       -0.5px -0.5px 0.5px 0.5px hsl(from var(--button-shadow-color) h s l / 0.5) inset,
@@ -749,7 +753,7 @@ button,
 
   &.small {
     padding: var(--size-2) var(--size-8);
-    font-size: 12px;
+    font-size: 1rem;
     line-height: 0.8;
   }
 }
@@ -757,6 +761,7 @@ button,
 input[type="number"],
 input[type="text"] {
   font-family: "IBM Plex Mono", monospace;
+  font-size: 1rem;
   user-select: none;
   border: none;
   border-radius: var(--ui-radius);
@@ -785,6 +790,7 @@ input[type="date"],
 input[type="datetime-local"],
 input[type="time"] {
   font-family: "IBM Plex Mono", monospace;
+  font-size: 1rem;
   user-select: none;
   border: none;
   border-radius: var(--ui-radius);
@@ -819,7 +825,7 @@ select,
 
 select {
   font-family: "IBM Plex Mono", monospace;
-  font-size: 14px;
+  font-size: 1rem;
   color: var(--color-text);
   user-select: none;
   cursor: pointer;
@@ -966,7 +972,7 @@ progress {
   padding: 2px;
 
   &::-webkit-progress-bar {
-    background: transparent;
+    background: color-mix(in srgb, var(--color-secondary-1) 18%, transparent);
     border-radius: calc(var(--ui-radius) - 2px);
   }
 
@@ -979,6 +985,11 @@ progress {
       0px 0px 2px 0px rgba(23, 38, 83, 0.256),
       1.5px 1.5px 2px -2px rgba(11, 28, 79, 0.377),
       3px 3px 6px -1px rgba(48, 41, 58, 0.31);
+  }
+
+  &::-moz-progress-bar {
+    background-color: var(--color-primary);
+    border-radius: calc(var(--ui-radius) - 2px);
   }
 
   // &::-moz-progress-bar {
@@ -994,9 +1005,9 @@ progress {
   &:indeterminate {
     animation: progress-indeterminate 1.5s infinite linear;
     background: linear-gradient(90deg,
-        var(--color-secondary) 0%,
+        var(--color-secondary-1) 0%,
         var(--color-primary) 50%,
-        var(--color-secondary) 100%);
+        var(--color-secondary-1) 100%);
     background-size: 200% 100%;
   }
 

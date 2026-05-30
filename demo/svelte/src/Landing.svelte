@@ -7,10 +7,9 @@
   
   // New demos
   import NodeUIDemo from "./demo/node_ui_demo/NodeUIDemo.svelte";
-  import DragDropDemo from "./demo/drag_drop/DragDropDemo.svelte";
+  import DropSnapNestedDemo from "./demo/drop_snap_nested/DropSnapNestedDemo.svelte";
   import CollisionDemo from "./demo/collision/CollisionDemo.svelte";
   import CSSShowcase from "./demo/css_showcase/CSSShowcase.svelte";
-  import NestedItemsDemo from "./demo/nested_items/NestedItemsDemo.svelte";
 
   type DemoOption = {
     label: string;
@@ -19,19 +18,21 @@
 
   const demoOptions: DemoOption[] = [
     { label: "Welcome Background", value: "welcome" },
-    { label: "CSS Showcase", value: "css_showcase" },
+    { label: "Style Guide", value: "css_showcase" },
     { label: "Animation", value: "gallery" },
     { label: "Input", value: "drag" },
     { label: "Snap Line", value: "node_ui" },
-    { label: "Drop & Snap", value: "drag_drop" },
+    { label: "SnapSort", value: "drop_snap_nested" },
     { label: "Collision", value: "collision" },
-    { label: "Nested Items", value: "nested_items" },
   ];
 
   function getDemoFromUrl() {
     if (typeof window === "undefined") return "welcome";
     const params = new URLSearchParams(window.location.search);
     const demo = params.get("demo");
+    if (demo === "drag_drop" || demo === "nested_items") {
+      return "drop_snap_nested";
+    }
     if (demo && demoOptions.some((o) => o.value === demo)) {
       return demo;
     }
@@ -41,10 +42,9 @@
   let selectedDemo = $state(getDemoFromUrl());
   let debugEnabled = $state(false);
   let dragDemoRef: DragDemo | null = $state(null);
-  let dragDropDemoRef: DragDropDemo | null = $state(null);
-  let nestedItemsDemoRef: NestedItemsDemo | null = $state(null);
+  let dropSnapNestedDemoRef: DropSnapNestedDemo | null = $state(null);
 
-  const debugSupportedDemos = ["drag", "drag_drop", "nested_items"];
+  const debugSupportedDemos = ["drag", "drop_snap_nested"];
 
   $effect(() => {
     if (typeof window !== "undefined") {
@@ -73,22 +73,20 @@
     const target = event.currentTarget as HTMLInputElement;
     debugEnabled = target.checked;
     dragDemoRef?.setDebug(debugEnabled);
-    dragDropDemoRef?.setDebug(debugEnabled);
-    nestedItemsDemoRef?.setDebug(debugEnabled);
+    dropSnapNestedDemoRef?.setDebug(debugEnabled);
   }
 
   $effect(() => {
     if (!debugSupportedDemos.includes(selectedDemo) && debugEnabled) {
       debugEnabled = false;
       dragDemoRef?.setDebug(false);
-      dragDropDemoRef?.setDebug(false);
-      nestedItemsDemoRef?.setDebug(false);
+      dropSnapNestedDemoRef?.setDebug(false);
     }
   });
 </script>
 
 <div class="landing-container">
-  <div class="demo-selector">
+  <div class="demo-selector" class:dev-navbar={selectedDemo === "drop_snap_nested"}>
     <label for="demo-select">Select Demo:</label>
     <select id="demo-select" bind:value={selectedDemo}>
       {#each demoOptions as option}
@@ -121,12 +119,10 @@
       <DragDemo bind:this={dragDemoRef} />
     {:else if selectedDemo === "node_ui"}
       <NodeUIDemo />
-    {:else if selectedDemo === "drag_drop"}
-      <DragDropDemo bind:this={dragDropDemoRef} />
+    {:else if selectedDemo === "drop_snap_nested"}
+      <DropSnapNestedDemo bind:this={dropSnapNestedDemoRef} />
     {:else if selectedDemo === "collision"}
       <CollisionDemo />
-    {:else if selectedDemo === "nested_items"}
-      <NestedItemsDemo bind:this={nestedItemsDemoRef} />
     {/if}
   </div>
 </div>
@@ -149,10 +145,9 @@
     gap: var(--size-12);
     z-index: 100;
     box-shadow: 0px 4px 12px 0px rgba(0, 0, 0, 0.05);
-    position: absolute;
     width: 100%;
     box-sizing: border-box;
-    top: 0;
+    margin-bottom: var(--size-32);
   }
 
   .demo-selector label {
@@ -204,5 +199,44 @@
 
   .debug-toggle.disabled {
     opacity: 0.4;
+  }
+
+  .demo-selector.dev-navbar {
+    background: #fff;
+    border-bottom: 2px solid #000;
+    box-shadow: none;
+    margin-bottom: 0;
+
+    label,
+    select {
+      font-family: "Geist", sans-serif;
+      color: #000;
+    }
+
+    select {
+      background: #fff;
+      border: 2px solid #000;
+      border-radius: 0;
+      box-shadow: none;
+      font-size: 1rem;
+    }
+
+    select:focus {
+      border-color: #000;
+      box-shadow: none;
+    }
+
+    :global(input[type="checkbox"] + span) {
+      background: #fff;
+      border: 2px solid #000;
+      border-radius: 0;
+      box-shadow: none;
+    }
+
+    :global(input[type="checkbox"] + span::before),
+    :global(input[type="checkbox"] + span::after) {
+      box-shadow: none;
+      border-radius: 0;
+    }
   }
 </style>
