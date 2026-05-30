@@ -1,178 +1,554 @@
 import { BaseObject, ElementObject } from "@snap-engine/core";
-import { ItemContainer, ClickAction } from "./container";
-import { AnimationObject } from "@snap-engine/core/animation";
-import type {
-  dragStartProp,
-  dragProp,
-  dragEndProp,
-} from "@snap-engine/core";
-import { mouseButtonBitmap } from "@snap-engine/core";
+import type { ItemContainer } from "./container";
+import { RectCollider, PointCollider } from "@snap-engine/core/collision";
+import type { dragStartProp, dragProp, dragEndProp } from "@snap-engine/core";
+import { determineDropTarget } from "./drop_target";
 
-const BUFFER = 20;
+/**
+ * How much to enlarge an item's hitbox while it is being dragged. The hitbox
+ * grows around the item's center, so a factor of 1 leaves it unchanged.
+ */
+const DRAG_HITBOX_SCALE = 4;
 
 export class ItemObject extends ElementObject {
-  #containerObject: ItemContainer | null;
-  #indexInList: number = 0;
-  #mouseOffsetX: number = 0;
-  #mouseOffsetY: number = 0;
-  #dropIndex: number | null = 0;
-  #rowDropIndex: number = 0;
-  #rowIndex: number = 0;
-  #currentRow: number = 0;
-  #onClickAction: ClickAction | null = null;
-  #metadata: Record<string, unknown> = {};
+  // Container element is the parent element
+  // #containerObject: ItemContainer | null = null;
+  #rootContainer: ItemContainer | null = null;
+  // #metadata: Record<string, unknown> = {};
+  #locked: boolean = false; // Locked items cannot be dragged
+  noDrop: boolean = false; // Containers marked as noDrop cannot be a drop target
+  #hitbox: RectCollider;
+  #centerPoint: PointCollider;
 
-  #prevContainer: ItemContainer | null = null;
+  #dragOffsetX: number = 0;
+  #dragOffsetY: number = 0;
 
-  constructor(engine: any, parent: BaseObject | null) {
+  #itemOrderedList: ItemObject[] = []; // Wrapper around children to maintain their order in the DOM
+
+  #isGhost: boolean = false;
+  #isDragging: boolean = false;
+  #depth: number = 0;
+  ghostItem: ItemObject | null = null; // The ghost item instance, so we can remove it later
+  // #groupId: Array<string> | string | null = null;
+
+  //
+
+  constructor(
+    engine: any,
+    parent: BaseObject | null,
+    // groupId: Array<string> | string | null = null,
+    isGhost: boolean = false,
+  ) {
     super(engine, parent);
-    this.event.input.dragStart = this.cursorDown;
-    this.event.input.drag = this.cursorMove;
-    this.event.input.dragEnd = this.cursorUp;
+    // this.#groupId = groupId;
+    this.#isGhost = isGhost;
+    this.event.input.dragStart = this.dragStart;
+    this.event.input.drag = this.drag;
+    this.event.input.dragEnd = this.dragEnd;
     this.transformMode = "none";
-    this.#containerObject = null;
-    this.#prevContainer = null;
-    this.#metadata = {};
+    this.#hitbox = new RectCollider(engine, this, 0, 0, 0, 0);
+    this.addCollider(this.#hitbox);
+    this.#centerPoint = new PointCollider(engine, this, 0, 0);
+    this.addCollider(this.#centerPoint);
+
+    this.ghostItem = null;
+
+    this.event.dom.onAfterReadDom = (stage) => {
+      const prop = this.getDomProperty(stage);
+      const factor = this.#isDragging ? DRAG_HITBOX_SCALE : 1;
+      this.#hitbox.local.width = prop.width * factor;
+      this.#hitbox.local.height = prop.height * factor;
+      this.#hitbox.local.x = (prop.width - this.#hitbox.local.width) / 2;
+      this.#hitbox.local.y = (prop.height - this.#hitbox.local.height) / 2;
+      this.#centerPoint.local.x = prop.width / 2;
+      this.#centerPoint.local.y = prop.height / 2;
+    };
   }
 
-  get metadata(): Record<string, unknown> {
-    return this.#metadata;
+  addItem(item: ItemObject) {
+    this.appendChild(item);
   }
 
-  set metadata(value: Record<string, unknown>) {
-    this.#metadata = value;
+  get locked(): boolean {
+    return this.#locked;
   }
 
-  get onClickAction() {
-    return this.#onClickAction;
+  set locked(value: boolean) {
+    this.#locked = value;
   }
 
-  set onClickAction(value: ClickAction | null) {
-    this.#onClickAction = value;
+  getIndexAndContainer(): { index: number; container: ItemObject | null } {
+    if (!this.parent) {
+      console.debug(
+        `[getIndexAndContainer] ${this.gid} has no parent → index=-1`,
+      );
+      return { index: -1, container: null };
+    }
+    const parentContainer = this.parent as unknown as ItemObject;
+    const idx = parentContainer.#itemOrderedList.indexOf(this);
+    console.debug(
+      `[getIndexAndContainer] ${this.gid} → container=${parentContainer.gid}, index=${idx}, orderedList=[${parentContainer.#itemOrderedList.map((i) => i.gid).join(", ")}]`,
+    );
+    return { index: idx, container: parentContainer };
   }
+
+  // get metadata(): Record<string, unknown> {
+  //   return this.#metadata;
+  // }
+
+  // set metadata(value: Record<string, unknown>) {
+  //   this.#metadata = value;
+  // }
 
   get container(): ItemContainer {
-    if (!this.#containerObject) {
-      throw new Error("ItemObject has no container set.");
+    if (!this.parent) {
+      console.warn("ItemObject has no container set.");
+      return null as any;
     }
-    return this.#containerObject;
+    return this.parent as unknown as ItemContainer;
   }
 
   setContainer(value: ItemContainer) {
-    this.#containerObject = value;
+    // this.#containerObject = value;
   }
 
-  set container(value: ItemContainer) {
-    this.#containerObject = value;
+  get rootContainer(): ItemContainer | null {
+    return this.#rootContainer;
   }
 
-  get orderedItemList() {
-    return this.container.itemList ?? [];
+  setRootContainer(root: ItemContainer | null) {
+    this.#rootContainer = root;
   }
 
-  get rowIndex() {
-    return this.#rowIndex;
+  get isGhost(): boolean {
+    return this.#isGhost;
   }
 
-  set rowIndex(value: number) {
-    this.#rowIndex = value;
+  get depth(): number {
+    return this.#depth;
   }
 
-  get dropIndex() {
-    return this.#dropIndex;
+  get itemOrderedList(): ItemObject[] {
+    return this.#itemOrderedList;
   }
 
-  set dropIndex(value: number | null) {
-    this.#dropIndex = value;
+  get hitbox(): RectCollider {
+    return this.#hitbox;
   }
 
-  get rowDropIndex() {
-    return this.#rowDropIndex;
-  }
-
-  set rowDropIndex(value: number) {
-    this.#rowDropIndex = value;
-  }
-
-  get indexInList() {
-    return this.#indexInList;
-  }
-
-  set indexInList(value: number) {
-    this.#indexInList = value;
-  }
-
-  debug_all_items() {
-    for (const item of this.container.itemList ?? []) {
-      const prop1 = item.getDomProperty("READ_1");
-      item.addDebugRect(
-        prop1.x + prop1.width / 2 - 4,
-        prop1.y + prop1.height / 2 - 4,
-        8,
-        8,
-        "orange",
-        true,
-        `center-read1-${item.gid}`
-      );
-    }
-  }
-
-  get isColumn() {
-    return this.container.direction === "column";
-  }
-
-  moveToContainer(targetContainer: ItemContainer) {
-    const sourceContainer = this.container;
-    // Clean up old container
-    // TODO: Figure out why queueing ghost removal in WRITE_1 causes issues
-    // Is it possible that position: relative is being set to soon?
-    // sourceContainer.removeAllGhost();
-    sourceContainer.removeGhostItem();
-    sourceContainer.dragItem = null;
-
-    // Reset styles
-    this.style = {
-      cursor: "grab",
-      position: "relative",
-      zIndex: "0",
-      top: "",
-      left: "",
-      width: "",
-      height: "",
-    };
-    this.transformMode = "none";
-
-
-    sourceContainer.sendItem(this);
-    targetContainer.receiveItem(this);
+  get centerPoint(): PointCollider {
+    return this.#centerPoint;
   }
 
   /**
-   * Handle the start of a drag operation.
-   * This method initializes the drag state, captures the initial positions of items,
-   * and sets up the visual appearance of the dragged item.
-   * @param prop The drag start event properties.
+   * Return this item's children sorted by their DOM order.
    */
-  cursorDown(prop: dragStartProp) {
-    // Disable camera control while dragging
-    this.global.data.allowCameraControl = false;
-
-    this.queueUpdate("READ_1", () => {
-      // Record the initial position of the container and its items
-      this.container.captureState("READ_1");
-      // Organize the items into rows
-      this.container.setItemRows(this);
+  childrenInDomOrder(): BaseObject[] {
+    return this.children.slice().sort((a, b) => {
+      const aEl = (a as ElementObject).element;
+      const bEl = (b as ElementObject).element;
+      if (!aEl || !bEl) return 0;
+      const cmp = aEl.compareDocumentPosition(bEl);
+      if (cmp & Node.DOCUMENT_POSITION_FOLLOWING) return -1;
+      if (cmp & Node.DOCUMENT_POSITION_PRECEDING) return 1;
+      return 0;
     });
+  }
+
+  static #containerColors = new Map<string, string>();
+
+  static #colorForContainer(gid: string): string {
+    let color = ItemObject.#containerColors.get(gid);
+    if (!color) {
+      let hash = 0;
+      for (let i = 0; i < gid.length; i++) {
+        hash = ((hash << 5) - hash + gid.charCodeAt(i)) | 0;
+      }
+      const hue = ((hash % 360) + 360) % 360;
+      color = `hsl(${hue}, 80%, 55%)`;
+      ItemObject.#containerColors.set(gid, color);
+    }
+    return color;
+  }
+
+  /**
+   * Draw a debug circle at the center of every item in the hierarchy,
+   * color-coded by parent container.
+   */
+  debugAllItems(
+    node: ItemObject = (this.#rootContainer as unknown as ItemObject) ?? this,
+  ) {
+    const color = ItemObject.#colorForContainer(node.gid);
+    for (const child of node.children) {
+      if (!(child instanceof ItemObject)) continue;
+      const prop = child.getDomProperty("READ_1");
+      if (prop) {
+        const cx = prop.x + prop.width / 2;
+        const cy = prop.y + prop.height / 2;
+        child.addDebugCircle(
+          cx,
+          cy,
+          4,
+          color,
+          true,
+          `center-read1-${child.gid}`,
+          "item-positions",
+        );
+      }
+      // Recurse into children that act as containers
+      if (child.children.length > 0) {
+        this.debugAllItems(child);
+      }
+    }
+  }
+
+  #findRootContainer() {
+    if (this.parent == null) {
+      this.#updateState(this as unknown as ItemContainer);
+      this.requestRead(false, true, "READ_1", true);
+    } else {
+      const parentContainer = this.parent as unknown as ItemObject;
+      parentContainer.#findRootContainer();
+    }
+  }
+
+  #updateState(root: ItemContainer | null, depth: number = 0) {
+    // Set root container and depth
+    this.#rootContainer = root;
+    this.#depth = depth;
+    // Get the list of children in DOM order
+    this.#itemOrderedList = this.childrenInDomOrder() as ItemObject[];
+    // Update all its children as well.
+    for (const child of this.children) {
+      if (child instanceof ItemObject) {
+        child.#updateState(root, depth + 1);
+      }
+    }
+  }
+
+  /**
+   * Temporarily move the DOM element of an item to the root container during dragging,
+   * so it can be positioned absolutely within the root container without affecting the
+   * layout of its original container.
+   */
+  #hoistElementToRoot() {
+    if (this.#rootContainer) {
+      // Move the DOM element to be a child of the root container's DOM element,
+      // so it can be positioned absolutely within it.
+      const element = this.element;
+      const rootElement = this.#rootContainer.element;
+      if (element && rootElement) {
+        rootElement.appendChild(element);
+      }
+    }
+  }
+
+  /**
+   * Move the DOM element of an item back to its original container.
+   * @param container
+   * @returns
+   */
+  #lowerElementToContainer(container: ItemContainer) {
+    const element = this.element;
+    const containerElement = container.element;
+    if (element && containerElement) {
+      containerElement.appendChild(element);
+    }
+  }
+
+  /**
+   * Move an item to a different container and index, updating the DOM and internal state accordingly.
+   * @param container
+   * @param item
+   * @param index
+   * @param updateDom Whether to update the DOM structure. This should be false if the DOM is already in the correct structure (e.g. during drag), to avoid unnecessary DOM operations.
+   * @returns
+   */
+  moveItemToContainer(
+    container: ItemContainer,
+    item: ItemObject,
+    index: number,
+    updateDom: boolean = true,
+  ) {
+    const sourceContainer = item.parent as unknown as ItemObject | null;
+    const sourceIndex = sourceContainer
+      ? sourceContainer.#itemOrderedList.indexOf(item)
+      : -1;
+    console.debug(
+      `[moveItemToContainer] item=${item.gid} from=${sourceContainer?.gid ?? "null"}[${sourceIndex}] to=${(container as unknown as ItemObject).gid}[${index}] updateDom=${updateDom}`,
+    );
+    console.debug(
+      `[moveItemToContainer]   source orderedList=[${sourceContainer ? sourceContainer.#itemOrderedList.map((i) => i.gid).join(", ") : "N/A"}]`,
+    );
+    console.debug(
+      `[moveItemToContainer]   target orderedList=[${container.#itemOrderedList.map((i) => i.gid).join(", ")}]`,
+    );
+    // If the source and target container is the same, we must adjust the index
+    // to account for the removal of the item from its original position.
+    if (item.parent === container) {
+      // If the source and target index is the same, no need to move.
+      if (container.#itemOrderedList.indexOf(item) === index) {
+        console.debug(
+          `[moveItemToContainer]   SKIP: same container, same index`,
+        );
+        return;
+      }
+      const currentIndex = container.#itemOrderedList.indexOf(item);
+      if (currentIndex !== -1 && currentIndex < index) {
+        console.debug(
+          `[moveItemToContainer]   adjusting index: ${index} → ${index - 1} (same container, current=${currentIndex} < target=${index})`,
+        );
+        index -= 1;
+      }
+    }
+    // Remove the item from its current container.
+    // deleteElement should be false because we will re-insert the same element into the new container,
+    // so we don't want to remove it from the DOM.
+    this.removeItemFrom(item.container, item, false);
+    this.insertItemAt(container, item, index);
+    console.debug(
+      `[moveItemToContainer]   DONE. target orderedList=[${container.#itemOrderedList.map((i) => i.gid).join(", ")}]`,
+    );
+  }
+
+  /**
+   * Insert an item at a specific index in the item list and DOM.
+   * If the index is past the end, the item is appended.
+   * Note that this assumes the #itemOrderedList is already in the correct order.
+   */
+  insertItemAt(container: ItemContainer, item: ItemObject, index: number) {
+    console.debug(
+      `[insertItemAt] item=${item.gid} into container=${(container as unknown as ItemObject).gid} at index=${index}`,
+    );
+    console.debug(
+      `[insertItemAt]   BEFORE orderedList=[${container.#itemOrderedList.map((i) => i.gid).join(", ")}] (len=${container.#itemOrderedList.length})`,
+    );
+    (container as unknown as ItemObject).appendChild(item);
+    if (index >= container.#itemOrderedList.length) {
+      console.debug(
+        `[insertItemAt]   index ${index} >= len ${container.#itemOrderedList.length}, appending`,
+      );
+      container.#itemOrderedList.push(item);
+    } else {
+      console.debug(`[insertItemAt]   splicing at index ${index}`);
+      container.#itemOrderedList.splice(index, 0, item);
+    }
+    const itemAfterIndex =
+      index >= container.#itemOrderedList.length - 1
+        ? null
+        : container.#itemOrderedList[index + 1].element;
+    console.debug(
+      `[insertItemAt]   AFTER orderedList=[${container.#itemOrderedList.map((i) => i.gid).join(", ")}]`,
+    );
+    console.debug(
+      `[insertItemAt]   DOM insertBefore: item.element=${item.element?.id ?? "null"}, before=${itemAfterIndex ? (itemAfterIndex as any).element?.id ?? itemAfterIndex.gid : "null (append)"}`,
+    );
+    container.element?.insertBefore(item.element!, itemAfterIndex);
+  }
+
+  /**
+   * Remove an item from the item list and DOM.
+   * @param item The item to remove.
+   * @param deleteElement Whether to delete the DOM element of the item.
+   */
+  removeItemFrom(
+    container: ItemContainer,
+    item: ItemObject,
+    deleteElement: boolean = true,
+  ) {
+    console.debug(
+      `[removeItemFrom] item=${item.gid} from container=${(container as unknown as ItemObject).gid} deleteElement=${deleteElement}`,
+    );
+    console.debug(
+      `[removeItemFrom]   BEFORE orderedList=[${container.#itemOrderedList.map((i) => i.gid).join(", ")}]`,
+    );
+    container.removeChild(item);
+    container.#itemOrderedList = container.#itemOrderedList.filter(
+      (i) => i !== item,
+    );
+    console.debug(
+      `[removeItemFrom]   AFTER orderedList=[${container.#itemOrderedList.map((i) => i.gid).join(", ")}]`,
+    );
+    if (deleteElement) {
+      item.element?.remove();
+    }
+  }
+
+  /**
+   * Create or remove a ghost element at the specified container and index.
+   * A null container means the ghost element should be removed.
+   * @param original The original item being dragged.
+   * @param container The container to place the ghost element in, or null to remove it.
+   * @param index The index at which to place the ghost element.
+   */
+  #updateGhostElement(
+    original: ItemObject,
+    container: ItemContainer | null,
+    index: number,
+  ) {
+    let ghostItem = this.#rootContainer?.ghostItem;
+    console.debug(
+      `[updateGhostElement] original=${original.gid} container=${container ? (container as unknown as ItemObject).gid : "null"} index=${index} existingGhost=${ghostItem ? ghostItem.gid : "none"}`,
+    );
+
+    if (container === null) {
+      if (ghostItem) {
+        console.debug(
+          `[updateGhostElement] removing ghost ${ghostItem.gid} from ${(ghostItem.container as unknown as ItemObject)?.gid}`,
+        );
+        // Remove the ghost item and element from the root container.
+        this.removeItemFrom(ghostItem.container, ghostItem);
+        ghostItem.destroy();
+        this.#rootContainer!.ghostItem = null;
+      }
+      return;
+    }
+    // If ghost element already exists, use that instead of creating a new one.
+    // Otherwise, create a new ghost element
+    if (!ghostItem) {
+      console.debug(`[updateGhostElement] creating new ghost element`);
+
+      const ghostElement = document.createElement("div");
+      ghostElement.id = "spacer";
+
+      ghostElement.style.width = original.getDomProperty("READ_1").width + "px";
+      ghostElement.style.height =
+        original.getDomProperty("READ_1").height + "px";
+      // ghostElement.style.margin = "" + original.getDomProperty("READ_1").margin;
+      // ghostElement.style.padding = "" + original.getDomProperty("READ_1").padding;
+      // ghostElement.style.boxSizing = "" + original.getDomProperty("READ_1").boxSizing;
+      ghostElement.classList.add("ghost");
+
+      ghostItem = new ItemObject(this.engine, null, null, true);
+      ghostItem.element = ghostElement;
+
+      // Set hitbox so the collision engine can detect overlaps with the ghost
+      const origProp = original.getDomProperty("READ_1");
+      ghostItem.hitbox.local.width = origProp.width;
+      ghostItem.hitbox.local.height = origProp.height;
+      ghostItem.centerPoint.local.x = origProp.width / 2;
+      ghostItem.centerPoint.local.y = origProp.height / 2;
+    }
+
+    // Remove ghost from its current container before re-inserting at the new position
+    if (ghostItem.parent) {
+      console.debug(
+        `[updateGhostElement] removing ghost from current container=${(ghostItem.container as unknown as ItemObject)?.gid}`,
+      );
+      this.removeItemFrom(ghostItem.container, ghostItem, false);
+    } else {
+      console.debug(
+        `[updateGhostElement] ghost has no parent, skipping remove`,
+      );
+    }
+    // Insert the ghost item at the new position in the DOM and item list.
+    // This also sets the ghost item's container to the new container.
+    console.debug(
+      `[updateGhostElement] inserting ghost at container=${(container as unknown as ItemObject).gid} index=${index}`,
+    );
+    this.insertItemAt(container, ghostItem, index);
+    // Root is responsible for maintaining the ghost element and removing it when necessary
+    this.#rootContainer!.ghostItem = ghostItem;
+
+    // let item =
+    //   itemIndex > this.#itemList.length - 1 ? null : this.#itemList[itemIndex];
+
+    // if (!this.element) {
+    //   return;
+    // }
+    // this.element.insertBefore(tmpDomElement, item ? item.element : null);
+    // this.#ghostDomElement = tmpDomElement;
+    // this.#spacerIndex = itemIndex;
+    // this.reorderItemList();
+  }
+
+  updateDropTarget(item: ItemObject) {
+    const root = (this.#rootContainer as unknown as ItemObject) ?? this;
+    const target = determineDropTarget(item, root);
+    // Compare against the ghost's current position, not the dragged item's (which is removed from the list during drag)
+    // In other words, check what the previous drop target was based on where the ghost is.
+    const ghostItem = this.#rootContainer?.ghostItem;
+    const ghostSource = ghostItem?.getIndexAndContainer();
+    console.debug(
+      `[updateDropTarget] item=${item.gid} target=${target ? `${target.container.gid}[${target.index}]` : "null"} ghostPos=${ghostSource?.container ? `${(ghostSource.container as unknown as ItemObject).gid}[${ghostSource.index}]` : "null"}`,
+    );
+    if (target?.container && ghostSource?.container) {
+      const sameContainer = target.container === ghostSource.container;
+      const sameIndex = target.index === ghostSource.index;
+      console.debug(
+        `[updateDropTarget]   sameContainer=${sameContainer} sameIndex=${sameIndex} (${target.index}===${ghostSource.index})`,
+      );
+      if (!sameContainer || !sameIndex) {
+        console.debug(
+          `[updateDropTarget]   >>> MOVING ghost to ${target.container.gid}[${target.index}]`,
+        );
+        this.#updateGhostElement(
+          item,
+          target.container as unknown as ItemContainer,
+          target.index,
+        );
+      } else {
+        console.debug(`[updateDropTarget]   SKIP: ghost already at target`);
+      }
+    } else if (target?.container) {
+      console.debug(`[updateDropTarget]   >>> PLACING initial ghost`);
+      this.#updateGhostElement(
+        item,
+        target.container as unknown as ItemContainer,
+        target.index,
+      );
+    } else {
+      console.debug(`[updateDropTarget]   SKIP: no target`);
+    }
+  }
+
+  dragStart(prop: dragStartProp) {
+    if (this.#locked) return;
+    console.debug(`[dragStart] item=${this.gid}`);
+    // Set the root container for all items, and queue READ to update the state of all containers and items.
+    this.#findRootContainer();
+    // Get the current index of the item in its container.
+    const { index: currentIndex, container: currentContainer } =
+      this.getIndexAndContainer();
+    console.debug(
+      `[dragStart] currentIndex=${currentIndex} currentContainer=${currentContainer?.gid ?? "null"}`,
+    );
+    // Compute the drag offset in READ_1, after DOM positions are read but before any WRITE_1
+    // callbacks (including drag events). This prevents race conditions where drag events
+    // modify this.transform before the offset is calculated.
+    this.queueUpdate(
+      "READ_1",
+      () => {
+        this.#dragOffsetX = prop.start.x - this.transform.x;
+        this.#dragOffsetY = prop.start.y - this.transform.y;
+        console.debug(
+          `[dragStart READ_1] offset=(${this.#dragOffsetX}, ${this.#dragOffsetY}) start=(${prop.start.x}, ${prop.start.y}) transform=(${this.transform.x}, ${this.transform.y})`,
+        );
+      },
+      `drag-start-offset-${this.gid}`,
+    );
 
     this.queueUpdate("WRITE_1", () => {
-      let property = this.getDomProperty("READ_1");
-      // Record the position of the mouse relative to the top-left of the item
-      this.#mouseOffsetX = prop.start.screenX - (property.screenX ?? 0);
-      this.#mouseOffsetY = prop.start.screenY - (property.screenY ?? 0);
-      this.worldPosition = [
-        prop.start.x - this.#mouseOffsetX,
-        prop.start.y - this.#mouseOffsetY,
-      ];
+      console.debug(
+        `[dragStart WRITE_1 callback] placing ghost at container=${currentContainer?.gid ?? "null"} index=${currentIndex}`,
+      );
+
+      this.#updateGhostElement(
+        this,
+        currentContainer as unknown as ItemContainer,
+        currentIndex,
+      );
+      // Remove the dragged item from its container's orderedList and engine children.
+      // The ghost now takes its place in the layout. The DOM element is kept (hoisted to root below).
+      this.removeItemFrom(
+        currentContainer as unknown as ItemContainer,
+        this,
+        false,
+      );
+      console.debug(
+        `[dragStart] after removing dragged item, orderedList=[${(currentContainer as unknown as ItemObject).#itemOrderedList.map((i) => i.gid).join(", ")}]`,
+      );
+
       this.style = {
         cursor: "grabbing",
         position: "absolute",
@@ -180,204 +556,96 @@ export class ItemObject extends ElementObject {
         top: "0px",
         left: "0px",
       };
-      this.transformMode = "offset";
-      this.transformOrigin = this.container as unknown as BaseObject; // TODO: Take padding into account
-
+      this.#hoistElementToRoot();
+      this.transformMode = "origin";
+      this.transformOrigin = this.#rootContainer;
+      this.transform.x = prop.start.x - this.#dragOffsetX;
+      this.transform.y = prop.start.y - this.#dragOffsetY;
+      // Scale hitbox around the item's center for the duration of the drag.
+      this.#isDragging = true;
+      const dragProp = this.getDomProperty("READ_1");
+      this.#hitbox.local.width = dragProp.width * DRAG_HITBOX_SCALE;
+      this.#hitbox.local.height = dragProp.height * DRAG_HITBOX_SCALE;
+      this.#hitbox.local.x = (dragProp.width - this.#hitbox.local.width) / 2;
+      this.#hitbox.local.y = (dragProp.height - this.#hitbox.local.height) / 2;
       this.writeDom();
       this.writeTransform();
-
-      // Temporarily remove the item from the container's item list
-      this.#indexInList = this.orderedItemList.indexOf(this) ?? 0;
-      if (this.container) {
-        this.container.dragItem = this;
-        this.container.removeItem(this);
-        this.container.updateItemIndexes();
-      }
-
-      // Determine the initial drop index
-      this.#currentRow = this.#rowIndex;
-      let { rowList, closestRow, rowBoundaries, overshoot } = this.container.getClosestRow(
-        this.isColumn
-          ? this.transform.x + property.width / 2
-          : this.transform.y + property.height / 2,
-      );
-      if (rowList.length == 0) {
-        // If there is nothing in the current container, set drop index to 0
-        this.#currentRow = 0;
-        this.#dropIndex = 0;
-        this.#rowDropIndex = 0;
-      } else {
-        this.#dropIndex = this.#indexInList;
-        this.#rowDropIndex =
-          this.#dropIndex - rowBoundaries[closestRow.index].cumulativeLength;
-        this.#currentRow = closestRow.index;
-      }
-      this.container.lastClosestRowIndex = this.#currentRow;
-      this.debug_all_items();
-
+      this.debugAllItems();
     });
-
-    // Add ghost at the initial drop index
-    // This can be here because Js is single threaded and this will be queued after the above WRITE_1 callback.
-    // console.debug("Initial ghost add at index:", this.#dropIndex);
-    this.container.addGhostBeforeItem(this, false);
   }
 
-  handoffToContainer(newContainer: ItemContainer, stage: "READ_1" | "READ_2" | "READ_3" = "READ_1") {
-    if (!this.#containerObject) {
-      throw new Error("ItemObject has no container set.");
-    }
-    this.#containerObject.removeAllGhost(true);
-    this.#containerObject.dragItem = null;
-    this.#containerObject = newContainer;
-
-    this.#containerObject.setItemRows(this);
-    this.#containerObject.dragItem = this;
-    this.transformOrigin = this.#containerObject as unknown as BaseObject;
-    this.#containerObject!.element?.appendChild(this.element!);
-  }
-
-
-  cursorMove(prop: dragProp) {
-    if (
-      !(prop.button & mouseButtonBitmap.LEFT) ||
-      !this.container ||
-      this.container.dragItem !== this
-    ) {
-      return;
-    }
-
-    // Move the item according to mouse position
-    this.worldPosition = [
-      prop.position.x - this.#mouseOffsetX,
-      prop.position.y - this.#mouseOffsetY,
-    ];
-    this.requestTransform("WRITE_1");
-
-    // We must NOT read the DOM properties while dragging, as it may read positions of items during animation
-    // which can lead to incorrect drop index calculation.
-    // this.container.captureState("READ_1");
-
-    let { dropIndex, rowDropIndex, closestRowIndex } =
-      this.container.determineDropIndex(this, "READ_1");
-
-    if (dropIndex != this.container.spacerIndex) {
-      this.#prevContainer = this.#containerObject;
-      const differentRow =
-        this.#currentRow != closestRowIndex ||
-        this.#containerObject !== this.#prevContainer;
-      this.#currentRow = closestRowIndex;
-      this.#dropIndex = dropIndex;
-      this.#rowDropIndex = rowDropIndex;
-      this.container.addGhostBeforeItem(this, differentRow);
-    } else {
-    }
-  }
-
-  cursorUp(_prop: dragEndProp) {
-    // Re-enable camera control after drag ends
-    this.global.data.allowCameraControl = true;
-
-    if (this.container.dragItem !== this) {
-      return;
-    }
-
-    // TODO: A better way would be to get the last cached position
-    // and store it into READ_1
-    this.element!.style.position = "relative";
-
-    this.container.dragItem = null;
-    this.transformMode = "none";
-    this.style = {
-      cursor: "grab",
-      position: "relative",
-      zIndex: "0",
-      top: "",
-      left: "",
-      width: "",
-      height: "",
-    };
-
-    const hasMoved =
-      Math.abs(_prop.end.screenX - _prop.start.screenX) > 1 ||
-      Math.abs(_prop.end.screenY - _prop.start.screenY) > 1;
-
-    if (!hasMoved) {
-      const action = this.onClickAction || this.container.onClickAction;
-      if (action && action.action === "moveTo") {
-        const targetContainer = this.global.data["dragAndDropContainers"]?.find(
-          (c: ItemContainer) => c.name === action.target,
-        );
-        if (targetContainer) {
-          this.moveToContainer(targetContainer);
-          return;
-        }
-      }
-    }
-
-
-    this.container.addItemAfter(this, this.orderedItemList[this.#dropIndex ?? 0]);
-    this.container.removeAllGhost();
-
-    const endX = this.worldPosition[0];
-    const endY = this.worldPosition[1];
-    this.requestRead(true, true, "READ_1");
-
-    this.requestWrite(
-      true,
-      () => {
-        this.container.element?.insertBefore(
-          this.element as HTMLElement,
-          (this.#dropIndex ?? 0) >= this.orderedItemList.length - 1 ||
-            this.orderedItemList.length == 0 ||
-            this.orderedItemList[this.#dropIndex ?? 0] == null
-            ? (null as unknown as HTMLElement)
-            : this.orderedItemList[this.#dropIndex ?? 0].element,
-        );
-        this.writeDom();
-        this.writeTransform();
-      },
+  drag(prop: dragProp) {
+    this.queueUpdate(
       "WRITE_1",
+      () => {
+        // Move the item according to mouse position
+        this.transform.x = prop.position.x - this.#dragOffsetX;
+        this.transform.y = prop.position.y - this.#dragOffsetY;
+        this.writeTransform();
+
+        this.updateDropTarget(this);
+      },
+      `drag-${this.gid}`,
     );
+    // Re-read positions of all items
+    this.#rootContainer?.requestRead(
+      false,
+      true,
+      "READ_2",
+      true,
+      `drag-${this.gid}`,
+    );
+  }
 
-    this.container.queueUpdate("READ_2", () => {
-      this.readDom(false, "READ_2");
-      const animConfig = this.container.configuration.animation?.drop;
-      if (animConfig) {
-        const curr = this.getDomProperty("READ_2");
-        // curr.x, curr.y is the new position in flow.
+  dragEnd(_: dragEndProp) {
+    this.requestWrite(true, () => {
+      // Get ghost's current position — this is where the item should land
+      const ghostItem = this.#rootContainer?.ghostItem;
+      const ghostPos = ghostItem?.getIndexAndContainer();
+      console.debug(
+        `[dragEnd] item=${this.gid} ghostPos=${ghostPos?.container ? `${(ghostPos.container as unknown as ItemObject).gid}[${ghostPos.index}]` : "null"}`,
+      );
 
-        const dx = endX - curr.x;
-        const dy = endY - curr.y;
+      // Remove the ghost first
+      this.#updateGhostElement(this, null, -1);
 
-        if (Math.abs(dx) >= 0.5 || Math.abs(dy) >= 0.5) {
-          const anim = new AnimationObject(
-            this.element,
-            {
-              transform: [
-                `translate3d(${dx}px, ${dy}px, 0px)`,
-                `translate3d(0px, 0px, 0px)`,
-              ],
-            },
-            {
-              duration: animConfig.duration ?? 100,
-              easing: animConfig.timing_function ?? "ease-out",
-            },
-          );
-          this.addAnimation(anim);
-          anim.play();
-        }
+      // Re-insert the dragged item at the ghost's former position
+      if (ghostPos?.container) {
+        this.insertItemAt(
+          ghostPos.container as unknown as ItemContainer,
+          this,
+          ghostPos.index,
+        );
+        console.debug(
+          `[dragEnd] re-inserted item at ${(ghostPos.container as unknown as ItemObject).gid}[${ghostPos.index}]`,
+        );
       }
+
+      this.style = {
+        cursor: "grab",
+        position: "relative",
+        zIndex: "",
+        top: "",
+        left: "",
+      };
+      this.transformMode = "none";
+      this.transformOrigin = null;
+      // Restore hitbox to natural size now that the drag is over.
+      this.#isDragging = false;
+      const endProp = this.getDomProperty("READ_1");
+      this.#hitbox.local.width = endProp.width;
+      this.#hitbox.local.height = endProp.height;
+      this.#hitbox.local.x = 0;
+      this.#hitbox.local.y = 0;
+      this.writeDom();
+      this.writeTransform();
     });
   }
 
   destroy() {
-    if (this.#containerObject) {
-      if (this.#containerObject.dragItem === this) {
-        this.#containerObject.dragItem = null;
-      }
-      this.#containerObject.removeItem(this);
-    }
+    // if (this.#containerObject) {
+    //   this.#containerObject.removeItem(this);
+    // }
     super.destroy();
   }
 }

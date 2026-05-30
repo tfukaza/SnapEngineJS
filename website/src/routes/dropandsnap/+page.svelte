@@ -145,6 +145,12 @@
     }
   }
 
+  function handleKeydown(e: KeyboardEvent) {
+    if (e.key === "d" || e.key === "D") {
+      toggleDebug();
+    }
+  }
+
   function checkSentence() {
     if (!sentenceDropZone) return;
     const words = Array.from(
@@ -162,6 +168,8 @@
     }
   }
 </script>
+
+<svelte:window onkeydown={handleKeydown} />
 
 <section id="landing">
   <Engine id="dropandsnap-canvas" bind:this={canvasComponent} {debug}>
@@ -370,6 +378,12 @@
     background: var(--color-background-tint);
     border-radius: var(--ui-radius);
     height: clamp(80vh, 80vh, 1200px);
+  }
+
+  :global(.ghost) {
+    background: rgba(0, 0, 0, 0.06);
+    border-radius: 6px;
+    box-sizing: border-box;
   }
 
  

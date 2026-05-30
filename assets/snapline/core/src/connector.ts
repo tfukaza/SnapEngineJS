@@ -72,10 +72,10 @@ class ConnectorComponent extends ElementObject {
         const prop = this.getDomProperty("READ_1");
         const centerX = prop.width / 2;
         const centerY = prop.height / 2;
-        this.#hitCircle.transform.x = centerX;
-        this.#hitCircle.transform.y = centerY;
-        this.#mouseHitBox.transform.x = centerX;
-        this.#mouseHitBox.transform.y = centerY;
+        this.#hitCircle.local.x = centerX;
+        this.#hitCircle.local.y = centerY;
+        this.#mouseHitBox.local.x = centerX;
+        this.#mouseHitBox.local.y = centerY;
       });
     };
 
@@ -172,11 +172,7 @@ class ConnectorComponent extends ElementObject {
   }
 
   updateAllLines() {
-    this.calculateTransformFromLocal();
-
     for (const line of [...this.#outgoingLines, ...this.#incomingLines]) {
-      line.target?.calculateTransformFromLocal();
-      line.calculateLocalFromTransform();
       line.moveLineToConnectorTransform();
       line.requestTransform("WRITE_2");
     }
@@ -263,12 +259,12 @@ class ConnectorComponent extends ElementObject {
         const centerA = a.center;
         const centerB = b.center;
         let da = Math.sqrt(
-          Math.pow(centerA.x - this.#mouseHitBox.transform.x, 2) +
-            Math.pow(centerA.y - this.#mouseHitBox.transform.y, 2),
+          Math.pow(centerA.x - this.#mouseHitBox.local.x, 2) +
+            Math.pow(centerA.y - this.#mouseHitBox.local.y, 2),
         );
         let db = Math.sqrt(
-          Math.pow(centerB.x - this.#mouseHitBox.transform.x, 2) +
-            Math.pow(centerB.y - this.#mouseHitBox.transform.y, 2),
+          Math.pow(centerB.x - this.#mouseHitBox.local.x, 2) +
+            Math.pow(centerB.y - this.#mouseHitBox.local.y, 2),
         );
         return da - db;
       });
@@ -288,8 +284,8 @@ class ConnectorComponent extends ElementObject {
       console.error(`Error: Outgoing lines is empty`);
       return;
     }
-    this.#mouseHitBox.transform.x = prop.position.x - this.transform.x;
-    this.#mouseHitBox.transform.y = prop.position.y - this.transform.y;
+    this.#mouseHitBox.local.x = prop.position.x - this.transform.x;
+    this.#mouseHitBox.local.y = prop.position.y - this.transform.y;
 
     let line = this.#outgoingLines[0];
 
@@ -363,8 +359,8 @@ class ConnectorComponent extends ElementObject {
     this.#targetConnector = null;
     this.#mouseHitBox.event.collider.onBeginContact = null;
     this.#mouseHitBox.event.collider.onEndContact = null;
-    this.#mouseHitBox.transform.x = 0;
-    this.#mouseHitBox.transform.y = 0;
+    this.#mouseHitBox.local.x = 0;
+    this.#mouseHitBox.local.y = 0;
   }
 
   startPickUpLine(line: LineComponent, prop: pointerDownProp) {
@@ -399,7 +395,6 @@ class ConnectorComponent extends ElementObject {
       this.#outgoingLines.unshift(line);
     }
 
-    this.calculateLocalFromTransform();
     line.target = connector;
     connector.incomingLines.push(line);
 

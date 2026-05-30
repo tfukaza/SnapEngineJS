@@ -14,6 +14,7 @@ import { UUID } from "crypto";
 export interface DomEvent {
   onAssignDom: null | (() => void);
   onResize: null | (() => void);
+  onAfterReadDom: null | ((stage: "READ_1" | "READ_2" | "READ_3") => void);
 }
 
 class EventCallback {
@@ -45,7 +46,10 @@ class EventCallback {
           this._object.engine,
         );
         if (value == null) {
-          globalInputEngine?.unsubscribeGlobalCursorEvent(prop, this._object.gid);
+          globalInputEngine?.unsubscribeGlobalCursorEvent(
+            prop,
+            this._object.gid,
+          );
         } else {
           globalInputEngine?.subscribeGlobalCursorEvent(
             prop,
@@ -76,6 +80,7 @@ class EventCallback {
     this._dom = {
       onAssignDom: null,
       onResize: null,
+      onAfterReadDom: null,
     };
     this.dom = EventProxyFactory<BaseObject, DomEvent>(this._object, this._dom);
   }
@@ -86,6 +91,63 @@ export interface TransformProperty {
   y: number;
   scaleX: number;
   scaleY: number;
+}
+
+export class ReactiveTransform implements TransformProperty {
+  private _x: number = 0;
+  private _y: number = 0;
+  private _scaleX: number = 1;
+  private _scaleY: number = 1;
+  _role: "world" | "local";
+  _owner: BaseObject | null = null;
+  _syncing: boolean = false;
+
+  constructor(role: "world" | "local") {
+    this._role = role;
+  }
+
+  _bind(owner: BaseObject) {
+    this._owner = owner;
+  }
+
+  get x(): number {
+    return this._x;
+  }
+  set x(value: number) {
+    this._x = value;
+    if (!this._syncing && this._owner) {
+      this._owner._syncFrom(this._role);
+    }
+  }
+
+  get y(): number {
+    return this._y;
+  }
+  set y(value: number) {
+    this._y = value;
+    if (!this._syncing && this._owner) {
+      this._owner._syncFrom(this._role);
+    }
+  }
+
+  get scaleX(): number {
+    return this._scaleX;
+  }
+  set scaleX(value: number) {
+    this._scaleX = value;
+  }
+
+  get scaleY(): number {
+    return this._scaleY;
+  }
+  set scaleY(value: number) {
+    this._scaleY = value;
+  }
+
+  _setRaw(x: number, y: number) {
+    this._x = x;
+    this._y = y;
+  }
 }
 
 export class queueEntry {
@@ -107,6 +169,12 @@ export class queueEntry {
     } else {
       this.callback = [callback.bind(this.object)];
     }
+  }
+  /**
+   * Cancels this queue entry so its callbacks will not be executed.
+   */
+  cancel() {
+    this.callback = null;
   }
 }
 
@@ -144,9 +212,9 @@ export class BaseObject {
   parent: BaseObject | null;
   children: BaseObject[] = [];
 
-  transform: TransformProperty;
-  local: TransformProperty;
-  offset: TransformProperty;
+  transform: ReactiveTransform;
+  local: ReactiveTransform;
+  displacement: TransformProperty;
 
   event: EventCallback;
 
@@ -175,19 +243,11 @@ export class BaseObject {
     this.parent = parent;
 
     this._colliderList = [];
-    this.transform = {
-      x: 0,
-      y: 0,
-      scaleX: 1,
-      scaleY: 1,
-    };
-    this.local = {
-      x: 0,
-      y: 0,
-      scaleX: 1,
-      scaleY: 1,
-    };
-    this.offset = {
+    this.transform = new ReactiveTransform("world");
+    this.transform._bind(this);
+    this.local = new ReactiveTransform("local");
+    this.local._bind(this);
+    this.displacement = {
       x: 0,
       y: 0,
       scaleX: 1,
@@ -231,6 +291,16 @@ export class BaseObject {
     });
   }
 
+  appendChild(child: BaseObject) {
+    this.children.push(child);
+    child.parent = this;
+  }
+
+  removeChild(child: BaseObject) {
+    this.children = this.children.filter((c) => c !== child);
+    child.parent = null;
+  }
+
   destroy() {
     // TODO: Remove colliders
     this.cancelAnimations();
@@ -244,6 +314,54 @@ export class BaseObject {
   set worldPosition(position: [number, number]) {
     this.transform.x = position[0];
     this.transform.y = position[1];
+  }
+
+  get localPosition(): [number, number] {
+    return [this.local.x, this.local.y];
+  }
+
+  set localPosition(position: [number, number]) {
+    this.local.x = position[0];
+    this.local.y = position[1];
+  }
+
+  _syncFrom(source: "world" | "local") {
+    if (source === "world") {
+      if (this.parent) {
+        this.local._setRaw(
+          this.transform.x - this.parent.transform.x,
+          this.transform.y - this.parent.transform.y,
+        );
+      } else {
+        this.local._setRaw(this.transform.x, this.transform.y);
+      }
+    } else {
+      if (this.parent) {
+        this.transform._setRaw(
+          this.parent.transform.x + this.local.x,
+          this.parent.transform.y + this.local.y,
+        );
+      } else {
+        this.transform._setRaw(this.local.x, this.local.y);
+      }
+    }
+    for (const collider of this._colliderList) {
+      collider.recalculate();
+    }
+    this._cascadeToChildren();
+  }
+
+  _cascadeToChildren() {
+    for (const child of this.children) {
+      child.transform._setRaw(
+        this.transform.x + child.local.x,
+        this.transform.y + child.local.y,
+      );
+      for (const collider of child._colliderList) {
+        collider.recalculate();
+      }
+      child._cascadeToChildren();
+    }
   }
 
   get cameraPosition(): [number, number] {
@@ -312,27 +430,7 @@ export class BaseObject {
     queueID: string | null = null,
   ): queueEntry {
     const request = new queueEntry(this, callback, queueID);
-    let queue = this.global.read1Queue;
-    switch (stage) {
-      case "READ_1":
-        queue = this.global.read1Queue;
-        break;
-      case "WRITE_1":
-        queue = this.global.write1Queue;
-        break;
-      case "READ_2":
-        queue = this.global.read2Queue;
-        break;
-      case "WRITE_2":
-        queue = this.global.write2Queue;
-        break;
-      case "READ_3":
-        queue = this.global.read3Queue;
-        break;
-      case "WRITE_3":
-        queue = this.global.write3Queue;
-        break;
-    }
+    const queue = this.global.queue[stage];
     if (!queue.get(this.gid)) {
       queue.set(this.gid, new Map());
     }
@@ -343,7 +441,7 @@ export class BaseObject {
   /**
    * Read the DOM property of the object.
    */
-  readDom(_: boolean = false) {
+  readDom(_subtractAppliedTransform: boolean = false) {
     for (const collider of this._colliderList) {
       collider.read();
     }
@@ -365,21 +463,6 @@ export class BaseObject {
    * Destroy the DOM element of the object.
    */
   destroyDom() {}
-
-  /**
-   * Calculate the transform properties of the object based on the saved transform properties of the parent
-   * and the saved local and offset properties of the object.
-   */
-  calculateLocalFromTransform() {
-    if (this.parent) {
-      this.transform.x = this.parent.transform.x + this.local.x;
-      this.transform.y = this.parent.transform.y + this.local.y;
-    }
-    for (const collider of this._colliderList) {
-      collider.recalculate();
-    }
-  }
-
 
   /**
    * Add an animation to this object.
@@ -435,7 +518,7 @@ export class BaseObject {
 
   /**
    * Convenience method to create and add an animation to this object.
-   * 
+   *
    * @deprecated Use addAnimation with AnimationObject instead.
    *
    * @param keyframe - The keyframe properties to animate
@@ -497,7 +580,7 @@ export class BaseObject {
 
   addCollider(collider: Collider) {
     this._colliderList.push(collider);
-    if (!this.engine){
+    if (!this.engine) {
       return;
     }
     this.engine.collisionEngine?.addObject(collider);
@@ -509,6 +592,7 @@ export class BaseObject {
     color: string = "red",
     persistent: boolean = false,
     id: string = "",
+    tag?: string,
   ) {
     if (!this.engine) return;
     this.engine.debugMarkerList[`${this.gid}-${id}`] = {
@@ -519,6 +603,7 @@ export class BaseObject {
       y,
       persistent,
       id: `${this.gid}-${id}`,
+      tag,
     };
   }
 
@@ -532,6 +617,7 @@ export class BaseObject {
     id: string = "",
     filled: boolean = true,
     lineWidth: number = 1,
+    tag?: string,
   ) {
     if (!this.engine) return;
     this.engine.debugMarkerList[`${this.gid}-${id}`] = {
@@ -546,6 +632,7 @@ export class BaseObject {
       id: `${this.gid}-${id}`,
       filled,
       lineWidth,
+      tag,
     };
   }
 
@@ -558,6 +645,10 @@ export class BaseObject {
     persistent: boolean = false,
     id: string = "",
     lineWidth: number = 2,
+    tag?: string,
+    arrowEnd?: boolean,
+    arrowStart?: boolean,
+    arrowSize?: number,
   ) {
     if (!this.engine) return;
     this.engine.debugMarkerList[`${this.gid}-${id}`] = {
@@ -571,6 +662,10 @@ export class BaseObject {
       persistent,
       id: `${this.gid}-${id}`,
       lineWidth,
+      tag,
+      arrowEnd,
+      arrowStart,
+      arrowSize,
     };
   }
 
@@ -581,6 +676,7 @@ export class BaseObject {
     color: string = "red",
     persistent: boolean = false,
     id: string = "",
+    tag?: string,
   ) {
     if (!this.engine) return;
     this.engine.debugMarkerList[`${this.gid}-${id}`] = {
@@ -592,6 +688,7 @@ export class BaseObject {
       radius,
       persistent,
       id: `${this.gid}-${id}`,
+      tag,
     };
   }
 
@@ -602,6 +699,7 @@ export class BaseObject {
     color: string = "red",
     persistent: boolean = false,
     id: string = "",
+    tag?: string,
   ) {
     if (!this.engine) return;
     this.engine.debugMarkerList[`${this.gid}-${id}`] = {
@@ -613,6 +711,7 @@ export class BaseObject {
       text,
       persistent,
       id: `${this.gid}-${id}`,
+      tag,
     };
   }
 
@@ -651,11 +750,23 @@ export function detachAnimationFromOwner(animation: AnimationInterface) {
   owner.removeAnimationReference(animation);
 }
 
-interface DomProperty extends TransformProperty {
+export interface DomProperty extends TransformProperty {
   height: number;
   width: number;
   screenX: number;
   screenY: number;
+  margin: {
+    top: number;
+    right: number;
+    bottom: number;
+    left: number;
+  };
+  padding: {
+    top: number;
+    right: number;
+    bottom: number;
+    left: number;
+  };
 }
 
 export interface DomInsertMode {
@@ -711,6 +822,18 @@ export class DomElement {
       scaleY: 1,
       screenX: 0,
       screenY: 0,
+      margin: {
+        top: 0,
+        right: 0,
+        bottom: 0,
+        left: 0,
+      },
+      padding: {
+        top: 0,
+        right: 0,
+        bottom: 0,
+        left: 0,
+      },
     };
     this._transformApplied = {
       x: 0,
@@ -773,10 +896,10 @@ export class DomElement {
 
   /**
    * Read the DOM property of the element.
-   * @param accountTransform If true, the returned transform property will subtract any transform applied to the element.
+   * @param subtractAppliedTransform If true, the returned transform property will subtract any transform applied to the element.
    *      Note that transforms applied to the parent will not be accounted for.
    */
-  readDom(accountTransform: boolean = false) {
+  readDom(subtractAppliedTransform: boolean = false) {
     if (!this.element) {
       throw new Error("Element is not set");
     }
@@ -790,7 +913,7 @@ export class DomElement {
       scaleY: 1,
     };
 
-    if (transform && transform != "none" && accountTransform) {
+    if (transform && transform != "none" && subtractAppliedTransform) {
       transformApplied = parseTransformString(transform);
     }
 
@@ -800,6 +923,8 @@ export class DomElement {
     this.property.y = property.y - transformApplied.y;
     this.property.screenX = property.screenX;
     this.property.screenY = property.screenY;
+    this.property.margin = property.margin;
+    this.property.padding = property.padding;
   }
 
   /**
@@ -807,6 +932,7 @@ export class DomElement {
    */
   writeDom() {
     if (!this.element) {
+      console.warn("Element is not set, cannot write to DOM");
       return;
     }
     setDomStyle(this.element, this._style);
@@ -840,8 +966,8 @@ export class DomElement {
       // ignoring the current position of the element.
       transformStyle = {
         transform: generateTransformString({
-          x: this._owner.transform.x + this._owner.offset.x,
-          y: this._owner.transform.y + this._owner.offset.y,
+          x: this._owner.transform.x + this._owner.displacement.x,
+          y: this._owner.transform.y + this._owner.displacement.y,
           scaleX: this._owner.transform.scaleX,
           scaleY: this._owner.transform.scaleY,
         }),
@@ -855,8 +981,8 @@ export class DomElement {
       ];
       transformStyle = {
         transform: generateTransformString({
-          x: newX + this._owner.offset.x,
-          y: newY + this._owner.offset.y,
+          x: newX + this._owner.displacement.x,
+          y: newY + this._owner.displacement.y,
           scaleX: this._owner.transform.scaleX,
           scaleY: this._owner.transform.scaleY,
         }),
@@ -866,8 +992,8 @@ export class DomElement {
       transformStyle = {
         transform: "",
       };
-    } else if (this._owner.transformMode == "offset") {
-      // If the transform mode is offset, the transform is applied relative to the position of a parent object.
+    } else if (this._owner.transformMode == "origin") {
+      // If the transform mode is origin, the transform is applied relative to the position of a parent object.
       // Use transformOrigin if set, otherwise default to parent
       const origin = this._owner.transformOrigin ?? this._owner.parent;
       if (!origin) {
@@ -878,8 +1004,8 @@ export class DomElement {
         ];
         transformStyle = {
           transform: generateTransformString({
-            x: newX + this._owner.offset.x,
-            y: newY + this._owner.offset.y,
+            x: newX + this._owner.displacement.x,
+            y: newY + this._owner.displacement.y,
             scaleX: this._owner.transform.scaleX,
             scaleY: this._owner.transform.scaleY,
           }),
@@ -935,14 +1061,14 @@ export class ElementObject extends BaseObject {
   _state: any = {};
   state: Record<string, any>;
 
-  transformMode: "direct" | "relative" | "offset" | "none";
+  transformMode: "direct" | "relative" | "origin" | "none";
   transformOrigin: BaseObject | null;
   /**
    * direct: Applies the transform directly to the object.
    * relative: Perform calculations to apply the transform relative to the DOM element's
    *      current position. The current position must be read from the DOM explicitly beforehand.
    *      Only applicable if the object owns a DOM element.
-   * offset: Apply the transform relative to the position of a parent object.
+   * origin: Apply the transform relative to the position of a parent object.
    * none: No transform is applied to the object.
    */
 
@@ -964,8 +1090,9 @@ export class ElementObject extends BaseObject {
     this._requestRead = false;
     this._requestDelete = false;
     this._requestPostWrite = false;
-    this._domProperty = [
-      {
+    this._domProperty = [];
+    for (let i = 0; i < 3; i++) {
+      this._domProperty.push({
         x: 0,
         y: 0,
         height: 0,
@@ -974,28 +1101,20 @@ export class ElementObject extends BaseObject {
         scaleY: 1,
         screenX: 0,
         screenY: 0,
-      },
-      {
-        x: 0,
-        y: 0,
-        height: 0,
-        width: 0,
-        scaleX: 1,
-        scaleY: 1,
-        screenX: 0,
-        screenY: 0,
-      },
-      {
-        x: 0,
-        y: 0,
-        height: 0,
-        width: 0,
-        scaleX: 1,
-        scaleY: 1,
-        screenX: 0,
-        screenY: 0,
-      },
-    ];
+        margin: {
+          top: 0,
+          right: 0,
+          bottom: 0,
+          left: 0,
+        },
+        padding: {
+          top: 0,
+          right: 0,
+          bottom: 0,
+          left: 0,
+        },
+      });
+    }
     this.transformMode = "direct";
     this.transformOrigin = null;
     this._callback = {
@@ -1014,11 +1133,7 @@ export class ElementObject extends BaseObject {
       },
     });
 
-    this.inputEngine = new InputControl(
-      this.engine,
-      false,
-      this.gid,
-    );
+    this.inputEngine = new InputControl(this.engine, false, this.gid);
   }
 
   destroy() {
@@ -1027,7 +1142,9 @@ export class ElementObject extends BaseObject {
     super.destroy();
   }
 
-  getDomProperty(stage: "READ_1" | "READ_2" | "READ_3" | null = null): DomProperty {
+  getDomProperty(
+    stage: "READ_1" | "READ_2" | "READ_3" | null = null,
+  ): DomProperty {
     const index = stage == "READ_1" ? 0 : stage == "READ_2" ? 1 : 2;
     return this._domProperty[index];
   }
@@ -1046,26 +1163,12 @@ export class ElementObject extends BaseObject {
    * Currently only saves the x and y properties.
    * This function assumes that the element position has already been read from the DOM.
    */
-  saveDomPropertyToTransform(
-    stage: "READ_1" | "READ_2" | "READ_3" | null = null,
-  ): void {
+  syncFromDom(stage: "READ_1" | "READ_2" | "READ_3" | null = null): void {
     let currentStage = stage ?? this.global.currentStage;
     currentStage = currentStage == "IDLE" ? "READ_2" : currentStage;
 
     const property = this.getDomProperty(currentStage as any);
     this.worldPosition = [property.x, property.y];
-  }
-
-  /**
-   * Calculate the local offsets relative to the parent.
-   * This function assumes that the element position has already been read from the DOM
-   * in both the parent and the current object.
-   */
-  calculateLocalFromTransform() {
-    if (this.parent) {
-      this.local.x = this.transform.x - this.parent.transform.x;
-      this.local.y = this.transform.y - this.parent.transform.y;
-    }
   }
 
   calculateLocalFromDom(stage: "READ_1" | "READ_2" | "READ_3" | null = null) {
@@ -1078,13 +1181,6 @@ export class ElementObject extends BaseObject {
         this.local.x = this.transform.x - this.parent.transform.x;
         this.local.y = this.transform.y - this.parent.transform.y;
       }
-    }
-  }
-
-  calculateTransformFromLocal() {
-    if (this.parent) {
-      this.transform.x = this.parent.transform.x + this.local.x;
-      this.transform.y = this.parent.transform.y + this.local.y;
     }
   }
 
@@ -1136,14 +1232,14 @@ export class ElementObject extends BaseObject {
   }
 
   readDom(
-    accountTransform: boolean = false,
+    subtractAppliedTransform: boolean = false,
     stage: "READ_1" | "READ_2" | "READ_3" | null = null,
   ) {
     let currentStage = stage ?? this.global.currentStage;
     currentStage = currentStage == "IDLE" ? "READ_2" : currentStage;
 
-    this._dom.readDom(accountTransform);
-    super.readDom(accountTransform);
+    this._dom.readDom(subtractAppliedTransform);
+    super.readDom(subtractAppliedTransform);
     if (currentStage == "READ_1") {
       Object.assign(this._domProperty[0], this._dom.property);
     } else if (currentStage == "READ_2") {
@@ -1151,6 +1247,9 @@ export class ElementObject extends BaseObject {
     } else if (currentStage == "READ_3") {
       Object.assign(this._domProperty[2], this._dom.property);
     }
+    this.event.dom.onAfterReadDom?.(
+      currentStage as "READ_1" | "READ_2" | "READ_3",
+    );
   }
 
   writeDom() {
@@ -1172,17 +1271,45 @@ export class ElementObject extends BaseObject {
    * Common queue requests for element objects.
    */
   requestRead(
-    accountTransform: boolean = false,
-    saveTransform: boolean = true,
+    subtractAppliedTransform: boolean = false,
+    syncToWorldPosition: boolean = true,
     stage: "READ_1" | "READ_2" | "READ_3" = "READ_1",
+    recursive: boolean = false,
+    queueID: string | null = null,
   ): queueEntry {
     const callback = () => {
-      this.readDom(accountTransform);
-      if (saveTransform) {
-        this.saveDomPropertyToTransform(stage);
-      }
+      this._readDomRecursive(
+        subtractAppliedTransform,
+        syncToWorldPosition,
+        stage,
+        recursive,
+      );
     };
-    return this.queueUpdate(stage, callback, stage);
+    return this.queueUpdate(stage, callback, queueID && stage);
+  }
+
+  _readDomRecursive(
+    subtractAppliedTransform: boolean,
+    syncToWorldPosition: boolean,
+    stage: "READ_1" | "READ_2" | "READ_3",
+    recursive: boolean,
+  ) {
+    this.readDom(subtractAppliedTransform, stage);
+    if (syncToWorldPosition) {
+      this.syncFromDom(stage);
+    }
+    if (recursive) {
+      for (const child of this.children) {
+        if (child instanceof ElementObject) {
+          child._readDomRecursive(
+            subtractAppliedTransform,
+            syncToWorldPosition,
+            stage,
+            recursive,
+          );
+        }
+      }
+    }
   }
 
   requestWrite(
@@ -1212,7 +1339,7 @@ export class ElementObject extends BaseObject {
     const callback = () => {
       this.writeTransform();
     };
-    return this.queueUpdate(stage, callback, "transform");
+    return this.queueUpdate(stage, callback, `${this.gid}-transform`);
   }
 
   requestFLIP(writeCallback: () => void, transformCallback: () => void): void {

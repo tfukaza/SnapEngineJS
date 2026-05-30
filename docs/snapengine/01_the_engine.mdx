@@ -19,8 +19,7 @@ engine.element = container;
 ```
 
 You may have noticed the `element` property is set after instantiating the `Engine`. 
-This is because SnapEngine is designed to integrate with frontend frameworks like React or Svelte,
-many of which create DOM elements after the component logic runs.
+This is because SnapEngine is designed to integrate with frontend frameworks like React or Svelte, which usually create DOM elements after the component logic runs.
 
 ```svelte
 <script lang="ts">
@@ -66,4 +65,3 @@ export function EngineComponent() {
 In addition, all `Engine` instances share a single global object called the `GlobalManager`. 
 The `GlobalManager` is automatically created when the first `Engine` is instantiated, and every subsequent `Engine` instance will reference the same `GlobalManager` automatically.
 This singleton manages the shared render loop, global input events, etc., which we will cover in more detail in later sections.
-

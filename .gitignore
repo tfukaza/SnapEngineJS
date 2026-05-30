@@ -35,6 +35,10 @@ dist-ssr
 *.umd.js
 demo/svelte/src/snapengine/
 
+# Local design notes / plans
+/plan-*.md
+TODO.md
+
 # Exceptions
 !vite.config.mjs
 !demo.mjs
