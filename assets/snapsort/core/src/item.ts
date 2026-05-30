@@ -296,6 +296,27 @@ export class ItemObject extends ElementObject {
   }
 
   /**
+   * Check whether every item in the frozen drag tree has a snapshot.
+   *
+   * A drag event can arrive before the drag-start READ phase has captured the
+   * snapshot tree. Drop prediction should skip that frame instead of falling
+   * back to live DOM geometry.
+   *
+   * @param visited Items already checked during this traversal.
+   * @returns True when this item and all frozen descendants have snapshots.
+   */
+  #hasDragSnapshotTree(visited: Set<ItemObject> = new Set()): boolean {
+    if (visited.has(this)) return true;
+    visited.add(this);
+
+    if (!this.#dragSnapshot) return false;
+
+    return this.#dragSnapshotOrderedList.every((child) =>
+      child.#hasDragSnapshotTree(visited),
+    );
+  }
+
+  /**
    * Temporarily move the DOM element of an item to the root container during dragging,
    * so it can be positioned absolutely within the root container without affecting the
    * layout of its original container.
@@ -604,6 +625,16 @@ export class ItemObject extends ElementObject {
    */
   updateDropTarget(item: ItemObject) {
     const root = (this.#rootContainer as unknown as ItemObject) ?? this;
+    // Defensive guard for a drag-start/drag race: the deeper fix should live in
+    // the engine scheduler as built-in debounce/coalescing support for input
+    // updates that depend on earlier READ/WRITE phases.
+    if (!root.#hasDragSnapshotTree() || !item.#dragSnapshot) {
+      console.debug(
+        `[updateDropTarget] SKIP: waiting for drag snapshot root=${root.gid} item=${item.gid}`,
+      );
+      return;
+    }
+
     const target = determineDropTarget(item, root);
     // Compare against the ghost's current position, not the dragged item's (which is removed from the list during drag)
     // In other words, check what the previous drop target was based on where the ghost is.

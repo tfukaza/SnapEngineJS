@@ -69,6 +69,13 @@ interface FlowPositionResult {
   ghostPosition: { x: number; y: number } | null;
 }
 
+export interface VirtualGhost {
+  container: ItemObject;
+  index: number;
+  width: number;
+  height: number;
+}
+
 type FlowEntry =
   | { kind: "item"; item: ItemObject; width: number; height: number }
   | { kind: "ghost"; width: number; height: number };
@@ -254,15 +261,6 @@ function median(values: number[]): number {
 }
 
 /**
- * Decide whether two snapshot items occupy the same flex line.
- *
- * @param containerProp Frozen DOM property for the parent container.
- * @param a First item to compare.
- * @param b Second item to compare.
- * @param axes Axis mapping for the parent container.
- * @returns True when both items have effectively equal cross-axis starts.
- */
-/**
  * Infer flex line starts and gaps from the frozen DOM snapshot.
  *
  * CSS flexbox can be affected by margins and content size, so replaying
@@ -368,7 +366,7 @@ function flowLayoutPositions(
   draggedItem: ItemObject,
   startX: number,
   startY: number,
-  ghost?: { index: number; width: number; height: number },
+  ghost?: VirtualGhost,
 ): FlowPositionResult {
   const axes = flowAxes(container);
   const containerProp = requireDragSnapshot(container);
@@ -377,11 +375,18 @@ function flowLayoutPositions(
   const items = ordered.filter((i) => i !== draggedItem);
   const metrics = inferFlowLayoutMetrics(container, axes);
   const entries: FlowEntry[] = items.map((item) => {
-    const prop = requireDragSnapshot(item);
-    return { kind: "item", item, width: prop.width, height: prop.height };
+    const dimensions = isSubContainer(item)
+      ? virtualDimensions(item, draggedItem, ghost)
+      : requireDragSnapshot(item);
+    return {
+      kind: "item",
+      item,
+      width: dimensions.width,
+      height: dimensions.height,
+    };
   });
 
-  if (ghost) {
+  if (ghost?.container === container) {
     entries.splice(Math.max(0, Math.min(ghost.index, entries.length)), 0, {
       kind: "ghost",
       width: ghost.width,
@@ -781,12 +786,15 @@ export interface DropCandidate {
  *
  * @param container Container whose children should be simulated.
  * @param draggedItem Item currently being dragged and omitted from layout.
+ * @param ghost Optional ghost insertion whose size should affect ancestor containers.
  * @returns Virtual width and height of the remaining children.
  */
 export function virtualDimensions(
   container: ItemObject,
   draggedItem: ItemObject,
+  ghost?: VirtualGhost,
 ): VirtualDimensions {
+  const axes = flowAxes(container);
   const containerProp = requireDragSnapshot(container);
   const items = snapshotItems(container, draggedItem);
   const flowPositions = flowLayoutPositions(
@@ -794,25 +802,61 @@ export function virtualDimensions(
     draggedItem,
     0,
     0,
-  ).itemPositions;
-  let minX = Infinity;
-  let minY = Infinity;
+    ghost,
+  );
   let maxX = 0;
   let maxY = 0;
 
   for (const child of items) {
-    const prop = requireDragSnapshot(child);
-    const rel = childRelativeOffset(containerProp, prop);
+    const dimensions = isSubContainer(child)
+      ? virtualDimensions(child, draggedItem, ghost)
+      : requireDragSnapshot(child);
+    const rel = childRelativeOffset(containerProp, requireDragSnapshot(child));
     const measured = { x: rel.x, y: rel.y };
-    const simulated = flowPositions.get(child) ?? measured;
-    minX = Math.min(minX, simulated.x);
-    minY = Math.min(minY, simulated.y);
-    maxX = Math.max(maxX, simulated.x + prop.width);
-    maxY = Math.max(maxY, simulated.y + prop.height);
+    const simulated = flowPositions.itemPositions.get(child) ?? measured;
+    maxX = Math.max(maxX, simulated.x + dimensions.width);
+    maxY = Math.max(maxY, simulated.y + dimensions.height);
   }
 
-  if (minX === Infinity || minY === Infinity) return { width: 0, height: 0 };
-  return { width: maxX - minX, height: maxY - minY };
+  if (ghost?.container === container && flowPositions.ghostPosition) {
+    maxX = Math.max(maxX, flowPositions.ghostPosition.x + ghost.width);
+    maxY = Math.max(maxY, flowPositions.ghostPosition.y + ghost.height);
+  }
+
+  const snapshotSize = {
+    width: containerProp.width,
+    height: containerProp.height,
+  };
+  const virtualSize = {
+    width:
+      containerProp.border.left +
+      containerProp.padding.left +
+      maxX +
+      containerProp.padding.right +
+      containerProp.border.right,
+    height:
+      containerProp.border.top +
+      containerProp.padding.top +
+      maxY +
+      containerProp.padding.bottom +
+      containerProp.border.bottom,
+  };
+
+  if (items.length === 0 && ghost?.container !== container) {
+    return snapshotSize;
+  }
+
+  if (axes.direction === "row") {
+    return {
+      width: snapshotSize.width,
+      height: Math.max(snapshotSize.height, virtualSize.height),
+    };
+  }
+
+  return {
+    width: snapshotSize.width,
+    height: virtualSize.height,
+  };
 }
 
 /**
@@ -880,6 +924,7 @@ export function virtualLayoutRecursive(
       startX,
       startY,
       {
+        container,
         index,
         width: dragGhostW,
         height: dragGhostH,
