@@ -1,4 +1,4 @@
-import { TransformProperty } from "./object";
+import type { DomProperty, TransformProperty } from "./object";
 
 /**
  * Retrieves the position and dimensions of a DOM element in multiple coordinate spaces.
@@ -28,6 +28,10 @@ function getDomProperty(engine: any, dom: HTMLElement) {
   const padding_right = parseFloat(css.paddingRight) || 0;
   const padding_bottom = parseFloat(css.paddingBottom) || 0;
   const padding_left = parseFloat(css.paddingLeft) || 0;
+  const border_top = parseFloat(css.borderTopWidth) || 0;
+  const border_right = parseFloat(css.borderRightWidth) || 0;
+  const border_bottom = parseFloat(css.borderBottomWidth) || 0;
+  const border_left = parseFloat(css.borderLeftWidth) || 0;
 
   if (engine == null || engine.camera == null) {
     return {
@@ -50,6 +54,12 @@ function getDomProperty(engine: any, dom: HTMLElement) {
         right: padding_right,
         bottom: padding_bottom,
         left: padding_left,
+      },
+      border: {
+        top: border_top,
+        right: border_right,
+        bottom: border_bottom,
+        left: border_left,
       },
     };
   }
@@ -85,6 +95,12 @@ function getDomProperty(engine: any, dom: HTMLElement) {
       right: padding_right,
       bottom: padding_bottom,
       left: padding_left,
+    },
+    border: {
+      top: border_top,
+      right: border_right,
+      bottom: border_bottom,
+      left: border_left,
     },
   };
 }
@@ -238,10 +254,27 @@ function EventProxyFactory<BindObject, Callback extends object>(
   });
 }
 
+function cloneDomProperty(prop: DomProperty): DomProperty {
+  return {
+    x: prop.x,
+    y: prop.y,
+    height: prop.height,
+    width: prop.width,
+    scaleX: prop.scaleX,
+    scaleY: prop.scaleY,
+    screenX: prop.screenX,
+    screenY: prop.screenY,
+    margin: { ...prop.margin },
+    padding: { ...prop.padding },
+    border: { ...prop.border },
+  };
+}
+
 export {
   setDomStyle,
   EventProxyFactory,
   getDomProperty,
+  cloneDomProperty,
   generateTransformString,
   parseTransformString,
 };

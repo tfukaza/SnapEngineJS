@@ -1,8 +1,13 @@
-import { BaseObject, ElementObject } from "@snap-engine/core";
+import { BaseObject, ElementObject, cloneDomProperty } from "@snap-engine/core";
 import type { ItemContainer } from "./container";
 import { RectCollider, PointCollider } from "@snap-engine/core/collision";
-import type { dragStartProp, dragProp, dragEndProp } from "@snap-engine/core";
-import { determineDropTarget } from "./drop_target";
+import type {
+  dragStartProp,
+  dragProp,
+  dragEndProp,
+  DomProperty,
+} from "@snap-engine/core";
+import { determineDropTarget, resetDropSnapshotDebugDump } from "./drop_target";
 
 /**
  * How much to enlarge an item's hitbox while it is being dragged. The hitbox
@@ -22,6 +27,8 @@ export class ItemObject extends ElementObject {
 
   #dragOffsetX: number = 0;
   #dragOffsetY: number = 0;
+  #dragSnapshot: DomProperty | null = null;
+  #dragSnapshotOrderedList: ItemObject[] = [];
 
   #itemOrderedList: ItemObject[] = []; // Wrapper around children to maintain their order in the DOM
 
@@ -132,6 +139,14 @@ export class ItemObject extends ElementObject {
     return this.#itemOrderedList;
   }
 
+  get dragSnapshot(): DomProperty | null {
+    return this.#dragSnapshot;
+  }
+
+  get dragSnapshotOrderedList(): ItemObject[] {
+    return this.#dragSnapshotOrderedList;
+  }
+
   get hitbox(): RectCollider {
     return this.#hitbox;
   }
@@ -223,6 +238,30 @@ export class ItemObject extends ElementObject {
       if (child instanceof ItemObject) {
         child.#updateState(root, depth + 1);
       }
+    }
+  }
+
+  #captureDragSnapshotTree() {
+    this.#dragSnapshot = cloneDomProperty(this.getDomProperty("READ_1"));
+    this.#dragSnapshotOrderedList = this.#itemOrderedList.slice();
+    for (const child of this.#dragSnapshotOrderedList) {
+      child.#captureDragSnapshotTree();
+    }
+  }
+
+  #clearDragSnapshotTree(visited: Set<ItemObject> = new Set()) {
+    if (visited.has(this)) return;
+    visited.add(this);
+
+    const childrenToClear = new Set([
+      ...this.#dragSnapshotOrderedList,
+      ...this.#itemOrderedList,
+    ]);
+    this.#dragSnapshot = null;
+    this.#dragSnapshotOrderedList = [];
+
+    for (const child of childrenToClear) {
+      child.#clearDragSnapshotTree(visited);
     }
   }
 
@@ -374,6 +413,41 @@ export class ItemObject extends ElementObject {
     }
   }
 
+  #liveIndexFromSnapshotIndex(
+    container: ItemObject,
+    snapshotIndex: number,
+    draggedItem: ItemObject,
+  ): number {
+    const snapshotItems = container.#dragSnapshotOrderedList.filter(
+      (i) => i !== draggedItem && !i.isGhost,
+    );
+    const ghostItem = this.#rootContainer?.ghostItem ?? null;
+    const liveItems = container.#itemOrderedList.filter(
+      (i) => i !== draggedItem && i !== ghostItem,
+    );
+    const clampedIndex = Math.max(
+      0,
+      Math.min(snapshotIndex, snapshotItems.length),
+    );
+    const beforeItem = snapshotItems[clampedIndex] ?? null;
+    if (!beforeItem) return liveItems.length;
+
+    const liveIndex = liveItems.indexOf(beforeItem);
+    return liveIndex === -1 ? liveItems.length : liveIndex;
+  }
+
+  #ghostInsertionPosition(
+    ghostItem: ItemObject | null,
+  ): { index: number; container: ItemObject | null } | null {
+    if (!ghostItem?.parent) return null;
+
+    const container = ghostItem.parent as ItemObject;
+    const index = container.#itemOrderedList.indexOf(ghostItem);
+    if (index === -1) return null;
+
+    return { container, index };
+  }
+
   /**
    * Create or remove a ghost element at the specified container and index.
    * A null container means the ghost element should be removed.
@@ -411,19 +485,18 @@ export class ItemObject extends ElementObject {
       const ghostElement = document.createElement("div");
       ghostElement.id = "spacer";
 
-      ghostElement.style.width = original.getDomProperty("READ_1").width + "px";
-      ghostElement.style.height =
-        original.getDomProperty("READ_1").height + "px";
-      // ghostElement.style.margin = "" + original.getDomProperty("READ_1").margin;
+      const origProp = original.dragSnapshot ?? original.getDomProperty("READ_1");
+      ghostElement.style.width = origProp.width + "px";
+      ghostElement.style.height = origProp.height + "px";
+      ghostElement.style.margin = `${origProp.margin.top}px ${origProp.margin.right}px ${origProp.margin.bottom}px ${origProp.margin.left}px`;
       // ghostElement.style.padding = "" + original.getDomProperty("READ_1").padding;
-      // ghostElement.style.boxSizing = "" + original.getDomProperty("READ_1").boxSizing;
+      ghostElement.style.boxSizing = "border-box";
       ghostElement.classList.add("ghost");
 
-      ghostItem = new ItemObject(this.engine, null, null, true);
+      ghostItem = new ItemObject(this.engine, null, true);
       ghostItem.element = ghostElement;
 
       // Set hitbox so the collision engine can detect overlaps with the ghost
-      const origProp = original.getDomProperty("READ_1");
       ghostItem.hitbox.local.width = origProp.width;
       ghostItem.hitbox.local.height = origProp.height;
       ghostItem.centerPoint.local.x = origProp.width / 2;
@@ -468,24 +541,32 @@ export class ItemObject extends ElementObject {
     // Compare against the ghost's current position, not the dragged item's (which is removed from the list during drag)
     // In other words, check what the previous drop target was based on where the ghost is.
     const ghostItem = this.#rootContainer?.ghostItem;
-    const ghostSource = ghostItem?.getIndexAndContainer();
+    const ghostSource = this.#ghostInsertionPosition(ghostItem ?? null);
+    const targetIndex =
+      target?.container != null
+        ? this.#liveIndexFromSnapshotIndex(
+            target.container,
+            target.index,
+            item,
+          )
+        : -1;
     console.debug(
-      `[updateDropTarget] item=${item.gid} target=${target ? `${target.container.gid}[${target.index}]` : "null"} ghostPos=${ghostSource?.container ? `${(ghostSource.container as unknown as ItemObject).gid}[${ghostSource.index}]` : "null"}`,
+      `[updateDropTarget] item=${item.gid} target=${target ? `${target.container.gid}[snapshot:${target.index} live:${targetIndex}]` : "null"} ghostPos=${ghostSource?.container ? `${(ghostSource.container as unknown as ItemObject).gid}[${ghostSource.index}]` : "null"}`,
     );
     if (target?.container && ghostSource?.container) {
       const sameContainer = target.container === ghostSource.container;
-      const sameIndex = target.index === ghostSource.index;
+      const sameIndex = targetIndex === ghostSource.index;
       console.debug(
-        `[updateDropTarget]   sameContainer=${sameContainer} sameIndex=${sameIndex} (${target.index}===${ghostSource.index})`,
+        `[updateDropTarget]   sameContainer=${sameContainer} sameIndex=${sameIndex} (${targetIndex}===${ghostSource.index})`,
       );
       if (!sameContainer || !sameIndex) {
         console.debug(
-          `[updateDropTarget]   >>> MOVING ghost to ${target.container.gid}[${target.index}]`,
+          `[updateDropTarget]   >>> MOVING ghost to ${target.container.gid}[${targetIndex}]`,
         );
         this.#updateGhostElement(
           item,
           target.container as unknown as ItemContainer,
-          target.index,
+          targetIndex,
         );
       } else {
         console.debug(`[updateDropTarget]   SKIP: ghost already at target`);
@@ -495,7 +576,7 @@ export class ItemObject extends ElementObject {
       this.#updateGhostElement(
         item,
         target.container as unknown as ItemContainer,
-        target.index,
+        targetIndex,
       );
     } else {
       console.debug(`[updateDropTarget]   SKIP: no target`);
@@ -507,6 +588,8 @@ export class ItemObject extends ElementObject {
     console.debug(`[dragStart] item=${this.gid}`);
     // Set the root container for all items, and queue READ to update the state of all containers and items.
     this.#findRootContainer();
+    const root = (this.#rootContainer as unknown as ItemObject) ?? this;
+    resetDropSnapshotDebugDump(this);
     // Get the current index of the item in its container.
     const { index: currentIndex, container: currentContainer } =
       this.getIndexAndContainer();
@@ -524,6 +607,7 @@ export class ItemObject extends ElementObject {
         console.debug(
           `[dragStart READ_1] offset=(${this.#dragOffsetX}, ${this.#dragOffsetY}) start=(${prop.start.x}, ${prop.start.y}) transform=(${this.transform.x}, ${this.transform.y})`,
         );
+        root.#captureDragSnapshotTree();
       },
       `drag-start-offset-${this.gid}`,
     );
@@ -549,12 +633,19 @@ export class ItemObject extends ElementObject {
         `[dragStart] after removing dragged item, orderedList=[${(currentContainer as unknown as ItemObject).#itemOrderedList.map((i) => i.gid).join(", ")}]`,
       );
 
+      const rootSnapshot = root.dragSnapshot;
+      const hoistOffsetX = rootSnapshot
+        ? -(rootSnapshot.border.left + rootSnapshot.padding.left)
+        : 0;
+      const hoistOffsetY = rootSnapshot
+        ? -(rootSnapshot.border.top + rootSnapshot.padding.top)
+        : 0;
       this.style = {
         cursor: "grabbing",
         position: "absolute",
         zIndex: "1000",
-        top: "0px",
-        left: "0px",
+        top: `${hoistOffsetY}px`,
+        left: `${hoistOffsetX}px`,
       };
       this.#hoistElementToRoot();
       this.transformMode = "origin";
@@ -598,6 +689,7 @@ export class ItemObject extends ElementObject {
   }
 
   dragEnd(_: dragEndProp) {
+    const root = (this.#rootContainer as unknown as ItemObject) ?? this;
     this.requestWrite(true, () => {
       // Get ghost's current position — this is where the item should land
       const ghostItem = this.#rootContainer?.ghostItem;
@@ -639,6 +731,8 @@ export class ItemObject extends ElementObject {
       this.#hitbox.local.y = 0;
       this.writeDom();
       this.writeTransform();
+      root.#clearDragSnapshotTree();
+      resetDropSnapshotDebugDump(this);
     });
   }
 

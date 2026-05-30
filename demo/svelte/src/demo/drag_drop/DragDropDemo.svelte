@@ -18,6 +18,7 @@
         { id: "containers", label: "Containers" },
         { id: "drop-index", label: "Drop Index" },
         { id: "drop-layout", label: "Drop: Virtual Layout" },
+        { id: "drop-snapshot", label: "Drop: Snapshot" },
         { id: "drop-collisions", label: "Drop: Collisions" },
         { id: "drop-candidates", label: "Drop: Candidates" },
         { id: "drop-neighbors", label: "Drop: Neighbors (prev/next)" },

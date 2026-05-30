@@ -6,7 +6,13 @@ const TAG_LAYOUT = "drop-layout"; // virtual layout: height bars, layout start l
 const TAG_COLLISIONS = "drop-collisions"; // collision: hitboxes, collision lines, DOM boxes, center points
 const TAG_CANDIDATES = "drop-candidates"; // candidates: result lines, best pick
 const TAG_NEIGHBORS = "drop-neighbors"; // per-candidate prev/next reference points and links
-const TAG_TIEBREAK = "drop-tiebreak"; // distance-tie conflict resolution lines (prev vs next)
+const TAG_SNAPSHOT = "drop-snapshot"; // drag-start snapshot geometry and simulation deltas
+
+const snapshotDumpedForDrag = new WeakSet<ItemObject>();
+
+export function resetDropSnapshotDebugDump(item: ItemObject) {
+  snapshotDumpedForDrag.delete(item);
+}
 
 /** Get layout direction for a container. ItemContainer has a direction getter; default to "column". */
 function getDirection(node: ItemObject): "column" | "row" {
@@ -21,7 +27,457 @@ function euclidean(x1: number, y1: number, x2: number, y2: number): number {
 }
 
 function isSubContainer(item: ItemObject) {
-  return item.itemOrderedList.length > 0;
+  return item.dragSnapshot
+    ? item.dragSnapshotOrderedList.length > 0
+    : item.itemOrderedList.length > 0;
+}
+
+function requireDragSnapshot(item: ItemObject): DomProperty {
+  const snapshot = item.dragSnapshot;
+  if (!snapshot) {
+    const message = `[drop-snapshot] Missing drag snapshot for item ${item.gid}. Drop prediction must run after dragStart captures snapshots.`;
+    console.error(message);
+    throw new Error(message);
+  }
+  return snapshot;
+}
+
+function contentBoxOrigin(prop: DomProperty): { x: number; y: number } {
+  return {
+    x: prop.x + prop.border.left + prop.padding.left,
+    y: prop.y + prop.border.top + prop.padding.top,
+  };
+}
+
+function contentBoxSize(prop: DomProperty): { width: number; height: number } {
+  return {
+    width: Math.max(
+      0,
+      prop.width -
+        prop.border.left -
+        prop.border.right -
+        prop.padding.left -
+        prop.padding.right,
+    ),
+    height: Math.max(
+      0,
+      prop.height -
+        prop.border.top -
+        prop.border.bottom -
+        prop.padding.top -
+        prop.padding.bottom,
+    ),
+  };
+}
+
+function childRelativeOffset(
+  containerProp: DomProperty,
+  childProp: DomProperty,
+): { x: number; y: number } {
+  const origin = contentBoxOrigin(containerProp);
+  return {
+    x: childProp.x - origin.x,
+    y: childProp.y - origin.y,
+  };
+}
+
+function snapshotItems(
+  container: ItemObject,
+  draggedItem: ItemObject,
+): ItemObject[] {
+  return container.dragSnapshotOrderedList.filter(
+    (i) => i !== draggedItem && !i.isGhost,
+  );
+}
+
+function isAfterDraggedInSameLine(
+  container: ItemObject,
+  item: ItemObject,
+  draggedItem: ItemObject,
+  isColumn: boolean,
+): boolean {
+  const ordered = container.dragSnapshotOrderedList.filter((i) => !i.isGhost);
+  const itemIdx = ordered.indexOf(item);
+  const draggedIdx = ordered.indexOf(draggedItem);
+  if (itemIdx === -1 || draggedIdx === -1 || itemIdx <= draggedIdx) {
+    return false;
+  }
+  if (isColumn) return true;
+
+  const containerProp = requireDragSnapshot(container);
+  const itemOffset = childRelativeOffset(containerProp, requireDragSnapshot(item));
+  const draggedOffset = childRelativeOffset(
+    containerProp,
+    requireDragSnapshot(draggedItem),
+  );
+  return Math.abs(itemOffset.y - draggedOffset.y) <= 1;
+}
+
+function draggedGapSpan(
+  container: ItemObject,
+  draggedItem: ItemObject,
+  isColumn: boolean,
+): number {
+  const ordered = container.dragSnapshotOrderedList.filter((i) => !i.isGhost);
+  const draggedIdx = ordered.indexOf(draggedItem);
+  if (draggedIdx === -1) return 0;
+
+  const containerProp = requireDragSnapshot(container);
+  const draggedProp = requireDragSnapshot(draggedItem);
+  const draggedOffset = childRelativeOffset(containerProp, draggedProp);
+  const next = ordered[draggedIdx + 1];
+
+  if (next) {
+    const nextOffset = childRelativeOffset(containerProp, requireDragSnapshot(next));
+    const sameLine = isColumn || Math.abs(nextOffset.y - draggedOffset.y) <= 1;
+    if (sameLine) {
+      const current = isColumn ? draggedOffset.y : draggedOffset.x;
+      const nextStart = isColumn ? nextOffset.y : nextOffset.x;
+      const span = nextStart - current;
+      if (span > 0) return span;
+    }
+  }
+
+  return isColumn ? draggedProp.height : draggedProp.width;
+}
+
+function closeDraggedGapPosition(
+  container: ItemObject,
+  item: ItemObject,
+  measuredPosition: { x: number; y: number },
+  draggedItem: ItemObject,
+  isColumn: boolean,
+): { x: number; y: number } {
+  if (item.locked) return measuredPosition;
+  if (!isAfterDraggedInSameLine(container, item, draggedItem, isColumn)) {
+    return measuredPosition;
+  }
+
+  const span = draggedGapSpan(container, draggedItem, isColumn);
+  return isColumn
+    ? { x: measuredPosition.x, y: measuredPosition.y - span }
+    : { x: measuredPosition.x - span, y: measuredPosition.y };
+}
+
+function gapAfter(
+  container: ItemObject,
+  item: ItemObject,
+  draggedItem: ItemObject,
+  isColumn: boolean,
+): number {
+  const items = snapshotItems(container, draggedItem);
+  const idx = items.indexOf(item);
+  if (idx === -1 || idx >= items.length - 1) return 0;
+
+  const containerProp = requireDragSnapshot(container);
+  const itemProp = requireDragSnapshot(item);
+  const nextProp = requireDragSnapshot(items[idx + 1]);
+  const itemOffset = childRelativeOffset(containerProp, itemProp);
+  const nextOffset = childRelativeOffset(containerProp, nextProp);
+
+  if (!isColumn && Math.abs(itemOffset.y - nextOffset.y) > 1) return 0;
+
+  const itemEnd = isColumn
+    ? itemOffset.y + itemProp.height
+    : itemOffset.x + itemProp.width;
+  const nextStart = isColumn ? nextOffset.y : nextOffset.x;
+  return Math.max(0, nextStart - itemEnd);
+}
+
+function median(values: number[]): number {
+  if (values.length === 0) return 0;
+  const sorted = values.slice().sort((a, b) => a - b);
+  const mid = Math.floor(sorted.length / 2);
+  return sorted.length % 2 === 0
+    ? (sorted[mid - 1] + sorted[mid]) / 2
+    : sorted[mid];
+}
+
+function sameSnapshotRow(
+  containerProp: DomProperty,
+  a: ItemObject,
+  b: ItemObject,
+): boolean {
+  const aOffset = childRelativeOffset(containerProp, requireDragSnapshot(a));
+  const bOffset = childRelativeOffset(containerProp, requireDragSnapshot(b));
+  return Math.abs(aOffset.y - bOffset.y) <= 1;
+}
+
+function inferRowLayoutMetrics(container: ItemObject): {
+  rowStartX: number;
+  rowStartY: number;
+  columnGap: number;
+  rowGap: number;
+} {
+  const containerProp = requireDragSnapshot(container);
+  const ordered = container.dragSnapshotOrderedList.filter((i) => !i.isGhost);
+  if (ordered.length === 0) {
+    return { rowStartX: 0, rowStartY: 0, columnGap: 0, rowGap: 0 };
+  }
+
+  const firstOffset = childRelativeOffset(
+    containerProp,
+    requireDragSnapshot(ordered[0]),
+  );
+  const columnGaps: number[] = [];
+  const rows: Array<{ y: number; height: number }> = [];
+  let currentRow: { y: number; height: number } | null = null;
+
+  for (let i = 0; i < ordered.length; i++) {
+    const item = ordered[i];
+    const prop = requireDragSnapshot(item);
+    const offset = childRelativeOffset(containerProp, prop);
+    if (!currentRow || Math.abs(offset.y - currentRow.y) > 1) {
+      currentRow = { y: offset.y, height: prop.height };
+      rows.push(currentRow);
+    } else {
+      currentRow.height = Math.max(currentRow.height, prop.height);
+    }
+
+    const next = ordered[i + 1];
+    if (next && sameSnapshotRow(containerProp, item, next)) {
+      const nextOffset = childRelativeOffset(
+        containerProp,
+        requireDragSnapshot(next),
+      );
+      const gap = nextOffset.x - (offset.x + prop.width);
+      if (gap >= 0) columnGaps.push(gap);
+    }
+  }
+
+  const rowGaps: number[] = [];
+  for (let i = 0; i < rows.length - 1; i++) {
+    const gap = rows[i + 1].y - (rows[i].y + rows[i].height);
+    if (gap >= 0) rowGaps.push(gap);
+  }
+
+  return {
+    rowStartX: firstOffset.x,
+    rowStartY: firstOffset.y,
+    columnGap: median(columnGaps),
+    rowGap: median(rowGaps),
+  };
+}
+
+function rowLayoutPositions(
+  container: ItemObject,
+  draggedItem: ItemObject,
+  startX: number,
+  startY: number,
+  ghost?: { index: number; width: number; height: number },
+): {
+  itemPositions: Map<ItemObject, { x: number; y: number }>;
+  ghostPosition: { x: number; y: number } | null;
+} {
+  const containerProp = requireDragSnapshot(container);
+  const contentSize = contentBoxSize(containerProp);
+  const ordered = container.dragSnapshotOrderedList.filter((i) => !i.isGhost);
+  const items = ordered.filter((i) => i !== draggedItem);
+  const metrics = inferRowLayoutMetrics(container);
+  const entries: Array<
+    | { kind: "item"; item: ItemObject; width: number; height: number }
+    | { kind: "ghost"; width: number; height: number }
+  > = items.map((item) => {
+    const prop = requireDragSnapshot(item);
+    return { kind: "item", item, width: prop.width, height: prop.height };
+  });
+
+  if (ghost) {
+    entries.splice(Math.max(0, Math.min(ghost.index, entries.length)), 0, {
+      kind: "ghost",
+      width: ghost.width,
+      height: ghost.height,
+    });
+  }
+
+  const itemPositions = new Map<ItemObject, { x: number; y: number }>();
+  let ghostPosition: { x: number; y: number } | null = null;
+  const rowStartX = startX + metrics.rowStartX;
+  const maxX = startX + contentSize.width;
+  let cursorX = rowStartX;
+  let cursorY = startY + metrics.rowStartY;
+  let rowHeight = 0;
+
+  for (const entry of entries) {
+    if (
+      cursorX > rowStartX + 0.5 &&
+      cursorX + entry.width > maxX + 0.5
+    ) {
+      cursorX = rowStartX;
+      cursorY += rowHeight + metrics.rowGap;
+      rowHeight = 0;
+    }
+
+    let position = { x: cursorX, y: cursorY };
+    if (entry.kind === "item" && entry.item.locked) {
+      const prop = requireDragSnapshot(entry.item);
+      const rel = childRelativeOffset(containerProp, prop);
+      position = { x: startX + rel.x, y: startY + rel.y };
+      cursorX = position.x;
+      cursorY = position.y;
+    }
+
+    if (entry.kind === "ghost") {
+      ghostPosition = position;
+    } else {
+      itemPositions.set(entry.item, position);
+    }
+
+    cursorX += entry.width + metrics.columnGap;
+    rowHeight = Math.max(rowHeight, entry.height);
+  }
+
+  return { itemPositions, ghostPosition };
+}
+
+function containerContentRect(container: ItemObject) {
+  const prop = requireDragSnapshot(container);
+  const origin = contentBoxOrigin(prop);
+  const size = contentBoxSize(prop);
+  return { ...origin, ...size };
+}
+
+function containsPoint(
+  rect: { x: number; y: number; width: number; height: number },
+  x: number,
+  y: number,
+): boolean {
+  return (
+    x >= rect.x &&
+    x <= rect.x + rect.width &&
+    y >= rect.y &&
+    y <= rect.y + rect.height
+  );
+}
+
+function distanceToNearestContentEdge(
+  rect: { x: number; y: number; width: number; height: number },
+  x: number,
+  y: number,
+): number {
+  if (containsPoint(rect, x, y)) {
+    return Math.min(
+      Math.abs(x - rect.x),
+      Math.abs(rect.x + rect.width - x),
+      Math.abs(y - rect.y),
+      Math.abs(rect.y + rect.height - y),
+    );
+  }
+  const clampedX = Math.max(rect.x, Math.min(x, rect.x + rect.width));
+  const clampedY = Math.max(rect.y, Math.min(y, rect.y + rect.height));
+  return euclidean(x, y, clampedX, clampedY);
+}
+
+function chooseByContentBox(
+  a: DropCandidate,
+  b: DropCandidate,
+  dragCenterX: number,
+  dragCenterY: number,
+): DropCandidate {
+  const aRect = containerContentRect(a.container);
+  const bRect = containerContentRect(b.container);
+  const aContains = containsPoint(aRect, dragCenterX, dragCenterY);
+  const bContains = containsPoint(bRect, dragCenterX, dragCenterY);
+  if (aContains !== bContains) return aContains ? a : b;
+
+  const aEdge = distanceToNearestContentEdge(aRect, dragCenterX, dragCenterY);
+  const bEdge = distanceToNearestContentEdge(bRect, dragCenterX, dragCenterY);
+  if (Math.abs(aEdge - bEdge) > 0.5) return aEdge < bEdge ? a : b;
+  return a.distance <= b.distance ? a : b;
+}
+
+function drawSnapshotDebug(
+  container: ItemObject,
+  item: ItemObject,
+  measuredPosition: { x: number; y: number },
+  simulatedPosition: { x: number; y: number },
+) {
+  const prop = requireDragSnapshot(item);
+  const dx = simulatedPosition.x - measuredPosition.x;
+  const dy = simulatedPosition.y - measuredPosition.y;
+
+  item.addDebugRect(
+    measuredPosition.x,
+    measuredPosition.y,
+    prop.width,
+    prop.height,
+    "rgba(14, 165, 233, 0.45)",
+    true,
+    `drop-snapshot-box-${container.gid}-${item.gid}`,
+    false,
+    1,
+    TAG_SNAPSHOT,
+  );
+  item.addDebugLine(
+    simulatedPosition.x,
+    simulatedPosition.y,
+    measuredPosition.x,
+    measuredPosition.y,
+    "rgba(244, 63, 94, 0.75)",
+    true,
+    `drop-snapshot-delta-${container.gid}-${item.gid}`,
+    2,
+    TAG_SNAPSHOT,
+  );
+  item.addDebugText(
+    measuredPosition.x + 2,
+    measuredPosition.y + prop.height + 12,
+    `delta ${Math.round(dx)},${Math.round(dy)}`,
+    "rgba(244, 63, 94, 0.8)",
+    true,
+    `drop-snapshot-delta-label-${container.gid}-${item.gid}`,
+    TAG_SNAPSHOT,
+  );
+}
+
+function drawContainerContentBox(
+  container: ItemObject,
+  origin: { x: number; y: number },
+) {
+  const size = contentBoxSize(requireDragSnapshot(container));
+  container.addDebugRect(
+    origin.x,
+    origin.y,
+    size.width,
+    size.height,
+    "rgba(20, 184, 166, 0.45)",
+    true,
+    `drop-snapshot-content-${container.gid}`,
+    false,
+    2,
+    TAG_SNAPSHOT,
+  );
+}
+
+function dumpSnapshotOnce(item: ItemObject, root: ItemObject) {
+  if (snapshotDumpedForDrag.has(item)) return;
+  snapshotDumpedForDrag.add(item);
+
+  const grouper =
+    typeof console.groupCollapsed === "function"
+      ? console.groupCollapsed.bind(console)
+      : console.log.bind(console);
+  const ender =
+    typeof console.groupEnd === "function"
+      ? console.groupEnd.bind(console)
+      : () => {};
+
+  const dumpNode = (node: ItemObject, depth = 0) => {
+    const prop = requireDragSnapshot(node);
+    const origin = contentBoxOrigin(prop);
+    const indent = "  ".repeat(depth);
+    console.log(
+      `${indent}${node.gid} contentOrigin=(${Math.round(origin.x)},${Math.round(origin.y)}) ` +
+        `padding=${JSON.stringify(prop.padding)} border=${JSON.stringify(prop.border)}`,
+    );
+    for (const child of node.dragSnapshotOrderedList) {
+      dumpNode(child, depth + 1);
+    }
+  };
+
+  grouper(`[drop-snapshot] root=${root.gid} drag=${item.gid}`);
+  dumpNode(root);
+  ender();
 }
 
 /** Toggle to silence the per-candidate ASCII layout trace in the console. */
@@ -49,6 +505,11 @@ function logCandidateSnapshot(args: {
   priority: number;
   dragCenterX: number;
   dragCenterY: number;
+  layoutItems?: Array<{
+    item: ItemObject;
+    measuredPosition: { x: number; y: number };
+    simulatedPosition: { x: number; y: number };
+  }>;
 }) {
   if (!LAYOUT_TRACE) return;
   const r = (n: number) => Math.round(n);
@@ -88,6 +549,9 @@ function logCandidateSnapshot(args: {
   // their actual rendered size — close to what virtualLayoutRecursive simulated).
   let cursorPrimary = args.isColumn ? args.startY : args.startX;
   const lines: string[] = [];
+  const layoutByItem = new Map(
+    args.layoutItems?.map((entry) => [entry.item, entry]),
+  );
   for (let i = 0; i <= args.items.length; i++) {
     if (i === args.insertIdx) {
       lines.push(
@@ -96,7 +560,7 @@ function logCandidateSnapshot(args: {
     }
     if (i >= args.items.length) break;
     const it = args.items[i];
-    const prop = it.getDomProperty("READ_1");
+    const prop = requireDragSnapshot(it);
     const dim = prop ? (args.isColumn ? prop.height : prop.width) : 0;
     const start = cursorPrimary;
     cursorPrimary += dim;
@@ -104,7 +568,19 @@ function logCandidateSnapshot(args: {
       ? `y=[${r(start)}..${r(cursorPrimary)}] h=${r(dim)}`
       : `x=[${r(start)}..${r(cursorPrimary)}] w=${r(dim)}`;
     const tag = isSubContainer(it) ? "▭" : "▪";
-    lines.push(`${indent}   [${i}] ${tag} ${it.gid}  ${range}`);
+    const layout = layoutByItem.get(it);
+    if (layout) {
+      const rel = childRelativeOffset(requireDragSnapshot(args.container), prop);
+      const dx = layout.simulatedPosition.x - layout.measuredPosition.x;
+      const dy = layout.simulatedPosition.y - layout.measuredPosition.y;
+      lines.push(
+        `${indent}   [${i}] ${tag} ${it.gid}  snapshotOffset=(${r(rel.x)},${r(rel.y)}) ` +
+          `sim=(${r(layout.simulatedPosition.x)},${r(layout.simulatedPosition.y)}) ` +
+          `delta=(${r(dx)},${r(dy)})`,
+      );
+    } else {
+      lines.push(`${indent}   [${i}] ${tag} ${it.gid}  ${range}`);
+    }
   }
   for (const ln of lines) console.log(ln);
 
@@ -147,67 +623,37 @@ export function virtualDimensions(
   draggedItem: ItemObject,
 ): VirtualDimensions {
   const isColumn = getDirection(container) === "column";
-  const containerProp = container.getDomProperty("READ_1");
-  const items = container.itemOrderedList.filter(
-    (i) => i !== draggedItem && !i.isGhost,
-  );
+  const containerProp = requireDragSnapshot(container);
+  const items = snapshotItems(container, draggedItem);
+  const rowPositions = isColumn
+    ? null
+    : rowLayoutPositions(container, draggedItem, 0, 0).itemPositions;
+  let minX = Infinity;
+  let minY = Infinity;
+  let maxX = 0;
+  let maxY = 0;
 
-  if (isColumn) {
-    // Column: stack vertically. Width = max child width, height = sum of child heights.
-    let totalHeight = 0;
-    let maxWidth = 0;
-    for (const child of items) {
-      let childW: number, childH: number;
-      if (child.itemOrderedList.length > 0) {
-        const dims = virtualDimensions(child, draggedItem);
-        childW = dims.width;
-        childH = dims.height;
-      } else {
-        const prop = child.getDomProperty("READ_1");
-        childW = prop ? prop.width : 0;
-        childH = prop ? prop.height : 0;
-      }
-      totalHeight += childH;
-      maxWidth = Math.max(maxWidth, childW);
-    }
-    return { width: maxWidth, height: totalHeight };
-  } else {
-    // Row with wrapping: place items left-to-right, wrap when exceeding container width.
-    const containerWidth = containerProp ? containerProp.width : Infinity;
-    let rowCursorX = 0;
-    let rowMaxHeight = 0;
-    let totalHeight = 0;
-    let maxRowWidth = 0;
-
-    for (const child of items) {
-      let childW: number, childH: number;
-      if (child.itemOrderedList.length > 0) {
-        const dims = virtualDimensions(child, draggedItem);
-        childW = dims.width;
-        childH = dims.height;
-      } else {
-        const prop = child.getDomProperty("READ_1");
-        childW = prop ? prop.width : 0;
-        childH = prop ? prop.height : 0;
-      }
-
-      // Wrap to next row if this item doesn't fit
-      if (rowCursorX > 0 && rowCursorX + childW > containerWidth) {
-        totalHeight += rowMaxHeight;
-        maxRowWidth = Math.max(maxRowWidth, rowCursorX);
-        rowCursorX = 0;
-        rowMaxHeight = 0;
-      }
-
-      rowCursorX += childW;
-      rowMaxHeight = Math.max(rowMaxHeight, childH);
-    }
-    // Final row
-    totalHeight += rowMaxHeight;
-    maxRowWidth = Math.max(maxRowWidth, rowCursorX);
-
-    return { width: maxRowWidth, height: totalHeight };
+  for (const child of items) {
+    const prop = requireDragSnapshot(child);
+    const rel = childRelativeOffset(containerProp, prop);
+    const measured = { x: rel.x, y: rel.y };
+    const simulated =
+      rowPositions?.get(child) ??
+      closeDraggedGapPosition(
+        container,
+        child,
+        measured,
+        draggedItem,
+        isColumn,
+      );
+    minX = Math.min(minX, simulated.x);
+    minY = Math.min(minY, simulated.y);
+    maxX = Math.max(maxX, simulated.x + prop.width);
+    maxY = Math.max(maxY, simulated.y + prop.height);
   }
+
+  if (minX === Infinity || minY === Infinity) return { width: 0, height: 0 };
+  return { width: maxX - minX, height: maxY - minY };
 }
 
 /**
@@ -253,20 +699,23 @@ export function virtualLayoutRecursive(
   dragCenterY: number,
 ): { candidates: DropCandidate[]; endX: number; endY: number } {
   const isColumn = getDirection(container) === "column";
-  const containerProp = container.getDomProperty("READ_1");
-  const containerWidth = containerProp ? containerProp.width : Infinity;
-
-  const items = container.itemOrderedList.filter(
-    (i) => i !== draggedItem && !i.isGhost,
-  );
-
-  // console.debug(`[virtual-layout] container=${container.gid} dir=${isColumn ? "col" : "row"} start=(${Math.round(startX)},${Math.round(startY)}) items=${items.length}`);
+  const containerProp = requireDragSnapshot(container);
+  const contentSize = contentBoxSize(containerProp);
+  const containerWidth = contentSize.width;
+  const items = snapshotItems(container, draggedItem);
+  const rowPositions = isColumn
+    ? null
+    : rowLayoutPositions(container, draggedItem, startX, startY).itemPositions;
 
   const thisCandidates: DropCandidate[] = [];
   const childCandidates: DropCandidate[] = [];
+  const layoutItems: Array<{
+    item: ItemObject;
+    measuredPosition: { x: number; y: number };
+    simulatedPosition: { x: number; y: number };
+  }> = [];
 
-  // TODO: take padding into account so distance can be used as tie breakers
-  // in container conflicts.
+  drawContainerContentBox(container, { x: startX, y: startY });
 
   // Clear stale ghost candidate debug rects
   for (let j = 0; j < items.length; j++) {
@@ -274,153 +723,130 @@ export function virtualLayoutRecursive(
     container.clearDebugMarker(`vlayout-ghost-after-${container.gid}-${j}`);
   }
 
-  if (isColumn) {
-    // Column layout: single cursor moving down
-    let cursorY = startY;
+  for (let j = 0; j < items.length; j++) {
+    const item = items[j];
+    const isColliding = collidingSet.has(item);
+    const prop = requireDragSnapshot(item);
+    const isContainer = isSubContainer(item);
+    const rel = childRelativeOffset(containerProp, prop);
+    const measuredPosition = { x: startX + rel.x, y: startY + rel.y };
+    const simulatedPosition =
+      rowPositions?.get(item) ??
+      closeDraggedGapPosition(
+        container,
+        item,
+        measuredPosition,
+        draggedItem,
+        isColumn,
+      );
+    layoutItems.push({ item, measuredPosition, simulatedPosition });
+    drawSnapshotDebug(container, item, measuredPosition, simulatedPosition);
 
-    for (let j = 0; j < items.length; j++) {
-      const item = items[j];
-      const isColliding = collidingSet.has(item);
-      const prop = item.getDomProperty("READ_1");
-      const isContainer = isSubContainer(item);
+    const newNode: VirtualNode = {
+      containerGID: container.gid,
+      item,
+      prop,
+      position: simulatedPosition,
+      previous: node,
+      next: null,
+    };
+    const prevNode = isContainer ? node : node.previous;
+    if (!isContainer) {
+      node.next = newNode;
+      node = newNode;
+    }
 
-      const newNode = {
-        containerGID: container.gid,
-        item: item,
-        prop: prop,
-        position: {
-          x: startX,
-          y: cursorY,
-        },
-        previous: node,
-        next: null,
+    if (isColliding && !item.locked) {
+      const rowGhostPosition = isColumn
+        ? null
+        : rowLayoutPositions(container, draggedItem, startX, startY, {
+            index: j,
+            width: dragGhostW,
+            height: dragGhostH,
+          }).ghostPosition;
+      const ghostX = rowGhostPosition?.x ?? simulatedPosition.x;
+      const ghostY = rowGhostPosition?.y ?? simulatedPosition.y;
+      const gcx = ghostX + dragGhostW / 2;
+      const gcy = ghostY + dragGhostH / 2;
+      const dist = euclidean(gcx, gcy, dragCenterX, dragCenterY);
+      const nextPosition = isColumn
+        ? { x: ghostX, y: ghostY + dragGhostH }
+        : { x: ghostX + dragGhostW, y: ghostY };
+
+      thisCandidates.push({
+        container,
+        index: j,
+        ghostCenterX: gcx,
+        ghostCenterY: gcy,
+        distance: dist,
+        priority: 0,
+        virtualNode: isContainer ? newNode : node,
+        prevPosition: prevNode && prevNode.position ? prevNode.position : null,
+        nextPosition,
+      });
+      logCandidateSnapshot({
+        container,
+        items,
+        insertIdx: j,
+        isColumn,
+        startX,
+        startY,
+        containerWidth,
+        ghostCenterX: gcx,
+        ghostCenterY: gcy,
+        ghostW: dragGhostW,
+        ghostH: dragGhostH,
+        distance: dist,
+        priority: 0,
+        dragCenterX,
+        dragCenterY,
+        layoutItems,
+      });
+      container.addDebugRect(
+        ghostX,
+        ghostY,
+        isColumn ? containerWidth : dragGhostW,
+        isColumn ? dragGhostH : dragGhostH,
+        "rgba(250, 204, 21, 0.15)",
+        true,
+        `vlayout-ghost-before-${container.gid}-${j}`,
+        true,
+        1,
+        TAG_LAYOUT,
+      );
+    }
+
+    if (isContainer) {
+      const childOrigin = {
+        x: simulatedPosition.x + prop.border.left + prop.padding.left,
+        y: simulatedPosition.y + prop.border.top + prop.padding.top,
       };
-      // Skip nodes for containers, we only link leaf nodes
-      if (!isContainer) {
-        node.next = newNode;
-        node = newNode;
+      const sub = virtualLayoutRecursive(
+        item,
+        node,
+        childOrigin.x,
+        childOrigin.y,
+        draggedItem,
+        dragGhostW,
+        dragGhostH,
+        collidingSet,
+        dragCenterX,
+        dragCenterY,
+      );
+      childCandidates.push(...sub.candidates);
+      while (node.next) {
+        node = node.next;
       }
+    }
 
-      // If this item is colliding with the drag item,
-      // calculate a hypothetical layout where the ghost is added to the previous index.
-      // Skip containers and items that are locked
-      if (isColliding && !item.locked) {
-        //
-        // BEFORE-case: insert ghost at index j (above current item).
-        //
-        //   x = startX                  x = startX + containerWidth
-        //   ├────────────────────────────┤
-        //   │  item[j-1]  (node.previous)│  ← prevPosition = node.previous.position
-        //   ├────────────────────────────┤  ← y = cursorY              ┐
-        //   │  GHOST  (insert idx = j)   │     center = (gcx, gcy)     │ dragGhostH
-        //   ├────────────────────────────┤  ← y = cursorY + dragGhostH ┘  (nextPosition.y)
-        //   │  item[j]  (current/node)   │     ← nextPosition aligns to top of current item
-        //   └────────────────────────────┘
-        //
-        // The ghost's center sits halfway down the inserted slot. prev/next
-        // positions are the snap targets used later for the drop indicator.
-        //
-        const gcx = startX + dragGhostW / 2;
-        const gcy = cursorY + dragGhostH / 2;
-        const dist = euclidean(gcx, gcy, dragCenterX, dragCenterY);
-
-        // let prevPosition = null;
-        // if (node.previous && node.previous.prop) {
-        //   prevPosition = {
-        //     x: startX,
-        //     y: cursorY, // - node.previous!.prop!.height / 2,
-        //   };
-        // }
-        const nextPosition = {
-          x: startX,
-          y: cursorY + dragGhostH,
-        };
-
-        const prevNode = isContainer ? node : node.previous;
-
-        thisCandidates.push({
-          container,
-          index: j,
-          ghostCenterX: gcx,
-          ghostCenterY: gcy,
-          distance: dist,
-          priority: 0,
-          virtualNode: isContainer ? newNode : node,
-          prevPosition:
-            prevNode && prevNode.position ? prevNode.position : null,
-          nextPosition: nextPosition,
-        });
-        logCandidateSnapshot({
-          container,
-          items,
-          insertIdx: j,
-          isColumn: true,
-          startX,
-          startY,
-          containerWidth,
-          ghostCenterX: gcx,
-          ghostCenterY: gcy,
-          ghostW: dragGhostW,
-          ghostH: dragGhostH,
-          distance: dist,
-          priority: 0,
-          // prevCenter,
-          // nextCenter,
-          // prevContainer,
-          // nextContainer,
-          dragCenterX,
-          dragCenterY,
-        });
-        container.addDebugRect(
-          startX,
-          cursorY,
-          containerWidth,
-          dragGhostH,
-          "rgba(250, 204, 21, 0.15)",
-          true,
-          `vlayout-ghost-before-${container.gid}-${j}`,
-          true,
-          1,
-          TAG_LAYOUT,
-        );
-      }
-
-      const itemStartY = cursorY;
-      let childH: number;
-
-      // If the item is a container, recursively build the virtual layout
-      if (isContainer) {
-        const sub = virtualLayoutRecursive(
-          item,
-          node,
-          startX,
-          cursorY,
-          draggedItem,
-          dragGhostW,
-          dragGhostH,
-          collidingSet,
-          dragCenterX,
-          dragCenterY,
-        );
-        childCandidates.push(...sub.candidates);
-        childH = sub.endY - cursorY;
-
-        while (node.next) {
-          node = node.next;
-        }
-      } else {
-        childH = prop ? prop.height : 0;
-      }
-      cursorY += childH;
-
-      // Debug: vertical bar for this item's height
-      const rootProp = container.rootContainer?.getDomProperty("READ_1");
-      const barX = (rootProp ? rootProp.x : startX) - 6 + container.depth * 10;
+    const barX = startX - 6 + container.depth * 10;
+    const barY = startY - 6 + container.depth * 10;
+    if (isColumn) {
       item.addDebugLine(
         barX,
-        itemStartY,
+        simulatedPosition.y,
         barX,
-        cursorY,
+        simulatedPosition.y + prop.height,
         "rgba(180, 100, 255, 0.7)",
         true,
         `vlayout-height-${item.gid}`,
@@ -429,251 +855,18 @@ export function virtualLayoutRecursive(
       );
       item.addDebugText(
         barX - 30,
-        itemStartY + childH / 2 + 4,
-        `${Math.round(childH)}`,
+        simulatedPosition.y + prop.height / 2 + 4,
+        `${Math.round(prop.height)}`,
         "rgba(180, 100, 255, 0.7)",
         true,
         `vlayout-height-label-${item.gid}`,
         TAG_LAYOUT,
       );
-
-      // Calculate a hypothetical layout where the ghost is added to the next index
-      if (isColliding && !item.locked) {
-        //
-        // AFTER-case: insert ghost at index j+1 (below current item).
-        //
-        // At this point cursorY has advanced past item[j], so it points at
-        // the bottom edge of the current item (= top edge of the new ghost).
-        //
-        //   x = startX                  x = startX + containerWidth
-        //   ├────────────────────────────┤
-        //   │  item[j-1]  (node.previous)│
-        //   ├────────────────────────────┤
-        //   │  item[j]  (current/node)   │     ← prevPosition.y sits at this item's vertical
-        //   │                            │       midline: cursorY − prev.height/2
-        //   ├────────────────────────────┤  ← y = cursorY              ┐
-        //   │  GHOST (insert idx = j+1)  │     center = (gcx, gcy)     │ dragGhostH
-        //   ├────────────────────────────┤  ← y = cursorY + dragGhostH ┘  (nextPosition.y)
-        //   │  item[j+1]  (would-be next)│     ← nextPosition aligns to top of next item
-        //   └────────────────────────────┘
-        //
-        // NOTE: `node` was reassigned to the just-placed item earlier in the
-        // loop, so `node.previous` here refers to the item ABOVE the current
-        // one (item[j-1]) — see prevPosition calculation below.
-        //
-        const gcx = startX + dragGhostW / 2;
-        const gcy = cursorY + dragGhostH / 2;
-        const dist = euclidean(gcx, gcy, dragCenterX, dragCenterY);
-
-        const prevPosition = {
-          x: startX,
-          y: itemStartY,
-        };
-        const nextPosition = {
-          x: startX,
-          y: cursorY + dragGhostH,
-        };
-
-        thisCandidates.push({
-          container,
-          index: j + 1,
-          ghostCenterX: gcx,
-          ghostCenterY: gcy,
-          distance: dist,
-          priority: 0,
-          virtualNode: item.itemOrderedList.length == 0 ? node : newNode,
-          prevPosition: prevPosition,
-          nextPosition: nextPosition,
-        });
-        logCandidateSnapshot({
-          container,
-          items,
-          insertIdx: j + 1,
-          isColumn: true,
-          startX,
-          startY,
-          containerWidth,
-          ghostCenterX: gcx,
-          ghostCenterY: gcy,
-          ghostW: dragGhostW,
-          ghostH: dragGhostH,
-          distance: dist,
-          priority: 0,
-          dragCenterX,
-          dragCenterY,
-        });
-        container.addDebugRect(
-          startX,
-          cursorY,
-          containerWidth,
-          dragGhostH,
-          "rgba(250, 204, 21, 0.15)",
-          true,
-          `vlayout-ghost-after-${container.gid}-${j}`,
-          true,
-          1,
-          TAG_LAYOUT,
-        );
-      }
-    }
-
-    let candidates: DropCandidate[] = [];
-    if (container.noDrop) {
-      candidates = childCandidates;
     } else {
-      candidates = childCandidates.concat(thisCandidates);
-    }
-
-    return { candidates, endX: startX + containerWidth, endY: cursorY };
-  } else {
-    // Row layout with wrapping
-    let cursorX = startX;
-    let cursorY = startY;
-    let rowMaxH = 0;
-
-    for (let j = 0; j < items.length; j++) {
-      const item = items[j];
-      const isColliding = collidingSet.has(item);
-      const prop = item.getDomProperty("READ_1");
-      const isContainer = isSubContainer(item);
-
-      // Get child dimensions FIRST so the wrap-check can run before placement.
-      let childW: number, childH: number;
-      if (item.itemOrderedList.length > 0) {
-        const dims = virtualDimensions(item, draggedItem);
-        childW = dims.width;
-        childH = dims.height;
-      } else {
-        childW = prop ? prop.width : 0;
-        childH = prop ? prop.height : 0;
-      }
-
-      // Wrap check: if this item doesn't fit on the current row, advance to
-      // the next one. Done before newNode construction so position reflects
-      // the true post-wrap origin.
-      if (cursorX > startX && cursorX + childW > startX + containerWidth) {
-        cursorY += rowMaxH;
-        cursorX = startX;
-        rowMaxH = 0;
-      }
-
-      // Build the virtual node. As in the column branch, only LEAVES are
-      // linked into the chain — container nodes are constructed for use as
-      // candidate `virtualNode` payloads but skipped from the prev/next walk.
-      const newNode = {
-        containerGID: container.gid,
-        item: item,
-        prop: prop,
-        position: { x: cursorX, y: cursorY },
-        previous: node,
-        next: null,
-      };
-      if (!isContainer) {
-        node.next = newNode;
-        node = newNode;
-      }
-
-      // BEFORE-case: insert ghost to the LEFT of current item (idx = j).
-      //
-      //   ┌──── current row ─────────────────────────────────────┐
-      //   │ item[j-1] │ GHOST(idx=j) │ item[j]   │ ...           │
-      //   └───────────┴──────────────┴───────────┴───────────────┘
-      //               ↑ (ghostX, ghostY)
-      //
-      // The ghost may itself wrap onto a fresh row if it doesn't fit in the
-      // remaining horizontal space. prevPosition snaps to the previous leaf's
-      // saved top-left; nextPosition snaps to the right edge of the ghost
-      // (= where the would-be-next item would begin).
-      if (isColliding) {
-        let ghostX = cursorX;
-        let ghostY = cursorY;
-        if (ghostX > startX && ghostX + dragGhostW > startX + containerWidth) {
-          ghostY += rowMaxH;
-          ghostX = startX;
-        }
-        const gcx = ghostX + dragGhostW / 2;
-        const gcy = ghostY + dragGhostH / 2;
-        const dist = euclidean(gcx, gcy, dragCenterX, dragCenterY);
-
-        const nextPosition = { x: ghostX + dragGhostW, y: ghostY };
-
-        const prevNode = isContainer ? node : node.previous;
-
-        thisCandidates.push({
-          container,
-          index: j,
-          ghostCenterX: gcx,
-          ghostCenterY: gcy,
-          distance: dist,
-          priority: 0,
-          virtualNode: isContainer ? newNode : node,
-          prevPosition:
-            prevNode && prevNode.position ? prevNode.position : null,
-          nextPosition: nextPosition,
-        });
-        logCandidateSnapshot({
-          container,
-          items,
-          insertIdx: j,
-          isColumn: false,
-          startX,
-          startY,
-          containerWidth,
-          ghostCenterX: gcx,
-          ghostCenterY: gcy,
-          ghostW: dragGhostW,
-          ghostH: dragGhostH,
-          distance: dist,
-          priority: 0,
-          dragCenterX,
-          dragCenterY,
-        });
-        container.addDebugRect(
-          ghostX,
-          ghostY,
-          dragGhostW,
-          dragGhostH,
-          "rgba(250, 204, 21, 0.15)",
-          true,
-          `vlayout-ghost-before-${container.gid}-${j}`,
-          true,
-          1,
-          TAG_LAYOUT,
-        );
-      }
-
-      // Place item and advance
-      const itemStartX = cursorX;
-      if (isContainer) {
-        const sub = virtualLayoutRecursive(
-          item,
-          node,
-          cursorX,
-          cursorY,
-          draggedItem,
-          dragGhostW,
-          dragGhostH,
-          collidingSet,
-          dragCenterX,
-          dragCenterY,
-        );
-        childCandidates.push(...sub.candidates);
-        // Walk past whatever leaves the recursion appended so the outer
-        // cursor reflects the true tail of the chain (mirrors column).
-        while (node.next) {
-          node = node.next;
-        }
-      }
-      cursorX += childW;
-      rowMaxH = Math.max(rowMaxH, childH);
-
-      // Debug: horizontal bar for this item's width
-      const rootProp = container.rootContainer?.getDomProperty("READ_1");
-      const barY = (rootProp ? rootProp.y : startY) - 6 + container.depth * 10;
       item.addDebugLine(
-        itemStartX,
+        simulatedPosition.x,
         barY,
-        cursorX,
+        simulatedPosition.x + prop.width,
         barY,
         "rgba(180, 100, 255, 0.7)",
         true,
@@ -682,92 +875,90 @@ export function virtualLayoutRecursive(
         TAG_LAYOUT,
       );
       item.addDebugText(
-        itemStartX + childW / 2 - 8,
+        simulatedPosition.x + prop.width / 2 - 8,
         barY - 8,
-        `${Math.round(childW)}`,
+        `${Math.round(prop.width)}`,
         "rgba(180, 100, 255, 0.7)",
         true,
         `vlayout-height-label-${item.gid}`,
         TAG_LAYOUT,
       );
-
-      // AFTER-case: insert ghost to the RIGHT of current item (idx = j+1).
-      //
-      //   ┌──── current row ─────────────────────────────────────┐
-      //   │ ... │ item[j] │ GHOST(idx=j+1) │ item[j+1] │ ...     │
-      //   └─────┴─────────┴────────────────┴───────────┴─────────┘
-      //                   ↑ (ghostX, ghostY)
-      //
-      // prevPosition snaps to the just-placed item's top-left; nextPosition
-      // snaps to the right edge of the ghost (where the next item would
-      // begin if it slid over). Both honor the post-wrap ghost row.
-      if (isColliding) {
-        let ghostX = cursorX;
-        let ghostY = cursorY;
-        if (ghostX > startX && ghostX + dragGhostW > startX + containerWidth) {
-          ghostY += rowMaxH;
-          ghostX = startX;
-        }
-        const gcx = ghostX + dragGhostW / 2;
-        const gcy = ghostY + dragGhostH / 2;
-        const dist = euclidean(gcx, gcy, dragCenterX, dragCenterY);
-
-        const prevPosition = { x: itemStartX, y: cursorY };
-        const nextPosition = { x: ghostX + dragGhostW, y: ghostY };
-
-        thisCandidates.push({
-          container,
-          index: j + 1,
-          ghostCenterX: gcx,
-          ghostCenterY: gcy,
-          distance: dist,
-          priority: 0,
-          virtualNode: node,
-          prevPosition: prevPosition,
-          nextPosition: nextPosition,
-        });
-        logCandidateSnapshot({
-          container,
-          items,
-          insertIdx: j + 1,
-          isColumn: false,
-          startX,
-          startY,
-          containerWidth,
-          ghostCenterX: gcx,
-          ghostCenterY: gcy,
-          ghostW: dragGhostW,
-          ghostH: dragGhostH,
-          distance: dist,
-          priority: 0,
-          dragCenterX,
-          dragCenterY,
-        });
-        container.addDebugRect(
-          ghostX,
-          ghostY,
-          dragGhostW,
-          dragGhostH,
-          "rgba(250, 204, 21, 0.15)",
-          true,
-          `vlayout-ghost-after-${container.gid}-${j}`,
-          true,
-          1,
-          TAG_LAYOUT,
-        );
-      }
     }
 
-    // Final row height
-    cursorY += rowMaxH;
-    let candidates: DropCandidate[] = [];
-    if (container.noDrop) {
-      candidates = childCandidates;
-    } else {
-      candidates = childCandidates.concat(thisCandidates);
+    if (isColliding && !item.locked) {
+      const gap = gapAfter(container, item, draggedItem, isColumn);
+      const rowGhostPosition = isColumn
+        ? null
+        : rowLayoutPositions(container, draggedItem, startX, startY, {
+            index: j + 1,
+            width: dragGhostW,
+            height: dragGhostH,
+          }).ghostPosition;
+      const ghostX =
+        rowGhostPosition?.x ??
+        (isColumn ? simulatedPosition.x : simulatedPosition.x + prop.width + gap);
+      const ghostY =
+        rowGhostPosition?.y ??
+        (isColumn ? simulatedPosition.y + prop.height + gap : simulatedPosition.y);
+      const gcx = ghostX + dragGhostW / 2;
+      const gcy = ghostY + dragGhostH / 2;
+      const dist = euclidean(gcx, gcy, dragCenterX, dragCenterY);
+      const nextPosition = isColumn
+        ? { x: ghostX, y: ghostY + dragGhostH }
+        : { x: ghostX + dragGhostW, y: ghostY };
+
+      thisCandidates.push({
+        container,
+        index: j + 1,
+        ghostCenterX: gcx,
+        ghostCenterY: gcy,
+        distance: dist,
+        priority: 0,
+        virtualNode: isContainer ? newNode : node,
+        prevPosition: simulatedPosition,
+        nextPosition,
+      });
+      logCandidateSnapshot({
+        container,
+        items,
+        insertIdx: j + 1,
+        isColumn,
+        startX,
+        startY,
+        containerWidth,
+        ghostCenterX: gcx,
+        ghostCenterY: gcy,
+        ghostW: dragGhostW,
+        ghostH: dragGhostH,
+        distance: dist,
+        priority: 0,
+        dragCenterX,
+        dragCenterY,
+        layoutItems,
+      });
+      container.addDebugRect(
+        ghostX,
+        ghostY,
+        isColumn ? containerWidth : dragGhostW,
+        dragGhostH,
+        "rgba(250, 204, 21, 0.15)",
+        true,
+        `vlayout-ghost-after-${container.gid}-${j}`,
+        true,
+        1,
+        TAG_LAYOUT,
+      );
     }
-    return { candidates, endX: cursorX, endY: cursorY };
   }
+
+  const candidates = container.noDrop
+    ? childCandidates
+    : childCandidates.concat(thisCandidates);
+  return {
+    candidates,
+    endX: startX + contentSize.width,
+    endY: startY + contentSize.height,
+  };
 }
 
 /**
@@ -793,14 +984,14 @@ export function determineDropTarget(
 
   let best: DropCandidate | null = null;
 
-  const rootProp = root.getDomProperty("READ_1");
-  const dragProp = item.getDomProperty("READ_1");
+  const rootProp = requireDragSnapshot(root);
+  const dragProp = requireDragSnapshot(item);
   const dragGhostW = dragProp.width;
   const dragGhostH = dragProp.height;
   const dragCenterX = item.transform.x + dragProp.width / 2;
   const dragCenterY = item.transform.y + dragProp.height / 2;
-  const layoutX = rootProp ? rootProp.x : 0;
-  const layoutY = rootProp ? rootProp.y : 0;
+  const layoutOrigin = contentBoxOrigin(rootProp);
+  dumpSnapshotOnce(item, root);
 
   // Build a global flat-leaf index so each candidate can carry references
   // to the items immediately before/after its insertion point in DOM order
@@ -829,8 +1020,8 @@ export function determineDropTarget(
   const { candidates: virtualCandidates } = virtualLayoutRecursive(
     root,
     head,
-    layoutX,
-    layoutY,
+    layoutOrigin.x,
+    layoutOrigin.y,
     item,
     dragGhostW,
     dragGhostH,
@@ -840,9 +1031,6 @@ export function determineDropTarget(
   );
   const candidates: DropCandidate[] = [];
   candidates.push(...virtualCandidates);
-
-  console.log(head);
-  console.log(candidates);
 
   // Clear any tie-break overlays from the previous frame so they don't ghost.
   // We allocate a generous slot range — in practice ties are rare, but multiple
@@ -856,182 +1044,17 @@ export function determineDropTarget(
     root.clearDebugMarker(`drop-tiebreak-next-dot-${i}`);
     root.clearDebugMarker(`drop-tiebreak-next-label-${i}`);
   }
-  let tieBreakIdx = 0;
-
-  // const ties: DropCandidate[] = [];
   // Pick best candidate: higher priority wins first, then shorter distance
   for (const c of candidates) {
     if (!best) {
       best = c;
       continue;
     }
-    // If there is a tie, it is likely a "conflicting container" case
     if (
       Math.abs(c.distance - best.distance) <= 1 &&
       c.container.gid != best.container.gid
     ) {
-      console.log("conflict");
-      // let nodeBest = best.virtualNode;
-      const candidateGID: string = c.container.gid;
-      // const bestGID = best.container.gid;
-      // let nodeCandidate = c.virtualNode;
-      // If there is no prevElement, place a prior stub element the same size as the ghost
-      const dropCandidateOfPrev: DropCandidate =
-        c.virtualNode.previous!.containerGID == candidateGID ? c : best;
-      const dropCandidateOfNext: DropCandidate =
-        c.virtualNode.next && c.virtualNode.next.containerGID == candidateGID
-          ? c
-          : best;
-      //   best.nextPosition &&
-      //   best.container.gid == best.virtualNode.next.item.gid
-      //     ? c
-      //     : best;
-      console.log(
-        dropCandidateOfNext.container.gid,
-        dropCandidateOfPrev.container.gid,
-      );
-      // TODO: handle row layout
-      //
-      // Tie-break geometry — two "arms" reach out from the drag center to the
-      // midpoints of the prev and next neighbors. The shorter arm wins.
-      //
-      //                ◐  prev midpoint
-      //                    (c.prevPosition.x,
-      //                     c.prevPosition.y + prev.height/2)
-      //               ╱
-      //              ╱
-      //   arm_prev  ╱   ← length = distanceToPrev
-      //            ╱
-      //           ╱
-      //          ●  drag center (dragCenterX, dragCenterY)
-      //           ╲
-      //            ╲
-      //   arm_next  ╲   ← length = distanceToNext
-      //              ╲
-      //               ╲
-      //                ◑  next midpoint
-      //                    (c.nextPosition.x,
-      //                     c.nextPosition.y + next.height/2)
-      //
-      // Whichever arm is shorter wins; the corresponding candidate becomes
-      // `best`. The debug overlay drawn below renders these two arms in
-      // magenta (prev) and cyan (next), with the winning arm bolded.
-      //
-      let distanceToPrev = dragGhostH;
-      let distanceToNext = dragGhostH;
-      // Midpoints of the prev/next neighbors used for the tie-break comparison.
-      // Captured here so the debug overlay below can render the exact points
-      // the algorithm compared against (rather than re-deriving them).
-      let prevMidX: number | null = null;
-      let prevMidY: number | null = null;
-      let nextMidX: number | null = null;
-      let nextMidY: number | null = null;
-      if (
-        c.prevPosition &&
-        c.virtualNode.previous &&
-        c.virtualNode.previous.prop
-      ) {
-        prevMidX = c.prevPosition.x;
-        prevMidY = c.prevPosition.y + c.virtualNode.previous.prop.height / 2;
-        distanceToPrev = euclidean(
-          prevMidX,
-          prevMidY,
-          dragCenterX,
-          dragCenterY,
-        );
-      }
-      if (c.nextPosition && c.virtualNode.next && c.virtualNode.next.prop) {
-        nextMidX = c.nextPosition.x;
-        nextMidY = c.nextPosition.y + c.virtualNode.next.prop.height / 2;
-        distanceToNext = euclidean(
-          nextMidX,
-          nextMidY,
-          dragCenterX,
-          dragCenterY,
-        );
-      }
-      console.log(distanceToPrev, distanceToNext);
-      const prevWins = distanceToPrev < distanceToNext;
-      best = prevWins ? dropCandidateOfPrev : dropCandidateOfNext;
-      // best = c;
-
-      // --- Debug: tie-break visualization ---
-      // Draw a line from the drag center to each compared midpoint. The
-      // winning side (shorter segment) is rendered bold/saturated; the
-      // losing side is faded so the ranking is obvious at a glance.
-      const slot = tieBreakIdx++ % TIEBREAK_MARKER_SLOTS;
-      const r = (n: number) => Math.round(n);
-      // Magenta = prev side, cyan = next side. Winner full alpha, loser dim.
-      const prevColor = prevWins
-        ? "rgba(236, 72, 153, 0.95)"
-        : "rgba(236, 72, 153, 0.3)";
-      const nextColor = !prevWins
-        ? "rgba(34, 211, 238, 0.95)"
-        : "rgba(34, 211, 238, 0.3)";
-
-      if (prevMidX !== null && prevMidY !== null) {
-        root.addDebugLine(
-          dragCenterX,
-          dragCenterY,
-          prevMidX,
-          prevMidY,
-          prevColor,
-          true,
-          `drop-tiebreak-prev-line-${slot}`,
-          prevWins ? 3 : 1,
-          TAG_TIEBREAK,
-        );
-        root.addDebugCircle(
-          prevMidX,
-          prevMidY,
-          prevWins ? 7 : 4,
-          prevColor,
-          true,
-          `drop-tiebreak-prev-dot-${slot}`,
-          TAG_TIEBREAK,
-        );
-        root.addDebugText(
-          (dragCenterX + prevMidX) / 2 + 6,
-          (dragCenterY + prevMidY) / 2,
-          `${prevWins ? "✔ " : ""}prev d=${r(distanceToPrev)}`,
-          prevColor,
-          true,
-          `drop-tiebreak-prev-label-${slot}`,
-          TAG_TIEBREAK,
-        );
-      }
-
-      if (nextMidX !== null && nextMidY !== null) {
-        root.addDebugLine(
-          dragCenterX,
-          dragCenterY,
-          nextMidX,
-          nextMidY,
-          nextColor,
-          true,
-          `drop-tiebreak-next-line-${slot}`,
-          !prevWins ? 3 : 1,
-          TAG_TIEBREAK,
-        );
-        root.addDebugCircle(
-          nextMidX,
-          nextMidY,
-          !prevWins ? 7 : 4,
-          nextColor,
-          true,
-          `drop-tiebreak-next-dot-${slot}`,
-          TAG_TIEBREAK,
-        );
-        root.addDebugText(
-          (dragCenterX + nextMidX) / 2 + 6,
-          (dragCenterY + nextMidY) / 2 + 12,
-          `${!prevWins ? "✔ " : ""}next d=${r(distanceToNext)}`,
-          nextColor,
-          true,
-          `drop-tiebreak-next-label-${slot}`,
-          TAG_TIEBREAK,
-        );
-      }
+      best = chooseByContentBox(best, c, dragCenterX, dragCenterY);
     } else if (c.distance < best.distance) {
       best = c;
     }
