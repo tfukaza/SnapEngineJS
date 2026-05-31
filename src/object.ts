@@ -4,6 +4,7 @@ import {
   EventProxyFactory,
   generateTransformString,
   parseTransformString,
+  cloneDomProperty,
 } from "./util";
 import { Collider } from "./collision";
 import { getDomProperty } from "./util";
@@ -767,6 +768,12 @@ export interface DomProperty extends TransformProperty {
     bottom: number;
     left: number;
   };
+  border: {
+    top: number;
+    right: number;
+    bottom: number;
+    left: number;
+  };
 }
 
 export interface DomInsertMode {
@@ -829,6 +836,12 @@ export class DomElement {
         left: 0,
       },
       padding: {
+        top: 0,
+        right: 0,
+        bottom: 0,
+        left: 0,
+      },
+      border: {
         top: 0,
         right: 0,
         bottom: 0,
@@ -925,6 +938,7 @@ export class DomElement {
     this.property.screenY = property.screenY;
     this.property.margin = property.margin;
     this.property.padding = property.padding;
+    this.property.border = property.border;
   }
 
   /**
@@ -1113,6 +1127,12 @@ export class ElementObject extends BaseObject {
           bottom: 0,
           left: 0,
         },
+        border: {
+          top: 0,
+          right: 0,
+          bottom: 0,
+          left: 0,
+        },
       });
     }
     this.transformMode = "direct";
@@ -1155,7 +1175,10 @@ export class ElementObject extends BaseObject {
   ): void {
     const fromIndex = fromStage == "READ_1" ? 0 : fromStage == "READ_2" ? 1 : 2;
     const toIndex = toStage == "READ_1" ? 0 : toStage == "READ_2" ? 1 : 2;
-    Object.assign(this._domProperty[toIndex], this._domProperty[fromIndex]);
+    Object.assign(
+      this._domProperty[toIndex],
+      cloneDomProperty(this._domProperty[fromIndex]),
+    );
   }
 
   /**
@@ -1241,11 +1264,11 @@ export class ElementObject extends BaseObject {
     this._dom.readDom(subtractAppliedTransform);
     super.readDom(subtractAppliedTransform);
     if (currentStage == "READ_1") {
-      Object.assign(this._domProperty[0], this._dom.property);
+      Object.assign(this._domProperty[0], cloneDomProperty(this._dom.property));
     } else if (currentStage == "READ_2") {
-      Object.assign(this._domProperty[1], this._dom.property);
+      Object.assign(this._domProperty[1], cloneDomProperty(this._dom.property));
     } else if (currentStage == "READ_3") {
-      Object.assign(this._domProperty[2], this._dom.property);
+      Object.assign(this._domProperty[2], cloneDomProperty(this._dom.property));
     }
     this.event.dom.onAfterReadDom?.(
       currentStage as "READ_1" | "READ_2" | "READ_3",

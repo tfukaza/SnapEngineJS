@@ -39,6 +39,21 @@ export class ItemContainer extends ItemObject {
     if (!this.#config.direction) {
       this.#config.direction = "column";
     }
+    if (this.#config.animation === undefined) {
+      const defaultAnimation = { duration: 100, timing_function: "ease-out" };
+      this.#config.animation = {
+        reorder: defaultAnimation,
+        drop: defaultAnimation,
+        clickMove: defaultAnimation,
+      };
+    } else if (this.#config.animation) {
+      const defaultAnimation = { duration: 100, timing_function: "ease-out" };
+      this.#config.animation = {
+        reorder: this.#config.animation.reorder ?? defaultAnimation,
+        drop: this.#config.animation.drop ?? defaultAnimation,
+        clickMove: this.#config.animation.clickMove ?? defaultAnimation,
+      };
+    }
     if (!this.#config.name) {
       if (!this.global.data["dragAndDropContainerCounter"]) {
         this.global.data["dragAndDropContainerCounter"] = 0;

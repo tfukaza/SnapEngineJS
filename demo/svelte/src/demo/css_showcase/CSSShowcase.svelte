@@ -1,4 +1,6 @@
 <script lang="ts">
+  type ShowcaseStyle = "existing" | "dev";
+
   let checkboxChecked = $state(false);
   // let radioValue = $state("option1");
   let rangeValue = $state(50);
@@ -7,83 +9,135 @@
   let selectValue = $state("option1");
   let dateValue = $state("");
   let progressValue = $state(65);
+  let showcaseStyle = $state<ShowcaseStyle>("existing");
+  let toggleEnabled = $state(true);
+  let devStyleLoaded = false;
+
+  async function setShowcaseStyle(style: ShowcaseStyle) {
+    showcaseStyle = style;
+
+    if (style === "dev" && !devStyleLoaded) {
+      await import("./style.dev.scss");
+      devStyleLoaded = true;
+    }
+  }
 </script>
 
-
-    <section class="showcase-section">
-      <h1>CSS Showcase</h1>
+<div class="css-showcase" data-showcase-style={showcaseStyle}>
+    <section class="showcase-section showcase-header">
+      <div>
+        <h1 class="showcase-title">Style<br />Guide</h1>
+        <div class="style-selector" aria-label="Style">
+          <button
+            class:active={showcaseStyle === "existing"}
+            type="button"
+            onclick={() => setShowcaseStyle("existing")}
+          >
+            Default
+          </button>
+          <button
+            class:active={showcaseStyle === "dev"}
+            type="button"
+            onclick={() => setShowcaseStyle("dev")}
+          >
+            Dev
+          </button>
+        </div>
+      </div>
     </section>
 
     <!-- Typography Section -->
     <section class="showcase-section">
       <h2>Typography</h2>
-      <div>
-        <h1>Heading 1</h1>
-        <h2>Heading 2</h2>
-        <h3>Heading 3</h3>
-        <h4>Heading 4</h4>
-        <h5>Heading 5</h5>
-        <h6>Heading 6</h6>
+      <article class="type-article prose">
+        <h1>Inside Snap Engine</h1>
         <p>
-          This is a paragraph. 
+          Snap Engine is an interaction layer for building direct,
+          responsive web tools. It coordinates input, layout reads, DOM writes,
+          animation, collision, and debug overlays through a shared frame loop.
         </p>
-        <a href="#typography">This is a link element</a>
-      </div>
+
+        <hr />
+
+        <h2>A Staged Frame Loop</h2>
+        <p>
+          Work is split into explicit read and write stages. Reads collect
+          geometry, writes update the DOM, and optional systems such as
+          animation and collision run in known places between them.
+        </p>
+        <ul>
+          <li>Input events collect user intent.</li>
+          <li>Read stages measure the current document.</li>
+          <li>Write stages apply DOM and transform updates.</li>
+        </ul>
+
+        <h3>Objects Own Their Behavior</h3>
+        <p>
+          Engine objects bind input handlers, transforms, DOM elements, and
+          debugging metadata in one place. That keeps interaction code local
+          without forcing each component to manually orchestrate a render loop.
+        </p>
+        <blockquote>
+          The most useful abstraction is the one that keeps a frame predictable.
+        </blockquote>
+
+        <pre class="slot shallow"><code>object.queueUpdate("READ_1", () => &#123;
+  object.readDom(true, "READ_1");
+&#125;);
+
+object.queueUpdate("WRITE_1", () => &#123;
+  object.writeTransform();
+&#125;);</code></pre>
+
+        <h4>Implementation Note</h4>
+        <p>
+          Inline code such as <code>queueUpdate()</code> should sit comfortably
+          inside body copy without changing the rhythm of the line. Related API
+          notes can point to <a href="#buttons">controls</a> or
+          <a href="#colors">color tokens</a> without feeling louder than the
+          surrounding text.
+        </p>
+        <ol>
+          <li>Capture the current state.</li>
+          <li>Apply the smallest possible mutation.</li>
+          <li>Animate from the old visual state into the new one.</li>
+        </ol>
+
+        <h5>Observation</h5>
+        <p class="mono-sample">
+          Geist Mono is reserved for code, labels, debug output, and compact
+          technical annotations.
+        </p>
+
+
+      </article>
     </section>
 
     <!-- Colors Section -->
     <section class="showcase-section">
       <h2>Color Palette</h2>
       <div class="color-grid">
-        <div class="color-swatch primary card ground">
+        <div class="color-swatch primary">
           <span class="light">Primary</span>
           <code>#ff753a</code>
         </div>
-        <div class="color-swatch secondary card">
-          <span class="light">Secondary</span>
-          <code>#1e2659</code>
-        </div>
-        <div class="color-swatch secondary-1 card">
+        <div class="color-swatch secondary-1">
           <span class="light">Secondary 1</span>
           <code>#f34336</code>
         </div>
-        <div class="color-swatch secondary-2 card">
-          <span class="light">Secondary 2</span>
-          <code>#e8b72f</code>
-        </div>
-        <div class="color-swatch secondary-3 card">
-          <span class="light">Secondary 3</span>
-          <code>#84c122</code>
-        </div>
-        <div class="color-swatch secondary-4 card">
-          <span class="light">Secondary 4</span>
-          <code>#1982c4</code>
-        </div>
-        <div class="color-swatch secondary-5 card">
-          <span class="light">Secondary 5</span>
-          <code>#6a4c93</code>
-        </div>
-        <div class="color-swatch secondary-6 card">
-          <span class="light">Secondary 6</span>
-          <code>#f15bb5</code>
-        </div>
-        <div class="color-swatch secondary-7 card">
-          <span class="light">Secondary 7</span>
-          <code>#00bbf9</code>
-        </div>
-        <div class="color-swatch accent card  ">
+        <div class="color-swatch accent">
           <span class="light">Accent</span>
           <code>#4b403a</code>
         </div>
-        <div class="color-swatch background card">
+        <div class="color-swatch background">
           <span>Background</span>
           <code>#f6f5f4</code>
         </div>
-        <div class="color-swatch background-tint card">
+        <div class="color-swatch background-tint">
           <span>Background Tint</span>
           <code>#e7e3e2</code>
         </div>
-        <div class="color-swatch text card">
+        <div class="color-swatch text">
           <span class="light">Text</span>
           <code>#453e3a</code>
         </div>
@@ -94,17 +148,9 @@
     <section class="showcase-section">
       <h2>Cards & Slots</h2>
       <div class="card-slot-grid">
-        <div class="card">
-          <h3>Default Card</h3>
-          <p>A standard card with subtle shadow and border effects.</p>
-        </div>
-        <div class="card float">
-          <h3>Float Card</h3>
-          <p>A floating card variant with enhanced shadow for elevation.</p>
-        </div>
-           <div class="card ground">
-          <h3>Ground Card</h3>
-          <p>A ground card variant with subtle shadows to make it look as if 
+        <div class="card ground">
+          <h3>Card</h3>
+          <p>A ground card variant with subtle shadows to make it look as if
             it is a bump on the ground.
           </p>
         </div>
@@ -114,312 +160,205 @@
             <span>Inset container for drop zones and recessed UI areas</span>
           </div>
         </div>
-       
+
       </div>
     </section>
 
-    <!-- Buttons Section -->
+    <!-- Buttons & Form Elements Section -->
     <section class="showcase-section">
-      <h2>Buttons</h2>
-      <div class="">
-        <div class="button-row">
-          <button>Default Button</button>
-          <button class="primary">Primary Button</button>
-          <button class="small">Small Button</button>
-          <button class="active">Active State</button>
-          <button class="primary" disabled>Disabled</button>
-        </div>
-        <div class="button-row" style="margin-top: var(--size-16);">
-          <span class="button">Button Class on Span</span>
-          <a href="#buttons" class="button primary">Link as Button</a>
-        </div>
-      </div>
-    </section>
-
-    <!-- Form Elements Section -->
-    <section class="showcase-section three-column">
-      <h2 style="grid-column: span 3;">Form Elements</h2>
-      
-   
-       
-
-        <!-- Checkboxes -->
-        <div class="card">
-          <h3>Checkboxes</h3>
-          <div class="form-group">
-            <label class="checkbox-label">
-              <input type="checkbox" bind:checked={checkboxChecked} />
-              <span></span>
-              Unchecked by default
-            </label>
-          </div>
-          <div class="form-group">
-            <label class="checkbox-label">
-              <input type="checkbox" checked />
-              <span></span>
-              Checked by default
-            </label>
-          </div>
-          <div class="form-group">
-            <label class="checkbox-label">
-              <input type="checkbox" />
-              <span></span>
-              Another option
-            </label>
-          </div>
-        </div>
-
-        <!-- Radio Buttons -->
-        <div class="card">
-          <h3>Radio Buttons</h3>
-          <div class="form-group">
-            <label class="radio-label">
-              <input type="radio" name="demo-radio" value="option1"  />
-              <span></span>
-              Option One
-            </label>
-          </div>
-          <div class="form-group">
-            <label class="radio-label">
-              <input type="radio" name="demo-radio" value="option2" />
-              <span></span>
-              Option Two
-            </label>
-          </div>
-          <div class="form-group">
-            <label class="radio-label">
-              <input type="radio" name="demo-radio" value="option3"  />
-              <span></span>
-              Option Three
-            </label>
-          </div>
-        </div>
-
-        <!-- Range Sliders -->
-        <div class="card">
-          <h3>Range Sliders</h3>
-          <div class="form-group">
-            <label>Default Range</label>
-            <input type="range" min="0" max="100" bind:value={rangeValue} />
-            <span class="range-value">{rangeValue}</span>
-          </div>
-          <div class="form-group">
-            <label>Large Range</label>
-            <input type="range" class="large" min="0" max="100" value="75" />
-          </div>
-        </div>
-
-        <!-- Dropdowns/Selects -->
-        <div class="card">
-          <h3>Dropdowns</h3>
-          <div class="form-group">
-            <label for="select-default">Default Select</label>
-            <select id="select-default" bind:value={selectValue}>
-              <option value="option1">Option One</option>
-              <option value="option2">Option Two</option>
-              <option value="option3">Option Three</option>
-              <option value="option4">Option Four</option>
-            </select>
-          </div>
-          <div class="form-group">
-            <label for="select-grouped">Grouped Options</label>
-            <select id="select-grouped">
-              <optgroup label="Category A">
-                <option value="a1">Item A1</option>
-                <option value="a2">Item A2</option>
-              </optgroup>
-              <optgroup label="Category B">
-                <option value="b1">Item B1</option>
-                <option value="b2">Item B2</option>
-              </optgroup>
-            </select>
-          </div>
-          <div class="form-group">
-            <label for="select-disabled">Disabled Select</label>
-            <select id="select-disabled" disabled>
-              <option>Cannot change this</option>
-            </select>
-          </div>
-        </div>
-
-        <!-- Date Selectors -->
-        <div class="card">
-          <h3>Date Selectors</h3>
-          <div class="form-group">
-            <label for="date-input">Date Input</label>
-            <input type="date" id="date-input" bind:value={dateValue} />
-          </div>
-          <div class="form-group">
-            <label for="datetime-input">DateTime Input</label>
-            <input type="datetime-local" id="datetime-input" />
-          </div>
-          <div class="form-group">
-            <label for="time-input">Time Input</label>
-            <input type="time" id="time-input" />
-          </div>
-        </div>
-
-        <!-- Progress Bars -->
-        <div class="card">
-          <h3>Progress Bars</h3>
-          <div class="form-group">
-            <label>Default Progress ({progressValue}%)</label>
-            <progress value={progressValue} max="100"></progress>
-          </div>
-          <div class="form-group">
-            <label>Complete (100%)</label>
-            <progress value="100" max="100"></progress>
-          </div>
-          <div class="form-group">
-            <label>Indeterminate</label>
-            <progress></progress>
-          </div>
-          <div class="form-group">
-            <label>Adjust Progress</label>
-            <input type="range" min="0" max="100" bind:value={progressValue} />
-          </div>
-        </div>
-
-         <!-- Text Inputs -->
-        <div class="card">
-          <h3>Text Inputs</h3>
-          <div class="form-group">
-            <label for="text-input">Text Input</label>
-            <input type="text" id="text-input" bind:value={textValue} placeholder="Enter text..." />
-          </div>
-          <div class="form-group">
-            <label for="number-input">Number Input</label>
-            <input type="number" id="number-input" bind:value={numberValue} />
-          </div>
-          <div class="form-group">
-            <label for="disabled-input">Disabled Text Input</label>
-            <input type="text" id="disabled-input" value="Cannot edit this" disabled />
-          </div>
-          <div class="form-group">
-            <label for="disabled-number">Disabled Number Input</label>
-            <input type="number" id="disabled-number" value="100" disabled />
-          </div>
-        </div>
-
-    </section>
-
-    <!-- Tables Section -->
-    <section class="showcase-section">
-      <h2>Tables</h2>
-      <div class="card">
-        <table>
-          <thead>
-            <tr>
-              <th>Name</th>
-              <th>Type</th>
-              <th>Status</th>
-              <th>Value</th>
-            </tr>
-          </thead>
-          <tbody>
-            <tr>
-              <td>Component A</td>
-              <td>Primary</td>
-              <td><span class="badge success">Active</span></td>
-              <td>128</td>
-            </tr>
-            <tr>
-              <td>Component B</td>
-              <td>Secondary</td>
-              <td><span class="badge warning">Pending</span></td>
-              <td>64</td>
-            </tr>
-            <tr>
-              <td>Component C</td>
-              <td>Accent</td>
-              <td><span class="badge error">Inactive</span></td>
-              <td>256</td>
-            </tr>
-            <tr>
-              <td>Component D</td>
-              <td>Primary</td>
-              <td><span class="badge">Default</span></td>
-              <td>512</td>
-            </tr>
-          </tbody>
-        </table>
-      </div>
-      
-      <div class="card" style="margin-top: var(--size-24);">
-        <h3>Striped Table</h3>
-        <table class="striped">
-          <thead>
-            <tr>
-              <th>ID</th>
-              <th>Description</th>
-              <th>Created</th>
-            </tr>
-          </thead>
-          <tbody>
-            <tr>
-              <td>001</td>
-              <td>First item in the list</td>
-              <td>2025-01-15</td>
-            </tr>
-            <tr>
-              <td>002</td>
-              <td>Second item in the list</td>
-              <td>2025-02-20</td>
-            </tr>
-            <tr>
-              <td>003</td>
-              <td>Third item in the list</td>
-              <td>2025-03-10</td>
-            </tr>
-            <tr>
-              <td>004</td>
-              <td>Fourth item in the list</td>
-              <td>2025-04-05</td>
-            </tr>
-          </tbody>
-        </table>
-      </div>
-    </section>
-
-    <!-- Spacing Scale Section -->
-    <section class="showcase-section">
-      <h2>Spacing Scale</h2>
-      <div class="card">
-        <div class="spacing-demo">
-          {#each [2, 4, 8, 12, 16, 24, 32, 48, 64] as size}
-            <div class="spacing-item">
-              <div class="spacing-box" style="width: {size}px; height: {size}px;"></div>
-              <code>--size-{size}</code>
+      <h2>Buttons & Form Elements</h2>
+      <div class="controls-stack">
+        <div class="controls-top">
+          <div>
+            <h3>Buttons</h3>
+            <div class="button-row">
+              <button>Default Button</button>
+              <button class="primary">Primary Button</button>
+              <button class="small">Small Button</button>
+              <button class="active">Active State</button>
+              <button class="primary" disabled>Disabled</button>
             </div>
-          {/each}
+          </div>
+          <div>
+            <h3>Toggles</h3>
+            <div class="toggle-demo">
+              <div
+                class="mini-toggle-switch slot"
+                class:enabled={toggleEnabled}
+                onclick={() => (toggleEnabled = !toggleEnabled)}
+                role="switch"
+                aria-checked={toggleEnabled}
+                tabindex="0"
+                onkeydown={(event) => {
+                  if (event.key === "Enter" || event.key === " ") {
+                    event.preventDefault();
+                    toggleEnabled = !toggleEnabled;
+                  }
+                }}
+              >
+                <div class="mini-toggle-knob disk"></div>
+              </div>
+              <span>{toggleEnabled ? "On" : "Off"}</span>
+            </div>
+          </div>
+        </div>
+
+        <div class="form-grid">
+          <div class="form-control-group">
+            <h3>Checkboxes</h3>
+            <div class="form-group">
+              <label class="checkbox-label">
+                <input type="checkbox" bind:checked={checkboxChecked} />
+                <span></span>
+                Unchecked by default
+              </label>
+            </div>
+            <div class="form-group">
+              <label class="checkbox-label">
+                <input type="checkbox" checked />
+                <span></span>
+                Checked by default
+              </label>
+            </div>
+            <div class="form-group">
+              <label class="checkbox-label">
+                <input type="checkbox" />
+                <span></span>
+                Another option
+              </label>
+            </div>
+          </div>
+
+          <div class="form-control-group">
+            <h3>Radio Buttons</h3>
+            <div class="form-group">
+              <label class="radio-label">
+                <input type="radio" name="demo-radio" value="option1"  />
+                <span></span>
+                Option One
+              </label>
+            </div>
+            <div class="form-group">
+              <label class="radio-label">
+                <input type="radio" name="demo-radio" value="option2" />
+                <span></span>
+                Option Two
+              </label>
+            </div>
+            <div class="form-group">
+              <label class="radio-label">
+                <input type="radio" name="demo-radio" value="option3"  />
+                <span></span>
+                Option Three
+              </label>
+            </div>
+          </div>
+
+          <div class="form-control-group">
+            <h3>Range Sliders</h3>
+            <div class="form-group">
+              <label>Default Range</label>
+              <input type="range" min="0" max="100" bind:value={rangeValue} />
+              <span class="range-value">{rangeValue}</span>
+            </div>
+            <div class="form-group">
+              <label>Large Range</label>
+              <input type="range" class="large" min="0" max="100" value="75" />
+            </div>
+          </div>
+
+          <div class="form-control-group">
+            <h3>Dropdowns</h3>
+            <div class="form-group">
+              <label for="select-default">Default Select</label>
+              <select id="select-default" bind:value={selectValue}>
+                <option value="option1">Option One</option>
+                <option value="option2">Option Two</option>
+                <option value="option3">Option Three</option>
+                <option value="option4">Option Four</option>
+              </select>
+            </div>
+            <div class="form-group">
+              <label for="select-grouped">Grouped Options</label>
+              <select id="select-grouped">
+                <optgroup label="Category A">
+                  <option value="a1">Item A1</option>
+                  <option value="a2">Item A2</option>
+                </optgroup>
+                <optgroup label="Category B">
+                  <option value="b1">Item B1</option>
+                  <option value="b2">Item B2</option>
+                </optgroup>
+              </select>
+            </div>
+            <div class="form-group">
+              <label for="select-disabled">Disabled Select</label>
+              <select id="select-disabled" disabled>
+                <option>Cannot change this</option>
+              </select>
+            </div>
+          </div>
+
+          <div class="form-control-group">
+            <h3>Date Selectors</h3>
+            <div class="form-group">
+              <label for="date-input">Date Input</label>
+              <input type="date" id="date-input" bind:value={dateValue} />
+            </div>
+            <div class="form-group">
+              <label for="datetime-input">DateTime Input</label>
+              <input type="datetime-local" id="datetime-input" />
+            </div>
+            <div class="form-group">
+              <label for="time-input">Time Input</label>
+              <input type="time" id="time-input" />
+            </div>
+          </div>
+
+          <div class="form-control-group">
+            <h3>Progress Bars</h3>
+            <div class="form-group">
+              <label>Default Progress ({progressValue}%)</label>
+              <progress value={progressValue} max="100"></progress>
+            </div>
+            <div class="form-group">
+              <label>Complete (100%)</label>
+              <progress value="100" max="100"></progress>
+            </div>
+            <div class="form-group">
+              <label>Indeterminate</label>
+              <progress></progress>
+            </div>
+            <div class="form-group">
+              <label>Adjust Progress</label>
+              <input type="range" min="0" max="100" bind:value={progressValue} />
+            </div>
+          </div>
+
+          <div class="form-control-group">
+            <h3>Text Inputs</h3>
+            <div class="form-group">
+              <label for="text-input">Text Input</label>
+              <input type="text" id="text-input" bind:value={textValue} placeholder="Enter text..." />
+            </div>
+            <div class="form-group">
+              <label for="number-input">Number Input</label>
+              <input type="number" id="number-input" bind:value={numberValue} />
+            </div>
+            <div class="form-group">
+              <label for="disabled-input">Disabled Text Input</label>
+              <input type="text" id="disabled-input" value="Cannot edit this" disabled />
+            </div>
+            <div class="form-group">
+              <label for="disabled-number">Disabled Number Input</label>
+              <input type="number" id="disabled-number" value="100" disabled />
+            </div>
+          </div>
         </div>
       </div>
     </section>
 
-    <!-- CSS Variables Reference -->
-    <section class="showcase-section">
-      <h2>CSS Variables Reference</h2>
-      <div class="card">
-        <h3>Colors</h3>
-        <code class="code-block">
---color-primary: #ff753a;
---color-secondary: #1e2659;
---color-accent: #4b403a;
---color-background: #f6f5f4;
---color-background-tint: #e7e3e2;
---color-background-dark: #8b817d;
---color-text: #453e3a;
-        </code>
-        
-        <h3 style="margin-top: var(--size-16);">Sizing</h3>
-        <code class="code-block">
---size-256, --size-128, --size-96, --size-80
---size-64, --size-48, --size-32, --size-24
---size-16, --size-12, --size-8, --size-4, --size-2
---ui-radius: var(--size-8);
-        </code>
-      </div>
-    </section>
+</div>
 
 
 <style lang="scss">
@@ -427,37 +366,92 @@
     width: 100%;
     height: 100%;
     position: relative;
+    background: #fff;
   }
 
- 
+  .showcase-header {
+    display: flex;
+    align-items: center;
+    justify-content: flex-start;
+    text-align: left;
+    height: 500px;
+  }
+
+  .showcase-title {
+    font-size: 96px;
+    line-height: 1;
+  }
+
+  .style-selector {
+    display: flex;
+    align-items: center;
+    gap: var(--size-8);
+    margin-top: var(--size-16);
+  }
 
   .showcase-section {
-
+    background: var(--color-background-tint);
+    border-radius: 12px;
+    padding: var(--size-48);
     margin-bottom: var(--size-48);
 
     > h2 {
+      font-family: "Geist Mono", monospace;
+      font-size: 14px;
+      font-weight: 300;
+      color: var(--color-background-dark);
       margin-bottom: var(--size-16);
-      padding-bottom: var(--size-8);
-      border-bottom: 2px solid var(--color-primary);
+      text-transform: lowercase;
     }
   }
 
-  .card-grid {
+  .type-article {
+    column-count: 2;
+    column-gap: var(--size-48);
+
+    h1,
+    h2,
+    h3,
+    h4,
+    h5,
+    pre {
+      break-inside: avoid;
+    }
+
+    h1 {
+      column-span: all;
+      margin-bottom: var(--size-24);
+    }
+  }
+
+  @media (max-width: 900px) {
+    .type-article {
+      column-count: 1;
+    }
+  }
+
+  .controls-stack {
+    display: flex;
+    flex-direction: column;
+    gap: var(--size-48);
+  }
+
+  .controls-top {
     display: grid;
-    grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+    grid-template-columns: repeat(2, minmax(0, 1fr));
     gap: var(--size-24);
+    align-items: start;
   }
 
   .form-grid {
     display: grid;
     grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
-    gap: var(--size-24);
+    gap: var(--size-48) var(--size-24);
+  }
 
-    .card {
-      h3 {
-        margin-bottom: var(--size-16);
-      }
-    }
+  .form-control-group h3,
+  .controls-stack h3 {
+    margin-bottom: var(--size-16);
   }
 
   .form-group {
@@ -472,11 +466,78 @@
     }
   }
 
+  .form-control-group select,
+  .form-control-group input[type="number"],
+  .form-control-group input[type="text"],
+  .form-control-group input[type="date"],
+  .form-control-group input[type="datetime-local"],
+  .form-control-group input[type="time"] {
+    font-family: "Geist", sans-serif;
+    font-size: 1rem;
+    border: 1px solid #d5d8dc;
+    box-shadow: none;
+  }
+
+  .toggle-demo {
+    display: flex;
+    align-items: center;
+    gap: var(--size-12);
+
+    span {
+      font-family: "Geist Mono", monospace;
+      font-size: 1rem;
+      color: var(--color-background-dark);
+    }
+  }
+
+  .mini-toggle-switch {
+    width: 36px;
+    height: 22px;
+    --ui-radius: 999px;
+    position: relative;
+    cursor: pointer;
+    overflow: hidden;
+    transition: background-color 0.3s ease;
+
+    &:hover {
+      background-color: rgba(0, 0, 0, 0.08);
+    }
+
+    &.enabled {
+      background-color: var(--color-primary);
+    }
+
+    &:focus-visible {
+      outline: 2px solid var(--color-primary);
+      outline-offset: 2px;
+    }
+  }
+
+  .mini-toggle-knob {
+    width: 16px;
+    height: 16px;
+    --ui-radius: 999px;
+    --card-color: rgb(29, 29, 29);
+    background-color: var(--color-primary);
+    position: absolute;
+    top: 3px;
+    left: 3px;
+    padding: 0;
+    transition:
+      transform 0.3s cubic-bezier(0.175, 0.885, 0.32, 1.275),
+      background-color 0.3s ease;
+  }
+
+  .mini-toggle-switch.enabled .mini-toggle-knob {
+    transform: translateX(14px);
+    background-color: white;
+  }
+
   .button-row {
     display: flex;
-    flex-wrap: wrap;
+    flex-direction: column;
     gap: var(--size-16);
-    align-items: center;
+    align-items: flex-start;
   }
 
   .color-grid {
@@ -484,6 +545,12 @@
     display: grid;
     grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
     gap: var(--size-16);
+  }
+
+  @media (max-width: 640px) {
+    .controls-top {
+      grid-template-columns: 1fr;
+    }
   }
 
   .color-swatch {
@@ -496,49 +563,21 @@
 
     span {
       font-family: "IBM Plex Mono", monospace;
-      font-size: 12px;
+      font-size: 1rem;
       font-weight: 600;
     }
 
     code {
-      font-size: 11px;
+      font-size: 1rem;
       opacity: 0.8;
     }
 
     &.primary {
-      --card-color: var(--color-primary);
-      color: white;
-    }
-    &.secondary {
-      background-color: var(--color-secondary);
+      background-color: var(--color-primary);
       color: white;
     }
     &.secondary-1 {
       background-color: var(--color-secondary-1);
-      color: white;
-    }
-    &.secondary-2 {
-      background-color: var(--color-secondary-2);
-      color: white;
-    }
-    &.secondary-3 {
-      background-color: var(--color-secondary-3);
-      color: white;
-    }
-    &.secondary-4 {
-      background-color: var(--color-secondary-4);
-      color: white;
-    }
-    &.secondary-5 {
-      background-color: var(--color-secondary-5);
-      color: white;
-    }
-    &.secondary-6 {
-      background-color: var(--color-secondary-6);
-      color: white;
-    }
-    &.secondary-7 {
-      background-color: var(--color-secondary-7);
       color: white;
     }
     &.accent {
@@ -566,6 +605,10 @@
     align-items: stretch;
   }
 
+  .card-slot-grid .card {
+    padding: var(--size-32);
+  }
+
   @media (max-width: 800px) {
     .card-slot-grid {
       grid-template-columns: 1fr;
@@ -589,48 +632,9 @@
     }
   }
 
-  .spacing-demo {
-    display: flex;
-    flex-wrap: wrap;
-    gap: var(--size-24);
-    align-items: flex-end;
-  }
-
-  .spacing-item {
-    display: flex;
-    flex-direction: column;
-    align-items: center;
-    gap: var(--size-8);
-  }
-
-  .spacing-box {
-    background-color: var(--color-primary);
-    border-radius: var(--size-2);
-  }
-
-  .grid-cell {
-    background-color: var(--color-primary);
-    color: white;
-    padding: var(--size-8);
-    text-align: center;
-    border-radius: var(--size-4);
-    font-family: "IBM Plex Mono", monospace;
-    font-size: 12px;
-  }
-
-  .code-block {
-    display: block;
-    background-color: var(--color-background-tint);
-    padding: var(--size-12);
-    border-radius: var(--size-4);
-    font-size: 12px;
-    white-space: pre;
-    overflow-x: auto;
-  }
-
   .range-value {
     font-family: "IBM Plex Mono", monospace;
-    font-size: 12px;
+    font-size: 1rem;
     color: var(--color-background-dark);
   }
 

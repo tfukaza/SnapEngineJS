@@ -43,6 +43,7 @@
     "server:svelte": "FRAMEWORK=svelte vite serve demo/svelte --config demo/svelte/vite.config.mjs --host",
     "dev:all": "concurrently --kill-others \"npm run dev:vanilla\" \"npm run dev:react\"",
     "test": "start-server-and-test server:vanilla http://localhost:3001 'playwright test'",
+    "test:snapsort": "playwright test -c tests/e2e/snapsort.playwright.config.ts",
     "test:ui": "start-server-and-test server:vanilla http://localhost:3001 'playwright test --ui'",
     "format": "prettier --write src",
     "lint": "eslint src --ext .ts",

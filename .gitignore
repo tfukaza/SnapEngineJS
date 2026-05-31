@@ -29,6 +29,9 @@ dist-ssr
 /playwright-report/
 /blob-report/
 /playwright/.cache/
+/.playwright-mcp/
+/mcp-*.png
+/mcp-*-snapshot.md
 
 # Generated build files
 *.mjs

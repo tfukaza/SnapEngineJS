@@ -26,14 +26,12 @@
   });
 </script>
 
-<div class="snapsort-item-wrapper {className}" bind:this={itemObject.element} {style}>
-  <div class="snapsort-item">
-    {@render children()}
-  </div>
+<div class="snapsort-item {className}" bind:this={itemObject.element} {style}>
+  {@render children()}
 </div>
 
 <style>
-  .snapsort-item-wrapper {
+  .snapsort-item {
     display: flex;
     flex-direction: column;
     align-items: center;

@@ -15,7 +15,7 @@ import {
   pinchEndProp,
   mouseButtonBitmap,
 } from "./input";
-import { getDomProperty, EventProxyFactory } from "./util";
+import { getDomProperty, cloneDomProperty, EventProxyFactory } from "./util";
 import { Camera } from "./camera";
 
 export {
@@ -26,6 +26,7 @@ export {
   GlobalManager,
   Camera,
   getDomProperty,
+  cloneDomProperty,
   EventProxyFactory,
   type pointerDownProp,
   type pointerMoveProp,
