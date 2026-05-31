@@ -1,5 +1,17 @@
 import type { ItemObject } from "./item";
 import type { DomProperty } from "@snap-engine/core";
+import {
+  childRelativeOffset,
+  contentBoxOrigin,
+  contentBoxSize,
+  flowAxesForDirection,
+  flowLayoutPositions,
+  layoutItems,
+  pointFromAxes,
+  virtualDimensions as layoutVirtualDimensions,
+  type LayoutNode,
+  type VirtualGhost as LayoutVirtualGhost,
+} from "./layout_engine";
 
 // Sub-tags for drop index calculation debug visuals
 const TAG_LAYOUT = "drop-layout"; // virtual layout: height bars, layout start lines, ghost positions
@@ -9,6 +21,7 @@ const TAG_NEIGHBORS = "drop-neighbors"; // per-candidate prev/next reference poi
 const TAG_SNAPSHOT = "drop-snapshot"; // drag-start snapshot geometry and simulation deltas
 
 const snapshotDumpedForDrag = new WeakSet<ItemObject>();
+const SNAPSHOT_DUMP_TRACE = false;
 
 /**
  * Allow the snapshot debug tree to be logged again for a new drag operation.
@@ -45,85 +58,11 @@ function euclidean(x1: number, y1: number, x2: number, y2: number): number {
   return Math.sqrt((x1 - x2) ** 2 + (y1 - y2) ** 2);
 }
 
-type AxisName = "x" | "y";
-type SizeName = "width" | "height";
-
-interface FlowAxes {
-  direction: "column" | "row";
-  main: AxisName;
-  cross: AxisName;
-  mainSize: SizeName;
-  crossSize: SizeName;
-}
-
-interface FlowMetrics {
-  mainStart: number;
-  crossStart: number;
-  mainGap: number;
-  crossGap: number;
-  lineCount: number;
-}
-
-interface FlowPositionResult {
-  itemPositions: Map<ItemObject, { x: number; y: number }>;
-  ghostPosition: { x: number; y: number } | null;
-}
-
 export interface VirtualGhost {
   container: ItemObject;
   index: number;
   width: number;
   height: number;
-}
-
-type FlowEntry =
-  | { kind: "item"; item: ItemObject; width: number; height: number }
-  | { kind: "ghost"; width: number; height: number };
-
-/**
- * Convert a container direction into the axes used by the virtual layout.
- *
- * The rest of the algorithm can work in "main" and "cross" terms, which keeps
- * row, column, row-wrap, and column-wrap behavior on the same code path.
- *
- * @param container Container whose direction determines the axis mapping.
- * @returns Axis metadata used by the flow layout simulator.
- */
-function flowAxes(container: ItemObject): FlowAxes {
-  const direction = getDirection(container);
-  if (direction === "row") {
-    return {
-      direction,
-      main: "x",
-      cross: "y",
-      mainSize: "width",
-      crossSize: "height",
-    };
-  }
-
-  return {
-    direction,
-    main: "y",
-    cross: "x",
-    mainSize: "height",
-    crossSize: "width",
-  };
-}
-
-/**
- * Convert main/cross-axis coordinates back into an `{ x, y }` point.
- *
- * @param axes Axis mapping for the current container direction.
- * @param main Coordinate on the layout's main axis.
- * @param cross Coordinate on the layout's cross axis.
- * @returns Absolute point in screen-space x/y coordinates.
- */
-function pointFromAxes(
-  axes: FlowAxes,
-  main: number,
-  cross: number,
-): { x: number; y: number } {
-  return axes.main === "x" ? { x: main, y: cross } : { x: cross, y: main };
 }
 
 /**
@@ -159,285 +98,45 @@ function requireDragSnapshot(item: ItemObject): DomProperty {
   return snapshot;
 }
 
-/**
- * Compute the content-box origin for a DOM snapshot.
- *
- * Flex children are laid out inside the content box, not the border box. The
- * virtual layout uses this as the origin for every container it simulates.
- *
- * @param prop Frozen DOM property for a container.
- * @returns Absolute x/y origin of the container's content box.
- */
-function contentBoxOrigin(prop: DomProperty): { x: number; y: number } {
-  return {
-    x: prop.x + prop.border.left + prop.padding.left,
-    y: prop.y + prop.border.top + prop.padding.top,
-  };
+function flowAxes(container: ItemObject) {
+  return flowAxesForDirection(getDirection(container));
 }
 
-/**
- * Compute the usable inner size for a DOM snapshot.
- *
- * @param prop Frozen DOM property for a container.
- * @returns Width and height remaining after border and padding are removed.
- */
-function contentBoxSize(prop: DomProperty): { width: number; height: number } {
-  return {
-    width: Math.max(
-      0,
-      prop.width -
-        prop.border.left -
-        prop.border.right -
-        prop.padding.left -
-        prop.padding.right,
-    ),
-    height: Math.max(
-      0,
-      prop.height -
-        prop.border.top -
-        prop.border.bottom -
-        prop.padding.top -
-        prop.padding.bottom,
-    ),
-  };
-}
-
-/**
- * Convert a child's absolute snapshot position into a content-relative offset.
- *
- * This lets the same snapshot be replayed at any simulated container origin.
- *
- * @param containerProp Frozen DOM property for the parent container.
- * @param childProp Frozen DOM property for the child item.
- * @returns Child x/y offset from the parent's content-box origin.
- */
-function childRelativeOffset(
-  containerProp: DomProperty,
-  childProp: DomProperty,
-): { x: number; y: number } {
-  const origin = contentBoxOrigin(containerProp);
-  return {
-    x: childProp.x - origin.x,
-    y: childProp.y - origin.y,
-  };
-}
-
-/**
- * Return the frozen child list used for candidate indexing.
- *
- * Snapshot lists are the canonical ordering during a drag. Live item lists can
- * contain the ghost or temporarily omit the dragged item, so candidate indices
- * are always computed against this filtered frozen list.
- *
- * @param container Container whose snapshot children should be listed.
- * @param draggedItem Item currently being dragged and excluded from layout.
- * @returns Snapshot children without the dragged item or ghost items.
- */
-function snapshotItems(
-  container: ItemObject,
-  draggedItem: ItemObject,
-): ItemObject[] {
-  return container.dragSnapshotOrderedList.filter(
-    (i) => i !== draggedItem && !i.isGhost,
-  );
-}
-
-/**
- * Compute the median number in a list.
- *
- * Median gaps are less sensitive than averages when one item has unusual
- * margins or a flex line ends before the container edge.
- *
- * @param values Numeric values to summarize.
- * @returns Median value, or `0` for an empty list.
- */
-function median(values: number[]): number {
-  if (values.length === 0) return 0;
-  const sorted = values.slice().sort((a, b) => a - b);
-  const mid = Math.floor(sorted.length / 2);
-  return sorted.length % 2 === 0
-    ? (sorted[mid - 1] + sorted[mid]) / 2
-    : sorted[mid];
-}
-
-/**
- * Infer flex line starts and gaps from the frozen DOM snapshot.
- *
- * CSS flexbox can be affected by margins and content size, so replaying
- * measured gaps gives the virtual layout enough information without trying to
- * parse every style.
- *
- * @param container Container whose frozen child geometry should be sampled.
- * @param axes Axis mapping for the container direction.
- * @returns Main/cross start offsets and median main/cross gaps.
- */
-function inferFlowLayoutMetrics(
-  container: ItemObject,
-  axes: FlowAxes,
-): FlowMetrics {
-  const containerProp = requireDragSnapshot(container);
-  const ordered = container.dragSnapshotOrderedList.filter((i) => !i.isGhost);
-  if (ordered.length === 0) {
-    return {
-      mainStart: 0,
-      crossStart: 0,
-      mainGap: 0,
-      crossGap: 0,
-      lineCount: 0,
+function createLayoutSnapshot(root: ItemObject): {
+  root: LayoutNode<ItemObject>;
+  byItem: Map<ItemObject, LayoutNode<ItemObject>>;
+} {
+  const byItem = new Map<ItemObject, LayoutNode<ItemObject>>();
+  const visit = (item: ItemObject): LayoutNode<ItemObject> => {
+    const node: LayoutNode<ItemObject> = {
+      value: item,
+      direction: getDirection(item),
+      locked: item.locked,
+      isGhost: item.isGhost,
+      box: requireDragSnapshot(item),
+      children: [],
     };
-  }
-
-  const firstOffset = childRelativeOffset(
-    containerProp,
-    requireDragSnapshot(ordered[0]),
-  );
-  const mainGaps: number[] = [];
-  const lines: Array<{ cross: number; crossSize: number }> = [];
-  let currentLine: { cross: number; crossSize: number } | null = null;
-  let previousOffset: { x: number; y: number } | null = null;
-
-  for (let i = 0; i < ordered.length; i++) {
-    const item = ordered[i];
-    const prop = requireDragSnapshot(item);
-    const offset = childRelativeOffset(containerProp, prop);
-    const startsNewLine =
-      previousOffset != null &&
-      offset[axes.main] < previousOffset[axes.main] - 1;
-    if (!currentLine || startsNewLine) {
-      currentLine = {
-        cross: offset[axes.cross],
-        crossSize: prop[axes.crossSize],
-      };
-      lines.push(currentLine);
-    } else {
-      currentLine.crossSize = Math.max(
-        currentLine.crossSize,
-        prop[axes.crossSize],
-      );
-    }
-
-    const next = ordered[i + 1];
-    if (next) {
-      const nextOffset = childRelativeOffset(
-        containerProp,
-        requireDragSnapshot(next),
-      );
-      const nextStartsNewLine = nextOffset[axes.main] < offset[axes.main] - 1;
-      if (!nextStartsNewLine) {
-        const gap =
-          nextOffset[axes.main] - (offset[axes.main] + prop[axes.mainSize]);
-        if (gap >= 0) mainGaps.push(gap);
-      }
-    }
-    previousOffset = offset;
-  }
-
-  const crossGaps: number[] = [];
-  for (let i = 0; i < lines.length - 1; i++) {
-    const gap = lines[i + 1].cross - (lines[i].cross + lines[i].crossSize);
-    if (gap >= 0) crossGaps.push(gap);
-  }
-
-  return {
-    mainStart: firstOffset[axes.main],
-    crossStart: firstOffset[axes.cross],
-    mainGap: median(mainGaps),
-    crossGap: median(crossGaps),
-    lineCount: lines.length,
+    byItem.set(item, node);
+    node.children = item.dragSnapshotOrderedList.map(visit);
+    return node;
   };
+
+  return { root: visit(root), byItem };
 }
 
-/**
- * Replay flex layout from the frozen snapshot.
- *
- * The dragged item is omitted, and a virtual ghost can be inserted at a
- * candidate index. This is the shared layout engine for rows and columns; only
- * the main/cross axes change.
- *
- * @param container Container whose children are being simulated.
- * @param draggedItem Item excluded from the simulated flow.
- * @param startX Absolute x-coordinate of the container content origin.
- * @param startY Absolute y-coordinate of the container content origin.
- * @param ghost Optional virtual ghost insertion to test.
- * @returns Simulated item positions and the simulated ghost position, if any.
- */
-function flowLayoutPositions(
-  container: ItemObject,
-  draggedItem: ItemObject,
-  startX: number,
-  startY: number,
+function layoutGhostFromItem(
+  byItem: Map<ItemObject, LayoutNode<ItemObject>>,
   ghost?: VirtualGhost,
-): FlowPositionResult {
-  const axes = flowAxes(container);
-  const containerProp = requireDragSnapshot(container);
-  const contentSize = contentBoxSize(containerProp);
-  const ordered = container.dragSnapshotOrderedList.filter((i) => !i.isGhost);
-  const items = ordered.filter((i) => i !== draggedItem);
-  const metrics = inferFlowLayoutMetrics(container, axes);
-  const entries: FlowEntry[] = items.map((item) => {
-    const dimensions = isSubContainer(item)
-      ? virtualDimensions(item, draggedItem, ghost)
-      : requireDragSnapshot(item);
-    return {
-      kind: "item",
-      item,
-      width: dimensions.width,
-      height: dimensions.height,
-    };
-  });
-
-  if (ghost?.container === container) {
-    entries.splice(Math.max(0, Math.min(ghost.index, entries.length)), 0, {
-      kind: "ghost",
-      width: ghost.width,
-      height: ghost.height,
-    });
-  }
-
-  const itemPositions = new Map<ItemObject, { x: number; y: number }>();
-  let ghostPosition: { x: number; y: number } | null = null;
-  const origin = { x: startX, y: startY };
-  const lineMainStart = origin[axes.main] + metrics.mainStart;
-  const lineCrossStart = origin[axes.cross] + metrics.crossStart;
-  const maxMain = origin[axes.main] + contentSize[axes.mainSize];
-  const canWrap = axes.direction === "row" || metrics.lineCount > 1;
-  let cursorMain = lineMainStart;
-  let cursorCross = lineCrossStart;
-  let lineCrossSize = 0;
-
-  for (const entry of entries) {
-    const entryMainSize = entry[axes.mainSize];
-    const entryCrossSize = entry[axes.crossSize];
-    if (
-      canWrap &&
-      cursorMain > lineMainStart + 0.5 &&
-      cursorMain + entryMainSize > maxMain + 0.5
-    ) {
-      cursorMain = lineMainStart;
-      cursorCross += lineCrossSize + metrics.crossGap;
-      lineCrossSize = 0;
-    }
-
-    let position = pointFromAxes(axes, cursorMain, cursorCross);
-    if (entry.kind === "item" && entry.item.locked) {
-      const prop = requireDragSnapshot(entry.item);
-      const rel = childRelativeOffset(containerProp, prop);
-      position = { x: startX + rel.x, y: startY + rel.y };
-      cursorMain = position[axes.main];
-      cursorCross = position[axes.cross];
-    }
-
-    if (entry.kind === "ghost") {
-      ghostPosition = position;
-    } else {
-      itemPositions.set(entry.item, position);
-    }
-
-    cursorMain += entryMainSize + metrics.mainGap;
-    lineCrossSize = Math.max(lineCrossSize, entryCrossSize);
-  }
-
-  return { itemPositions, ghostPosition };
+): LayoutVirtualGhost<ItemObject> | undefined {
+  if (!ghost) return undefined;
+  const container = byItem.get(ghost.container);
+  if (!container) return undefined;
+  return {
+    container,
+    index: ghost.index,
+    width: ghost.width,
+    height: ghost.height,
+  };
 }
 
 /**
@@ -623,6 +322,7 @@ function drawContainerContentBox(
  * @returns Nothing.
  */
 function dumpSnapshotOnce(item: ItemObject, root: ItemObject) {
+  if (!SNAPSHOT_DUMP_TRACE) return;
   if (snapshotDumpedForDrag.has(item)) return;
   snapshotDumpedForDrag.add(item);
 
@@ -654,7 +354,7 @@ function dumpSnapshotOnce(item: ItemObject, root: ItemObject) {
 }
 
 /** Toggle to silence the per-candidate ASCII layout trace in the console. */
-const LAYOUT_TRACE = true;
+const LAYOUT_TRACE = false;
 
 /**
  * Log an ASCII snapshot of the virtual layout that produced one candidate.
@@ -746,7 +446,10 @@ function logCandidateSnapshot(args: {
     const tag = isSubContainer(it) ? "▭" : "▪";
     const layout = layoutByItem.get(it);
     if (layout) {
-      const rel = childRelativeOffset(requireDragSnapshot(args.container), prop);
+      const rel = childRelativeOffset(
+        requireDragSnapshot(args.container),
+        prop,
+      );
       const dx = layout.simulatedPosition.x - layout.measuredPosition.x;
       const dy = layout.simulatedPosition.y - layout.measuredPosition.y;
       lines.push(
@@ -794,69 +497,20 @@ export function virtualDimensions(
   draggedItem: ItemObject,
   ghost?: VirtualGhost,
 ): VirtualDimensions {
-  const axes = flowAxes(container);
-  const containerProp = requireDragSnapshot(container);
-  const items = snapshotItems(container, draggedItem);
-  const flowPositions = flowLayoutPositions(
-    container,
-    draggedItem,
-    0,
-    0,
-    ghost,
+  const snapshot = createLayoutSnapshot(container);
+  const draggedNode = snapshot.byItem.get(draggedItem) ?? {
+    value: draggedItem,
+    direction: getDirection(draggedItem),
+    locked: draggedItem.locked,
+    isGhost: draggedItem.isGhost,
+    box: requireDragSnapshot(draggedItem),
+    children: [],
+  };
+  return layoutVirtualDimensions(
+    snapshot.root,
+    draggedNode,
+    layoutGhostFromItem(snapshot.byItem, ghost),
   );
-  let maxX = 0;
-  let maxY = 0;
-
-  for (const child of items) {
-    const dimensions = isSubContainer(child)
-      ? virtualDimensions(child, draggedItem, ghost)
-      : requireDragSnapshot(child);
-    const rel = childRelativeOffset(containerProp, requireDragSnapshot(child));
-    const measured = { x: rel.x, y: rel.y };
-    const simulated = flowPositions.itemPositions.get(child) ?? measured;
-    maxX = Math.max(maxX, simulated.x + dimensions.width);
-    maxY = Math.max(maxY, simulated.y + dimensions.height);
-  }
-
-  if (ghost?.container === container && flowPositions.ghostPosition) {
-    maxX = Math.max(maxX, flowPositions.ghostPosition.x + ghost.width);
-    maxY = Math.max(maxY, flowPositions.ghostPosition.y + ghost.height);
-  }
-
-  const snapshotSize = {
-    width: containerProp.width,
-    height: containerProp.height,
-  };
-  const virtualSize = {
-    width:
-      containerProp.border.left +
-      containerProp.padding.left +
-      maxX +
-      containerProp.padding.right +
-      containerProp.border.right,
-    height:
-      containerProp.border.top +
-      containerProp.padding.top +
-      maxY +
-      containerProp.padding.bottom +
-      containerProp.border.bottom,
-  };
-
-  if (items.length === 0 && ghost?.container !== container) {
-    return snapshotSize;
-  }
-
-  if (axes.direction === "row") {
-    return {
-      width: snapshotSize.width,
-      height: Math.max(snapshotSize.height, virtualSize.height),
-    };
-  }
-
-  return {
-    width: snapshotSize.width,
-    height: virtualSize.height,
-  };
 }
 
 /**
@@ -886,21 +540,54 @@ export function virtualLayoutRecursive(
   dragCenterX: number,
   dragCenterY: number,
 ): { candidates: DropCandidate[]; endX: number; endY: number } {
+  const snapshot = createLayoutSnapshot(container);
+  const draggedNode = snapshot.byItem.get(draggedItem) ?? {
+    value: draggedItem,
+    direction: getDirection(draggedItem),
+    locked: draggedItem.locked,
+    isGhost: draggedItem.isGhost,
+    box: requireDragSnapshot(draggedItem),
+    children: [],
+  };
+  return virtualLayoutRecursiveFromNode(
+    snapshot.root,
+    startX,
+    startY,
+    draggedNode,
+    dragGhostW,
+    dragGhostH,
+    dragCenterX,
+    dragCenterY,
+  );
+}
+
+function virtualLayoutRecursiveFromNode(
+  containerNode: LayoutNode<ItemObject>,
+  startX: number,
+  startY: number,
+  draggedNode: LayoutNode<ItemObject>,
+  dragGhostW: number,
+  dragGhostH: number,
+  dragCenterX: number,
+  dragCenterY: number,
+): { candidates: DropCandidate[]; endX: number; endY: number } {
+  const container = containerNode.value;
   const axes = flowAxes(container);
   const isColumn = axes.direction === "column";
-  const containerProp = requireDragSnapshot(container);
+  const containerProp = containerNode.box;
   const contentSize = contentBoxSize(containerProp);
   const containerWidth = contentSize.width;
-  const items = snapshotItems(container, draggedItem);
+  const itemNodes = layoutItems(containerNode, draggedNode);
+  const items = itemNodes.map((item) => item.value);
   const flowPositions = flowLayoutPositions(
-    container,
-    draggedItem,
+    containerNode,
+    draggedNode,
     startX,
     startY,
   ).itemPositions;
 
   const candidates: DropCandidate[] = [];
-  const layoutItems: Array<{
+  const layoutDebugItems: Array<{
     item: ItemObject;
     measuredPosition: { x: number; y: number };
     simulatedPosition: { x: number; y: number };
@@ -919,12 +606,12 @@ export function virtualLayoutRecursive(
     fallbackPosition: { x: number; y: number },
   ): DropCandidate => {
     const ghostPosition = flowLayoutPositions(
-      container,
-      draggedItem,
+      containerNode,
+      draggedNode,
       startX,
       startY,
       {
-        container,
+        container: containerNode,
         index,
         width: dragGhostW,
         height: dragGhostH,
@@ -951,38 +638,41 @@ export function virtualLayoutRecursive(
     };
   };
 
-  for (let j = 0; j < items.length; j++) {
-    const item = items[j];
-    const canPlaceCandidate = !item.locked;
-    const prop = requireDragSnapshot(item);
-    const isContainer = isSubContainer(item);
+  for (let j = 0; j < itemNodes.length; j++) {
+    const itemNode = itemNodes[j];
+    const item = itemNode.value;
+    const canPlaceCandidate = !itemNode.locked;
+    const prop = itemNode.box;
+    const isContainer = itemNode.children.length > 0;
     const rel = childRelativeOffset(containerProp, prop);
     const measuredPosition = { x: startX + rel.x, y: startY + rel.y };
-    const simulatedPosition = flowPositions.get(item) ?? measuredPosition;
-    layoutItems.push({ item, measuredPosition, simulatedPosition });
+    const simulatedPosition = flowPositions.get(itemNode) ?? measuredPosition;
+    layoutDebugItems.push({ item, measuredPosition, simulatedPosition });
     drawSnapshotDebug(container, item, measuredPosition, simulatedPosition);
 
     if (canPlaceCandidate) {
       const beforeCandidate = makeCandidate(j, simulatedPosition);
       candidates.push(beforeCandidate);
-      logCandidateSnapshot({
-        container,
-        items,
-        insertIdx: j,
-        isColumn,
-        startX,
-        startY,
-        containerWidth,
-        ghostCenterX: beforeCandidate.ghostCenterX,
-        ghostCenterY: beforeCandidate.ghostCenterY,
-        ghostW: dragGhostW,
-        ghostH: dragGhostH,
-        distance: beforeCandidate.distance,
-        priority: beforeCandidate.priority,
-        dragCenterX,
-        dragCenterY,
-        layoutItems,
-      });
+      if (LAYOUT_TRACE) {
+        logCandidateSnapshot({
+          container,
+          items,
+          insertIdx: j,
+          isColumn,
+          startX,
+          startY,
+          containerWidth,
+          ghostCenterX: beforeCandidate.ghostCenterX,
+          ghostCenterY: beforeCandidate.ghostCenterY,
+          ghostW: dragGhostW,
+          ghostH: dragGhostH,
+          distance: beforeCandidate.distance,
+          priority: beforeCandidate.priority,
+          dragCenterX,
+          dragCenterY,
+          layoutItems: layoutDebugItems,
+        });
+      }
       container.addDebugRect(
         beforeCandidate.ghostCenterX - dragGhostW / 2,
         beforeCandidate.ghostCenterY - dragGhostH / 2,
@@ -1002,11 +692,11 @@ export function virtualLayoutRecursive(
         x: simulatedPosition.x + prop.border.left + prop.padding.left,
         y: simulatedPosition.y + prop.border.top + prop.padding.top,
       };
-      const sub = virtualLayoutRecursive(
-        item,
+      const sub = virtualLayoutRecursiveFromNode(
+        itemNode,
         childOrigin.x,
         childOrigin.y,
-        draggedItem,
+        draggedNode,
         dragGhostW,
         dragGhostH,
         dragCenterX,
@@ -1062,30 +752,31 @@ export function virtualLayoutRecursive(
     }
 
     if (canPlaceCandidate) {
-      const fallbackMain =
-        simulatedPosition[axes.main] + prop[axes.mainSize];
+      const fallbackMain = simulatedPosition[axes.main] + prop[axes.mainSize];
       const fallbackCross = simulatedPosition[axes.cross];
       const fallbackPosition = pointFromAxes(axes, fallbackMain, fallbackCross);
       const afterCandidate = makeCandidate(j + 1, fallbackPosition);
       candidates.push(afterCandidate);
-      logCandidateSnapshot({
-        container,
-        items,
-        insertIdx: j + 1,
-        isColumn,
-        startX,
-        startY,
-        containerWidth,
-        ghostCenterX: afterCandidate.ghostCenterX,
-        ghostCenterY: afterCandidate.ghostCenterY,
-        ghostW: dragGhostW,
-        ghostH: dragGhostH,
-        distance: afterCandidate.distance,
-        priority: afterCandidate.priority,
-        dragCenterX,
-        dragCenterY,
-        layoutItems,
-      });
+      if (LAYOUT_TRACE) {
+        logCandidateSnapshot({
+          container,
+          items,
+          insertIdx: j + 1,
+          isColumn,
+          startX,
+          startY,
+          containerWidth,
+          ghostCenterX: afterCandidate.ghostCenterX,
+          ghostCenterY: afterCandidate.ghostCenterY,
+          ghostW: dragGhostW,
+          ghostH: dragGhostH,
+          distance: afterCandidate.distance,
+          priority: afterCandidate.priority,
+          dragCenterX,
+          dragCenterY,
+          layoutItems: layoutDebugItems,
+        });
+      }
       container.addDebugRect(
         afterCandidate.ghostCenterX - dragGhostW / 2,
         afterCandidate.ghostCenterY - dragGhostH / 2,
@@ -1371,10 +1062,7 @@ export function determineDropTarget(
  * @param draggedItem Item currently being dragged.
  * @returns Nothing.
  */
-export function debugDropTargetTree(
-  node: ItemObject,
-  draggedItem: ItemObject,
-) {
+export function debugDropTargetTree(node: ItemObject, draggedItem: ItemObject) {
   const items = node.itemOrderedList.filter(
     (i) => i !== draggedItem && !i.isGhost,
   );

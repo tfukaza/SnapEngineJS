@@ -16,6 +16,13 @@ import { AnimationObject } from "@snap-engine/core/animation";
  */
 const DRAG_HITBOX_SCALE = 4;
 const MIN_FLIP_DISTANCE = 0.5;
+const DEBUG_LOGS = false;
+
+function debugLog(...args: unknown[]) {
+  if (DEBUG_LOGS) {
+    console.debug(...args);
+  }
+}
 
 interface FlipSnapshot {
   item: ItemObject;
@@ -94,16 +101,16 @@ export class ItemObject extends ElementObject {
 
   getIndexAndContainer(): { index: number; container: ItemObject | null } {
     if (!this.parent) {
-      console.debug(
-        `[getIndexAndContainer] ${this.gid} has no parent → index=-1`,
-      );
+      DEBUG_LOGS &&
+        debugLog(`[getIndexAndContainer] ${this.gid} has no parent → index=-1`);
       return { index: -1, container: null };
     }
     const parentContainer = this.parent as unknown as ItemObject;
     const idx = parentContainer.#itemOrderedList.indexOf(this);
-    console.debug(
-      `[getIndexAndContainer] ${this.gid} → container=${parentContainer.gid}, index=${idx}, orderedList=[${parentContainer.#itemOrderedList.map((i) => i.gid).join(", ")}]`,
-    );
+    DEBUG_LOGS &&
+      debugLog(
+        `[getIndexAndContainer] ${this.gid} → container=${parentContainer.gid}, index=${idx}, orderedList=[${parentContainer.#itemOrderedList.map((i) => i.gid).join(", ")}]`,
+      );
     return { index: idx, container: parentContainer };
   }
 
@@ -427,7 +434,10 @@ export class ItemObject extends ElementObject {
 
       const dx = first.x - last.x;
       const dy = first.y - last.y;
-      if (Math.abs(dx) < MIN_FLIP_DISTANCE && Math.abs(dy) < MIN_FLIP_DISTANCE) {
+      if (
+        Math.abs(dx) < MIN_FLIP_DISTANCE &&
+        Math.abs(dy) < MIN_FLIP_DISTANCE
+      ) {
         continue;
       }
 
@@ -569,30 +579,33 @@ export class ItemObject extends ElementObject {
     const sourceIndex = sourceContainer
       ? sourceContainer.#itemOrderedList.indexOf(item)
       : -1;
-    console.debug(
-      `[moveItemToContainer] item=${item.gid} from=${sourceContainer?.gid ?? "null"}[${sourceIndex}] to=${(container as unknown as ItemObject).gid}[${index}] updateDom=${updateDom}`,
-    );
-    console.debug(
-      `[moveItemToContainer]   source orderedList=[${sourceContainer ? sourceContainer.#itemOrderedList.map((i) => i.gid).join(", ") : "N/A"}]`,
-    );
-    console.debug(
-      `[moveItemToContainer]   target orderedList=[${container.#itemOrderedList.map((i) => i.gid).join(", ")}]`,
-    );
+    DEBUG_LOGS &&
+      debugLog(
+        `[moveItemToContainer] item=${item.gid} from=${sourceContainer?.gid ?? "null"}[${sourceIndex}] to=${(container as unknown as ItemObject).gid}[${index}] updateDom=${updateDom}`,
+      );
+    DEBUG_LOGS &&
+      debugLog(
+        `[moveItemToContainer]   source orderedList=[${sourceContainer ? sourceContainer.#itemOrderedList.map((i) => i.gid).join(", ") : "N/A"}]`,
+      );
+    DEBUG_LOGS &&
+      debugLog(
+        `[moveItemToContainer]   target orderedList=[${container.#itemOrderedList.map((i) => i.gid).join(", ")}]`,
+      );
     // If the source and target container is the same, we must adjust the index
     // to account for the removal of the item from its original position.
     if (item.parent === container) {
       // If the source and target index is the same, no need to move.
       if (container.#itemOrderedList.indexOf(item) === index) {
-        console.debug(
-          `[moveItemToContainer]   SKIP: same container, same index`,
-        );
+        DEBUG_LOGS &&
+          debugLog(`[moveItemToContainer]   SKIP: same container, same index`);
         return;
       }
       const currentIndex = container.#itemOrderedList.indexOf(item);
       if (currentIndex !== -1 && currentIndex < index) {
-        console.debug(
-          `[moveItemToContainer]   adjusting index: ${index} → ${index - 1} (same container, current=${currentIndex} < target=${index})`,
-        );
+        DEBUG_LOGS &&
+          debugLog(
+            `[moveItemToContainer]   adjusting index: ${index} → ${index - 1} (same container, current=${currentIndex} < target=${index})`,
+          );
         index -= 1;
       }
     }
@@ -601,9 +614,10 @@ export class ItemObject extends ElementObject {
     // so we don't want to remove it from the DOM.
     this.removeItemFrom(item.container, item, false);
     this.insertItemAt(container, item, index);
-    console.debug(
-      `[moveItemToContainer]   DONE. target orderedList=[${container.#itemOrderedList.map((i) => i.gid).join(", ")}]`,
-    );
+    DEBUG_LOGS &&
+      debugLog(
+        `[moveItemToContainer]   DONE. target orderedList=[${container.#itemOrderedList.map((i) => i.gid).join(", ")}]`,
+      );
   }
 
   /**
@@ -617,32 +631,37 @@ export class ItemObject extends ElementObject {
    * @returns Nothing.
    */
   insertItemAt(container: ItemContainer, item: ItemObject, index: number) {
-    console.debug(
-      `[insertItemAt] item=${item.gid} into container=${(container as unknown as ItemObject).gid} at index=${index}`,
-    );
-    console.debug(
-      `[insertItemAt]   BEFORE orderedList=[${container.#itemOrderedList.map((i) => i.gid).join(", ")}] (len=${container.#itemOrderedList.length})`,
-    );
+    DEBUG_LOGS &&
+      debugLog(
+        `[insertItemAt] item=${item.gid} into container=${(container as unknown as ItemObject).gid} at index=${index}`,
+      );
+    DEBUG_LOGS &&
+      debugLog(
+        `[insertItemAt]   BEFORE orderedList=[${container.#itemOrderedList.map((i) => i.gid).join(", ")}] (len=${container.#itemOrderedList.length})`,
+      );
     (container as unknown as ItemObject).appendChild(item);
     if (index >= container.#itemOrderedList.length) {
-      console.debug(
-        `[insertItemAt]   index ${index} >= len ${container.#itemOrderedList.length}, appending`,
-      );
+      DEBUG_LOGS &&
+        debugLog(
+          `[insertItemAt]   index ${index} >= len ${container.#itemOrderedList.length}, appending`,
+        );
       container.#itemOrderedList.push(item);
     } else {
-      console.debug(`[insertItemAt]   splicing at index ${index}`);
+      DEBUG_LOGS && debugLog(`[insertItemAt]   splicing at index ${index}`);
       container.#itemOrderedList.splice(index, 0, item);
     }
     const itemAfterIndex =
       index >= container.#itemOrderedList.length - 1
         ? null
         : container.#itemOrderedList[index + 1].element;
-    console.debug(
-      `[insertItemAt]   AFTER orderedList=[${container.#itemOrderedList.map((i) => i.gid).join(", ")}]`,
-    );
-    console.debug(
-      `[insertItemAt]   DOM insertBefore: item.element=${item.element?.id ?? "null"}, before=${itemAfterIndex ? (itemAfterIndex as any).element?.id ?? itemAfterIndex.gid : "null (append)"}`,
-    );
+    DEBUG_LOGS &&
+      debugLog(
+        `[insertItemAt]   AFTER orderedList=[${container.#itemOrderedList.map((i) => i.gid).join(", ")}]`,
+      );
+    DEBUG_LOGS &&
+      debugLog(
+        `[insertItemAt]   DOM insertBefore: item.element=${item.element?.id ?? "null"}, before=${itemAfterIndex ? (itemAfterIndex as any).element?.id ?? itemAfterIndex.gid : "null (append)"}`,
+      );
     container.element?.insertBefore(item.element!, itemAfterIndex);
   }
 
@@ -659,19 +678,22 @@ export class ItemObject extends ElementObject {
     item: ItemObject,
     deleteElement: boolean = true,
   ) {
-    console.debug(
-      `[removeItemFrom] item=${item.gid} from container=${(container as unknown as ItemObject).gid} deleteElement=${deleteElement}`,
-    );
-    console.debug(
-      `[removeItemFrom]   BEFORE orderedList=[${container.#itemOrderedList.map((i) => i.gid).join(", ")}]`,
-    );
+    DEBUG_LOGS &&
+      debugLog(
+        `[removeItemFrom] item=${item.gid} from container=${(container as unknown as ItemObject).gid} deleteElement=${deleteElement}`,
+      );
+    DEBUG_LOGS &&
+      debugLog(
+        `[removeItemFrom]   BEFORE orderedList=[${container.#itemOrderedList.map((i) => i.gid).join(", ")}]`,
+      );
     container.removeChild(item);
     container.#itemOrderedList = container.#itemOrderedList.filter(
       (i) => i !== item,
     );
-    console.debug(
-      `[removeItemFrom]   AFTER orderedList=[${container.#itemOrderedList.map((i) => i.gid).join(", ")}]`,
-    );
+    DEBUG_LOGS &&
+      debugLog(
+        `[removeItemFrom]   AFTER orderedList=[${container.#itemOrderedList.map((i) => i.gid).join(", ")}]`,
+      );
     if (deleteElement) {
       item.element?.remove();
     }
@@ -744,15 +766,17 @@ export class ItemObject extends ElementObject {
     index: number,
   ) {
     let ghostItem = this.#rootContainer?.ghostItem;
-    console.debug(
-      `[updateGhostElement] original=${original.gid} container=${container ? (container as unknown as ItemObject).gid : "null"} index=${index} existingGhost=${ghostItem ? ghostItem.gid : "none"}`,
-    );
+    DEBUG_LOGS &&
+      debugLog(
+        `[updateGhostElement] original=${original.gid} container=${container ? (container as unknown as ItemObject).gid : "null"} index=${index} existingGhost=${ghostItem ? ghostItem.gid : "none"}`,
+      );
 
     if (container === null) {
       if (ghostItem) {
-        console.debug(
-          `[updateGhostElement] removing ghost ${ghostItem.gid} from ${(ghostItem.container as unknown as ItemObject)?.gid}`,
-        );
+        DEBUG_LOGS &&
+          debugLog(
+            `[updateGhostElement] removing ghost ${ghostItem.gid} from ${(ghostItem.container as unknown as ItemObject)?.gid}`,
+          );
         // Remove the ghost item and element from the root container.
         this.removeItemFrom(ghostItem.container, ghostItem);
         ghostItem.destroy();
@@ -763,12 +787,13 @@ export class ItemObject extends ElementObject {
     // If ghost element already exists, use that instead of creating a new one.
     // Otherwise, create a new ghost element
     if (!ghostItem) {
-      console.debug(`[updateGhostElement] creating new ghost element`);
+      DEBUG_LOGS && debugLog(`[updateGhostElement] creating new ghost element`);
 
       const ghostElement = document.createElement("div");
       ghostElement.id = "spacer";
 
-      const origProp = original.dragSnapshot ?? original.getDomProperty("READ_1");
+      const origProp =
+        original.dragSnapshot ?? original.getDomProperty("READ_1");
       ghostElement.style.width = origProp.width + "px";
       ghostElement.style.height = origProp.height + "px";
       ghostElement.style.margin = `${origProp.margin.top}px ${origProp.margin.right}px ${origProp.margin.bottom}px ${origProp.margin.left}px`;
@@ -789,20 +814,21 @@ export class ItemObject extends ElementObject {
     const moveGhost = () => {
       // Remove ghost from its current container before re-inserting at the new position
       if (ghostItem.parent) {
-        console.debug(
-          `[updateGhostElement] removing ghost from current container=${(ghostItem.container as unknown as ItemObject)?.gid}`,
-        );
+        DEBUG_LOGS &&
+          debugLog(
+            `[updateGhostElement] removing ghost from current container=${(ghostItem.container as unknown as ItemObject)?.gid}`,
+          );
         this.removeItemFrom(ghostItem.container, ghostItem, false);
       } else {
-        console.debug(
-          `[updateGhostElement] ghost has no parent, skipping remove`,
-        );
+        DEBUG_LOGS &&
+          debugLog(`[updateGhostElement] ghost has no parent, skipping remove`);
       }
       // Insert the ghost item at the new position in the DOM and item list.
       // This also sets the ghost item's container to the new container.
-      console.debug(
-        `[updateGhostElement] inserting ghost at container=${(container as unknown as ItemObject).gid} index=${index}`,
-      );
+      DEBUG_LOGS &&
+        debugLog(
+          `[updateGhostElement] inserting ghost at container=${(container as unknown as ItemObject).gid} index=${index}`,
+        );
       this.insertItemAt(container, ghostItem, index);
     };
 
@@ -839,9 +865,10 @@ export class ItemObject extends ElementObject {
     // the engine scheduler as built-in debounce/coalescing support for input
     // updates that depend on earlier READ/WRITE phases.
     if (!root.#hasDragSnapshotTree() || !item.#dragSnapshot) {
-      console.debug(
-        `[updateDropTarget] SKIP: waiting for drag snapshot root=${root.gid} item=${item.gid}`,
-      );
+      DEBUG_LOGS &&
+        debugLog(
+          `[updateDropTarget] SKIP: waiting for drag snapshot root=${root.gid} item=${item.gid}`,
+        );
       return;
     }
 
@@ -852,48 +879,48 @@ export class ItemObject extends ElementObject {
     const ghostSource = this.#ghostInsertionPosition(ghostItem ?? null);
     const targetIndex =
       target?.container != null
-        ? this.#liveIndexFromSnapshotIndex(
-            target.container,
-            target.index,
-            item,
-          )
+        ? this.#liveIndexFromSnapshotIndex(target.container, target.index, item)
         : -1;
-    console.debug(
-      `[updateDropTarget] item=${item.gid} target=${target ? `${target.container.gid}[snapshot:${target.index} live:${targetIndex}]` : "null"} ghostPos=${ghostSource?.container ? `${(ghostSource.container as unknown as ItemObject).gid}[${ghostSource.index}]` : "null"}`,
-    );
+    DEBUG_LOGS &&
+      debugLog(
+        `[updateDropTarget] item=${item.gid} target=${target ? `${target.container.gid}[snapshot:${target.index} live:${targetIndex}]` : "null"} ghostPos=${ghostSource?.container ? `${(ghostSource.container as unknown as ItemObject).gid}[${ghostSource.index}]` : "null"}`,
+      );
     if (target?.container && ghostSource?.container) {
       const sameContainer = target.container === ghostSource.container;
       const sameIndex = targetIndex === ghostSource.index;
-      console.debug(
-        `[updateDropTarget]   sameContainer=${sameContainer} sameIndex=${sameIndex} (${targetIndex}===${ghostSource.index})`,
-      );
-      if (!sameContainer || !sameIndex) {
-        console.debug(
-          `[updateDropTarget]   >>> MOVING ghost to ${target.container.gid}[${targetIndex}]`,
+      DEBUG_LOGS &&
+        debugLog(
+          `[updateDropTarget]   sameContainer=${sameContainer} sameIndex=${sameIndex} (${targetIndex}===${ghostSource.index})`,
         );
+      if (!sameContainer || !sameIndex) {
+        DEBUG_LOGS &&
+          debugLog(
+            `[updateDropTarget]   >>> MOVING ghost to ${target.container.gid}[${targetIndex}]`,
+          );
         this.#updateGhostElement(
           item,
           target.container as unknown as ItemContainer,
           targetIndex,
         );
       } else {
-        console.debug(`[updateDropTarget]   SKIP: ghost already at target`);
+        DEBUG_LOGS &&
+          debugLog(`[updateDropTarget]   SKIP: ghost already at target`);
       }
     } else if (target?.container) {
-      console.debug(`[updateDropTarget]   >>> PLACING initial ghost`);
+      DEBUG_LOGS && debugLog(`[updateDropTarget]   >>> PLACING initial ghost`);
       this.#updateGhostElement(
         item,
         target.container as unknown as ItemContainer,
         targetIndex,
       );
     } else {
-      console.debug(`[updateDropTarget]   SKIP: no target`);
+      DEBUG_LOGS && debugLog(`[updateDropTarget]   SKIP: no target`);
     }
   }
 
   dragStart(prop: dragStartProp) {
     if (this.#locked) return;
-    console.debug(`[dragStart] item=${this.gid}`);
+    DEBUG_LOGS && debugLog(`[dragStart] item=${this.gid}`);
     // Set the root container for all items, and queue READ to update the state of all containers and items.
     this.#findRootContainer();
     const root = (this.#rootContainer as unknown as ItemObject) ?? this;
@@ -901,9 +928,10 @@ export class ItemObject extends ElementObject {
     // Get the current index of the item in its container.
     const { index: currentIndex, container: currentContainer } =
       this.getIndexAndContainer();
-    console.debug(
-      `[dragStart] currentIndex=${currentIndex} currentContainer=${currentContainer?.gid ?? "null"}`,
-    );
+    DEBUG_LOGS &&
+      debugLog(
+        `[dragStart] currentIndex=${currentIndex} currentContainer=${currentContainer?.gid ?? "null"}`,
+      );
     // Compute the drag offset in READ_1, after DOM positions are read but before any WRITE_1
     // callbacks (including drag events). This prevents race conditions where drag events
     // modify this.transform before the offset is calculated.
@@ -912,18 +940,20 @@ export class ItemObject extends ElementObject {
       () => {
         this.#dragOffsetX = prop.start.x - this.transform.x;
         this.#dragOffsetY = prop.start.y - this.transform.y;
-        console.debug(
-          `[dragStart READ_1] offset=(${this.#dragOffsetX}, ${this.#dragOffsetY}) start=(${prop.start.x}, ${prop.start.y}) transform=(${this.transform.x}, ${this.transform.y})`,
-        );
+        DEBUG_LOGS &&
+          debugLog(
+            `[dragStart READ_1] offset=(${this.#dragOffsetX}, ${this.#dragOffsetY}) start=(${prop.start.x}, ${prop.start.y}) transform=(${this.transform.x}, ${this.transform.y})`,
+          );
         root.#captureDragSnapshotTree();
       },
       `drag-start-offset-${this.gid}`,
     );
 
     this.queueUpdate("WRITE_1", () => {
-      console.debug(
-        `[dragStart WRITE_1 callback] placing ghost at container=${currentContainer?.gid ?? "null"} index=${currentIndex}`,
-      );
+      DEBUG_LOGS &&
+        debugLog(
+          `[dragStart WRITE_1 callback] placing ghost at container=${currentContainer?.gid ?? "null"} index=${currentIndex}`,
+        );
 
       this.#updateGhostElement(
         this,
@@ -937,9 +967,10 @@ export class ItemObject extends ElementObject {
         this,
         false,
       );
-      console.debug(
-        `[dragStart] after removing dragged item, orderedList=[${(currentContainer as unknown as ItemObject).#itemOrderedList.map((i) => i.gid).join(", ")}]`,
-      );
+      DEBUG_LOGS &&
+        debugLog(
+          `[dragStart] after removing dragged item, orderedList=[${(currentContainer as unknown as ItemObject).#itemOrderedList.map((i) => i.gid).join(", ")}]`,
+        );
 
       const rootSnapshot = root.dragSnapshot;
       const hoistOffsetX = rootSnapshot
@@ -1002,9 +1033,10 @@ export class ItemObject extends ElementObject {
       // Get ghost's current position — this is where the item should land
       const ghostItem = this.#rootContainer?.ghostItem;
       const ghostPos = ghostItem?.getIndexAndContainer();
-      console.debug(
-        `[dragEnd] item=${this.gid} ghostPos=${ghostPos?.container ? `${(ghostPos.container as unknown as ItemObject).gid}[${ghostPos.index}]` : "null"}`,
-      );
+      DEBUG_LOGS &&
+        debugLog(
+          `[dragEnd] item=${this.gid} ghostPos=${ghostPos?.container ? `${(ghostPos.container as unknown as ItemObject).gid}[${ghostPos.index}]` : "null"}`,
+        );
 
       // Remove the ghost first
       this.#updateGhostElement(this, null, -1);
@@ -1016,9 +1048,10 @@ export class ItemObject extends ElementObject {
           this,
           ghostPos.index,
         );
-        console.debug(
-          `[dragEnd] re-inserted item at ${(ghostPos.container as unknown as ItemObject).gid}[${ghostPos.index}]`,
-        );
+        DEBUG_LOGS &&
+          debugLog(
+            `[dragEnd] re-inserted item at ${(ghostPos.container as unknown as ItemObject).gid}[${ghostPos.index}]`,
+          );
       }
 
       this.style = {
