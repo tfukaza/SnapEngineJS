@@ -17,19 +17,12 @@ body {
 
 :root {
   --color-primary: #ff753a;
-  --color-secondary: #323233;
   --color-secondary-1: #f34336;
-  --color-secondary-2: #e8b72f;
-  --color-secondary-3: #84c122;
-  --color-secondary-4: #1982c4;
-  --color-secondary-5: #6a4c93;
-  --color-secondary-6: #f15bb5;
-  --color-secondary-7: #00bbf9;
   --color-accent: #ff0e56;
   --color-background: #ffffff;
   --color-background-tint: #f6f7f7;
   --color-background-dark: #7f8286;
-  --color-text: #555657;
+  --color-text: #333637;
 
   --size-256: 256px;
   --size-128: 128px;
@@ -49,7 +42,7 @@ body {
 }
 
 ::selection {
-  background: var(--color-secondary);
+  background: var(--color-primary);
   color: #fff;
 }
 
@@ -72,7 +65,6 @@ h6 {
 h1 {
   font-family: 'Geist Pixel Circle', sans-serif;
   font-size: 72px;
-  padding-bottom: var(--size-16);
 }
 
 h2,
@@ -110,11 +102,12 @@ h6 {
 
 p,
 a,
+blockquote,
 span,
 label,
 ul,
-li {
-  font-family: "Lato", sans-serif;
+ol {
+  font-family: "Geist", sans-serif;
   font-size: 1rem;
   color: var(--color-text);
   margin: 0;
@@ -128,10 +121,63 @@ li {
 
 pre, code {
   font-family: 'Geist Mono', monospace;
-  font-size: 0.9rem;
+  font-size: 0.8rem;
   > span, > span > span {
     font-family: 'Geist Mono', monospace;
-    font-size: 0.9rem;
+    font-size: 0.8rem;
+  }
+}
+
+article {
+  p, ul, ol {
+    margin-bottom: var(--size-32);
+  }
+
+  > p:has(+ ul),
+  > p:has(+ ol) {
+    margin-bottom: 0;
+  }
+
+  a {
+    color: var(--color-primary);
+    text-decoration: underline;
+    text-underline-offset: 0.18em;
+    text-decoration-thickness: 1px;
+  }
+
+  p code,
+  li code {
+    padding: 0 var(--size-4);
+    background: var(--color-background);
+    border-radius: var(--size-4);
+  }
+
+  pre {
+    margin: var(--size-16) 0;
+    padding: var(--size-16);
+    overflow: auto;
+    background: var(--color-background);
+    border-radius: var(--ui-radius);
+  }
+
+  pre code {
+    padding: 0;
+    background: transparent;
+    border-radius: 0;
+  }
+
+  hr {
+    border: 0;
+    border-top: 1px solid var(--color-background-dark);
+    margin: var(--size-32) 0;
+    opacity: 0.35;
+  }
+
+  blockquote {
+    margin: var(--size-16) 0;
+    padding-left: var(--size-16);
+    border-left: 2px solid var(--color-background-dark);
+    color: var(--color-background-dark);
   }
 }
 
@@ -139,7 +185,7 @@ pre, code {
 }
 
 
-section {  
+section {
   width: clamp(100px, 90%, 1200px);
   margin: 0 auto;
   box-sizing: border-box;
@@ -164,7 +210,7 @@ section {
   }
 
   &.five-column {
-    display: grid;  
+    display: grid;
     grid-template-columns: repeat(5, 1fr);
   }
 
@@ -289,11 +335,11 @@ section {
 
   &.shallow {
     box-shadow:
-      -2px -2px 4px 0px rgba(255, 255, 255, 0.162) inset,
+      -4px -4px 4px 0px rgba(255, 255, 255, 0.162) inset,
       1px 1px 3px -1px rgba(14, 26, 40, 0.31) inset,
-      -0.5px -0.5px 0.5px 0px rgba(73, 40, 49, 0.25),
-      0.5px 0.5px 0.5px 0px rgba(255, 255, 255, 0.25),
-      4px 4px 10px -7px rgba(40, 49, 73, 0.25) inset;
+      -1px -1px 0.5px 0px rgba(73, 40, 49, 0.25),
+      1px 1px 0.5px 0px rgba(255, 255, 255, 0.25),
+      6px 6px 10px -7px rgba(40, 49, 73, 0.25) inset;
   }
 }
 
@@ -341,6 +387,7 @@ label {
     gap: var(--size-4);
 
     input+span {
+      --checkbox-size: var(--size-12);
       width: var(--size-12);
       height: var(--size-12);
       --toggle-square-size: calc(var(--size-12) - 4px);
@@ -354,17 +401,17 @@ label {
 
 label:has(input[type="checkbox"]) {
   input+span {
+    --checkbox-size: var(--size-16);
     --toggle-square-size: calc(var(--size-16) - 4px);
+    --checkbox-expand-scale: calc(var(--checkbox-size) / var(--toggle-square-size));
     display: inline-flex;
     align-items: center;
     justify-content: center;
     position: relative;
-    width: var(--size-16);
-    height: var(--size-16);
+    width: var(--checkbox-size);
+    height: var(--checkbox-size);
     border-radius: calc(var(--size-4) - 1px);
     overflow: hidden;
-    transform-style: preserve-3d;
-    perspective: 600px;
 
     &::before,
     &::after {
@@ -372,8 +419,13 @@ label:has(input[type="checkbox"]) {
       width: var(--toggle-square-size);
       height: var(--toggle-square-size);
       border-radius: calc(var(--size-4) - 2px);
-      backface-visibility: hidden;
-      transition: transform 0.15s ease;
+      top: calc((var(--checkbox-size) - var(--toggle-square-size)) / 2);
+      left: var(--checkbox-size);
+      transform: scale(0.9);
+      transform-origin: center;
+      transition:
+        left 65ms ease-in 35ms,
+        transform 35ms ease-out;
       box-sizing: border-box;
       box-shadow:
         inset 0.5px 0.5px 0.5px rgba(255, 255, 255, 0.45),
@@ -396,7 +448,6 @@ label:has(input[type="checkbox"]) {
     &::after {
       content: "\2713";
       background: var(--color-primary);
-      transform: rotate3d(-1, 1, 0, -180deg);
       display: flex;
       align-items: center;
       justify-content: center;
@@ -418,12 +469,12 @@ label:has(input[type="checkbox"]) {
     }
   }
 
-  input:checked+span::before {
-    transform: rotateY(180deg);
-  }
-
   input:checked+span::after {
-    transform: rotateY(360deg);
+    left: calc((var(--checkbox-size) - var(--toggle-square-size)) / 2);
+    transform: scale(var(--checkbox-expand-scale));
+    transition:
+      left 65ms ease-in,
+      transform 35ms ease-out 65ms;
   }
 }
 
@@ -566,10 +617,11 @@ input[type="range"] {
   height: 6px;
   // background: radial-gradient(hsl(from var(--color-background) h calc(s + 5) calc(l + 5)) 0%,
   //     hsl(from var(--color-background) h calc(s + 10) l) 70%);
+  background-color: var(--color-background-tint);
   box-shadow:
     -0.8px -0.8px 0.8px 0.2px rgba(9, 22, 36, 0.348),
     0.8px 0.8px 0.4px 0px rgba(255, 255, 255, 0.162),
-    0px 0px 4px 4px rgba(21, 28, 42, 0.84) inset;
+    0px 0px 2px 1px rgba(127, 130, 134, 0.18) inset;
   // overflow: hidden;
 
   &::-webkit-slider-thumb {
@@ -611,7 +663,7 @@ input[type="range"].large {
 button,
 .button {
 
-  --button-color: #fff; 
+  --button-color: #fff;
   --button-highlight-color: hsl(from var(--button-color) calc(h + 10) s calc(l + 20));
   --button-shadow-color: hsl(from var(--button-color) calc(h - 10) s calc(l - 20));
   color: var(--color-text);
@@ -688,7 +740,7 @@ button,
     filter: blur(0.2px);
   }
 
-  &:hover:not(:disabled) {
+  &:hover:not(:disabled):not(.active) {
     box-shadow: 0px 0px 1px 0.5px rgba(1, 11, 38, 0.157) inset,
       1px 1px 1px 0.5px hsl(from var(--button-highlight-color) h s l / 0.7) inset,
       -0.5px -0.5px 0.5px 0.5px hsl(from var(--button-shadow-color) h s l / 0.5) inset,
@@ -947,81 +999,34 @@ table {
     background-color: var(--color-primary);
     color: #fff;
   }
-
-  &.secondary {
-    background-color: var(--color-secondary);
-    color: #fff;
-  }
 }
 
 /* Progress Bar Styles */
 progress {
   width: 100%;
-  // height: var(--size-8);
+  height: var(--size-8);
   border-radius: var(--ui-radius);
   overflow: hidden;
   appearance: none;
   border: none;
-
+  background: var(--color-background-tint);
   box-shadow:
-    -0.8px -0.8px 0.8px 0px rgba(73, 40, 49, 0.25),
-    0.8px 0.8px 0.8px 0px rgba(255, 255, 255, 0.25),
-    -3px -2px 4px 0px rgba(23, 21, 18, 0.02) inset,
-    2px 2px 6.1px -1px rgba(40, 23, 14, 0.31) inset,
-    8px 8px 28px -7px rgba(73, 40, 49, 0.25) inset;
-  padding: 2px;
+    -0.8px -0.8px 2px 0.2px rgba(9, 22, 36, 0.348),
+    0.8px 0.8px 0.4px 0px rgba(255, 255, 255, 0.2),
+    0px 0px 2px 1px rgba(127, 130, 134, 0.18) inset;
 
   &::-webkit-progress-bar {
-    background: color-mix(in srgb, var(--color-secondary-1) 18%, transparent);
-    border-radius: calc(var(--ui-radius) - 2px);
+    background: var(--color-background-tint);
+    border-radius: var(--ui-radius) 0 0 var(--ui-radius);
   }
 
   &::-webkit-progress-value {
     background-color: var(--color-primary);
-    border-radius: calc(var(--ui-radius) - 2px);
-    box-shadow:
-      inset 1px 1px 0.5px 0px rgba(255, 255, 255, 0.242),
-      inset -0.5px -0.5px 0.5px 0px rgba(196, 223, 255, 0.56),
-      0px 0px 2px 0px rgba(23, 38, 83, 0.256),
-      1.5px 1.5px 2px -2px rgba(11, 28, 79, 0.377),
-      3px 3px 6px -1px rgba(48, 41, 58, 0.31);
+    border-radius: var(--ui-radius) 0 0 var(--ui-radius);
   }
 
   &::-moz-progress-bar {
     background-color: var(--color-primary);
-    border-radius: calc(var(--ui-radius) - 2px);
-  }
-
-  // &::-moz-progress-bar {
-  //   background: linear-gradient(
-  //     to right,
-  //     hsl(from var(--color-primary) h calc(s - 5) calc(l + 5)) 0%,
-  //     hsl(from var(--color-primary) h s l) 50%,
-  //     hsl(from var(--color-primary) h calc(s + 5) calc(l - 5)) 100%
-  //   );
-  //   border-radius: var(--size-8);
-  // }
-
-  &:indeterminate {
-    animation: progress-indeterminate 1.5s infinite linear;
-    background: linear-gradient(90deg,
-        var(--color-secondary-1) 0%,
-        var(--color-primary) 50%,
-        var(--color-secondary-1) 100%);
-    background-size: 200% 100%;
-  }
-
-  &:indeterminate::-webkit-progress-bar {
-    background: transparent;
-  }
-}
-
-@keyframes progress-indeterminate {
-  0% {
-    background-position: 200% 0;
-  }
-
-  100% {
-    background-position: -200% 0;
+    border-radius: var(--ui-radius) 0 0 var(--ui-radius);
   }
 }

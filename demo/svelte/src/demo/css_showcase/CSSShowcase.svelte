@@ -49,19 +49,68 @@
     <!-- Typography Section -->
     <section class="showcase-section">
       <h2>Typography</h2>
-      <div>
-        <h1>Heading 1</h1>
-        <h2>Heading 2</h2>
-        <h3>Heading 3</h3>
-        <h4>Heading 4</h4>
-        <h5>Heading 5</h5>
-        <h6>Heading 6</h6>
+      <article class="type-article prose">
+        <h1>Inside Snap Engine</h1>
         <p>
-          This is a paragraph. 
+          Snap Engine is an interaction layer for building direct,
+          responsive web tools. It coordinates input, layout reads, DOM writes,
+          animation, collision, and debug overlays through a shared frame loop.
         </p>
-        <a href="#typography">This is a link element</a>
-        <p class="mono-sample">Geist Mono is the monospace font.</p>
-      </div>
+
+        <hr />
+
+        <h2>A Staged Frame Loop</h2>
+        <p>
+          Work is split into explicit read and write stages. Reads collect
+          geometry, writes update the DOM, and optional systems such as
+          animation and collision run in known places between them.
+        </p>
+        <ul>
+          <li>Input events collect user intent.</li>
+          <li>Read stages measure the current document.</li>
+          <li>Write stages apply DOM and transform updates.</li>
+        </ul>
+
+        <h3>Objects Own Their Behavior</h3>
+        <p>
+          Engine objects bind input handlers, transforms, DOM elements, and
+          debugging metadata in one place. That keeps interaction code local
+          without forcing each component to manually orchestrate a render loop.
+        </p>
+        <blockquote>
+          The most useful abstraction is the one that keeps a frame predictable.
+        </blockquote>
+
+        <pre class="slot shallow"><code>object.queueUpdate("READ_1", () => &#123;
+  object.readDom(true, "READ_1");
+&#125;);
+
+object.queueUpdate("WRITE_1", () => &#123;
+  object.writeTransform();
+&#125;);</code></pre>
+
+        <h4>Implementation Note</h4>
+        <p>
+          Inline code such as <code>queueUpdate()</code> should sit comfortably
+          inside body copy without changing the rhythm of the line. Related API
+          notes can point to <a href="#buttons">controls</a> or
+          <a href="#colors">color tokens</a> without feeling louder than the
+          surrounding text.
+        </p>
+        <ol>
+          <li>Capture the current state.</li>
+          <li>Apply the smallest possible mutation.</li>
+          <li>Animate from the old visual state into the new one.</li>
+        </ol>
+
+        <h5>Observation</h5>
+        <p class="mono-sample">
+          Geist Mono is reserved for code, labels, debug output, and compact
+          technical annotations.
+        </p>
+
+
+      </article>
     </section>
 
     <!-- Colors Section -->
@@ -101,7 +150,7 @@
       <div class="card-slot-grid">
         <div class="card ground">
           <h3>Card</h3>
-          <p>A ground card variant with subtle shadows to make it look as if 
+          <p>A ground card variant with subtle shadows to make it look as if
             it is a bump on the ground.
           </p>
         </div>
@@ -111,7 +160,7 @@
             <span>Inset container for drop zones and recessed UI areas</span>
           </div>
         </div>
-       
+
       </div>
     </section>
 
@@ -343,7 +392,7 @@
   .showcase-section {
     background: var(--color-background-tint);
     border-radius: 12px;
-    padding: var(--size-32);
+    padding: var(--size-48);
     margin-bottom: var(--size-48);
 
     > h2 {
@@ -356,8 +405,29 @@
     }
   }
 
-  .mono-sample {
-    font-family: "Geist Mono", monospace;
+  .type-article {
+    column-count: 2;
+    column-gap: var(--size-48);
+
+    h1,
+    h2,
+    h3,
+    h4,
+    h5,
+    pre {
+      break-inside: avoid;
+    }
+
+    h1 {
+      column-span: all;
+      margin-bottom: var(--size-24);
+    }
+  }
+
+  @media (max-width: 900px) {
+    .type-article {
+      column-count: 1;
+    }
   }
 
   .controls-stack {
