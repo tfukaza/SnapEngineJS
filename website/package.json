@@ -27,6 +27,7 @@
 		"geist": "^1.7.0",
 		"highlight.js": "^11.11.1",
 		"svhighlight": "^0.7.1",
+		"tone": "^15.1.22",
 		"unist-util-visit": "^5.1.0"
 	}
 }

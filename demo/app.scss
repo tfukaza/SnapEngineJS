@@ -687,6 +687,22 @@ button,
 
   transition: all 0.1s ease-in-out;
 
+  &:active:not(:disabled),
+  &.active:not(:disabled),
+  &.is-active:not(:disabled) {
+    color: #ff1f1f !important;
+    text-shadow:
+      0 0 2px #ff1f1f,
+      0 0 8px rgba(255, 31, 31, 0.75);
+
+    * {
+      color: #ff1f1f !important;
+      text-shadow:
+        0 0 2px #ff1f1f,
+        0 0 8px rgba(255, 31, 31, 0.75);
+    }
+  }
+
   // &::before {
   //   content: "";
   //   position: absolute;
