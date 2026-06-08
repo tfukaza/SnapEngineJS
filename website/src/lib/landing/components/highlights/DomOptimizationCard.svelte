@@ -294,64 +294,75 @@
   <div class="dom-optimization-inner">
     <div class="dom-optimization-copy">
       <h3>
-        DOM<br />
-        Opti-<br />
-        miza-<br />
-        tion
+        <span class="dom-title-line">DOM</span>
+        <span class="dom-title-line dom-title-desktop-line">Opti-</span>
+        <span class="dom-title-line dom-title-desktop-line">mization</span>
+        <span class="dom-title-line dom-title-mobile-line">Optimization</span>
       </h3>
       <p>Batch DOM work to avoid layout thrash.</p>
-
-      <div
-        class="optimize-control"
-        onclick={toggleOptimize}
-        onkeydown={(event) => {
-          if (event.key === "Enter" || event.key === " ") {
-            event.preventDefault();
-            toggleOptimize();
-          }
-        }}
-        role="switch"
-        aria-checked={optimize}
-        tabindex="0"
-      >
-        <div
-          class="mini-toggle-switch slot"
-          class:enabled={optimize}
-        >
-          <div class="mini-toggle-knob disk"></div>
-        </div>
-        <span>optimize</span>
-      </div>
     </div>
 
-    <div
-      class="dom-optimization-visual card ground"
-      aria-hidden="true"
-      bind:this={visualRef}
-    >
-      <Engine id="dom-optimization-highlight" bind:engine debug={debugState.enabled}>
-        <div class:optimized={optimize} class="operation-stack">
-          {#each operations as operation (operation.id)}
-            <div
-              class={`operation-pill ${operation.type}`}
-              data-operation-id={operation.id}
-            >
-              <span>{operation.meta}</span>
-              <strong>{operation.label}</strong>
-            </div>
-          {/each}
+    <div class="dom-optimization-visual-column">
+      <div
+        class="dom-optimization-visual card"
+        bind:this={visualRef}
+      >
+        <div
+          class="optimize-control"
+          onclick={toggleOptimize}
+          onkeydown={(event) => {
+            if (event.key === "Enter" || event.key === " ") {
+              event.preventDefault();
+              toggleOptimize();
+            }
+          }}
+          role="switch"
+          aria-checked={optimize}
+          tabindex="0"
+        >
+          <span class={`optimize-label optimize-label-left ${!optimize ? "is-active" : ""}`}>
+            <span class="optimize-label-text">unoptimized</span>
+            <span class="optimize-label-icon material-symbols-outlined" aria-hidden="true">traffic_jam</span>
+          </span>
+          <div
+            class="mini-toggle-switch slot"
+            class:enabled={optimize}
+          >
+            <div class="mini-toggle-knob disk"></div>
+          </div>
+          <span class={`optimize-label optimize-label-right ${optimize ? "is-active" : ""}`}>
+            <span class="optimize-label-text">optimized</span>
+            <span class="optimize-label-icon material-symbols-outlined" aria-hidden="true">bolt</span>
+          </span>
         </div>
-      </Engine>
+
+        <Engine id="dom-optimization-highlight" bind:engine debug={debugState.enabled}>
+          <div class:optimized={optimize} class="operation-stack" aria-hidden="true">
+            {#each operations as operation (operation.id)}
+              <div
+                class={`operation-pill ${operation.type}`}
+                data-operation-id={operation.id}
+              >
+                <span>{operation.meta}</span>
+                <strong>{operation.label}</strong>
+              </div>
+            {/each}
+          </div>
+        </Engine>
+      </div>
     </div>
   </div>
 </article>
 
 <style lang="scss">
   .dom-optimization-card {
-    --card-padding: var(--size-32);
+    --card-padding: 40px;
+    --operation-card-height: 23.35rem;
+    container-type: inline-size;
+    container-name: dom-optimization-card;
     position: relative;
     height: 100%;
-    min-height: 420px;
+    min-height: 0;
     box-sizing: border-box;
     padding: var(--card-padding);
     background: var(--color-background-tint);
@@ -361,21 +372,26 @@
     @media (max-width: 720px) {
       --card-padding: var(--size-24);
       grid-column: span 2;
-      min-height: 360px;
     }
   }
 
   .dom-optimization-inner {
     position: relative;
     display: grid;
-    grid-template-columns: minmax(8rem, 2fr) minmax(12rem, 3fr);
-    align-items: stretch;
+    grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+    align-items: end;
     gap: var(--size-48);
     width: 100%;
     height: 100%;
 
     @media (max-width: 720px) {
-      grid-template-columns: minmax(7rem, 2fr) minmax(10rem, 3fr);
+      grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+      gap: var(--size-24);
+    }
+
+    @container dom-optimization-card (max-width: 450px) {
+      grid-template-columns: 1fr;
+      align-items: start;
       gap: var(--size-24);
     }
   }
@@ -388,7 +404,7 @@
     align-items: flex-start;
     justify-content: flex-start;
     align-self: start;
-    max-width: 12rem;
+    max-width: 14rem;
     min-width: 0;
     text-align: left;
   }
@@ -397,8 +413,34 @@
     width: min-content;
     margin: 0;
     font-family: "Geist Pixel", sans-serif;
-    font-size: clamp(2rem, 4vw, 3.55rem);
+    font-size: 3.55rem;
     line-height: 0.9;
+  }
+
+  .dom-title-line {
+    display: block;
+    font-family: inherit;
+    font-size: inherit;
+    line-height: inherit;
+  }
+
+  .dom-title-mobile-line {
+    display: none;
+  }
+
+  @container dom-optimization-card (max-width: 450px) {
+    .dom-optimization-copy h3 {
+      width: max-content;
+      font-size: 3.55rem;
+    }
+
+    .dom-title-desktop-line {
+      display: none;
+    }
+
+    .dom-title-mobile-line {
+      display: block;
+    }
   }
 
   .dom-optimization-copy p {
@@ -409,10 +451,11 @@
   }
 
   .optimize-control {
-    display: inline-flex;
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr);
     align-items: center;
     gap: var(--size-12);
-    margin-top: var(--size-24);
+    width: 100%;
     min-width: 0;
     color: #202426;
     cursor: pointer;
@@ -428,12 +471,58 @@
     outline-offset: 3px;
   }
 
-  .optimize-control > span {
+  .optimize-label {
+    display: inline-flex;
+    align-items: center;
+    min-width: 0;
     font-family: "Bitcount Grid Single", monospace;
     font-optical-sizing: auto;
     font-style: normal;
     letter-spacing: 0;
     text-transform: lowercase;
+  }
+
+  .optimize-label-icon {
+    display: none;
+    font-family: "Material Symbols Outlined";
+    font-size: 1.15rem;
+    font-style: normal;
+    font-weight: 500;
+    line-height: 1;
+    color: rgba(0, 0, 0, 0.8);
+    transition:
+      color 0.18s ease,
+      filter 0.18s ease;
+    font-variation-settings:
+      "FILL" 0,
+      "wght" 500,
+      "GRAD" 0,
+      "opsz" 24;
+  }
+
+  .optimize-label.is-active .optimize-label-icon {
+    color: var(--color-primary);
+    filter: drop-shadow(0 0 6px rgba(255, 117, 58, 0.58));
+  }
+
+  @container dom-optimization-visual (max-width: 250px) {
+    .optimize-label-text {
+      display: none;
+    }
+
+    .optimize-label-icon {
+      display: inline-block;
+    }
+  }
+
+  .optimize-label-left {
+    justify-content: flex-end;
+    text-align: right;
+  }
+
+  .optimize-label-right {
+    justify-content: flex-start;
+    text-align: left;
   }
 
   .mini-toggle-switch {
@@ -476,22 +565,43 @@
     background-color: white;
   }
 
+  .dom-optimization-visual-column {
+    display: flex;
+    flex-direction: column;
+    align-self: end;
+    justify-self: stretch;
+    width: 100%;
+    min-width: 0;
+
+    @container dom-optimization-card (max-width: 450px) {
+      align-self: stretch;
+    }
+  }
+
   .dom-optimization-visual {
+    container-type: inline-size;
+    container-name: dom-optimization-visual;
     position: relative;
-    align-self: stretch;
     box-sizing: border-box;
-    padding: var(--size-12);
+    width: 100%;
+    padding: var(--size-16);
+    height: var(--operation-card-height);
+    max-width: 100%;
     overflow: hidden;
-    pointer-events: none;
+    display: flex;
+    flex-direction: column;
+    gap: var(--size-16);
   }
 
   .dom-optimization-visual :global(#snap-canvas) {
     width: 100%;
-    height: 100%;
+    flex: 1;
+    min-height: 0;
     background: transparent;
     display: flex;
     align-items: center;
     justify-content: center;
+    pointer-events: none;
   }
 
   .operation-stack {
@@ -499,8 +609,7 @@
     display: flex;
     flex-direction: column;
     gap: 0.2rem;
-    width: min(100%, 17rem);
-    min-height: 21.35rem;
+    width: 100%;
     justify-content: center;
   }
 

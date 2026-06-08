@@ -254,14 +254,14 @@
   <div class="hero-layout">
     <div class="hero-text">
       <h1>
-        Interactivity<br />Engine<span class="hero-emoji">⚡️</span><br />for the<br />Web<span class="hero-emoji">🌐</span>
+        Interactivity<br />Engine<span class="hero-title-icon material-symbols-outlined" aria-hidden="true">manufacturing</span><br />for the<br />Web<span class="hero-title-icon material-symbols-outlined" aria-hidden="true">web</span>
       </h1>
     </div>
-    <div class="hero-card card ground">
+    <div class="hero-card card">
       <Engine id="hero-synth-pads">
         <div class="hero-synth-panel">
           <div class="hero-synth-top">
-            <div class="hero-oled">
+            <div class="hero-oled display">
               <canvas bind:this={waveformCanvas} class="hero-waveform" width="64" height="64"></canvas>
             </div>
             <div class="hero-transport-grid" aria-label="Sequencer controls">
@@ -352,18 +352,28 @@
       font-size: 100px;
     }
 
-    .hero-emoji {
+    .hero-title-icon {
       display: inline-block;
-      font-size: 75px;
-      margin-left: 10px;
+      width: 0.9em;
+      height: 0.9em;
+      margin-left: 0.1em;
+      font-family: "Material Symbols Outlined";
+      font-size: 0.82em;
+      font-style: normal;
+      font-weight: 500;
       line-height: 1;
-      vertical-align: 0.03em;
+      color: #44484f;
+      vertical-align: -0.08em;
+      font-variation-settings:
+        "FILL" 0,
+        "wght" 500,
+        "GRAD" 0,
+        "opsz" 48;
     }
   }
 
   .hero-card {
-    --hero-device-max-height: calc(60vh - var(--size-24));
-    width: min(100%, calc(var(--hero-device-max-height) * 0.77), 440px);
+    width: 440px;
     align-self: end;
     justify-self: end;
     box-sizing: border-box;
@@ -395,48 +405,10 @@
   }
 
   .hero-oled {
-    --button-color: #1f242b;
-    --button-highlight-color: hsl(from var(--button-color) calc(h + 10) s calc(l + 20));
-    --button-shadow-color: hsl(from var(--button-color) calc(h - 10) s calc(l - 20));
     width: var(--hero-control-size);
     aspect-ratio: 1 / 1;
     margin-left: var(--hero-pad-gap);
     flex: 0 0 auto;
-    position: relative;
-    overflow: hidden;
-    border-radius: var(--ui-radius);
-
-
-
-    background: var(--button-color);
-    box-shadow:
-      0px 0px 1px 0.5px rgba(1, 11, 38, 0.157) inset,
-      1px 1px 1px 0.5px hsl(from var(--button-highlight-color) h s l / 0.7) inset,
-      -0.5px -0.5px 0.5px 0.5px hsl(from var(--button-shadow-color) h s l / 0.5) inset,
-      2.5px 2.5px 3px -2px rgba(13, 34, 68, 0.43),
-      5px 5px 6px -3px rgba(6, 29, 57, 0.348);
-  }
-
-  .hero-oled::after {
-    content: "";
-    position: absolute;
-    top: 0.5px;
-    left: 0.5px;
-    width: calc(100% - 1px);
-    height: calc(100% - 1px);
-    border-radius: calc(var(--ui-radius) - 0.5px);
-    box-sizing: border-box;
-    border: 1.5px solid rgb(255, 255, 255);
-    mask-image: linear-gradient(
-      to bottom right,
-      rgba(0, 0, 0, 0.9) 0%,
-      rgba(0, 0, 0, 0.8) 8%,
-      rgba(0, 0, 0, 0.6) 10%,
-      rgba(0, 0, 0, 0.5) 25%,
-      rgba(0, 0, 0, 0) 50%
-    );
-    filter: blur(0.2px);
-    pointer-events: none;
   }
 
   .hero-waveform {
@@ -588,11 +560,9 @@
     background: var(--button-color);
     position: relative;
     box-shadow:
-      0px 0px 0.5px 0.25px rgba(1, 11, 38, 0.12) inset,
-      0.5px 0.5px 0.5px 0.25px hsl(from var(--button-highlight-color) h s l / 0.45) inset,
-      -0.25px -0.25px 0.35px 0.25px hsl(from var(--button-shadow-color) h s l / 0.32) inset,
-      0.75px 0.75px 1.5px -1px rgba(13, 34, 68, 0.24),
-      1.25px 1.25px 2px -1.25px rgba(6, 29, 57, 0.18);
+      1.75px 2px 2.25px -1.25px rgba(32, 36, 37, 0.26),
+      0.75px 0.75px 0.75px 0px hsl(from var(--button-highlight-color) h s l / 0.42) inset,
+      -0.4px -0.4px 0.65px 0px hsl(from var(--button-shadow-color) h s l / 0.28) inset;
   }
 
   .hero-synth-button-bump::after {
@@ -711,7 +681,7 @@
     filter: saturate(1.08);
   }
 
-  @container landing (max-width: 1000px) {
+  @container landing (max-width: 900px) {
     #landing {
       height: auto;
     }
@@ -738,9 +708,8 @@
     }
 
     .hero-card {
-      width: min(600px, 92vw);
-      transform-origin: top center;
-      transform: scale(0.8);
+      width: min(440px, calc(100% - var(--size-32)));
+      justify-self: center;
     }
   }
 </style>
