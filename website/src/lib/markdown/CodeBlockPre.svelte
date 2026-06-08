@@ -8,7 +8,7 @@
 	let language = $state('plaintext');
 	let hydrated = $state(false);
 	let preElement = $state<HTMLPreElement | null>(null);
-	const wrapperClass = 'doc-code-block';
+	const wrapperClass = 'display';
 
 	const parseLanguage = (value: string) => {
 		const match = value.match(/language-([\w-]+)/i);
@@ -35,7 +35,7 @@
 		<CodeBlock {code} {language} />
 	</div>
 {:else}
-	<pre bind:this={preElement} class={`${className} ${wrapperClass}`.trim()}>
+	<pre bind:this={preElement} class={wrapperClass}>
 		{@render children()}
 	</pre>
 {/if}

@@ -1,1 +1,14 @@
 // Fonts are now imported via fonts.css in the layout
+
+:global(.landing-section-gap) {
+  margin-top: clamp(5rem, 9vw, 8rem);
+
+  @media (max-width: 900px) {
+    margin-top: clamp(4rem, 12vw, 6rem);
+  }
+}
+
+:global(.landing-section-heading) {
+  font-size: clamp(1.85rem, 3.4vw, 3.35rem);
+  line-height: 1.06;
+}

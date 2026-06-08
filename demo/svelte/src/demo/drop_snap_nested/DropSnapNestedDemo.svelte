@@ -61,7 +61,7 @@
   $effect(() => {
     if (!devStyleLoaded) {
       devStyleLoaded = true;
-      import("../css_showcase/style.dev.scss");
+      import("../../../../../website/src/lib/landing/style-guide/style.dev.scss");
     }
   });
 

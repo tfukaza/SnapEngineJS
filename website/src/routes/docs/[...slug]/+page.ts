@@ -1,4 +1,4 @@
-import { error } from '@sveltejs/kit';
+import { error, redirect } from '@sveltejs/kit';
 
 type DocEntry = {
 	slug: string;
@@ -18,7 +18,7 @@ type DocSection = {
 
 export const entries = (): DocEntry[] => {
 	// Use the alias to find files (eager: true to access metadata)
-	const modules = import.meta.glob('@docs/**/*.{md,mdx}', { eager: true }) as Record<string, { metadata?: { title?: string; order?: number; section?: string; sectionTitle?: string; sectionOrder?: number } }>;
+	const modules = import.meta.glob('@docs/**/*.{md,mdx}', { eager: true }) as Record<string, { metadata?: { title?: string; order?: number; section?: string; sectionTitle?: string; sectionOrder?: number; hidden?: boolean } }>;
 	const entries: DocEntry[] = [];
 	for (const [path, module] of Object.entries(modules)) {
 		// Revised regex to match docs/ root structure
@@ -34,9 +34,12 @@ export const entries = (): DocEntry[] => {
 			if (slug.endsWith('/index')) {
 				slug = slug.replace(/\/index$/, '');
 			} else if (slug === 'index') {
-				slug = '';
+				continue;
 			}
 			const metadata = module.metadata || {};
+			if (metadata.hidden) {
+				continue;
+			}
 			
 			entries.push({
 				slug,
@@ -80,7 +83,9 @@ export async function load({ params }) {
 	const modules = import.meta.glob('@docs/**/*.{md,mdx}');
 	
 	let slug = params.slug || '';
-	if (slug === '') slug = 'index';
+	if (slug === '') {
+		throw redirect(308, '/docs/snapengine');
+	}
 	
 	for (const [path, resolver] of Object.entries(modules)) {
 		// Parse based on docs root

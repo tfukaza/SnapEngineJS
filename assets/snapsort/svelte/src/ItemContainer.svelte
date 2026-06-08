@@ -6,7 +6,7 @@
   import type { Engine } from "@snap-engine/core";
   import Item from "./Item.svelte";
 
-  let { config, children, container = $bindable(), locked = true }: { config: ItemContainerConfig; children: any; container?: ItemContainer; locked?: boolean } =
+  let { config, children, container = $bindable(), locked = true, className = "" }: { config: ItemContainerConfig; children: any; container?: ItemContainer; locked?: boolean; className?: string } =
     $props();
   const engine: Engine = getContext("engine");
 
@@ -29,11 +29,11 @@
 </script>
 
 <div
-  class="snapsort-container"
+  class="snapsort-container {className}"
   style="flex-direction: {config.direction}"
   bind:this={itemContainer.element}
 >
-  {@render children()}
+  {@render children?.()}
 </div>
 
 <style>

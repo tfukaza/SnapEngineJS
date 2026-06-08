@@ -1,0 +1,73 @@
+---
+title: Docs Styleguide
+description: Prototypes for documentation-specific surfaces and content patterns.
+order: 0
+section: docs
+sectionTitle: Docs
+sectionOrder: 0
+hidden: true
+---
+
+This page is a scratchpad for documentation UI that should feel native to SnapEngine: tactile surfaces, compact technical labels, and restrained orange accents.
+
+## Callouts
+
+<div class="doc-prototype-grid">
+  <div class="doc-callout doc-callout-note">
+    <div class="doc-callout-header">
+      <span class="doc-callout-icon material-symbols-outlined" aria-hidden="true">info</span>
+      <span class="doc-callout-label">Note</span>
+    </div>
+    <p>Use this for non-blocking context that helps the reader avoid a wrong assumption.</p>
+  </div>
+
+  <div class="doc-callout doc-callout-warning">
+    <div class="doc-callout-header">
+      <span class="doc-callout-icon material-symbols-outlined" aria-hidden="true">warning</span>
+      <span class="doc-callout-label">Warning</span>
+    </div>
+    <p>Use this when the reader can break an interaction by skipping a required setup step.</p>
+  </div>
+</div>
+
+## API Summary
+
+<div class="doc-api-card card">
+  <div class="doc-api-heading">
+    <span class="doc-api-kind">class</span>
+    <code>Engine</code>
+  </div>
+  <p>The root interaction controller. It owns the frame loop, input routing, and object lifecycle for a DOM region.</p>
+  <div class="doc-meta-grid">
+    <span>Package</span>
+    <code>@snap-engine/core</code>
+    <span>Import</span>
+    <code>import {"{ Engine }"} from "@snap-engine/core"</code>
+    <span>Lifecycle</span>
+    <code>engine.element = container</code>
+  </div>
+</div>
+
+## Code + Action
+
+```ts
+import { Engine } from "@snap-engine/core";
+
+const engine = new Engine();
+engine.element = document.querySelector("[data-scene]");
+```
+
+<hr>
+
+```ts
+import { Engine } from "@snap-engine/core";
+
+const engine = new Engine();
+engine.element = document.querySelector("[data-scene]");
+```
+```svelte
+import { Engine } from "@snap-engine/core";
+
+const engine = new Engine();
+engine.element = document.querySelector("[data-scene]");
+```

@@ -102,6 +102,25 @@ function flowAxes(container: ItemObject) {
   return flowAxesForDirection(getDirection(container));
 }
 
+/**
+ * Check whether an object is an ItemContainer rather than a plain item.
+ *
+ * This intentionally avoids treating every item as a possible nested drop
+ * target. Empty-container candidates should only be generated for real
+ * container objects.
+ *
+ * @param item Item object to inspect.
+ * @returns True when the object exposes the ItemContainer API surface.
+ */
+function isItemContainerObject(item: ItemObject) {
+  return (
+    "configuration" in item &&
+    "direction" in item &&
+    "name" in item &&
+    "numberOfItems" in item
+  );
+}
+
 function createLayoutSnapshot(root: ItemObject): {
   root: LayoutNode<ItemObject>;
   byItem: Map<ItemObject, LayoutNode<ItemObject>>;
@@ -600,6 +619,7 @@ function virtualLayoutRecursiveFromNode(
     container.clearDebugMarker(`vlayout-ghost-before-${container.gid}-${j}`);
     container.clearDebugMarker(`vlayout-ghost-after-${container.gid}-${j}`);
   }
+  container.clearDebugMarker(`vlayout-ghost-empty-${container.gid}`);
 
   const makeCandidate = (
     index: number,
@@ -638,12 +658,54 @@ function virtualLayoutRecursiveFromNode(
     };
   };
 
+  if (
+    itemNodes.length === 0 &&
+    isItemContainerObject(container) &&
+    !container.noDrop
+  ) {
+    const emptyCandidate = makeCandidate(0, { x: startX, y: startY });
+    candidates.push(emptyCandidate);
+    if (LAYOUT_TRACE) {
+      logCandidateSnapshot({
+        container,
+        items,
+        insertIdx: 0,
+        isColumn,
+        startX,
+        startY,
+        containerWidth,
+        ghostCenterX: emptyCandidate.ghostCenterX,
+        ghostCenterY: emptyCandidate.ghostCenterY,
+        ghostW: dragGhostW,
+        ghostH: dragGhostH,
+        distance: emptyCandidate.distance,
+        priority: emptyCandidate.priority,
+        dragCenterX,
+        dragCenterY,
+        layoutItems: layoutDebugItems,
+      });
+    }
+    container.addDebugRect(
+      emptyCandidate.ghostCenterX - dragGhostW / 2,
+      emptyCandidate.ghostCenterY - dragGhostH / 2,
+      isColumn ? containerWidth : dragGhostW,
+      dragGhostH,
+      "rgba(250, 204, 21, 0.15)",
+      true,
+      `vlayout-ghost-empty-${container.gid}`,
+      true,
+      1,
+      TAG_LAYOUT,
+    );
+  }
+
   for (let j = 0; j < itemNodes.length; j++) {
     const itemNode = itemNodes[j];
     const item = itemNode.value;
     const canPlaceCandidate = !itemNode.locked;
     const prop = itemNode.box;
-    const isContainer = itemNode.children.length > 0;
+    const isContainer =
+      itemNode.children.length > 0 || isItemContainerObject(item);
     const rel = childRelativeOffset(containerProp, prop);
     const measuredPosition = { x: startX + rel.x, y: startY + rel.y };
     const simulatedPosition = flowPositions.get(itemNode) ?? measuredPosition;

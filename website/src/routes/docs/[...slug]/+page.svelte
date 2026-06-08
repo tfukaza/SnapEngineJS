@@ -45,7 +45,7 @@
 
 
 <!-- Mobile sub-navbar with hamburger, breadcrumb, and dropdown menu -->
-<div class="mobile-navbar">
+<div class="mobile-navbar card">
 	<div class="mobile-navbar-bar">
 		<button class="mobile-menu-btn" onclick={toggleMobileMenu} aria-label="Toggle menu">
 			<span class="hamburger-line" class:open={mobileMenuOpen}></span>
@@ -71,7 +71,13 @@
 					<ul>
 						{#each section.entries as entry}
 							<li>
-								<a href={entry.slug ? `/docs/${entry.slug}` : '/docs'} onclick={closeMobileMenu}>{entry.title}</a>
+								<a
+									href={entry.slug ? `/docs/${entry.slug}` : '/docs'}
+									class:active={(entry.slug || '') === currentSlug}
+									onclick={closeMobileMenu}
+								>
+									{entry.title}
+								</a>
 							</li>
 						{/each}
 					</ul>
@@ -99,7 +105,12 @@
 					<ul>
 						{#each section.entries as entry}
 							<li>
-								<a href={entry.slug ? `/docs/${entry.slug}` : '/docs'}>{entry.title}</a>
+								<a
+									href={entry.slug ? `/docs/${entry.slug}` : '/docs'}
+									class:active={(entry.slug || '') === currentSlug}
+								>
+									{entry.title}
+								</a>
 							</li>
 						{/each}
 					</ul>
@@ -150,21 +161,29 @@
 <style lang="scss">
 
 .doc-layout {
-	display: flex;
-	gap: var(--size-128);
-	margin: 100px auto;
+	display: grid;
+	grid-template-columns: minmax(210px, 260px) minmax(0, 1fr);
+	gap: clamp(var(--size-32), 5vw, var(--size-80));
+	margin: clamp(var(--size-48), 6vw, var(--size-96)) auto;
 	width: clamp(100px, 90%, 1200px);
+	align-items: start;
 }
 
 .doc-sidebar {
-	min-width: 200px;
-	max-width: 250px;
-	height: fit-content;
-	border-right: 1px solid #eee;
-	padding-right: var(--size-32);
+	position: sticky;
+	top: var(--size-32);
+	min-width: 0;
+	max-height: calc(100vh - var(--size-64));
+	overflow-y: auto;
+	padding: var(--size-24);
+	scrollbar-width: thin;
 
 	.sidebar-section {
-		margin-bottom: var(--size-48);
+		margin-bottom: var(--size-24);
+
+		&:last-child {
+			margin-bottom: 0;
+		}
 	}
 
 	ul {
@@ -174,64 +193,113 @@
 	}
 
 	li {
-		margin-bottom: var(--size-8);
+		margin-bottom: var(--size-2);
 	}
 
 	a {
-		color: var(--color-primary, #2a4cff);
+		display: block;
+		padding: var(--size-8) var(--size-12);
+		border-radius: calc(var(--ui-radius) - 2px);
+		color: var(--color-text);
 		font-weight: 400;
 		text-decoration: none;
 		font-size: 0.9rem;
-		text-wrap:  balance;
+		line-height: 1.3;
+		text-wrap: balance;
+		transition:
+			color 0.15s ease,
+			text-shadow 0.15s ease;
 
-		&:hover {
-			text-decoration: underline;
+		&:hover,
+		&:focus-visible {
+			color: var(--color-primary);
+			text-decoration: none;
+			text-shadow: 0 0 6px rgba(255, 117, 58, 0.5);
+		}
+
+		&.active {
+			color: var(--color-secondary-1);
+			font-weight: 500;
+			text-shadow: 0 0 7px rgba(243, 67, 54, 0.52);
 		}
 	}
 }
 
+.section-title {
+	margin: 0 0 var(--size-12);
+	color: var(--color-background-dark);
+	font-family: "Bitcount Grid Single", monospace;
+	font-size: 1rem;
+	font-weight: 300;
+	letter-spacing: 0;
+	line-height: 1;
+}
+
 .doc-content {
-	flex: 1 1 0%;
 	min-width: 0;
+	max-width: 840px;
 }
 
 .doc-header {
-	margin-bottom: 100px;
+	margin-bottom: clamp(var(--size-48), 6vw, var(--size-80));
+
+	h1 {
+		margin: 0;
+		font-family: "Geist Pixel Circle", sans-serif;
+		font-size: clamp(2.25rem, 4.5vw, 4rem);
+		font-weight: 500;
+		line-height: 0.9;
+		text-wrap: balance;
+	}
 }
 
 .doc-breadcrumb {
-	margin-bottom: 2rem;
-	font-size: 0.95rem;
-	color: #888;
+	display: flex;
+	flex-wrap: wrap;
+	align-items: center;
+	gap: 0.25rem;
+	margin-bottom: var(--size-16);
+	color: var(--color-background-dark);
+	font-family: "Bitcount Grid Single", monospace;
+	font-size: 0.84rem;
+	font-weight: 300;
+	line-height: 1.25;
 
 	a {
-		color: var(--color-primary, #2a4cff);
+		color: inherit;
+		font-family: inherit;
+		font-size: inherit;
+		font-weight: inherit;
 		text-decoration: none;
 
 		&:hover {
-			text-decoration: underline;
+			color: var(--color-primary);
+			text-decoration: none;
 		}
 	}
 }
 
 .breadcrumb-sep {
-	margin: 0 0.25em;
-	color: #bbb;
+	margin: 0 0.35em;
+	color: color-mix(in srgb, var(--color-background-dark) 55%, transparent);
 }
 
 p.description {
-	font-size: 1.2rem;
-	color: #555;
-	margin-top: 0.5rem;
+	max-width: 680px;
+	margin: var(--size-24) 0 0;
+	color: var(--color-text);
+	font-size: clamp(1rem, 1.6vw, 1.18rem);
+	font-weight: 300;
+	line-height: 1.6;
 }
 
 .doc-pagination {
 	display: flex;
 	justify-content: space-between;
 	gap: var(--size-16);
-	margin-top: var(--size-64);
+	margin-top: var(--size-80);
 	padding-top: var(--size-32);
-	border-top: 1px solid #eee;
+	border-top: 1px solid color-mix(in srgb, var(--color-background-dark) 22%, transparent);
 }
 
 .pagination-placeholder {
@@ -242,15 +310,16 @@ p.description {
 	display: flex;
 	flex-direction: column;
 	flex: 1;
-	padding: var(--size-16);
-	border: 1px solid #eee;
-	border-radius: 8px;
+	padding: var(--size-20);
+	border-radius: var(--ui-radius);
 	text-decoration: none;
-	transition: border-color 0.2s, background-color 0.2s;
+	transition:
+		background-color 0.15s ease,
+		transform 0.2s;
 
 	&:hover {
-		border-color: var(--color-primary, #2a4cff);
-		background-color: #f8f9ff;
+		background: var(--color-background-tint);
+		transform: translateY(-1px);
 	}
 
 	&.prev {
@@ -264,15 +333,20 @@ p.description {
 }
 
 .pagination-label {
-	font-size: 0.85rem;
-	color: #888;
-	margin-bottom: 0.25rem;
+	color: var(--color-background-dark);
+	font-family: "Bitcount Grid Single", monospace;
+	font-size: 0.82rem;
+	font-weight: 300;
+	line-height: 1;
+	margin-bottom: var(--size-8);
 }
 
 .pagination-title {
+	color: var(--color-text);
+	font-family: "Geist", sans-serif;
 	font-size: 1rem;
 	font-weight: 500;
-	color: var(--color-primary, #2a4cff);
+	line-height: 1.3;
 }
 
 // Mobile navbar (hidden on desktop)
@@ -283,7 +357,8 @@ p.description {
 	left: 0;
 	right: 0;
 	z-index: 100;
-	background: white;
+	--card-color: var(--color-background);
+	padding: 0;
 	flex-direction: column;
 }
 
@@ -292,7 +367,7 @@ p.description {
 	align-items: center;
 	gap: 0.75rem;
 	padding: 0.75rem 1rem;
-	border-bottom: 1px solid #eee;
+	border-bottom: 1px solid color-mix(in srgb, var(--color-background-dark) 16%, transparent);
 }
 
 // Mobile menu button
@@ -334,13 +409,17 @@ p.description {
 	overflow: hidden;
 	text-overflow: ellipsis;
 	white-space: nowrap;
+	font-family: "Bitcount Grid Single", monospace;
 
 	a {
-		color: var(--color-primary, #2a4cff);
+		color: var(--color-background-dark);
+		font-family: inherit;
+		font-size: inherit;
 		text-decoration: none;
 
 		&:hover {
-			text-decoration: underline;
+			color: var(--color-primary);
+			text-decoration: none;
 		}
 	}
 
@@ -355,13 +434,13 @@ p.description {
 	display: none;
 	max-height: 0;
 	overflow: hidden;
-	background: white;
+	background: var(--color-background);
 	transition: max-height 0.3s ease;
 
 	&.open {
 		max-height: 70vh;
 		overflow-y: auto;
-		border-bottom: 1px solid #eee;
+		border-bottom: 1px solid color-mix(in srgb, var(--color-background-dark) 16%, transparent);
 	}
 
 	nav {
@@ -377,11 +456,11 @@ p.description {
 	}
 
 	.section-title {
-		font-size: 0.75rem;
-		font-weight: 600;
-		text-transform: uppercase;
-		letter-spacing: 0.05em;
-		color: #666;
+		font-size: 0.92rem;
+		font-weight: 300;
+		text-transform: none;
+		letter-spacing: 0;
+		color: var(--color-background-dark);
 		margin: 0 0 0.5rem 0;
 	}
 
@@ -396,12 +475,28 @@ p.description {
 	}
 
 	a {
-		color: var(--color-primary, #2a4cff);
+		display: block;
+		padding: var(--size-8) var(--size-12);
+		border-radius: calc(var(--ui-radius) - 2px);
+		color: var(--color-text);
 		text-decoration: none;
 		font-size: 0.9rem;
+		line-height: 1.3;
+		transition:
+			color 0.15s ease,
+			text-shadow 0.15s ease;
 
-		&:hover {
-			text-decoration: underline;
+		&:hover,
+		&:focus-visible {
+			color: var(--color-primary);
+			text-decoration: none;
+			text-shadow: 0 0 6px rgba(255, 117, 58, 0.5);
+		}
+
+		&.active {
+			color: var(--color-secondary-1);
+			font-weight: 500;
+			text-shadow: 0 0 7px rgba(243, 67, 54, 0.52);
 		}
 	}
 }
@@ -426,8 +521,9 @@ p.description {
 	}
 
 	.doc-layout {
-		margin: 1rem auto;
-		padding: 0 1rem;
+		display: block;
+		margin: 1.5rem auto;
+		width: clamp(100px, 92%, 720px);
 	}
 
 	// Hide desktop sidebar and breadcrumb on mobile
@@ -460,4 +556,3 @@ p.description {
 }
 
 </style>
-

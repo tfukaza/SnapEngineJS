@@ -951,9 +951,17 @@ export class DomElement {
     }
     setDomStyle(this.element, this._style);
     // TODO: See if we can batch the class list updates
-    this.element.classList.forEach((className) => {
-      this.element!.classList.add(className);
-    });
+    if (this._classList.length > 0) {
+      const nextClassList = new Set(this._classList);
+      this.element.classList.forEach((className) => {
+        if (!nextClassList.has(className)) {
+          this.element!.classList.remove(className);
+        }
+      });
+      for (const className of nextClassList) {
+        this.element.classList.add(className);
+      }
+    }
     // TODO: See if we can batch the data attribute updates
     for (const [key, value] of Object.entries(this._dataAttribute)) {
       this.element.setAttribute(`data-${key}`, value);

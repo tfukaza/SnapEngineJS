@@ -9,7 +9,6 @@
   import NodeUIDemo from "./demo/node_ui_demo/NodeUIDemo.svelte";
   import DropSnapNestedDemo from "./demo/drop_snap_nested/DropSnapNestedDemo.svelte";
   import CollisionDemo from "./demo/collision/CollisionDemo.svelte";
-  import CSSShowcase from "./demo/css_showcase/CSSShowcase.svelte";
 
   type DemoOption = {
     label: string;
@@ -18,7 +17,6 @@
 
   const demoOptions: DemoOption[] = [
     { label: "Welcome Background", value: "welcome" },
-    { label: "Style Guide", value: "css_showcase" },
     { label: "Animation", value: "gallery" },
     { label: "Input", value: "drag" },
     { label: "Snap Line", value: "node_ui" },
@@ -111,8 +109,6 @@
       <div class="welcome-placeholder">
         <p>Select a demo from the dropdown to begin.</p>
       </div>
-    {:else if selectedDemo === "css_showcase"}
-      <CSSShowcase />
     {:else if selectedDemo === "gallery"}
       <GalleryDemo />
     {:else if selectedDemo === "drag"}

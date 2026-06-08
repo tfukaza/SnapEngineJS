@@ -33,6 +33,12 @@ dist-ssr
 /mcp-*.png
 /mcp-*-snapshot.md
 
+# Local verification screenshots
+/*.png
+/*.jpg
+/*.jpeg
+/*.webp
+
 # Generated build files
 *.mjs
 *.umd.js

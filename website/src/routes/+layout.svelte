@@ -12,11 +12,11 @@
 <nav class="nav-bar">
   <div class="nav-left">
     <a href="/" class="wordmark">SnapEngine</a>
-    <span class="alpha-badge">v0.1.0-alpha</span>
+    <span class="chip chip-warning alpha-badge">v0.1.0-alpha</span>
   </div>
   <div class="nav-right">
     <!-- <a href="#assets" class="nav-link">Assets</a> -->
-    <a href="/docs" class="nav-link">Docs</a>
+    <a href="/docs/snapengine" class="nav-link">Docs</a>
     <a href="/about" class="nav-link">About</a>
     <a href="https://github.com/tfukaza/SnapLineJS" class="nav-link github-link" target="_blank" rel="noopener noreferrer">
       <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
@@ -39,13 +39,13 @@
         <div class="footer-column">
           <h4>Project</h4>
           <a href="/about">About</a>
-          <a href="/docs">Docs</a>
+          <a href="/docs/snapengine">Docs</a>
           <a href="https://github.com/tfukaza/SnapLineJS" target="_blank" rel="noopener noreferrer">GitHub</a>
         </div>
         <div class="footer-column">
           <a href="/#assets"><h4>Assets</h4></a>
           <span class="footer-link-disabled">SnapZap</span>
-          <a href="/dropandsnap">SnapSort</a>
+          <a href="/snapsort">SnapSort</a>
           <span class="footer-link-disabled">SnapLine</span>
         </div>
       </div>
@@ -85,16 +85,7 @@
   }
 
   .alpha-badge {
-    font-size: 0.65rem;
-    font-weight: 600;
-    color: #8b6914;
-    background: #f5e6c8;
-    border: 1px solid #e6d3a8;
-    padding: 0.1rem 0.45rem;
-    border-radius: 999px;
-    letter-spacing: 0.02em;
-    white-space: nowrap;
-    line-height: 1.4;
+    flex: 0 0 auto;
   }
 
   .wordmark {
@@ -151,7 +142,7 @@
     margin: var(--size-128) auto;
     box-sizing: border-box;
     background: white;
-    
+
     .footer-content {
       max-width: var(--page-width, 1400px);
       display: flex;
@@ -171,7 +162,7 @@
       font-size: 0.9rem;
       color: #8b8a89;
       font-family: 'Tomorrow', sans-serif;
-      
+
       .brand-name {
         color: #3a2a22;
         font-weight: 500;
@@ -196,7 +187,7 @@
         text-decoration: none;
         font-size: 0.9rem;
         transition: color 0.2s ease;
-        
+
         &:hover {
           color: var(--color-primary);
         }

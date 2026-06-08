@@ -1,9 +1,8 @@
-
-@import url('https://fonts.googleapis.com/css2?family=Doto:wght@100..900&family=Geist+Mono:ital,wght@0,100..900;1,100..900&family=Geist:wght@100..900&family=Lato&family=Lekton:ital,wght@0,400;0,700;1,400&display=swap');
+@import url("https://fonts.googleapis.com/css2?family=Doto:wght@100..900&family=Geist+Mono:ital,wght@0,100..900;1,100..900&family=Geist:wght@100..900&family=Lato&family=Lekton:ital,wght@0,400;0,700;1,400&display=swap");
 
 @font-face {
-  font-family: 'Geist Pixel Circle';
-  src: url('/fonts/geist-pixel/GeistPixel-Circle.woff2') format('woff2');
+  font-family: "Geist Pixel Circle";
+  src: url("/fonts/geist-pixel/GeistPixel-Circle.woff2") format("woff2");
   font-weight: normal;
   font-style: normal;
   font-display: swap;
@@ -16,7 +15,7 @@ body {
 }
 
 :root {
-  --color-primary: #ff753a;
+  --color-primary: #ff5d0f;
   --color-secondary-1: #f34336;
   --color-accent: #ff0e56;
   --color-background: #ffffff;
@@ -47,7 +46,7 @@ body {
 }
 
 .pixel-font {
-  font-family: 'Geist Pixel Circle', sans-serif;
+  font-family: "Geist Pixel Circle", sans-serif;
   font-weight: 500;
 }
 
@@ -63,7 +62,7 @@ h6 {
 }
 
 h1 {
-  font-family: 'Geist Pixel Circle', sans-serif;
+  font-family: "Geist Pixel Circle", sans-serif;
   font-size: 72px;
 }
 
@@ -72,7 +71,7 @@ h3,
 h4,
 h5,
 h6 {
-  font-family: 'Geist', sans-serif;
+  font-family: "Geist", sans-serif;
 }
 
 h2 {
@@ -109,6 +108,7 @@ ul,
 ol {
   font-family: "Geist", sans-serif;
   font-size: 1rem;
+  font-weight: 300;
   color: var(--color-text);
   margin: 0;
   margin-bottom: 0.1em;
@@ -119,17 +119,21 @@ ol {
   }
 }
 
-pre, code {
-  font-family: 'Geist Mono', monospace;
+pre,
+code {
+  font-family: "Geist Mono", monospace;
   font-size: 0.8rem;
-  > span, > span > span {
-    font-family: 'Geist Mono', monospace;
+  > span,
+  > span > span {
+    font-family: "Geist Mono", monospace;
     font-size: 0.8rem;
   }
 }
 
 article {
-  p, ul, ol {
+  p,
+  ul,
+  ol {
     margin-bottom: var(--size-32);
   }
 
@@ -183,7 +187,6 @@ article {
 
 @media (max-width: 720px) {
 }
-
 
 section {
   width: clamp(100px, 90%, 1200px);
@@ -241,12 +244,13 @@ section {
     border-style: inset;
     border: 1px solid rgb(255, 255, 255);
     mask-image: conic-gradient(
-        from 135deg at 50% 50%,
-        rgba(0, 0, 0, 0) 0%,
-        rgba(0, 0, 0, 0.0) 35%,
-        rgba(0, 0, 0, 0.9) 50%,
-        rgba(0, 0, 0, 0) 65%,
-        rgba(0, 0, 0, 0) 100%);
+      from 135deg at 50% 50%,
+      rgba(0, 0, 0, 0) 0%,
+      rgba(0, 0, 0, 0) 35%,
+      rgba(0, 0, 0, 0.9) 50%,
+      rgba(0, 0, 0, 0) 65%,
+      rgba(0, 0, 0, 0) 100%
+    );
     filter: blur(0.3px);
     background-blend-mode: multiply;
   }
@@ -260,8 +264,10 @@ section {
   border-radius: var(--ui-radius);
   background-color: var(--card-color);
   box-shadow:
-    0px 0px 8px 0px #3431432b,
-    0px 20px 16px -10px #29323e2e;
+    6px 6px 4px -2px rgba(52, 54, 76, 0.15),
+    10px 10px 12px -4px rgba(55, 52, 76, 0.15),
+    16px 16px 20px -8px rgba(31, 30, 41, 0.15),
+    -4px -4px 16px -4px hsla(from var(--card-color) h s calc(l + 15) / 0.2);
   position: relative;
   z-index: 1;
 
@@ -292,12 +298,14 @@ section {
     box-sizing: border-box;
     border-style: inset;
     border: var(--card-border) solid rgb(255, 255, 255);
-    mask-image: linear-gradient(to bottom right,
-        rgba(0, 0, 0, 0.9) 5%,
-        rgba(0, 0, 0, 0) 20%,
-        rgba(0, 0, 0, 0.3) 60%,
-        rgba(0, 0, 0, 0.2) 70%,
-        rgba(0, 0, 0, 0) 95%);
+    mask-image: linear-gradient(
+      to bottom right,
+      rgba(0, 0, 0, 0.9) 5%,
+      rgba(0, 0, 0, 0) 20%,
+      rgba(0, 0, 0, 0.3) 60%,
+      rgba(0, 0, 0, 0.2) 70%,
+      rgba(0, 0, 0, 0) 95%
+    );
     filter: blur(0.3px);
     background-blend-mode: multiply;
   }
@@ -307,15 +315,6 @@ section {
       0px 23px 27.8px -11px rgba(61, 52, 76, 0.28),
       0px 0px 20.4px -3px rgba(82, 60, 67, 0.13);
   }
-
-  &.ground {
-    box-shadow:
-      6px 6px 4px -2px rgba(52, 54, 76, 0.15),
-      10px 10px 12px -4px rgba(55, 52, 76, 0.15),
-      16px 16px 20px -8px rgba(31, 30, 41, 0.15),
-      -4px -4px 16px -4px hsla(from var(--card-color) h s calc(l + 15) / 0.2);
-  }
-
 }
 
 .highlight-card {
@@ -343,6 +342,74 @@ section {
   }
 }
 
+.display {
+  --display-bezel-width: 8px;
+  --display-bezel-color: #15181a;
+  --display-surface-color: #050708;
+  --display-text-color: #e8e6dc;
+
+  display: block;
+  box-sizing: border-box;
+  padding: 8px;
+  border: var(--display-bezel-width) solid var(--display-bezel-color);
+  border-radius: 3px;
+  background: radial-gradient(
+    circle at 50% 70%,
+    #121516 0%,
+    #07090a 48%,
+    var(--display-surface-color) 82%
+  );
+  box-shadow:
+    -1px -1px 1px 0px rgba(10, 12, 14, 0.28),
+    1px 1px 1px 0px rgba(255, 255, 255, 0.18),
+    2px 2px 6px -1px rgba(0, 0, 0, 0.36) inset,
+    -1px -1px 2px 0px rgba(255, 255, 255, 0.05) inset;
+  color: var(--display-text-color);
+  font-family: "Geist Mono", monospace;
+  overflow: visible;
+  position: relative;
+
+  :where(*) {
+    color: inherit;
+    font-family: inherit;
+  }
+
+  &::before,
+  &::after {
+    content: "";
+    position: absolute;
+    top: calc(-1 * var(--display-bezel-width) + 2px);
+    left: calc(-1 * var(--display-bezel-width) + 2px);
+    width: calc(
+      100% + var(--display-bezel-width) + var(--display-bezel-width) - 4px
+    );
+    height: calc(
+      100% + var(--display-bezel-width) + var(--display-bezel-width) - 4px
+    );
+    box-sizing: border-box;
+    border-radius: 1.5px;
+    pointer-events: none;
+  }
+
+  &::before {
+    border: 0.6px solid rgba(255, 255, 255, 0.14);
+  }
+
+  &::after {
+    border: 0.8px solid rgba(255, 255, 255, 0.42);
+    mask-image: linear-gradient(
+      to bottom right,
+      rgba(0, 0, 0, 0.92) 0%,
+      rgba(0, 0, 0, 0.56) 10%,
+      rgba(0, 0, 0, 0.22) 20%,
+      rgba(0, 0, 0, 0) 42%,
+      rgba(0, 0, 0, 0) 66%,
+      rgba(0, 0, 0, 0.16) 84%,
+      rgba(0, 0, 0, 0.32) 100%
+    );
+  }
+}
+
 input[type="checkbox"],
 input[type="radio"] {
   position: absolute;
@@ -359,7 +426,7 @@ label:has(input[type="radio"]) {
   cursor: pointer;
   margin: 0px;
 
-  input+span {
+  input + span {
     top: 0;
     width: var(--size-16);
     height: var(--size-16);
@@ -386,7 +453,7 @@ label {
   &:has(input[type="checkbox"].small) {
     gap: var(--size-4);
 
-    input+span {
+    input + span {
       --checkbox-size: var(--size-12);
       width: var(--size-12);
       height: var(--size-12);
@@ -400,10 +467,12 @@ label {
 }
 
 label:has(input[type="checkbox"]) {
-  input+span {
+  input + span {
     --checkbox-size: var(--size-16);
     --toggle-square-size: calc(var(--size-16) - 4px);
-    --checkbox-expand-scale: calc(var(--checkbox-size) / var(--toggle-square-size));
+    --checkbox-expand-scale: calc(
+      var(--checkbox-size) / var(--toggle-square-size)
+    );
     display: inline-flex;
     align-items: center;
     justify-content: center;
@@ -469,7 +538,7 @@ label:has(input[type="checkbox"]) {
     }
   }
 
-  input:checked+span::after {
+  input:checked + span::after {
     left: calc((var(--checkbox-size) - var(--toggle-square-size)) / 2);
     transform: scale(var(--checkbox-expand-scale));
     transition:
@@ -479,7 +548,7 @@ label:has(input[type="checkbox"]) {
 }
 
 label:has(input[type="radio"]) {
-  input+span {
+  input + span {
     --specular-angle: 120deg;
     border-radius: 50%;
 
@@ -493,25 +562,32 @@ label:has(input[type="radio"]) {
         0px 0px 1px 0.5px #ffffff6c inset,
         2px 2px 4px -1px rgba(48, 41, 58, 0.5);
       box-sizing: border-box;
-      background: radial-gradient(hsl(from var(--color-primary) h calc(s + 5) calc(l + 5)) 0%,
+      background: radial-gradient(
+          hsl(from var(--color-primary) h calc(s + 5) calc(l + 5)) 0%,
           hsl(from var(--color-primary) h calc(s + 10) calc(l - 0)) 55%,
           hsl(from var(--color-primary) h s l / 0) 63%,
           hsl(from var(--color-primary) h s l / 0) 67%,
-          hsl(from var(--color-primary) h s calc(l - 5) / 0.4) 68%),
-        conic-gradient(from var(--specular-angle) at center,
+          hsl(from var(--color-primary) h s calc(l - 5) / 0.4) 68%
+        ),
+        conic-gradient(
+          from var(--specular-angle) at center,
           hsl(from var(--color-primary) h calc(s + 20) calc(l + 5) / 0.1) 43%,
           #fff 57%,
-          hsl(from var(--color-primary) h calc(s + 20) calc(l + 5) / 0.1) 70%),
-        conic-gradient(from 120deg at center,
+          hsl(from var(--color-primary) h calc(s + 20) calc(l + 5) / 0.1) 70%
+        ),
+        conic-gradient(
+          from 120deg at center,
           hsl(from var(--color-primary) h calc(s - 5) calc(l - 10)) 0%,
-          hsl(from var(--color-primary) calc(h + 10) calc(s + 10) calc(l + 10)) 50%,
-          hsl(from var(--color-primary)  h calc(s - 5) calc(l - 10)) 100%);
+          hsl(from var(--color-primary) calc(h + 10) calc(s + 10) calc(l + 10))
+            50%,
+          hsl(from var(--color-primary) h calc(s - 5) calc(l - 10)) 100%
+        );
 
       transition: left 0.05s ease-in;
     }
   }
 
-  input:checked+span {
+  input:checked + span {
     &::before {
       left: calc(var(--size-16) / 4);
     }
@@ -520,7 +596,7 @@ label:has(input[type="radio"]) {
 
 /* Toggle Switch Styles */
 label:has(input[type="checkbox"].toggle) {
-  input+span {
+  input + span {
     --toggle-width: 40px;
     --toggle-height: 20px;
     --toggle-knob-size: 16px;
@@ -567,14 +643,18 @@ label:has(input[type="checkbox"].toggle) {
         conic-gradient(
           from 120deg at center,
           hsl(from var(--toggle-color) h calc(s - 5) calc(l - 10)) 0%,
-          hsl(from var(--toggle-color) calc(h + 10) calc(s + 10) calc(l + 20)) 50%,
+          hsl(from var(--toggle-color) calc(h + 10) calc(s + 10) calc(l + 20))
+            50%,
           hsl(from var(--toggle-color) h calc(s - 5) calc(l - 10)) 100%
         );
       box-shadow:
         2px 2px 2px 0px rgba(4, 14, 48, 0.096),
         4px 4px 4px -3px rgba(7, 20, 53, 0.142),
         6px 6px 6px -4px rgba(6, 21, 40, 0.422);
-      transition: left 0.15s ease, --specular-angle 0.15s ease, --toggle-color 0.15s ease;
+      transition:
+        left 0.15s ease,
+        --specular-angle 0.15s ease,
+        --toggle-color 0.15s ease;
     }
 
     &::after {
@@ -582,25 +662,27 @@ label:has(input[type="checkbox"].toggle) {
     }
   }
 
-  input:checked+span {
+  input:checked + span {
     background-color: var(--toggle-on-background);
   }
 
-  input:checked+span {
+  input:checked + span {
     &::before {
       --specular-angle: 150deg;
       // --toggle-color: var(--color-background-tint);
-      left: calc(var(--toggle-width) - var(--toggle-knob-size) - var(--toggle-padding));
+      left: calc(
+        var(--toggle-width) - var(--toggle-knob-size) - var(--toggle-padding)
+      );
     }
   }
 
-  &.small input+span {
+  &.small input + span {
     --toggle-width: 32px;
     --toggle-height: 16px;
     --toggle-knob-size: 12px;
   }
 
-  &.large input+span {
+  &.large input + span {
     --toggle-width: 52px;
     --toggle-height: 26px;
     --toggle-knob-size: 22px;
@@ -631,19 +713,26 @@ input[type="range"] {
     height: var(--size-16);
 
     border-radius: 50%;
-    background: radial-gradient(var(--color-primary) 0%,
-          hsl(from var(--color-primary) h s calc(l + 5)) 50%,
-          hsl(from var(--color-primary) h s l / 0) 58%,
-          hsl(from var(--color-primary) h s l / 0) 65%,
-          hsl(from var(--color-primary) h s calc(l - 5) / 0.4) 72%),
-        conic-gradient(from var(--specular-angle) at center,
-          hsl(from var(--color-primary) h calc(s + 20) calc(l + 5) / 0.1) 43%,
-          #fff 57%,
-          hsl(from var(--color-primary) h calc(s + 20) calc(l + 5) / 0.1) 70%),
-        conic-gradient(from 120deg at center,
-          hsl(from var(--color-primary) h calc(s - 5) calc(l - 10)) 0%,
-          hsl(from var(--color-primary) calc(h + 10) calc(s + 10) calc(l + 10)) 50%,
-          hsl(from var(--color-primary)  h calc(s - 5) calc(l - 10)) 100%);
+    background: radial-gradient(
+        var(--color-primary) 0%,
+        hsl(from var(--color-primary) h s calc(l + 5)) 50%,
+        hsl(from var(--color-primary) h s l / 0) 58%,
+        hsl(from var(--color-primary) h s l / 0) 65%,
+        hsl(from var(--color-primary) h s calc(l - 5) / 0.4) 72%
+      ),
+      conic-gradient(
+        from var(--specular-angle) at center,
+        hsl(from var(--color-primary) h calc(s + 20) calc(l + 5) / 0.1) 43%,
+        #fff 57%,
+        hsl(from var(--color-primary) h calc(s + 20) calc(l + 5) / 0.1) 70%
+      ),
+      conic-gradient(
+        from 120deg at center,
+        hsl(from var(--color-primary) h calc(s - 5) calc(l - 10)) 0%,
+        hsl(from var(--color-primary) calc(h + 10) calc(s + 10) calc(l + 10))
+          50%,
+        hsl(from var(--color-primary) h calc(s - 5) calc(l - 10)) 100%
+      );
 
     box-shadow:
       2px 2px 2px 0px rgba(4, 14, 48, 0.096),
@@ -662,14 +751,16 @@ input[type="range"].large {
 
 button,
 .button {
-
   --button-color: #fff;
-  --button-highlight-color: hsl(from var(--button-color) calc(h + 10) s calc(l + 20));
-  --button-shadow-color: hsl(from var(--button-color) calc(h - 10) s calc(l - 20));
+  --button-highlight-color: hsl(
+    from var(--button-color) calc(h + 10) s calc(l + 20)
+  );
+  --button-shadow-color: hsl(
+    from var(--button-color) calc(h - 10) s calc(l - 20)
+  );
   color: var(--color-text);
 
   cursor: pointer;
-  font-family: "Lato", sans-serif;
   font-size: 1rem;
   position: relative;
 
@@ -678,28 +769,29 @@ button,
   padding: var(--size-8) var(--size-12);
 
   background: var(--button-color);
-  box-shadow: 0px 0px 1px 0.5px rgba(1, 11, 38, 0.157) inset,
-  1px 1px 1px 0.5px hsl(from var(--button-highlight-color) h s l / 0.7) inset,
-  -0.5px -0.5px 0.5px 0.5px hsl(from var(--button-shadow-color) h s l / 0.5) inset,
-  1.5px 1.5px 3px -2px rgba(13, 34, 68, 0.538),
-  3px 3px 6px -3px rgba(6, 29, 57, 0.435),
-  ;
+  box-shadow:
+    0px 0px 1px 0.5px rgba(1, 11, 38, 0.157) inset,
+    1px 1px 1px 0.5px hsl(from var(--button-highlight-color) h s l / 0.7) inset,
+    -0.5px -0.5px 0.5px 0.5px hsl(from var(--button-shadow-color) h s l / 0.5)
+      inset,
+    1.5px 1.5px 3px -2px rgba(13, 34, 68, 0.538),
+    3px 3px 6px -3px rgba(6, 29, 57, 0.435);
 
   transition: all 0.1s ease-in-out;
 
   &:active:not(:disabled),
   &.active:not(:disabled),
   &.is-active:not(:disabled) {
-    color: #ff1f1f !important;
+    color: var(--color-primary) !important;
     text-shadow:
-      0 0 2px #ff1f1f,
-      0 0 8px rgba(255, 31, 31, 0.75);
+      0 0 1px var(--color-primary),
+      0 0 4px rgba(255, 117, 58, 0.38);
 
     * {
-      color: #ff1f1f !important;
+      color: var(--color-primary) !important;
       text-shadow:
-        0 0 2px #ff1f1f,
-        0 0 8px rgba(255, 31, 31, 0.75);
+        0 0 1px var(--color-primary),
+        0 0 4px rgba(255, 117, 58, 0.38);
     }
   }
 
@@ -747,22 +839,28 @@ button,
     box-sizing: border-box;
     border-style: inset;
     border: 1.2px solid rgb(255, 255, 255);
-    mask-image: linear-gradient(to bottom right,
-        rgba(0, 0, 0, 0.9) 0%,
-        rgba(0, 0, 0, 0.8) 8%,
-        rgba(0, 0, 0, 0.6) 10%,
-        rgba(0, 0, 0, 0.5) 25%,
-        rgba(0, 0, 0, 0) 50%);
+    mask-image: linear-gradient(
+      to bottom right,
+      rgba(0, 0, 0, 0.9) 0%,
+      rgba(0, 0, 0, 0.8) 8%,
+      rgba(0, 0, 0, 0.6) 10%,
+      rgba(0, 0, 0, 0.5) 25%,
+      rgba(0, 0, 0, 0) 50%
+    );
     filter: blur(0.2px);
   }
 
   &:hover:not(:disabled):not(.active) {
-    box-shadow: 0px 0px 1px 0.5px rgba(1, 11, 38, 0.157) inset,
-      1px 1px 1px 0.5px hsl(from var(--button-highlight-color) h s l / 0.7) inset,
-      -0.5px -0.5px 0.5px 0.5px hsl(from var(--button-shadow-color) h s l / 0.5) inset,
+    color: var(--color-primary);
+    text-shadow: 0 0 3px rgba(255, 117, 58, 0.26);
+    box-shadow:
+      0px 0px 1px 0.5px rgba(1, 11, 38, 0.157) inset,
+      1px 1px 1px 0.5px hsl(from var(--button-highlight-color) h s l / 0.7)
+        inset,
+      -0.5px -0.5px 0.5px 0.5px hsl(from var(--button-shadow-color) h s l / 0.5)
+        inset,
       1px 1px 3px -2px rgba(13, 34, 68, 0.538),
-      2px 2px 6px -3px rgba(6, 29, 57, 0.435),
-      ;
+      2px 2px 6px -3px rgba(6, 29, 57, 0.435);
     // &::before {
     //   box-shadow:
     //     calc(var(--button-border) * -0.5) calc(var(--button-border) * -0.5) 2px 0px rgba(0, 28, 61, 0.411) inset,
@@ -788,12 +886,14 @@ button,
   }
 
   &.active {
-    box-shadow: 0px 0px 1px 0.5px rgba(1, 11, 38, 0.157) inset,
-      -1px -1px 1px 0.5px hsl(from var(--button-highlight-color) h s l / 0.7) inset,
-      0.5px 0.5px 0.5px 0.5px hsl(from var(--button-shadow-color) h s l / 0.5) inset,
+    box-shadow:
+      0px 0px 1px 0.5px rgba(1, 11, 38, 0.157) inset,
+      -1px -1px 1px 0.5px hsl(from var(--button-highlight-color) h s l / 0.7)
+        inset,
+      0.5px 0.5px 0.5px 0.5px hsl(from var(--button-shadow-color) h s l / 0.5)
+        inset,
       0.5px 0.5px 3px -2px rgba(13, 34, 68, 0.538),
-      1px 1px 6px -3px rgba(6, 29, 57, 0.435),
-      ;
+      1px 1px 6px -3px rgba(6, 29, 57, 0.435);
     // &::before {
     //   box-shadow:
     //     3px 3px 1px 0px rgba(11, 28, 48, 0.456) inset,
@@ -813,6 +913,11 @@ button,
   &.primary {
     --button-color: var(--color-primary);
     color: #fff;
+
+    &:hover:not(:disabled):not(.active) {
+      color: #fff;
+      text-shadow: 0 0 6px rgba(255, 255, 255, 1);
+    }
 
     &:disabled {
       cursor: not-allowed;
@@ -948,41 +1053,95 @@ select {
 }
 
 /* Table Styles */
+.table-shell {
+  overflow-x: auto;
+  border-radius: var(--ui-radius);
+  background: var(--color-background);
+}
+
 table {
   width: 100%;
+  min-width: 560px;
   border-collapse: collapse;
-  font-family: "IBM Plex Mono", monospace;
-  font-size: 14px;
+  font-family: "Geist", sans-serif;
+  color: var(--color-text);
 
   th,
   td {
     padding: var(--size-12) var(--size-16);
+    border-bottom: 1px solid
+      color-mix(in srgb, var(--color-background-dark) 20%, transparent);
     text-align: left;
-    border-bottom: 1px solid var(--color-background-tint);
+    vertical-align: middle;
+    white-space: nowrap;
   }
 
   th {
-    font-weight: 600;
-    color: var(--color-text);
-    background-color: var(--color-background-tint);
-    font-family: "Tomorrow", sans-serif;
+    color: var(--color-background-dark);
+    font-family: "Bitcount Grid Single", monospace;
+    font-size: 0.86rem;
+    font-weight: 300;
+    line-height: 1;
   }
 
-  tbody tr {
-    transition: background-color 0.1s ease;
+  td {
+    font-size: 0.95rem;
+    font-weight: 300;
 
-    &:hover {
-      background-color: var(--color-background-tint);
+    code {
+      font-size: 0.78rem;
     }
   }
 
-  &.striped tbody tr:nth-child(even) {
-    background-color: rgba(0, 0, 0, 0.02);
+  tbody tr:last-child td {
+    border-bottom: 0;
   }
+}
 
-  &.striped tbody tr:hover {
-    background-color: var(--color-background-tint);
-  }
+.chip {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 24px;
+  padding: 1.5px var(--size-12) 0 var(--size-12);
+  border-radius: 999px;
+  background: var(--color-background-tint);
+  color: var(--color-text);
+  font-family: "Bitcount Grid Single", monospace;
+  font-size: 0.78rem;
+  font-weight: 400;
+  line-height: 1;
+  white-space: nowrap;
+}
+
+.chip-ready {
+  background: color-mix(in srgb, var(--color-primary) 16%, white);
+  color: color-mix(in srgb, var(--color-primary) 78%, #222);
+}
+
+.chip-active {
+  background: var(--color-primary);
+  color: white;
+}
+
+.chip-warning {
+  background: color-mix(in srgb, var(--color-secondary-1) 15%, white);
+  color: color-mix(in srgb, var(--color-secondary-1) 78%, #222);
+}
+
+.chip-draft {
+  background: color-mix(in srgb, var(--color-accent) 14%, white);
+  color: color-mix(in srgb, var(--color-accent) 72%, #222);
+}
+
+.chip-muted {
+  background: color-mix(in srgb, var(--color-background-dark) 16%, white);
+  color: var(--color-background-dark);
+}
+
+.chip-code {
+  background: #1f1f22;
+  color: #e8e6dc;
 }
 
 /* Badge Styles */
