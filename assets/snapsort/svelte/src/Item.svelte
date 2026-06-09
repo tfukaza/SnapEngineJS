@@ -14,7 +14,6 @@
     if (container) {
       container.addItem(itemObject);
     }
-    // itemObject.metadata = metadata;
   });
 
   $effect(() => {

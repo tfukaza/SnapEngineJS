@@ -6,12 +6,13 @@
   import type { Engine } from "@snap-engine/core";
   import Item from "./Item.svelte";
 
-  let { config, children, container = $bindable(), locked = true, className = "" }: { config: ItemContainerConfig; children: any; container?: ItemContainer; locked?: boolean; className?: string } =
+  let { config, children, container = $bindable(), locked = true, className = "", metadata = {} }: { config: ItemContainerConfig; children: any; container?: ItemContainer; locked?: boolean; className?: string; metadata?: Record<string, unknown> } =
     $props();
   const engine: Engine = getContext("engine");
 
   let itemContainer: ItemContainer = new ItemContainer(engine, null, config);
   itemContainer.locked = locked;
+  itemContainer.metadata = metadata;
   container = itemContainer;
   // If there's a parent container context, register this container as an item in it
   const parent: ItemContainer | Item = getContext("container");
@@ -25,6 +26,10 @@
 
   onDestroy(() => {
     itemContainer.destroy();
+  });
+
+  $effect(() => {
+    itemContainer.metadata = metadata;
   });
 </script>
 

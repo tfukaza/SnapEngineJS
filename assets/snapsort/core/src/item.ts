@@ -1,6 +1,5 @@
 import { BaseObject, ElementObject, cloneDomProperty } from "@snap-engine/core";
 import type { AnimationConfig, ItemContainer } from "./container";
-import { RectCollider, PointCollider } from "@snap-engine/core/collision";
 import type {
   dragStartProp,
   dragProp,
@@ -10,11 +9,6 @@ import type {
 import { determineDropTarget, resetDropSnapshotDebugDump } from "./drop_target";
 import { AnimationObject } from "@snap-engine/core/animation";
 
-/**
- * How much to enlarge an item's hitbox while it is being dragged. The hitbox
- * grows around the item's center, so a factor of 1 leaves it unchanged.
- */
-const DRAG_HITBOX_SCALE = 4;
 const MIN_FLIP_DISTANCE = 0.5;
 const DEBUG_LOGS = false;
 
@@ -31,64 +25,54 @@ interface FlipSnapshot {
 }
 
 export class ItemObject extends ElementObject {
-  // Container element is the parent element
-  // #containerObject: ItemContainer | null = null;
   #rootContainer: ItemContainer | null = null;
-  // #metadata: Record<string, unknown> = {};
+  #metadata: Record<string, unknown> = {};
   #locked: boolean = false; // Locked items cannot be dragged
   noDrop: boolean = false; // Containers marked as noDrop cannot be a drop target
-  #hitbox: RectCollider;
-  #centerPoint: PointCollider;
 
   #dragOffsetX: number = 0;
   #dragOffsetY: number = 0;
   #dragSnapshot: DomProperty | null = null;
   #dragSnapshotOrderedList: ItemObject[] = [];
+  #dragPositionContextSnapshot: Map<HTMLElement, string> = new Map();
 
   #itemOrderedList: ItemObject[] = []; // Wrapper around children to maintain their order in the DOM
 
   #isGhost: boolean = false;
-  #isDragging: boolean = false;
   #depth: number = 0;
   ghostItem: ItemObject | null = null; // The ghost item instance, so we can remove it later
-  // #groupId: Array<string> | string | null = null;
-
-  //
 
   constructor(
     engine: any,
     parent: BaseObject | null,
-    // groupId: Array<string> | string | null = null,
     isGhost: boolean = false,
   ) {
     super(engine, parent);
-    // this.#groupId = groupId;
     this.#isGhost = isGhost;
     this.event.input.dragStart = this.dragStart;
     this.event.input.drag = this.drag;
     this.event.input.dragEnd = this.dragEnd;
     this.transformMode = "none";
-    this.#hitbox = new RectCollider(engine, this, 0, 0, 0, 0);
-    this.addCollider(this.#hitbox);
-    this.#centerPoint = new PointCollider(engine, this, 0, 0);
-    this.addCollider(this.#centerPoint);
 
     this.ghostItem = null;
-
-    this.event.dom.onAfterReadDom = (stage) => {
-      const prop = this.getDomProperty(stage);
-      const factor = this.#isDragging ? DRAG_HITBOX_SCALE : 1;
-      this.#hitbox.local.width = prop.width * factor;
-      this.#hitbox.local.height = prop.height * factor;
-      this.#hitbox.local.x = (prop.width - this.#hitbox.local.width) / 2;
-      this.#hitbox.local.y = (prop.height - this.#hitbox.local.height) / 2;
-      this.#centerPoint.local.x = prop.width / 2;
-      this.#centerPoint.local.y = prop.height / 2;
-    };
   }
 
   addItem(item: ItemObject) {
     this.appendChild(item);
+  }
+
+  #itemID(item: ItemObject) {
+    const id = item.metadata.id ?? item.metadata.itemId;
+    return typeof id === "string" || typeof id === "number"
+      ? String(id)
+      : item.gid;
+  }
+
+  removeItem(id: string) {
+    const item = this.#itemOrderedList.find((item) => this.#itemID(item) === id);
+    if (!item) return;
+
+    this.removeItemFrom(this as unknown as ItemContainer, item);
   }
 
   get locked(): boolean {
@@ -114,13 +98,13 @@ export class ItemObject extends ElementObject {
     return { index: idx, container: parentContainer };
   }
 
-  // get metadata(): Record<string, unknown> {
-  //   return this.#metadata;
-  // }
+  get metadata(): Record<string, unknown> {
+    return this.#metadata;
+  }
 
-  // set metadata(value: Record<string, unknown>) {
-  //   this.#metadata = value;
-  // }
+  set metadata(value: Record<string, unknown>) {
+    this.#metadata = value;
+  }
 
   get container(): ItemContainer {
     if (!this.parent) {
@@ -160,14 +144,6 @@ export class ItemObject extends ElementObject {
 
   get dragSnapshotOrderedList(): ItemObject[] {
     return this.#dragSnapshotOrderedList;
-  }
-
-  get hitbox(): RectCollider {
-    return this.#hitbox;
-  }
-
-  get centerPoint(): PointCollider {
-    return this.#centerPoint;
   }
 
   /**
@@ -535,15 +511,16 @@ export class ItemObject extends ElementObject {
    * @returns Nothing.
    */
   #hoistElementToRoot() {
-    if (this.#rootContainer) {
-      // Move the DOM element to be a child of the root container's DOM element,
-      // so it can be positioned absolutely within it.
-      const element = this.element;
-      const rootElement = this.#rootContainer.element;
-      if (element && rootElement) {
-        rootElement.appendChild(element);
-      }
-    }
+    // Prototype: avoid moving framework-owned DOM during drag.
+    // if (this.#rootContainer) {
+    //   // Move the DOM element to be a child of the root container's DOM element,
+    //   // so it can be positioned absolutely within it.
+    //   const element = this.element;
+    //   const rootElement = this.#rootContainer.element;
+    //   if (element && rootElement) {
+    //     rootElement.appendChild(element);
+    //   }
+    // }
   }
 
   /**
@@ -553,11 +530,49 @@ export class ItemObject extends ElementObject {
    * @returns Nothing.
    */
   #lowerElementToContainer(container: ItemContainer) {
-    const element = this.element;
-    const containerElement = container.element;
-    if (element && containerElement) {
-      containerElement.appendChild(element);
+    // Prototype: avoid moving framework-owned DOM during drag.
+    // const element = this.element;
+    // const containerElement = container.element;
+    // if (element && containerElement) {
+    //   containerElement.appendChild(element);
+    // }
+  }
+
+  #collectPositionContextItems(
+    node: ItemObject,
+    items: ItemObject[] = [],
+  ): ItemObject[] {
+    items.push(node);
+    for (const child of node.#itemOrderedList) {
+      this.#collectPositionContextItems(child, items);
     }
+    return items;
+  }
+
+  #setTemporaryPosition(element: HTMLElement | null, position: string) {
+    if (!element || this.#dragPositionContextSnapshot.has(element)) return;
+    this.#dragPositionContextSnapshot.set(element, element.style.position);
+    element.style.position = position;
+  }
+
+  #applyDragPositionContext() {
+    const root = this.#rootContainer as unknown as ItemObject | null;
+    if (!root?.element) return;
+
+    this.#dragPositionContextSnapshot.clear();
+    for (const item of this.#collectPositionContextItems(root)) {
+      this.#setTemporaryPosition(
+        item.element,
+        item === root ? "relative" : "static",
+      );
+    }
+  }
+
+  #restoreDragPositionContext() {
+    for (const [element, position] of this.#dragPositionContextSnapshot) {
+      element.style.position = position;
+    }
+    this.#dragPositionContextSnapshot.clear();
   }
 
   /**
@@ -566,22 +581,16 @@ export class ItemObject extends ElementObject {
    * @param container Destination container.
    * @param item Item to move.
    * @param index Destination index in the destination container.
-   * @param updateDom Whether to update the DOM structure. This should be false if the DOM is already in the correct structure (e.g. during drag), to avoid unnecessary DOM operations.
    * @returns Nothing.
    */
-  moveItemToContainer(
-    container: ItemContainer,
-    item: ItemObject,
-    index: number,
-    updateDom: boolean = true,
-  ) {
+  moveItemToContainer(container: ItemContainer, item: ItemObject, index: number) {
     const sourceContainer = item.parent as unknown as ItemObject | null;
     const sourceIndex = sourceContainer
       ? sourceContainer.#itemOrderedList.indexOf(item)
       : -1;
     DEBUG_LOGS &&
       debugLog(
-        `[moveItemToContainer] item=${item.gid} from=${sourceContainer?.gid ?? "null"}[${sourceIndex}] to=${(container as unknown as ItemObject).gid}[${index}] updateDom=${updateDom}`,
+        `[moveItemToContainer] item=${item.gid} from=${sourceContainer?.gid ?? "null"}[${sourceIndex}] to=${(container as unknown as ItemObject).gid}[${index}]`,
       );
     DEBUG_LOGS &&
       debugLog(
@@ -609,15 +618,56 @@ export class ItemObject extends ElementObject {
         index -= 1;
       }
     }
-    // Remove the item from its current container.
-    // deleteElement should be false because we will re-insert the same element into the new container,
-    // so we don't want to remove it from the DOM.
-    this.removeItemFrom(item.container, item, false);
+    this.#detachItemFromContainer(item.container, item);
     this.insertItemAt(container, item, index);
     DEBUG_LOGS &&
       debugLog(
         `[moveItemToContainer]   DONE. target orderedList=[${container.#itemOrderedList.map((i) => i.gid).join(", ")}]`,
       );
+  }
+
+  #attachItemToContainer(
+    container: ItemContainer,
+    item: ItemObject,
+    index: number,
+  ) {
+    (container as unknown as ItemObject).appendChild(item);
+    if (index >= container.#itemOrderedList.length) {
+      DEBUG_LOGS &&
+        debugLog(
+          `[insertItemAt]   index ${index} >= len ${container.#itemOrderedList.length}, appending`,
+        );
+      container.#itemOrderedList.push(item);
+    } else {
+      DEBUG_LOGS && debugLog(`[insertItemAt]   splicing at index ${index}`);
+      container.#itemOrderedList.splice(index, 0, item);
+    }
+  }
+
+  #insertItemElement(container: ItemContainer, item: ItemObject, index: number) {
+    const itemAfterIndex =
+      index >= container.#itemOrderedList.length - 1
+        ? null
+        : container.#itemOrderedList[index + 1].element;
+    DEBUG_LOGS &&
+      debugLog(
+        `[insertItemAt]   DOM insertBefore: item.element=${item.element?.id ?? "null"}, before=${itemAfterIndex ? (itemAfterIndex as any).element?.id ?? itemAfterIndex.gid : "null (append)"}`,
+      );
+
+    const onDomInsert = item.isGhost ? null : container.callbacks?.onDomInsert;
+    if (onDomInsert) {
+      onDomInsert({
+        item,
+        itemMetadata: item.metadata,
+        container,
+        containerMetadata: container.metadata,
+        index,
+        beforeElement: itemAfterIndex,
+      });
+      return;
+    }
+
+    container.element?.insertBefore(item.element!, itemAfterIndex);
   }
 
   /**
@@ -639,30 +689,34 @@ export class ItemObject extends ElementObject {
       debugLog(
         `[insertItemAt]   BEFORE orderedList=[${container.#itemOrderedList.map((i) => i.gid).join(", ")}] (len=${container.#itemOrderedList.length})`,
       );
-    (container as unknown as ItemObject).appendChild(item);
-    if (index >= container.#itemOrderedList.length) {
-      DEBUG_LOGS &&
-        debugLog(
-          `[insertItemAt]   index ${index} >= len ${container.#itemOrderedList.length}, appending`,
-        );
-      container.#itemOrderedList.push(item);
-    } else {
-      DEBUG_LOGS && debugLog(`[insertItemAt]   splicing at index ${index}`);
-      container.#itemOrderedList.splice(index, 0, item);
-    }
-    const itemAfterIndex =
-      index >= container.#itemOrderedList.length - 1
-        ? null
-        : container.#itemOrderedList[index + 1].element;
+    this.#attachItemToContainer(container, item, index);
     DEBUG_LOGS &&
       debugLog(
         `[insertItemAt]   AFTER orderedList=[${container.#itemOrderedList.map((i) => i.gid).join(", ")}]`,
       );
-    DEBUG_LOGS &&
-      debugLog(
-        `[insertItemAt]   DOM insertBefore: item.element=${item.element?.id ?? "null"}, before=${itemAfterIndex ? (itemAfterIndex as any).element?.id ?? itemAfterIndex.gid : "null (append)"}`,
-      );
-    container.element?.insertBefore(item.element!, itemAfterIndex);
+    this.#insertItemElement(container, item, index);
+  }
+
+  #detachItemFromContainer(container: ItemContainer, item: ItemObject) {
+    container.removeChild(item);
+    container.#itemOrderedList = container.#itemOrderedList.filter(
+      (i) => i !== item,
+    );
+  }
+
+  #removeItemElement(container: ItemContainer, item: ItemObject) {
+    const onDomRemove = item.isGhost ? null : container.callbacks?.onDomRemove;
+    if (onDomRemove) {
+      onDomRemove({
+        item,
+        itemMetadata: item.metadata,
+        container,
+        containerMetadata: container.metadata,
+      });
+      return;
+    }
+
+    item.element?.remove();
   }
 
   /**
@@ -670,33 +724,23 @@ export class ItemObject extends ElementObject {
    *
    * @param container Container that currently owns the item.
    * @param item The item to remove.
-   * @param deleteElement Whether to delete the DOM element of the item.
    * @returns Nothing.
    */
-  removeItemFrom(
-    container: ItemContainer,
-    item: ItemObject,
-    deleteElement: boolean = true,
-  ) {
+  removeItemFrom(container: ItemContainer, item: ItemObject) {
     DEBUG_LOGS &&
       debugLog(
-        `[removeItemFrom] item=${item.gid} from container=${(container as unknown as ItemObject).gid} deleteElement=${deleteElement}`,
+        `[removeItemFrom] item=${item.gid} from container=${(container as unknown as ItemObject).gid}`,
       );
     DEBUG_LOGS &&
       debugLog(
         `[removeItemFrom]   BEFORE orderedList=[${container.#itemOrderedList.map((i) => i.gid).join(", ")}]`,
       );
-    container.removeChild(item);
-    container.#itemOrderedList = container.#itemOrderedList.filter(
-      (i) => i !== item,
-    );
+    this.#detachItemFromContainer(container, item);
     DEBUG_LOGS &&
       debugLog(
         `[removeItemFrom]   AFTER orderedList=[${container.#itemOrderedList.map((i) => i.gid).join(", ")}]`,
       );
-    if (deleteElement) {
-      item.element?.remove();
-    }
+    this.#removeItemElement(container, item);
   }
 
   /**
@@ -803,12 +847,6 @@ export class ItemObject extends ElementObject {
 
       ghostItem = new ItemObject(this.engine, null, true);
       ghostItem.element = ghostElement;
-
-      // Set hitbox so the collision engine can detect overlaps with the ghost
-      ghostItem.hitbox.local.width = origProp.width;
-      ghostItem.hitbox.local.height = origProp.height;
-      ghostItem.centerPoint.local.x = origProp.width / 2;
-      ghostItem.centerPoint.local.y = origProp.height / 2;
     }
 
     const moveGhost = () => {
@@ -818,7 +856,7 @@ export class ItemObject extends ElementObject {
           debugLog(
             `[updateGhostElement] removing ghost from current container=${(ghostItem.container as unknown as ItemObject)?.gid}`,
           );
-        this.removeItemFrom(ghostItem.container, ghostItem, false);
+        this.#detachItemFromContainer(ghostItem.container, ghostItem);
       } else {
         DEBUG_LOGS &&
           debugLog(`[updateGhostElement] ghost has no parent, skipping remove`);
@@ -962,10 +1000,9 @@ export class ItemObject extends ElementObject {
       );
       // Remove the dragged item from its container's orderedList and engine children.
       // The ghost now takes its place in the layout. The DOM element is kept (hoisted to root below).
-      this.removeItemFrom(
+      this.#detachItemFromContainer(
         currentContainer as unknown as ItemContainer,
         this,
-        false,
       );
       DEBUG_LOGS &&
         debugLog(
@@ -986,18 +1023,12 @@ export class ItemObject extends ElementObject {
         top: `${hoistOffsetY}px`,
         left: `${hoistOffsetX}px`,
       };
-      this.#hoistElementToRoot();
+      this.#applyDragPositionContext();
+      // this.#hoistElementToRoot();
       this.transformMode = "origin";
       this.transformOrigin = this.#rootContainer;
       this.transform.x = prop.start.x - this.#dragOffsetX;
       this.transform.y = prop.start.y - this.#dragOffsetY;
-      // Scale hitbox around the item's center for the duration of the drag.
-      this.#isDragging = true;
-      const dragProp = this.getDomProperty("READ_1");
-      this.#hitbox.local.width = dragProp.width * DRAG_HITBOX_SCALE;
-      this.#hitbox.local.height = dragProp.height * DRAG_HITBOX_SCALE;
-      this.#hitbox.local.x = (dragProp.width - this.#hitbox.local.width) / 2;
-      this.#hitbox.local.y = (dragProp.height - this.#hitbox.local.height) / 2;
       this.writeDom();
       this.writeTransform();
       this.debugAllItems();
@@ -1043,11 +1074,9 @@ export class ItemObject extends ElementObject {
 
       // Re-insert the dragged item at the ghost's former position
       if (ghostPos?.container) {
-        this.insertItemAt(
-          ghostPos.container as unknown as ItemContainer,
-          this,
-          ghostPos.index,
-        );
+        const destinationContainer =
+          ghostPos.container as unknown as ItemContainer;
+        this.insertItemAt(destinationContainer, this, ghostPos.index);
         DEBUG_LOGS &&
           debugLog(
             `[dragEnd] re-inserted item at ${(ghostPos.container as unknown as ItemObject).gid}[${ghostPos.index}]`,
@@ -1063,24 +1092,21 @@ export class ItemObject extends ElementObject {
       };
       this.transformMode = "none";
       this.transformOrigin = null;
-      // Restore hitbox to natural size now that the drag is over.
-      this.#isDragging = false;
-      const endProp = this.getDomProperty("READ_1");
-      this.#hitbox.local.width = endProp.width;
-      this.#hitbox.local.height = endProp.height;
-      this.#hitbox.local.x = 0;
-      this.#hitbox.local.y = 0;
       this.writeDom();
       this.writeTransform();
+      this.#restoreDragPositionContext();
       root.#clearDragSnapshotTree();
       resetDropSnapshotDebugDump(this);
     });
   }
 
   destroy() {
-    // if (this.#containerObject) {
-    //   this.#containerObject.removeItem(this);
-    // }
+    if (this.parent) {
+      this.#detachItemFromContainer(
+        this.parent as unknown as ItemContainer,
+        this,
+      );
+    }
     super.destroy();
   }
 }

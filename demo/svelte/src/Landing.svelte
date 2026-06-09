@@ -8,6 +8,7 @@
   // New demos
   import NodeUIDemo from "./demo/node_ui_demo/NodeUIDemo.svelte";
   import DropSnapNestedDemo from "./demo/drop_snap_nested/DropSnapNestedDemo.svelte";
+  import SnapSortComponentsDemo from "./demo/snapsort_components/SnapSortComponentsDemo.svelte";
   import CollisionDemo from "./demo/collision/CollisionDemo.svelte";
 
   type DemoOption = {
@@ -21,6 +22,7 @@
     { label: "Input", value: "drag" },
     { label: "Snap Line", value: "node_ui" },
     { label: "SnapSort", value: "drop_snap_nested" },
+    { label: "SnapSort Components", value: "snapsort_components" },
     { label: "Collision", value: "collision" },
   ];
 
@@ -84,7 +86,7 @@
 </script>
 
 <div class="landing-container">
-  <div class="demo-selector" class:dev-navbar={selectedDemo === "drop_snap_nested"}>
+  <div class="demo-selector" class:dev-navbar={selectedDemo === "drop_snap_nested" || selectedDemo === "snapsort_components"}>
     <label for="demo-select">Select Demo:</label>
     <select id="demo-select" bind:value={selectedDemo}>
       {#each demoOptions as option}
@@ -117,6 +119,8 @@
       <NodeUIDemo />
     {:else if selectedDemo === "drop_snap_nested"}
       <DropSnapNestedDemo bind:this={dropSnapNestedDemoRef} />
+    {:else if selectedDemo === "snapsort_components"}
+      <SnapSortComponentsDemo />
     {:else if selectedDemo === "collision"}
       <CollisionDemo />
     {/if}

@@ -15,7 +15,7 @@ import {
 
 // Sub-tags for drop index calculation debug visuals
 const TAG_LAYOUT = "drop-layout"; // virtual layout: height bars, layout start lines, ghost positions
-const TAG_COLLISIONS = "drop-collisions"; // collision: hitboxes, collision lines, DOM boxes, center points
+const TAG_COLLISIONS = "drop-collisions"; // collision debug: DOM boxes
 const TAG_CANDIDATES = "drop-candidates"; // candidates: result lines, best pick
 const TAG_NEIGHBORS = "drop-neighbors"; // per-candidate prev/next reference points and links
 const TAG_SNAPSHOT = "drop-snapshot"; // drag-start snapshot geometry and simulation deltas
@@ -304,6 +304,28 @@ function drawSnapshotDebug(
     true,
     `drop-snapshot-delta-label-${container.gid}-${item.gid}`,
     TAG_SNAPSHOT,
+  );
+
+  item.addDebugRect(
+    simulatedPosition.x,
+    simulatedPosition.y,
+    prop.width,
+    prop.height,
+    "rgba(180, 100, 255, 0.55)",
+    true,
+    `drop-layout-box-${container.gid}-${item.gid}`,
+    false,
+    2,
+    TAG_LAYOUT,
+  );
+  item.addDebugText(
+    simulatedPosition.x + 2,
+    simulatedPosition.y + 12,
+    `sim box ${Math.round(prop.width)}x${Math.round(prop.height)} m ${Math.round(prop.margin.left)},${Math.round(prop.margin.right)}`,
+    "rgba(180, 100, 255, 0.85)",
+    true,
+    `drop-layout-box-label-${container.gid}-${item.gid}`,
+    TAG_LAYOUT,
   );
 }
 
@@ -618,8 +640,15 @@ function virtualLayoutRecursiveFromNode(
   for (let j = 0; j < items.length; j++) {
     container.clearDebugMarker(`vlayout-ghost-before-${container.gid}-${j}`);
     container.clearDebugMarker(`vlayout-ghost-after-${container.gid}-${j}`);
+    container.clearDebugMarker(
+      `vlayout-ghost-before-label-${container.gid}-${j}`,
+    );
+    container.clearDebugMarker(
+      `vlayout-ghost-after-label-${container.gid}-${j}`,
+    );
   }
   container.clearDebugMarker(`vlayout-ghost-empty-${container.gid}`);
+  container.clearDebugMarker(`vlayout-ghost-empty-label-${container.gid}`);
 
   const makeCandidate = (
     index: number,
@@ -697,6 +726,15 @@ function virtualLayoutRecursiveFromNode(
       1,
       TAG_LAYOUT,
     );
+    container.addDebugText(
+      emptyCandidate.ghostCenterX - dragGhostW / 2 + 2,
+      emptyCandidate.ghostCenterY - dragGhostH / 2 + 12,
+      `ghost ${Math.round(dragGhostW)}x${Math.round(dragGhostH)}`,
+      "rgba(161, 98, 7, 0.9)",
+      true,
+      `vlayout-ghost-empty-label-${container.gid}`,
+      TAG_LAYOUT,
+    );
   }
 
   for (let j = 0; j < itemNodes.length; j++) {
@@ -739,12 +777,21 @@ function virtualLayoutRecursiveFromNode(
         beforeCandidate.ghostCenterX - dragGhostW / 2,
         beforeCandidate.ghostCenterY - dragGhostH / 2,
         isColumn ? containerWidth : dragGhostW,
-        isColumn ? dragGhostH : dragGhostH,
+        dragGhostH,
         "rgba(250, 204, 21, 0.15)",
         true,
         `vlayout-ghost-before-${container.gid}-${j}`,
         true,
         1,
+        TAG_LAYOUT,
+      );
+      container.addDebugText(
+        beforeCandidate.ghostCenterX - dragGhostW / 2 + 2,
+        beforeCandidate.ghostCenterY - dragGhostH / 2 + 12,
+        `ghost ${Math.round(dragGhostW)}x${Math.round(dragGhostH)}`,
+        "rgba(161, 98, 7, 0.9)",
+        true,
+        `vlayout-ghost-before-label-${container.gid}-${j}`,
         TAG_LAYOUT,
       );
     }
@@ -849,6 +896,15 @@ function virtualLayoutRecursiveFromNode(
         `vlayout-ghost-after-${container.gid}-${j}`,
         true,
         1,
+        TAG_LAYOUT,
+      );
+      container.addDebugText(
+        afterCandidate.ghostCenterX - dragGhostW / 2 + 2,
+        afterCandidate.ghostCenterY - dragGhostH / 2 + 12,
+        `ghost ${Math.round(dragGhostW)}x${Math.round(dragGhostH)}`,
+        "rgba(161, 98, 7, 0.9)",
+        true,
+        `vlayout-ghost-after-label-${container.gid}-${j}`,
         TAG_LAYOUT,
       );
     }
@@ -1089,31 +1145,6 @@ export function determineDropTarget(
   // --- Debug: layout item visuals ---
   debugDropTargetTree(root, item);
 
-  const dragTx = item.transform.x;
-  const dragTy = item.transform.y;
-  const dragHb = item.hitbox;
-  item.addDebugRect(
-    dragTx + dragHb.local.x,
-    dragTy + dragHb.local.y,
-    dragHb.local.width,
-    dragHb.local.height,
-    "rgba(250, 204, 21, 0.6)",
-    true,
-    `drop-drag-hitbox`,
-    false,
-    2,
-    TAG_COLLISIONS,
-  );
-  item.addDebugText(
-    dragTx + dragHb.local.x + 2,
-    dragTy + dragHb.local.y - 4,
-    `DRAGGING ${item.gid}`,
-    "rgba(250, 204, 21, 0.9)",
-    true,
-    `drop-drag-label`,
-    TAG_COLLISIONS,
-  );
-
   return best;
 }
 
@@ -1134,9 +1165,6 @@ export function debugDropTargetTree(node: ItemObject, draggedItem: ItemObject) {
     const prop = item.getDomProperty("READ_1");
     if (!prop) continue;
 
-    const tx = item.transform.x;
-    const ty = item.transform.y;
-
     item.addDebugRect(
       prop.x,
       prop.y,
@@ -1156,32 +1184,6 @@ export function debugDropTargetTree(node: ItemObject, draggedItem: ItemObject) {
       "rgba(60, 130, 246, 0.7)",
       true,
       `drop-dom-label-${item.gid}`,
-      TAG_COLLISIONS,
-    );
-
-    const hb = item.hitbox;
-    item.addDebugRect(
-      tx + hb.local.x,
-      ty + hb.local.y,
-      hb.local.width,
-      hb.local.height,
-      "rgba(34, 197, 94, 0.4)",
-      true,
-      `drop-hitbox-${item.gid}`,
-      false,
-      1,
-      TAG_COLLISIONS,
-    );
-
-    const cpX = tx + item.centerPoint.local.x;
-    const cpY = ty + item.centerPoint.local.y;
-    item.addDebugCircle(
-      cpX,
-      cpY,
-      4,
-      "rgba(239, 68, 68, 0.8)",
-      true,
-      `drop-center-${item.gid}`,
       TAG_COLLISIONS,
     );
 

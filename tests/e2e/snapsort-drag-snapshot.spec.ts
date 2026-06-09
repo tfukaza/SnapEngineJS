@@ -178,6 +178,93 @@ function center(rect: Rect) {
   };
 }
 
+function layoutBox(
+  rect: Rect,
+  margin: Partial<Box["margin"]> = {},
+  padding: Partial<Box["padding"]> = {},
+  border: Partial<Box["border"]> = {},
+): Box {
+  return {
+    ...rect,
+    scaleX: 1,
+    scaleY: 1,
+    screenX: rect.x,
+    screenY: rect.y,
+    margin: {
+      top: margin.top ?? 0,
+      right: margin.right ?? 0,
+      bottom: margin.bottom ?? 0,
+      left: margin.left ?? 0,
+    },
+    padding: {
+      top: padding.top ?? 0,
+      right: padding.right ?? 0,
+      bottom: padding.bottom ?? 0,
+      left: padding.left ?? 0,
+    },
+    border: {
+      top: border.top ?? 0,
+      right: border.right ?? 0,
+      bottom: border.bottom ?? 0,
+      left: border.left ?? 0,
+    },
+  };
+}
+
+test("wraps a horizontal ghost when its trailing margin exceeds the content width", () => {
+  const container: LayoutNode<string> = {
+    value: "container",
+    direction: "row",
+    locked: false,
+    isGhost: false,
+    box: layoutBox({ x: 0, y: 0, width: 313, height: 120 }),
+    children: [
+      {
+        value: "item-1",
+        direction: "column",
+        locked: false,
+        isGhost: false,
+        box: layoutBox(
+          { x: 4, y: 0, width: 100, height: 40 },
+          { left: 4, right: 4 },
+        ),
+        children: [],
+      },
+      {
+        value: "item-2",
+        direction: "column",
+        locked: false,
+        isGhost: false,
+        box: layoutBox(
+          { x: 112, y: 0, width: 100, height: 40 },
+          { left: 4, right: 4 },
+        ),
+        children: [],
+      },
+    ],
+  };
+  const dragged: LayoutNode<string> = {
+    value: "dragged",
+    direction: "column",
+    locked: false,
+    isGhost: false,
+    box: layoutBox(
+      { x: 0, y: 0, width: 90, height: 40 },
+      { left: 4, right: 4 },
+    ),
+    children: [],
+  };
+
+  const simulated = flowLayoutPositions(container, dragged, 0, 0, {
+    container,
+    index: 2,
+    width: dragged.box.width,
+    height: dragged.box.height,
+  }).ghostPosition;
+
+  expect(simulated).toEqual({ x: 4, y: 40 });
+});
+
 function horizontalDoubleRowLayoutCases(): LayoutCase[] {
   const cases: LayoutCase[] = [];
   for (let width = 236; width <= 356; width += 4) {
@@ -427,6 +514,12 @@ async function itemByTextIn(parent: Locator, text: string, index = 0) {
     .nth(index);
   await expect(locator).toBeVisible();
   return locator;
+}
+
+async function componentArrayList(page: Page) {
+  const list = page.locator(".array-list");
+  await expect(list).toBeVisible();
+  return list;
 }
 
 async function collectSample(
@@ -976,6 +1069,71 @@ test.describe("Snapsort drag-start snapshot layout", () => {
         ),
       ),
     ).toHaveLength(0);
+  });
+
+  test("updates framework state when SnapSort DOM insert callbacks reorder an array list", async ({
+    page,
+  }) => {
+    await page.goto("/?demo=snapsort_components", {
+      waitUntil: "networkidle",
+    });
+
+    const list = await componentArrayList(page);
+    await expect(page.locator(".demo-header p")).toHaveText("4 array items");
+
+    await page.getByRole("button", { name: "Add Item" }).click();
+    await expect(page.locator(".demo-header p")).toHaveText("5 array items");
+    await expect(list.locator(".task-card")).toHaveCount(5);
+
+    await page.getByRole("button", { name: "Delete Task 5" }).click();
+    await expect(page.locator(".demo-header p")).toHaveText("4 array items");
+    await expect(list.locator(".task-card")).toHaveCount(4);
+
+    const upwardItem = await itemByTextIn(list, "Search filters");
+    const upwardItemCenter = center(await itemRect(upwardItem));
+    const upwardTarget = await itemByTextIn(list, "Invite flow");
+    const upwardTargetCenter = center(await itemRect(upwardTarget));
+
+    await dragBy(page, upwardItem, "Search filters", 0, {
+      x: 0,
+      y: upwardTargetCenter.y - upwardItemCenter.y - 24,
+    });
+
+    await expect(
+      list.locator(".task-card .task-main strong"),
+    ).toHaveText([
+      "Profile fields",
+      "Search filters",
+      "Invite flow",
+      "Audit log",
+    ]);
+
+    await page.getByRole("button", { name: "Reset" }).click();
+    await expect(page.locator(".demo-header p")).toHaveText("4 array items");
+
+    const item = await itemByTextIn(list, "Profile fields");
+    const itemCenter = center(await itemRect(item));
+    const target = await itemByTextIn(list, "Search filters");
+    const targetCenter = center(await itemRect(target));
+
+    await dragBy(page, item, "Profile fields", 0, {
+      x: 0,
+      y: targetCenter.y - itemCenter.y + 48,
+    });
+
+    await expect(
+      page.locator(".task-card").filter({ hasText: "Profile fields" }),
+    ).toHaveCount(1);
+
+    await expect(page.locator(".demo-header p")).toHaveText("4 array items");
+    await expect(
+      list.locator(".task-card .task-main strong"),
+    ).toHaveText([
+      "Invite flow",
+      "Audit log",
+      "Search filters",
+      "Profile fields",
+    ]);
   });
 
   test("does not flicker the spacer backward while dragging down a vertical column", async ({

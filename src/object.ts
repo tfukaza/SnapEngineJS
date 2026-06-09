@@ -303,8 +303,13 @@ export class BaseObject {
   }
 
   destroy() {
-    // TODO: Remove colliders
     this.cancelAnimations();
+    for (const queue of Object.values(this.global.queue)) {
+      queue.delete(this.gid);
+    }
+    if (this.parent) {
+      this.parent.removeChild(this);
+    }
     this.global.unregisterObject(this);
   }
 
@@ -1243,9 +1248,8 @@ export class ElementObject extends BaseObject {
     return this._dom.element;
   }
 
-  set element(element: HTMLElement) {
+  set element(element: HTMLElement | null | undefined) {
     if (!element) {
-      console.error("Element is not set", this.gid);
       return;
     }
     this._dom.addElement(element);
