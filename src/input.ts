@@ -166,9 +166,12 @@ export type pointerData = {
   endX: number | null;
   endY: number | null;
   moveCount: number; // Number of times the pointer has moved since the last pointer down event
+  button: number;
+  isWithinEngine: boolean;
 };
 
 const GLOBAL_GID = "global";
+const DRAG_START_THRESHOLD_PX = 3;
 
 export interface InputControlOption {
   pinch: {
@@ -450,33 +453,22 @@ class InputControl {
       endX: null,
       endY: null,
       moveCount: 0,
+      button: e.buttons,
+      isWithinEngine,
     };
 
     this.globalPointerDict[e.pointerId] = pointerData;
 
-    // Register the gesture and enforce drag limits BEFORE firing dragStart.
-    // This ensures that if enforceMaxDragLimit cancels an older drag (firing dragEnd),
-    // the old drag's cleanup completes before the new drag's setup begins.
     if (this.globalGestureDict[e.pointerId]) {
       this.globalGestureDict[e.pointerId].memberList.push(this);
     } else {
       this.globalGestureDict[e.pointerId] = {
         type: "drag",
-        state: "drag",
+        state: "pending",
         memberList: [this, ...this.#dragMemberList],
         initiatorID: this._isGlobal ? GLOBAL_GID : this._ownerGID ?? "",
       };
-      // Enforce max simultaneous drags limit
-      this.globalInputEngine?.enforceMaxDragLimit();
     }
-
-    this.event.dragStart?.({
-      gid: this._isGlobal ? GLOBAL_GID : this._ownerGID,
-      pointerId: e.pointerId,
-      start: coordinates,
-      button: e.buttons,
-      isWithinEngine,
-    });
     this.#debugObject.addDebugPoint(
       coordinates.x,
       coordinates.y,
@@ -514,7 +506,7 @@ class InputControl {
         callerGID: this._isGlobal ? GLOBAL_GID : this._ownerGID,
       };
       Object.assign(pointerData, updatedPointerData);
-      this.#handleMultiPointer(e);
+      this.#handleMultiPointer();
     }
     e.stopPropagation();
   }
@@ -539,21 +531,25 @@ class InputControl {
     // this._localPointerDict[e.pointerId];
     if (pointerData != null) {
       const gesture = this.globalGestureDict[e.pointerId];
-      if (gesture != null) {
+      if (gesture != null && gesture.type === "drag") {
+        const wasDragging = gesture.state === "drag";
         gesture.state = "release";
 
-        const start = this.getCoordinates(
-          pointerData.startX,
-          pointerData.startY,
-        );
-        for (const member of gesture.memberList) {
-          member.event.dragEnd?.({
-            gid: this._isGlobal ? GLOBAL_GID : this._ownerGID,
-            pointerId: e.pointerId,
-            start: start,
-            end: coordinates,
-            button: e.buttons,
-          });
+        if (wasDragging) {
+          for (const member of gesture.memberList) {
+            const start = member.getCoordinates(
+              pointerData.startX,
+              pointerData.startY,
+            );
+            const end = member.getCoordinates(e.clientX, e.clientY);
+            member.event.dragEnd?.({
+              gid: member._isGlobal ? GLOBAL_GID : member._ownerGID,
+              pointerId: e.pointerId,
+              start: start,
+              end: end,
+              button: pointerData.button,
+            });
+          }
         }
         delete this.globalGestureDict[e.pointerId];
       }
@@ -615,7 +611,7 @@ class InputControl {
     e.stopPropagation();
   }
 
-  #handleMultiPointer(e: PointerEvent) {
+  #handleMultiPointer() {
     // Only handle global pointer dict
     const numKeys = Object.keys(this.globalPointerDict).length;
     // Handle drag gestures of each pointer
@@ -632,6 +628,21 @@ class InputControl {
         // which can happen if the user is dragging very quickly
         const gesture = this.globalGestureDict[pointer.id];
         if (!gesture) {
+          continue;
+        }
+        if (gesture.type !== "drag") {
+          continue;
+        }
+        if (gesture.state === "pending") {
+          if (!this.#isPastDragStartThreshold(pointer)) {
+            continue;
+          }
+          this.#startDragGesture(pointer, gesture);
+          if (this.globalGestureDict[pointer.id] !== gesture) {
+            continue;
+          }
+        }
+        if (gesture.state !== "drag") {
           continue;
         }
         // console.info("drag gesture", gesture.memberList, this._isGlobal);
@@ -659,7 +670,7 @@ class InputControl {
             start: startPosition,
             position: currentPosition,
             delta: deltaCoordinates,
-            button: e.buttons,
+            button: pointer.button,
           });
         }
       }
@@ -678,6 +689,33 @@ class InputControl {
           globalInput._inputControl._detectAndFirePinchGestures();
         }
       }
+    }
+  }
+
+  #isPastDragStartThreshold(pointer: pointerData) {
+    return Math.hypot(
+      pointer.x - pointer.startX,
+      pointer.y - pointer.startY,
+    ) >= DRAG_START_THRESHOLD_PX;
+  }
+
+  #startDragGesture(pointer: pointerData, gesture: dragGesture) {
+    gesture.state = "drag";
+
+    // Enforce drag limits before firing dragStart so cancelled older drags clean up first.
+    this.globalInputEngine?.enforceMaxDragLimit();
+    if (this.globalGestureDict[pointer.id] !== gesture) {
+      return;
+    }
+
+    for (const member of gesture.memberList) {
+      member.event.dragStart?.({
+        gid: member._isGlobal ? GLOBAL_GID : member._ownerGID,
+        pointerId: pointer.id,
+        start: member.getCoordinates(pointer.startX, pointer.startY),
+        button: pointer.button,
+        isWithinEngine: pointer.isWithinEngine,
+      });
     }
   }
 
@@ -777,17 +815,15 @@ class InputControl {
   }
 }
 
-type gestureType = "drag" | "pinch";
-
 interface dragGesture {
-  type: gestureType;
-  state: "idle" | "drag" | "release";
+  type: "drag";
+  state: "pending" | "drag" | "release";
   initiatorID: string;
   memberList: InputControl[];
 }
 
 interface pinchGesture {
-  type: gestureType;
+  type: "pinch";
   state: "idle" | "pinch" | "release";
   memberList: InputControl[];
   start: {
@@ -1035,7 +1071,9 @@ class GlobalInputControl {
    * Gets the number of active drag gestures.
    */
   getActiveDragCount(): number {
-    return Object.values(this._gestureDict).filter(g => g.type === "drag").length;
+    return Object.values(this._gestureDict).filter(g =>
+      g.type === "drag" && g.state === "drag",
+    ).length;
   }
 
   /**
@@ -1045,7 +1083,7 @@ class GlobalInputControl {
     const drags: { pointerId: number; gesture: dragGesture; timestamp: number }[] = [];
     
     for (const [key, gesture] of Object.entries(this._gestureDict)) {
-      if (gesture.type !== "drag") continue;
+      if (gesture.type !== "drag" || gesture.state !== "drag") continue;
       const pointerId = parseInt(key, 10);
       const pointerData = this._pointerDict[pointerId];
       if (pointerData) {

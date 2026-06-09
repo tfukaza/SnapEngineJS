@@ -74,15 +74,12 @@
   }
 
   function stopControlEvent(event: Event) {
-    event.preventDefault();
     event.stopPropagation();
-    event.stopImmediatePropagation();
   }
 
   function runControl(event: Event, action: () => void) {
     event.preventDefault();
     event.stopPropagation();
-    event.stopImmediatePropagation();
     action();
   }
 </script>
@@ -131,7 +128,7 @@
                 <button
                   aria-label={`Delete ${item.label}`}
                   onpointerdown={stopControlEvent}
-                  onpointerup={stopControlEvent}
+                  onpointerup={(event) => runControl(event, () => deleteItem(item.id))}
                   onclick={(event) => runControl(event, () => deleteItem(item.id))}
                 >Delete</button>
               </div>

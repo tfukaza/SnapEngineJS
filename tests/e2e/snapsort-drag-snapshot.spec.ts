@@ -676,11 +676,23 @@ async function dragBy(
   await page.mouse.move(start.x, start.y);
   await page.mouse.down();
 
+  const dragDistance = Math.hypot(delta.x, delta.y);
+  const activationRatio =
+    dragDistance === 0 ? 0 : Math.min(4 / dragDistance, 1);
+  if (activationRatio > 0) {
+    await page.mouse.move(
+      start.x + delta.x * activationRatio,
+      start.y + delta.y * activationRatio,
+    );
+    await page.waitForTimeout(16);
+  }
+
   const samples: DragSample[] = [];
   for (let step = 1; step <= steps; step++) {
+    const ratio = activationRatio + ((1 - activationRatio) * step) / steps;
     const mouse = {
-      x: start.x + (delta.x * step) / steps,
-      y: start.y + (delta.y * step) / steps,
+      x: start.x + delta.x * ratio,
+      y: start.y + delta.y * ratio,
     };
     await page.mouse.move(mouse.x, mouse.y);
     await page.waitForTimeout(8);
@@ -1085,7 +1097,20 @@ test.describe("Snapsort drag-start snapshot layout", () => {
     await expect(page.locator(".demo-header p")).toHaveText("5 array items");
     await expect(list.locator(".task-card")).toHaveCount(5);
 
-    await page.getByRole("button", { name: "Delete Task 5" }).click();
+    const deleteButton = page.getByRole("button", { name: "Delete Task 5" });
+    const deleteBox = await deleteButton.boundingBox();
+    expect(deleteBox).not.toBeNull();
+    await page.mouse.move(
+      deleteBox!.x + deleteBox!.width / 2,
+      deleteBox!.y + deleteBox!.height / 2,
+    );
+    await page.mouse.down();
+    await page.mouse.move(
+      deleteBox!.x + deleteBox!.width / 2 + 1,
+      deleteBox!.y + deleteBox!.height / 2 + 1,
+      { steps: 2 },
+    );
+    await page.mouse.up();
     await expect(page.locator(".demo-header p")).toHaveText("4 array items");
     await expect(list.locator(".task-card")).toHaveCount(4);
 

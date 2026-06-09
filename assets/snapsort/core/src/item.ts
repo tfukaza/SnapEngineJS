@@ -58,7 +58,13 @@ export class ItemObject extends ElementObject {
   }
 
   addItem(item: ItemObject) {
-    this.appendChild(item);
+    if (!this.children.includes(item)) {
+      this.appendChild(item);
+    }
+    if (!this.#itemOrderedList.includes(item)) {
+      this.#itemOrderedList.push(item);
+    }
+    this.#findRootContainer();
   }
 
   #itemID(item: ItemObject) {
@@ -69,7 +75,12 @@ export class ItemObject extends ElementObject {
   }
 
   removeItem(id: string) {
-    const item = this.#itemOrderedList.find((item) => this.#itemID(item) === id);
+    const item =
+      this.#itemOrderedList.find((item) => this.#itemID(item) === id) ??
+      this.children.find(
+        (item): item is ItemObject =>
+          item instanceof ItemObject && this.#itemID(item) === id,
+      );
     if (!item) return;
 
     this.removeItemFrom(this as unknown as ItemContainer, item);
