@@ -1,0 +1,83 @@
+name: Publish asset package to npm
+
+on:
+  push:
+    tags:
+      - 'asset-base-v*'
+      - 'asset-base-svelte-v*'
+      - 'snapsort-v*'
+      - 'snapsort-svelte-v*'
+      - 'snapsort-react-v*'
+      - 'snapline-v*'
+      - 'snapline-svelte-v*'
+      - 'snapline-react-v*'
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      id-token: write
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+          registry-url: 'https://registry.npmjs.org'
+
+      - name: Resolve package from tag
+        id: package
+        run: |
+          case "$GITHUB_REF_NAME" in
+            asset-base-v*)
+              package_dir="assets/asset-base/core"
+              tag_version="${GITHUB_REF_NAME#asset-base-v}"
+              ;;
+            asset-base-svelte-v*)
+              package_dir="assets/asset-base/svelte"
+              tag_version="${GITHUB_REF_NAME#asset-base-svelte-v}"
+              ;;
+            snapsort-v*)
+              package_dir="assets/snapsort/core"
+              tag_version="${GITHUB_REF_NAME#snapsort-v}"
+              ;;
+            snapsort-svelte-v*)
+              package_dir="assets/snapsort/svelte"
+              tag_version="${GITHUB_REF_NAME#snapsort-svelte-v}"
+              ;;
+            snapsort-react-v*)
+              package_dir="assets/snapsort/react"
+              tag_version="${GITHUB_REF_NAME#snapsort-react-v}"
+              ;;
+            snapline-v*)
+              package_dir="assets/snapline/core"
+              tag_version="${GITHUB_REF_NAME#snapline-v}"
+              ;;
+            snapline-svelte-v*)
+              package_dir="assets/snapline/svelte"
+              tag_version="${GITHUB_REF_NAME#snapline-svelte-v}"
+              ;;
+            snapline-react-v*)
+              package_dir="assets/snapline/react"
+              tag_version="${GITHUB_REF_NAME#snapline-react-v}"
+              ;;
+            *)
+              echo "Unsupported release tag: $GITHUB_REF_NAME"
+              exit 1
+              ;;
+          esac
+
+          package_version=$(node -p "require('./$package_dir/package.json').version")
+
+          if [ "$package_version" != "$tag_version" ]; then
+            echo "Tag version $tag_version does not match $package_dir/package.json version $package_version"
+            exit 1
+          fi
+
+          echo "package_dir=$package_dir" >> "$GITHUB_OUTPUT"
+
+      - run: npm ci
+      - run: npm publish "./${{ steps.package.outputs.package_dir }}" --access public --provenance
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}

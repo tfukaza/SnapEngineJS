@@ -6,7 +6,28 @@
 
 <svelte:head>
   <title>SnapEngineJS</title>
-  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <meta
+    name="description"
+    content="SnapEngine is an interactivity engine for building draggable, animated, collision-aware web experiences."
+  />
+  <meta property="og:title" content="SnapEngineJS" />
+  <meta
+    property="og:description"
+    content="An interactivity engine for building draggable, animated, collision-aware web experiences."
+  />
+  <meta property="og:type" content="website" />
+  <meta property="og:image" content="https://snap-engine-js.vercel.app/images/thumbnail.png" />
+  <meta property="og:image:secure_url" content="https://snap-engine-js.vercel.app/images/thumbnail.png" />
+  <meta property="og:image:width" content="1200" />
+  <meta property="og:image:height" content="627" />
+  <meta property="og:image:alt" content="SnapEngineJS website preview" />
+  <meta name="twitter:card" content="summary_large_image" />
+  <meta name="twitter:title" content="SnapEngineJS" />
+  <meta
+    name="twitter:description"
+    content="An interactivity engine for building draggable, animated, collision-aware web experiences."
+  />
+  <meta name="twitter:image" content="https://snap-engine-js.vercel.app/images/thumbnail.png" />
 </svelte:head>
 
 <nav class="nav-bar">

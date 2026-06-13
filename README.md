@@ -1,64 +1,44 @@
-# SnapEngine
+<img src="./docs/assets/images/banner.png" alt="SnapEngine" width="100%" />
 
-Interactivity engine for building complex interactive UIs on web applications.
+> [!WARNING]
+> The engine is still in early stages of development. Expect frequent updates and breaking changes.
+
+# Interactivity Engine for the Web
+
+SnapEngineJS is a collection of utilities for building interactive UI elements on the web.
+
+- Input handling with a common API for mouse and touch events.
+- Collision detection for basic shapes and lines.
+- Helpers for batching DOM updates.
+- Camera and world coordinate translation for pan-and-zoom interfaces.
+- A built-in WAAPI-based animation engine.
+- A visual debugger for inspecting engine internals.
+- Zero-dependency, framework-agnostic APIs.
+
+See the [website](https://snap-engine-js.vercel.app) for details and documentation.
 
 ## Installation
 
 ```bash
-npm install snap-engine
+npm install @snap-engine/core
 ```
 
 ## Quick Start
 
-```typescript
-import { Engine, ElementObject } from 'snap-engine';
+```ts
+import { Engine, ElementObject } from "@snap-engine/core";
 
-// Create engine and attach to container
 const engine = new Engine();
-engine.assignDom(document.getElementById('container'));
+engine.assignDom(document.getElementById("container") as HTMLElement);
 
-// Create an interactive object
-const obj = new ElementObject(engine, null);
-obj.element = document.getElementById('my-element');
+const object = new ElementObject(engine, null);
+object.element = document.getElementById("item");
 
-// Queue DOM updates to avoid layout thrashing
-obj.queueUpdate("READ_1", () => {
-    obj.readDom();
+object.queueUpdate("WRITE_1", () => {
+  object.worldPosition = [100, 200];
+  object.writeTransform();
 });
-
-obj.queueUpdate("WRITE_1", () => {
-    obj.worldPosition = [100, 200];
-    obj.writeTransform();
-});
-```
-
-## Documentation
-
-See `doc/overview.md` for detailed engine concepts and API documentation.
-
-## Development
-
-Install dependencies:
-```bash
-npm install
-```
-
-Run demo apps:
-```bash
-npm run dev:vanilla   # Vanilla JS demo
-npm run dev:react     # React demo
-npm run dev:svelte    # Svelte demo
-```
-
-Build the library:
-```bash
-npm run build
-```
-
-Run tests:
-```bash
-npm run test
-```
+````
 
 ## License
 
