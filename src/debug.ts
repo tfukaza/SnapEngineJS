@@ -214,8 +214,8 @@ export class DebugRenderer implements DebugRendererInterface {
     ) ?? [0, 0];
 
     // If object has a dom, draw a rectangle around the object's width and height
-    if (object.hasOwnProperty("_dom")) {
-      let elementObject = object as ElementObject;
+    if (Object.prototype.hasOwnProperty.call(object, "_dom")) {
+      const elementObject = object as ElementObject;
 
       const colors = ["#FF0000A0", "#00FF00A0", "#0000FFA0"];
       const stages = ["READ_1", "READ_2", "READ_3"];
@@ -259,7 +259,7 @@ export class DebugRenderer implements DebugRendererInterface {
 
     const COLLIDER_BLUE = "rgba(0, 247, 255, 0.5)";
 
-    for (let collisionObject of object._colliderList) {
+    for (const collisionObject of object._colliderList) {
       this.debugCtx.beginPath();
       this.debugCtx.strokeStyle = COLLIDER_BLUE;
       this.debugCtx.lineWidth = 1;

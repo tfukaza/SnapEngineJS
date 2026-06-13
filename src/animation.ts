@@ -325,7 +325,7 @@ class AnimationObject implements AnimationInterface {
   finish() {
     try {
       this.#animation?.commitStyles();
-    } catch (e) {
+    } catch {
       // Ignore error
     }
   }

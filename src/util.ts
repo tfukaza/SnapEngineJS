@@ -190,7 +190,9 @@ function setDomStyle(
   Object.assign(dom.style, style);
 }
 
-interface CallbackInterface extends Record<KeyType, Function | null> {}
+type CallbackFunction = (...args: any[]) => void;
+
+interface CallbackInterface extends Record<KeyType, CallbackFunction | null> {}
 
 /**
  * Creates a proxy for event callbacks that automatically binds them to an object.
@@ -219,12 +221,12 @@ function EventProxyFactory<BindObject, Callback extends object>(
     set: (
       target: Callback,
       prop: keyof Callback & KeyType,
-      value: Function | null,
+      value: CallbackFunction | null,
     ) => {
       if (value == null) {
         target[prop] = null as any;
       } else {
-        target[prop] = value.bind(object);
+        target[prop] = value.bind(object) as any;
       }
       return true;
     },

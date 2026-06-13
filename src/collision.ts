@@ -123,7 +123,7 @@ class Collider {
 
   set element(element: HTMLElement) {
     this._element = element;
-    if (this.parent.hasOwnProperty("element")) {
+    if (Object.prototype.hasOwnProperty.call(this.parent, "element")) {
       // Parent is an ElementObject with requestRead method
       (this.parent as any).requestRead();
     } else {
@@ -365,7 +365,7 @@ class CollisionEngine {
   detectCollisions() {
     this.updateXCoordinates();
     this.sortXCoordinates();
-    let localCollisions: Set<Collider> = new Set();
+    const localCollisions: Set<Collider> = new Set();
     let collisionIdx = 0;
     // Sweep through the sorted X coordinates
     for (const entry of this.sortedXCoordinates) {
@@ -467,8 +467,7 @@ class CollisionEngine {
     if (thisObject.event.collider.onCollide) {
       thisObject.event.collider.onCollide(thisObject, otherObject);
     }
-    if (thisObject._currentCollisions.has(otherObject)) {
-    } else {
+    if (!thisObject._currentCollisions.has(otherObject)) {
       // console.debug(`onColliderCollide, ${thisObject} and ${otherObject}`);
       thisObject.event.collider.onBeginContact?.(thisObject, otherObject);
       thisObject._currentCollisions.add(otherObject);
@@ -507,9 +506,9 @@ class CollisionEngine {
       rectY = rect.worldPosition[1] + rect.local.height;
     }
 
-    let distanceX = circle.worldPosition[0] - rectX;
-    let distanceY = circle.worldPosition[1] - rectY;
-    let distance = Math.sqrt(distanceX * distanceX + distanceY * distanceY);
+    const distanceX = circle.worldPosition[0] - rectX;
+    const distanceY = circle.worldPosition[1] - rectY;
+    const distance = Math.sqrt(distanceX * distanceX + distanceY * distanceY);
     return distance <= (circle.radius ?? 0);
   }
 
@@ -523,9 +522,9 @@ class CollisionEngine {
   }
 
   isCirclePointIntersecting(circle: CircleCollider, point: PointCollider) {
-    let distanceX = circle.worldPosition[0] - point.worldPosition[0];
-    let distanceY = circle.worldPosition[1] - point.worldPosition[1];
-    let distance = Math.sqrt(distanceX * distanceX + distanceY * distanceY);
+    const distanceX = circle.worldPosition[0] - point.worldPosition[0];
+    const distanceY = circle.worldPosition[1] - point.worldPosition[1];
+    const distance = Math.sqrt(distanceX * distanceX + distanceY * distanceY);
     return distance <= (circle.radius ?? 0);
   }
 
@@ -533,9 +532,9 @@ class CollisionEngine {
     if (circleA.uuid === circleB.uuid) {
       return false;
     }
-    let distanceX = circleA.worldPosition[0] - circleB.worldPosition[0];
-    let distanceY = circleA.worldPosition[1] - circleB.worldPosition[1];
-    let distance = Math.sqrt(distanceX * distanceX + distanceY * distanceY);
+    const distanceX = circleA.worldPosition[0] - circleB.worldPosition[0];
+    const distanceY = circleA.worldPosition[1] - circleB.worldPosition[1];
+    const distance = Math.sqrt(distanceX * distanceX + distanceY * distanceY);
     return distance <= (circleA.radius ?? 0) + (circleB.radius ?? 0);
   }
 

@@ -213,7 +213,7 @@ class InputControl {
   _event: InputEventCallback;
   event: InputEventCallback;
   _isGlobal: boolean;
-  _uuid: Symbol;
+  _uuid: symbol;
   _ownerGID: string | null;
 
   #debugObject: BaseObject;
@@ -496,7 +496,7 @@ class InputControl {
       button: e.buttons,
     });
     const id = e.pointerId;
-    let pointerData = this.globalPointerDict[id]; // || this._localPointerDict[id];
+    const pointerData = this.globalPointerDict[id]; // || this._localPointerDict[id];
     if (pointerData != null) {
       const updatedPointerData = {
         prevX: pointerData.x,
@@ -527,7 +527,7 @@ class InputControl {
       gid: this._isGlobal ? GLOBAL_GID : this._ownerGID,
       button: e.buttons,
     });
-    let pointerData = this.globalPointerDict[e.pointerId];
+    const pointerData = this.globalPointerDict[e.pointerId];
     // this._localPointerDict[e.pointerId];
     if (pointerData != null) {
       const gesture = this.globalGestureDict[e.pointerId];
