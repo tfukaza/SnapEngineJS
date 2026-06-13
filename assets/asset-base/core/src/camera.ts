@@ -54,9 +54,9 @@ class CameraControl extends ElementObject {
   set element(_element: HTMLElement) {
     super.element = _element;
     this.camera = new Camera(this.engine);
-    // this.camera.containerDom = _element;
     this.engine.camera = this.camera;
-    // this.camera.updateCameraProperty();
+    this.camera.containerDom =
+      this.engine.containerElement ?? _element.parentElement ?? _element;
     // this.engine.subscribeEvent('containerResized', 'cameraControl', () => {
     //   this.setCameraPosition(this.#prevCameraX, this.#prevCameraY);
     //   this.paintCamera();

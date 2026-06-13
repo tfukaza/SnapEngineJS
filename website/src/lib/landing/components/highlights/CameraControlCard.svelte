@@ -1,199 +1,239 @@
 <script lang="ts">
+  import { onMount } from "svelte";
   import { Engine, Camera as CameraControlComponent } from "@snap-engine/asset-base-svelte";
   import type { CameraControl as CameraControlApi } from "@snap-engine/asset-base";
-  import HighlightCardShell from "./HighlightCardShell.svelte";
   import { debugState } from "$lib/landing/debugState.svelte";
-  import { onMount } from "svelte";
 
-  let cameraControl: CameraControlApi | null = null;
-  let canvasComponent: Engine | null = null;
+  const plusCells = Array.from({ length: 180 }, (_, index) => index);
   const ZOOM_STEP = 0.12;
+  let cameraControl: CameraControlApi | null = null;
 
   function zoom(delta: number) {
-    if (!cameraControl) return;
-    cameraControl.zoomBy(delta);
+    cameraControl?.zoomBy(delta);
   }
 
-  const zoomIn = () => zoom(ZOOM_STEP);
-  const zoomOut = () => zoom(-ZOOM_STEP);
+  function resetOrientation() {
+    if (!cameraControl) {
+      return;
+    }
+
+    const currentZoom = cameraControl.camera?.zoom ?? 1;
+    if (currentZoom < 1) {
+      cameraControl.zoomBy(1 - currentZoom);
+    }
+    cameraControl.setCameraPosition(0, 0);
+  }
+
+  function stopControlPointer(event: PointerEvent | MouseEvent) {
+    event.stopPropagation();
+  }
 
   onMount(() => {
-    cameraControl?.setCameraCenterPosition(1500, 1500);
+    cameraControl?.setCameraPosition(0, 0);
   });
 </script>
 
-<HighlightCardShell
-  className="camera-control-card theme-secondary-7"
-  title="Camera Control"
-  description="Zoom and pan any DOM element."
->
-  <div class="camera-card slot shallow">
-        <Engine id="camera-control-highlight" bind:this={canvasComponent} debug={debugState.enabled}>
-          <CameraControlComponent bind:cameraControl>
-            <div class="dot-grid-background"></div>
-            <div class="image-stage">
-              <img
-                src="https://upload.wikimedia.org/wikipedia/commons/0/04/NYC_subway-4D.svg"
-                alt="NYC Subway Map"
-                class="stage-image"
-                draggable="false"
-              />
-            </div>
-          </CameraControlComponent>
-        </Engine>
+<article class="camera-control-card theme-secondary-7">
+  <div class="camera-viewport">
+    <Engine id="camera-control-highlight" debug={debugState.enabled}>
+      <CameraControlComponent bind:cameraControl>
+        <div class="camera-scene">
+          <div class="camera-plus-grid" aria-hidden="true">
+            {#each plusCells as cell (cell)}
+              <span>+</span>
+            {/each}
+          </div>
+
+          <div class="camera-card-heading">
+            <h3>Camera<br />Control</h3>
+            <p>Zoom and pan any DOM element.</p>
+          </div>
+        </div>
+      </CameraControlComponent>
+    </Engine>
   </div>
 
-  <div class="zoom-controls card" aria-label="Zoom controls">
-    <button type="button" class="zoom-button" on:click={zoomIn} aria-label="Zoom in">
-      +
+  <div class="camera-controls card" aria-label="Camera controls">
+    <button type="button" aria-label="Zoom in" onpointerdown={stopControlPointer} onclick={() => zoom(ZOOM_STEP)}>
+      <span class="material-symbols-rounded" aria-hidden="true">zoom_in</span>
     </button>
-    <button type="button" class="zoom-button" on:click={zoomOut} aria-label="Zoom out">
-      −
+    <button type="button" aria-label="Zoom out" onpointerdown={stopControlPointer} onclick={() => zoom(-ZOOM_STEP)}>
+      <span class="material-symbols-rounded" aria-hidden="true">zoom_out</span>
+    </button>
+    <button type="button" aria-label="Reset orientation" onpointerdown={stopControlPointer} onclick={resetOrientation}>
+      <span class="material-symbols-rounded" aria-hidden="true">screen_rotation</span>
     </button>
   </div>
-
-  <div class="photo-credit">
-    <p>Source:</p>
-    <a href="https://en.wikipedia.org/wiki/File:NYC_subway-4D.svg" target="_blank" rel="noreferrer">
-      Wikipedia
-    </a>
-  </div>
-</HighlightCardShell>
+</article>
 
 <style lang="scss">
-  .camera-card {
-    background-color: var(--color-background-tint);
-    border: 1px solid #d4d4d4;
-    height: 100%;
+  .camera-control-card {
+    --card-padding: var(--size-48);
     position: relative;
+    display: flex;
+    flex-direction: column;
+    gap: var(--size-32);
+    height: 100%;
+    box-sizing: border-box;
+    background: var(--color-background-tint);
+    border-radius: var(--ui-radius);
     overflow: hidden;
-    touch-action: none;
-    // margin-top: 20px;
+    isolation: isolate;
 
     @media (max-width: 720px) {
-      height: 300px;
+      --card-padding: var(--size-24);
+      grid-column: span 2;
     }
   }
 
-  .dot-grid-background {
+  .camera-viewport {
     position: absolute;
-    top: 50%;
-    left: 50%;
-    width: 1000px;
-    height: 1000px;
-    transform: translate(-50%, -50%);
-    background-image: radial-gradient(circle, rgba(47, 31, 26, 0.15) 1px, transparent 1px);
-    background-size: 16px 16px;
-    pointer-events: none;
-  }
-
-
-
-  .zoom-controls {
-    display: inline-flex;
-    gap: var(--size-8);
-    position: absolute;
-    bottom: var(--size-24);
-    left: 50%;
-    transform: translateX(-50%);
-    background-color: #ffffff5e;
-    backdrop-filter: blur(2px);
-    padding: var(--size-8);
-
-    button {
-      --button-color: #ffffff75;
-    }
-  }
-
-  // .zoom-button {
-  //   width: 2rem;
-  //   height: 2rem;
-  //   border-radius: 999px;
-  //   border: 1px solid color-mix(in srgb, #ffffff 60%, var(--card-accent, rgba(26, 20, 16, 0.85)));
-  //   background: color-mix(in srgb, #ffffff 12%, var(--card-accent, rgba(26, 20, 16, 0.85)));
-  //   color: #ffffff;
-  //   font-size: 1.2rem;
-  //   line-height: 1;
-  //   cursor: pointer;
-  //   transition: border-color 0.2s ease, background 0.2s ease;
-  // }
-
-  // .zoom-button:hover {
-  //   border-color: color-mix(in srgb, #ffffff 75%, var(--card-accent, rgba(26, 20, 16, 0.85)));
-  //   background: color-mix(in srgb, #ffffff 28%, var(--card-accent, rgba(26, 20, 16, 0.85)));
-  // }
-
-  .camera-stage {
-    // border-radius: 1rem;
-    // overflow: hidden;
-    // box-shadow: inset 0 0 0 1px rgba(47, 31, 26, 0.12);
-    // background: radial-gradient(circle at top, rgba(255, 255, 255, 0.25), transparent 65%);
-    // height: 320px;
-  }
-
-  .canvas-wrapper {
-    width: 100%;
-    height: 100%;
-  }
-
-  .canvas-wrapper :global(#snap-canvas) {
-    height: 100% !important;
-  }
-
-  .image-stage {
-    width: 3000px;
-    position: relative;
-    // pointer-events: none;
-    overflow: hidden;
-    border-radius: 16px;
+    inset: 0;
+    z-index: 0;
     cursor: grab;
 
-    img {
-      width: 100%;
-      height: 100%;
-      object-fit: cover;
+    &:active {
+      cursor: grabbing;
     }
   }
 
-  .photo-credit {
+  .camera-viewport :global(#snap-canvas) {
+    width: 100%;
+    height: 100%;
+    background: transparent;
+  }
+
+  .camera-viewport :global(#snap-camera-control) {
+    position: relative !important;
+    top: auto !important;
+    left: auto !important;
+    width: 100% !important;
+    height: 100% !important;
+    background: transparent;
+  }
+
+  .camera-scene {
+    position: relative;
+    width: 100%;
+    height: 100%;
+    display: grid;
+    place-items: center;
+    overflow: hidden;
+  }
+
+  .camera-plus-grid {
     position: absolute;
-    bottom: -20px;
-    left: 2px;
-    z-index: 10;
-    // padding: 0.35rem 0.65rem;
-    // border-radius: 999px;
-    // background: rgba(0, 0, 0, 0.6);
-    // color: white;
-    // font-size: 0.5rem;
-    display: inline-flex;
-    gap: 0.35rem;
+    inset: 10px;
+    z-index: 0;
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(36px, 1fr));
+    grid-auto-rows: 36px;
+    overflow: hidden;
+    pointer-events: none;
+    color: rgba(0, 0, 0, 0.08);
+    font-family: "Bitcount Grid Single", monospace;
+    font-size: 10px;
+    font-weight: 300;
+    line-height: 1;
+    place-items: center;
+    user-select: none;
+  }
+
+  .camera-plus-grid span {
+    color: inherit;
+    margin: 0;
+  }
+
+  .camera-card-heading {
+    position: relative;
+    z-index: 1;
+    display: flex;
+    flex-direction: column;
     align-items: center;
+    gap: var(--size-12);
+    padding: var(--card-padding);
+    box-sizing: border-box;
+    text-align: center;
+
+    h3 {
+      margin: 0;
+      font-family: "Geist Pixel Circle", "Doto", sans-serif;
+      font-size: 58px;
+      line-height: 0.88;
+    }
 
     p {
-      font-size: 0.7rem;
+      margin: 0;
     }
 
-    a {
-      font-size: 0.7rem;
-      text-decoration: underline;
+    @media (max-width: 720px) {
+      gap: var(--size-12);
     }
   }
 
-  .photo-credit a {
-    // color: white;
-
+  .camera-controls {
+    position: absolute;
+    left: 50%;
+    bottom: var(--card-padding);
+    z-index: 1;
+    display: flex;
+    gap: var(--size-4);
+    padding: var(--size-4);
+    background-color: rgba(255, 255, 255, 0.68);
+    backdrop-filter: blur(3px);
+    transform: translateX(-50%);
   }
 
-  // .stage-image {
-  //   width: 100%;
-  //   height: 100%;
-  //   object-fit: cover;
-  //   filter: saturate(0.9);
-  // }
+  .camera-controls button {
+    width: 32px;
+    height: 32px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    padding: 0;
+    border: 0;
+    border-radius: var(--ui-radius);
+    background: transparent;
+    color: var(--color-text);
+    cursor: pointer;
+    transition:
+      transform 0.16s ease;
+  }
 
-  @media (max-width: 720px) {
-    .zoom-controls {
-      align-self: flex-end;
-    }
+  .camera-controls button:hover,
+  .camera-controls button:focus-visible {
+    background: transparent;
+    outline: none;
+  }
+
+  .camera-controls button:active {
+    transform: translateY(1px);
+  }
+
+  .camera-controls button:hover .material-symbols-rounded,
+  .camera-controls button:focus-visible .material-symbols-rounded {
+    color: var(--color-primary);
+  }
+
+  .camera-controls button:active .material-symbols-rounded {
+    color: var(--color-secondary-1);
+  }
+
+  .material-symbols-rounded {
+    font-family: "Material Symbols Rounded";
+    font-weight: normal;
+    font-style: normal;
+    font-size: 20px;
+    line-height: 1;
+    letter-spacing: 0;
+    text-transform: none;
+    display: inline-block;
+    white-space: nowrap;
+    word-wrap: normal;
+    direction: ltr;
+    -webkit-font-feature-settings: "liga";
+    -webkit-font-smoothing: antialiased;
+    font-feature-settings: "liga";
+    transition: color 0.16s ease;
   }
 </style>

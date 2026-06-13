@@ -1,14 +1,14 @@
 <script lang="ts">
-  import HighlightCardShell from "./HighlightCardShell.svelte";
   import { debugState } from "$lib/landing/debugState.svelte";
 </script>
 
-<HighlightCardShell
-  className="visual-debugger-card theme-secondary-3"
-  title="Visual Debugger"
-  description="See what's going on under the hood."
->
-  <div class="card-content">
+<article class="visual-debugger-card theme-secondary-3">
+  <div class="visual-debugger-card-heading">
+    <h3>
+      Visual<br />
+      Debugger<br />
+      {debugState.enabled ? "On" : "Off"}
+    </h3>
     <div
       class="toggle-switch slot"
       class:enabled={debugState.enabled}
@@ -23,18 +23,50 @@
     >
       <div class="knob disk"></div>
     </div>
-    <p class="status-text">Debugger: {debugState.enabled ? "On" : "Off"}</p>
   </div>
-</HighlightCardShell>
+</article>
 
 <style lang="scss">
-  .card-content {
+  .visual-debugger-card {
+    --card-padding: var(--size-48);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    height: 100%;
+    box-sizing: border-box;
+    background: var(--color-background-tint);
+    border-radius: var(--ui-radius);
+    overflow: hidden;
+
+    @media (max-width: 720px) {
+      --card-padding: var(--size-24);
+      grid-column: span 2;
+    }
+  }
+
+  .visual-debugger-card-heading {
     display: flex;
     flex-direction: column;
     align-items: center;
     justify-content: center;
-    height: 100%;
-    gap: 1rem;
+    gap: var(--size-24);
+    padding: var(--card-padding);
+    text-align: center;
+
+    h3 {
+      display: flex;
+      flex-direction: column;
+      width: min-content;
+      margin: 0;
+      font-family: "Geist Pixel Circle", "Doto", sans-serif;
+      font-size: clamp(3rem, 6.5vw, 5.25rem);
+      line-height: 1;
+    }
+
+    @media (max-width: 720px) {
+      gap: var(--size-20);
+      padding: var(--card-padding);
+    }
   }
 
   .toggle-switch {
@@ -83,14 +115,4 @@
     background-color: white;
   }
 
-  .status-text {
-    font-size: 1rem;
-    font-weight: 600;
-    // color: var(--color-text-secondary);
-    color: rgba(0, 0, 0, 0.5);
-    margin: 0;
-    text-transform: uppercase;
-    letter-spacing: 0.05em;
-    font-size: 0.8rem;
-  }
 </style>

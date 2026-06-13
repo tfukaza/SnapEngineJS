@@ -50,6 +50,15 @@ type FlowEntry<T> =
   | { kind: "item"; item: LayoutNode<T>; width: number; height: number }
   | { kind: "ghost"; width: number; height: number };
 
+function trailingMainMargin<T>(
+  entry: FlowEntry<T>,
+  draggedItem: LayoutNode<T>,
+  axes: FlowAxes,
+): number {
+  const box = entry.kind === "item" ? entry.item.box : draggedItem.box;
+  return axes.main === "x" ? box.margin.right : box.margin.bottom;
+}
+
 export function flowAxesForDirection(direction: LayoutDirection): FlowAxes {
   if (direction === "row") {
     return {
@@ -253,10 +262,15 @@ export function flowLayoutPositions<T>(
   for (const entry of entries) {
     const entryMainSize = entry[axes.mainSize];
     const entryCrossSize = entry[axes.crossSize];
+    const entryTrailingMainMargin = trailingMainMargin(
+      entry,
+      draggedItem,
+      axes,
+    );
     if (
       canWrap &&
       cursorMain > lineMainStart + 0.5 &&
-      cursorMain + entryMainSize > maxMain + 0.5
+      cursorMain + entryMainSize + entryTrailingMainMargin > maxMain + 0.5
     ) {
       cursorMain = lineMainStart;
       cursorCross += lineCrossSize + metrics.crossGap;

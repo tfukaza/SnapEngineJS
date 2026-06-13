@@ -303,8 +303,13 @@ export class BaseObject {
   }
 
   destroy() {
-    // TODO: Remove colliders
     this.cancelAnimations();
+    for (const queue of Object.values(this.global.queue)) {
+      queue.delete(this.gid);
+    }
+    if (this.parent) {
+      this.parent.removeChild(this);
+    }
     this.global.unregisterObject(this);
   }
 
@@ -951,9 +956,17 @@ export class DomElement {
     }
     setDomStyle(this.element, this._style);
     // TODO: See if we can batch the class list updates
-    this.element.classList.forEach((className) => {
-      this.element!.classList.add(className);
-    });
+    if (this._classList.length > 0) {
+      const nextClassList = new Set(this._classList);
+      this.element.classList.forEach((className) => {
+        if (!nextClassList.has(className)) {
+          this.element!.classList.remove(className);
+        }
+      });
+      for (const className of nextClassList) {
+        this.element.classList.add(className);
+      }
+    }
     // TODO: See if we can batch the data attribute updates
     for (const [key, value] of Object.entries(this._dataAttribute)) {
       this.element.setAttribute(`data-${key}`, value);
@@ -1235,9 +1248,8 @@ export class ElementObject extends BaseObject {
     return this._dom.element;
   }
 
-  set element(element: HTMLElement) {
+  set element(element: HTMLElement | null | undefined) {
     if (!element) {
-      console.error("Element is not set", this.gid);
       return;
     }
     this._dom.addElement(element);

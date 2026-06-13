@@ -4,7 +4,6 @@
   import { ElementObject } from "@snapline/object";
   import { AnimationObject } from "@snapline/animation";
   import type { Engine as EngineType } from "@snapline/index";
-  import HighlightCardShell from "./HighlightCardShell.svelte";
   import { debugState } from "$lib/landing/debugState.svelte";
 
   type Keyframe = {
@@ -28,6 +27,7 @@
 
   const TOTAL_DURATION = 4; // seconds
   const TOTAL_DURATION_MS = TOTAL_DURATION * 1000;
+  const plusCells = Array.from({ length: 120 }, (_, index) => index);
 
   const INITIAL_TIME = 0;
   const timelineMarkers = [0, 1, 2, 3, 4];
@@ -41,8 +41,8 @@
   let counterValue = $state(VARIABLE_KEYFRAMES[0]);
   let engine: EngineType | null = $state(null);
   let canvasComponent: Engine | null = null;
-  let animatedSquareRef: HTMLDivElement | null = $state(null);
-  let squareObject: ElementObject | null = null;
+  let animatedValueRef: HTMLSpanElement | null = $state(null);
+  let valueObject: ElementObject | null = null;
   let isPlaying = $state(true);
   let trackControllers: Record<TrackId, AnimationObject | null> = {
     rotate: null,
@@ -51,7 +51,7 @@
   };
   let currentRotation = $state(0);
   let currentScale = $state(1);
-  let squareTransform = $state(`rotate(0deg) scale(1)`);
+  let valueTransform = $state(`rotate(0deg) scale(1)`);
   // Hidden linear time track state
   let playbackRaf: number | null = null;
   let playbackStartMs = 0;
@@ -60,9 +60,9 @@
   let resumeAfterScrub = false;
 
   const TRACK_COLORS: Record<Track["type"], string> = {
-    css: "var(--color-secondary-4)",
-    variable: "var(--color-secondary-3)",
-    sequence: "var(--color-secondary-1)",
+    css: "#d8dde0",
+    variable: "#d8dde0",
+    sequence: "#d8dde0",
   };
 
   const tracks: Track[] = [
@@ -114,22 +114,22 @@
   function updateRotationState(rotation: number) {
     const clampedRotation = clamp(rotation, 0, 360);
     currentRotation = clampedRotation;
-    squareTransform = `rotate(${currentRotation}deg) scale(${currentScale})`;
+    valueTransform = `rotate(${currentRotation}deg) scale(${currentScale})`;
   }
 
   function updateScaleState(scale: number) {
     currentScale = clamp(scale, 0.25, 2);
-    squareTransform = `rotate(${currentRotation}deg) scale(${currentScale})`;
+    valueTransform = `rotate(${currentRotation}deg) scale(${currentScale})`;
   }
 
   $effect(() => {
-    if (!engine || !animatedSquareRef) {
+    if (!engine || !animatedValueRef) {
       return;
     }
 
-    if (!squareObject) {
-      squareObject = new ElementObject(engine, null);
-      squareObject.element = animatedSquareRef;
+    if (!valueObject) {
+      valueObject = new ElementObject(engine, null);
+      valueObject.element = animatedValueRef;
     }
 
     ensureTrackAnimations();
@@ -138,8 +138,8 @@
   onDestroy(() => {
     stopPlaybackLoop();
     cancelTrackAnimations();
-    squareObject?.destroy();
-    squareObject = null;
+    valueObject?.destroy();
+    valueObject = null;
   });
 
   function startPlaybackLoop() {
@@ -231,7 +231,7 @@
   }
 
   function ensureTrackAnimations() {
-    if (!squareObject || !animatedSquareRef) {
+    if (!valueObject || !animatedValueRef) {
       return;
     }
 
@@ -248,7 +248,7 @@
 
       const animation = builders[id]();
       animation.pause();
-      squareObject.addAnimation(animation, { replaceExisting: false });
+      valueObject.addAnimation(animation, { replaceExisting: false });
       animation.progress = currentTime / TOTAL_DURATION;
       trackControllers = { ...trackControllers, [id]: animation };
     }
@@ -263,7 +263,7 @@
   function createRotationAnimation() {
     let controller: AnimationObject;
     controller = new AnimationObject(
-      animatedSquareRef,
+      animatedValueRef,
       {
         $rotation: ROTATION_KEYFRAMES,
       },
@@ -284,7 +284,7 @@
   function createScaleAnimation() {
     let controller: AnimationObject;
     controller = new AnimationObject(
-      animatedSquareRef,
+      animatedValueRef,
       {
         $scale: SCALE_KEYFRAMES,
       },
@@ -305,7 +305,7 @@
   function createVariableAnimation() {
     let controller: AnimationObject;
     controller = new AnimationObject(
-      animatedSquareRef,
+      animatedValueRef,
       {
         $variable: VARIABLE_KEYFRAMES,
       },
@@ -363,7 +363,7 @@
   }
 
   function cancelTrackAnimations() {
-    squareObject?.cancelAnimations();
+    valueObject?.cancelAnimations();
     trackControllers = {
       rotate: null,
       scale: null,
@@ -419,86 +419,147 @@
   }
 </script>
 
-<HighlightCardShell
-  className="animation-card theme-secondary-4"
-  title="Animation Engine"
-  description="WAAPI based animation engine that's lightweight and performant."
->
-  <Engine id="highlight-animation" bind:engine bind:this={canvasComponent} debug={debugState.enabled}>
-    <div class="animation-card">
-      <div class="timeline grid-layout">
-        <div class="timeline-content">
-          <!-- <label class="timeline-label" for="animation-timeline-range"
-            >Time</label
-          > -->
-            <span/>
-          <div class="timeline-slider">
-            <input
-              id="animation-timeline-range"
-              type="range"
-              min="0"
-              max={TOTAL_DURATION}
-              step="0.01"
-              value={currentTime}
-              oninput={handleTimelineInput}
-              onpointerdown={beginTimelineScrub}
-              onpointerup={endTimelineScrub}
-              onpointerleave={endTimelineScrub}
-              onpointercancel={endTimelineScrub}
-              aria-label="Scrub animation time"
-            />
-            <span class="playhead" style={`left: calc(8px + (100% - 16px) * ${currentTime / TOTAL_DURATION});`}></span>
-          </div>
-
-          <span class="timeline-placeholder" aria-hidden="true"></span>
-          <div class="timeline-header">
-            {#each timelineMarkers as marker}
-              <span>{marker}s</span>
-            {/each}
-          </div>
-
-          {#each tracks as track}
-            <div class="track-meta">
-              <span class="track-label">{track.label}</span>
+<article class="animation-card theme-secondary-4">
+  <div class="animation-card-body card">
+    <Engine id="highlight-animation" bind:engine bind:this={canvasComponent} debug={debugState.enabled}>
+      <div class="animation-demo">
+        <div class="timeline grid-layout">
+          <div class="timeline-content">
+            <!-- <label class="timeline-label" for="animation-timeline-range"
+              >Time</label
+            > -->
+            <span></span>
+            <div class="timeline-slider">
+              <input
+                id="animation-timeline-range"
+                type="range"
+                min="0"
+                max={TOTAL_DURATION}
+                step="0.01"
+                value={currentTime}
+                oninput={handleTimelineInput}
+                onpointerdown={beginTimelineScrub}
+                onpointerup={endTimelineScrub}
+                onpointerleave={endTimelineScrub}
+                onpointercancel={endTimelineScrub}
+                aria-label="Scrub animation time"
+              />
+              <span class="playhead" style={`left: calc(8px + (100% - 16px) * ${currentTime / TOTAL_DURATION});`}></span>
             </div>
-            <div class={`track-lane slot ${track.type}`} aria-hidden="true">
+
+            <span class="timeline-placeholder" aria-hidden="true"></span>
+            <div class="timeline-header">
+              {#each timelineMarkers as marker}
+                <span>{marker}s</span>
+              {/each}
+            </div>
+
+            {#each tracks as track}
+              <div class="track-meta">
+                <span class="track-label">{track.label}</span>
+              </div>
               <div
-                class="range-bar"
-                style={`left: ${toPercent(track.range.start)}; width: calc(${toPercent(track.range.end)} - ${toPercent(track.range.start)}); --range-color: ${TRACK_COLORS[track.type]};`}
+                class={`track-lane ${track.type}`}
+                style={`--range-color: ${TRACK_COLORS[track.type]};`}
+                aria-hidden="true"
               >
+                <span
+                  class="track-line"
+                  style={`left: ${toPercent(track.range.start)}; width: calc(${toPercent(track.range.end)} - ${toPercent(track.range.start)});`}
+                ></span>
                 {#each track.keyframes as keyframe}
                   <span
                     class="keyframe-point"
-                    style={`left: ${toPercent(keyframe.time)}; background-color: ${TRACK_COLORS[track.type]};`}
+                    style={`left: ${toPercent(keyframe.time)};`}
                   ></span>
                 {/each}
               </div>
-            </div>
-          {/each}
-        </div>
-      </div>
-
-      <div class="slot shallow preview-area">
-        <div class="preview-square-container">
-          <div
-            class="animated-square"
-            bind:this={animatedSquareRef}
-            style={`transform: ${squareTransform};`}
-          >
-            <span class="value-readout">{counterValue}</span>
+            {/each}
           </div>
         </div>
-        <!-- <button class="playback-toggle" type="button" onclick={togglePlayback}>
-          {isPlaying ? "Pause" : "Play"}
-        </button> -->
+
+        <div class="preview-area">
+        <div class="preview-plus-grid" aria-hidden="true">
+          {#each plusCells as cell (cell)}
+            <span>+</span>
+          {/each}
+        </div>
+        <div class="preview-value-container">
+          <span
+            class="animated-value value-readout"
+            bind:this={animatedValueRef}
+            style={`transform: ${valueTransform};`}
+          >
+            {counterValue}
+          </span>
+        </div>
+          <!-- <button class="playback-toggle" type="button" onclick={togglePlayback}>
+            {isPlaying ? "Pause" : "Play"}
+          </button> -->
+        </div>
       </div>
-    </div>
-  </Engine>
-</HighlightCardShell>
+    </Engine>
+  </div>
+
+  <div class="animation-card-heading">
+    <h3>Animation Engine</h3>
+    <p>WAAPI based animation engine that's lightweight and performant.</p>
+  </div>
+</article>
 
 <style lang="scss">
-
   .animation-card {
+    --card-padding: var(--size-48);
+    container-type: inline-size;
+    container-name: animation-card;
+    display: flex;
+    flex-direction: column;
+    gap: var(--size-32);
+    height: 100%;
+    box-sizing: border-box;
+    background: var(--color-background-tint);
+    border-radius: var(--ui-radius);
+    overflow: hidden;
+
+    @media (max-width: 720px) {
+      --card-padding: var(--size-24);
+      grid-column: span 2;
+    }
+  }
+
+  .animation-card-heading {
+    display: grid;
+    grid-template-columns: auto 1fr;
+    align-items: start;
+    justify-content: space-between;
+    gap: var(--size-48);
+    padding: 0 var(--card-padding) var(--card-padding) var(--card-padding);
+
+    h3 {
+      width: min-content;
+      margin-bottom: 0;
+      font-family: "Geist Pixel Circle", "Doto", sans-serif;
+      font-size: clamp(2.25rem, 8.4cqi, 4.25rem);
+      line-height: 0.88;
+    }
+
+    @container animation-card (max-width: 500px) {
+      gap: var(--size-12);
+      grid-template-columns: 1fr;
+
+      > * {
+        grid-column: auto;
+      }
+    }
+  }
+
+  .animation-card-body {
+    flex: 1;
+    min-height: 0;
+    margin: var(--size-16) var(--card-padding) 0 var(--card-padding);
+  }
+
+  .animation-demo {
     display: flex;
     flex-direction: column;
     gap: 0;
@@ -508,47 +569,71 @@
 
 
   .preview-area {
+    position: relative;
     flex: 1;
     border-radius: 0 0 var(--ui-radius) var(--ui-radius);
+    border: 1px solid #d8dde0;
     overflow: hidden;
     display: flex;
     align-items: center;
     justify-content: center;
-    background-image: radial-gradient(circle, rgba(47, 31, 26, 0.15) 1px, transparent 1px);
-    background-size: 32px 32px;
     background-color: var(--color-background-tint);
-    min-height: 150px;
+    min-height: 0;
+    isolation: isolate;
   }
 
-  .animated-square {
-    width: 64px;
-    height: 64px;
-    border-radius: 0.6rem;
-    background-color:var(--color-secondary-1);
-    // box-shadow: 0 15px 35px color-mix(in srgb, red 30%, rgba(0, 0, 0, 0.35));
-    // transition: transform 0.2s ease, filter 0.2s ease;
+  .preview-plus-grid {
+    position: absolute;
+    inset: 10px;
+    z-index: 0;
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(36px, 1fr));
+    grid-auto-rows: 36px;
+    overflow: hidden;
+    pointer-events: none;
+    color: rgba(0, 0, 0, 0.08);
+    font-family: "Bitcount Grid Single", monospace;
+    font-size: 10px;
+    font-weight: 300;
+    line-height: 1;
+    place-items: center;
+    user-select: none;
+  }
+
+  .preview-plus-grid span {
+    color: inherit;
+    margin: 0;
+  }
+
+  .preview-value-container {
+    position: relative;
+    z-index: 1;
     display: flex;
     align-items: center;
     justify-content: center;
-    font-weight: 600;
-    font-size: 1.15rem;
-    font-variant-numeric: tabular-nums;
-    letter-spacing: 0.05em;
-    transform: rotate(0deg) scale(1);
-
-
-    span {
-      font-family: 'Geist Pixel Circle', 'Doto', sans-serif;
-      font-weight: 900;
-    }
   }
 
-  // .preview-square-container {
+  .animated-value {
+    min-width: 2.2ch;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    color: #111111;
+    font-family: "Bitcount Grid Single", monospace;
+    font-size: 56px;
+    font-weight: 300;
+    font-variant-numeric: tabular-nums;
+    line-height: 1;
+    letter-spacing: 0;
+    transform: rotate(0deg) scale(1);
+  }
+
+  // .preview-value-container {
   //   filter: drop-shadow(6px 6px 5px rgba(24, 29, 42, 0.264));
   // }
 
   .value-readout {
-    color: #fffaf6;
+    color: #111111;
   }
 
   .timeline {
@@ -602,7 +687,7 @@
     transform: translateX(-50%);
     pointer-events: none;
     box-shadow: 4px 4px 4px rgba(28, 38, 44, 0.151);
-    z-index: 1;
+    z-index: 0;
   }
 
   .timeline-placeholder {
@@ -636,44 +721,71 @@
   }
 
   .track-label {
+    font-family: "Bitcount Grid Single", monospace;
     font-size: 0.8rem;
+    font-weight: 300;
     // letter-spacing: 0.05em;
     // text-transform: uppercase;
   }
 
   .track-lane {
+    --keyframe-size: 14px;
+    --specular-angle: 130deg;
+    --track-line-color: #aeb6ba;
+    --keyframe-color: #aeb6ba;
     position: relative;
+    z-index: 1;
     height: 20px;
-    border-radius: 10px;
-    background-color: var(--color-background-tint);
     border: none;
-    // background: none;
-    padding: 0px 8px;
     margin: 0px 8px;
-    // padding: 0px 4px;
-    // box-sizing: border-box;
-    // overflow: hidden;  
-    .range-bar {
-      position: relative;
-      height: 20px;
-      border-radius: 10px;
-      // border: 1px solid var(--range-color, rgba(47, 31, 26, 0.4));
-      // box-shadow: 0 6px 18px rgba(0, 0, 0, 0.08);
-      // background-color: var(--color-background);
-      pointer-events: none;
-    }
+    overflow: visible;
   }
 
-
+  .track-line {
+    position: absolute;
+    top: 50%;
+    height: 2px;
+    border-radius: 999px;
+    transform: translateY(-50%);
+    background-color: var(--track-line-color);
+    box-shadow: none;
+    pointer-events: none;
+    z-index: 0;
+  }
 
   .keyframe-point {
     position: absolute;
+    z-index: 2;
     top: 50%;
-    width: 10px;
-    height: 10px;
-    border-radius: 2px;
-    transform: translate(-50%, -50%) rotate(45deg);
-    box-shadow: 2px 2px 2px rgba(10, 30, 53, 0.12);
+    width: var(--keyframe-size);
+    height: var(--keyframe-size);
+    border-radius: 50%;
+    transform: translate(-50%, -50%);
+    background:
+      radial-gradient(
+        hsl(from var(--keyframe-color) h calc(s + 5) calc(l + 15)) 0%,
+        hsl(from var(--keyframe-color) h s calc(l + 10)) 50%,
+        hsl(from var(--keyframe-color) h s l / 0) 58%,
+        hsl(from var(--keyframe-color) h s l / 0) 65%,
+        hsl(from var(--keyframe-color) h s calc(l - 5) / 0.4) 72%
+      ),
+      conic-gradient(
+        from var(--specular-angle) at center,
+        hsl(from var(--keyframe-color) h calc(s + 20) calc(l + 5) / 0.1) 43%,
+        #fff 57%,
+        hsl(from var(--keyframe-color) h calc(s + 20) calc(l + 5) / 0.1) 70%
+      ),
+      conic-gradient(
+        from 120deg at center,
+        hsl(from var(--keyframe-color) h calc(s - 5) calc(l - 10)) 0%,
+        hsl(from var(--keyframe-color) calc(h + 10) calc(s + 10) calc(l + 20)) 50%,
+        hsl(from var(--keyframe-color) h calc(s - 5) calc(l - 10)) 100%
+      );
+    box-shadow:
+      2px 2px 2px 0px rgba(4, 14, 48, 0.096),
+      4px 4px 4px -3px rgba(7, 20, 53, 0.142),
+      6px 6px 6px -4px rgba(6, 21, 40, 0.422);
+    pointer-events: none;
   }
 
   .playback-toggle {

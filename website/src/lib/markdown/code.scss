@@ -9,8 +9,58 @@
 
 .code-tabs-header {
 	display: flex;
-	gap: 4px;
+	flex-wrap: wrap;
+	gap: 0;
     margin-bottom: 8px;
+	padding-top: 2px;
+}
+
+.code-tab-btn,
+.code-tab-button {
+	appearance: none;
+	background: transparent;
+	border: 0;
+	border-radius: 0;
+	box-shadow: none;
+	color: var(--color-background-dark);
+	cursor: pointer;
+	font-family: "Bitcount Grid Single", monospace;
+	font-size: 0.86rem;
+	font-weight: 300;
+	line-height: 1;
+	margin: 0;
+	padding: 0;
+	text-shadow: none;
+	transition:
+		color 0.15s ease,
+		text-shadow 0.15s ease;
+}
+
+.code-tab-btn:not(:last-child)::after,
+.code-tab-button:not(:last-child)::after {
+	content: "•";
+	color: color-mix(in srgb, var(--color-background-dark) 62%, transparent);
+	display: inline-block;
+	margin: 0 12px;
+	text-shadow: none;
+}
+
+.code-tab-btn:hover,
+.code-tab-btn:focus-visible,
+.code-tab-button:hover,
+.code-tab-button:focus-visible {
+	background: transparent;
+	box-shadow: none;
+	color: var(--color-primary);
+	text-shadow: 0 0 5px rgba(255, 117, 58, 0.42);
+}
+
+.code-tab-btn.active,
+.code-tab-button.active {
+	color: var(--color-primary);
+	text-shadow:
+		0 0 1px var(--color-primary),
+		0 0 6px rgba(255, 117, 58, 0.52);
 }
 
 .code-tabs-content {
@@ -19,7 +69,7 @@
     }
 }
 
-.code-tabs-content .doc-code-block {
+.code-tabs-content .display {
 	margin: 0;
 }
 

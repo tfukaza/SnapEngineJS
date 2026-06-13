@@ -1,234 +1,831 @@
 <script lang="ts">
+  import type { Action } from "svelte/action";
   import { Engine } from "@snap-engine/asset-base-svelte";
-  import CollisionBox from "@svelte-demo/demo/collision/CollisionBox.svelte";
-  import CollisionCircle from "@svelte-demo/demo/collision/CollisionCircle.svelte";
-  import type { Engine as EngineType } from "@snapline/index";
-  import HighlightCardShell from "./HighlightCardShell.svelte";
+  import { CircleCollider, RectCollider } from "@snap-engine/core/collision";
+  import type { Collider } from "@snap-engine/core/collision";
+  import { ElementObject } from "@snap-engine/core";
+  import type { Engine as EngineType } from "@snap-engine/core";
   import { debugState } from "$lib/landing/debugState.svelte";
+  import collisionDotMatrix from "../../../../../static/generated/collision-detection-dot-matrix.json";
+
+  type Dot = {
+    x: number;
+    y: number;
+    key: string;
+  };
+  type CollisionDotMatrix = {
+    columns: number;
+    rows: number;
+    dots: Array<{ x: number; y: number }>;
+  };
+  type TargetCollisionKind = "square" | "circle";
+
+  const GENERATED_DOT_MATRIX = collisionDotMatrix as CollisionDotMatrix;
+  const BOX_SIZE = 84;
+  const CIRCLE_SIZE = 72;
+  const DOT_DISPLACEMENT_MIN = 4;
+  const DOT_DISPLACEMENT_MAX = 30;
+  const DOT_DISPLACEMENT_POWER = 1.45;
+  const DOT_SQUARE_CORNER_BONUS = 18;
+  const ACTIVE_DISPLACEMENT_EPSILON = 0.01;
+  const DESCRIPTION_DISPLACEMENT_MIN = 3;
+  const DESCRIPTION_DISPLACEMENT_MAX = 22;
+  const DESCRIPTION_DISPLACEMENT_POWER = 1.35;
+  const DESCRIPTION_SQUARE_CORNER_BONUS = 12;
+  const TARGET_COMBINED_COLOR = "#8f3dff";
+  const DESCRIPTION_TEXT = "Built-in collision engine to detect overlaps and contacts.";
+  const descriptionCharacters = Array.from(DESCRIPTION_TEXT).map((character, index) => ({
+    character,
+    key: `${character}-${index}`,
+  }));
+  const dots: Dot[] = GENERATED_DOT_MATRIX.dots.map((dot) => ({
+    ...dot,
+    key: `${dot.x}-${dot.y}`,
+  }));
 
   let engine: EngineType | null = $state(null);
-  let collisionCount = $state(0);
-  let isColliding = $state(false);
-  let containerEl: HTMLDivElement | null = $state(null);
-  let containerWidth = $state(360);
-  let containerHeight = $state(360);
+  let stageElement: HTMLDivElement | null = $state(null);
+  let descriptionDisplacementUpdateQueued = false;
+  const descriptionCharacterObjects = new WeakMap<HTMLElement, ElementObject>();
+  const descriptionCharacterClassLists = new WeakMap<HTMLElement, string[]>();
+  const gridColumns = GENERATED_DOT_MATRIX.columns;
+  const gridRows = GENERATED_DOT_MATRIX.rows;
 
-  const BOX_SIZE = 70;
-  const HERO_CIRCLE_RADIUS = 35;
-  const CIRCLE_RADIUS = 8;
-  const CIRCLE_GAP = 6;
-  const STEP = CIRCLE_RADIUS * 2 + CIRCLE_GAP;
-  const GRID_MARGIN = 16; // Margin from container edges
+  function clamp(value: number, min: number, max: number) {
+    return Math.min(Math.max(value, min), max);
+  }
 
-  // Calculate grid dimensions based on container size
-  let gridCols = $derived(Math.max(1, Math.floor((containerWidth - GRID_MARGIN * 2) / STEP)));
-  let gridRows = $derived(Math.max(1, Math.floor((containerHeight - GRID_MARGIN * 2) / STEP)));
+  function getColliderElement(collider: Collider) {
+    return (collider.parent as ElementObject).element;
+  }
 
-  // Calculate actual grid size and centering margins
-  let gridWidth = $derived((gridCols - 1) * STEP + CIRCLE_RADIUS * 2);
-  let gridHeight = $derived((gridRows - 1) * STEP + CIRCLE_RADIUS * 2);
-  let gridMarginX = $derived((containerWidth - gridWidth) / 2 - CIRCLE_RADIUS);
-  let gridMarginY = $derived((containerHeight - gridHeight) / 2 - CIRCLE_RADIUS);
+  function getCollisionTargetKind(collider: Collider): TargetCollisionKind | null {
+    const element = getColliderElement(collider);
+    if (element?.classList.contains("collision-target--square")) {
+      return "square";
+    }
+    if (element?.classList.contains("collision-target--circle")) {
+      return "circle";
+    }
+    return null;
+  }
 
-  // Hero object positions (relative to container)
-  let boxX = $derived(Math.max(10, gridMarginX - BOX_SIZE / 2));
-  let boxY = $derived(Math.max(10, gridMarginY - BOX_SIZE / 2));
-  let heroCircleX = $derived(Math.min(containerWidth - HERO_CIRCLE_RADIUS - 10, containerWidth - gridMarginX - HERO_CIRCLE_RADIUS));
-  let heroCircleY = $derived(Math.max(HERO_CIRCLE_RADIUS + 10, gridMarginY));
+  function isCollisionTarget(collider: Collider) {
+    return getCollisionTargetKind(collider) !== null;
+  }
 
-  // Generate collision circles based on dynamic grid
-  let collisionCircles = $derived.by(() => {
-    const cols = gridCols;
-    const rows = gridRows;
-    const marginX = gridMarginX;
-    const marginY = gridMarginY;
-    
-    return Array.from(
-      { length: cols * rows },
-      (_, index) => {
-        const row = Math.floor(index / cols);
-        const col = index % cols;
-        return {
-          id: `${row}-${col}`,
-          initialX: marginX + col * STEP + CIRCLE_RADIUS,
-          initialY: marginY + row * STEP + CIRCLE_RADIUS,
-        };
-      },
+  function setObjectActiveClass(
+    object: ElementObject | null | undefined,
+    baseClassList: string[],
+    isActive: boolean,
+  ) {
+    if (!object) {
+      return;
+    }
+
+    const nextClassList = isActive
+      ? Array.from(new Set([...baseClassList, "is-active"]))
+      : baseClassList;
+    object.classList = nextClassList;
+    object.writeDom();
+  }
+
+  function rectsOverlap(a: DOMRect, b: DOMRect) {
+    return a.left < b.right && a.right > b.left && a.top < b.bottom && a.bottom > b.top;
+  }
+
+  function getLayoutRect(element: HTMLElement) {
+    const offsetParent = element.offsetParent as HTMLElement | null;
+    if (!offsetParent) {
+      return element.getBoundingClientRect();
+    }
+
+    const parentRect = offsetParent.getBoundingClientRect();
+    return new DOMRect(
+      parentRect.left + element.offsetLeft,
+      parentRect.top + element.offsetTop,
+      element.offsetWidth,
+      element.offsetHeight,
     );
-  });
-
-  function handleCollisionBegin() {
-    collisionCount++;
-    isColliding = true;
   }
 
-  function handleCollisionEnd() {
-    isColliding = false;
+  function getTargetElementKind(element: HTMLElement): TargetCollisionKind | null {
+    if (element.classList.contains("collision-target--square")) {
+      return "square";
+    }
+    if (element.classList.contains("collision-target--circle")) {
+      return "circle";
+    }
+    return null;
   }
 
-  $effect(() => {
-    if (!containerEl) return;
+  function getDescriptionSquareCornerBonus(
+    textCenter: { x: number; y: number },
+    targetCenter: { x: number; y: number },
+    targetRect: DOMRect,
+    direction: { x: number; y: number },
+  ) {
+    const halfWidth = targetRect.width / 2;
+    const halfHeight = targetRect.height / 2;
+    const minHalfSize = Math.min(halfWidth, halfHeight);
+    const absDirectionX = Math.abs(direction.x);
+    const absDirectionY = Math.abs(direction.y);
+    const rayBoundaryDistance = Math.min(
+      absDirectionX > 0.001 ? halfWidth / absDirectionX : Number.POSITIVE_INFINITY,
+      absDirectionY > 0.001 ? halfHeight / absDirectionY : Number.POSITIVE_INFINITY,
+    );
+    const angleBoost = clamp(rayBoundaryDistance / minHalfSize, 1, Math.SQRT2);
+    const localX = clamp(Math.abs(textCenter.x - targetCenter.x) / halfWidth, 0, 1);
+    const localY = clamp(Math.abs(textCenter.y - targetCenter.y) / halfHeight, 0, 1);
+    const cornerCloseness = Math.sqrt(localX * localY);
+    const normalizedAngleBoost = clamp((angleBoost - 1) / (Math.SQRT2 - 1), 0, 1);
 
-    const resizeObserver = new ResizeObserver((entries) => {
-      for (const entry of entries) {
-        containerWidth = entry.contentRect.width;
-        containerHeight = entry.contentRect.height;
+    return cornerCloseness * normalizedAngleBoost * DESCRIPTION_SQUARE_CORNER_BONUS;
+  }
+
+  function updateDescriptionTextDisplacements() {
+    if (!stageElement) {
+      return;
+    }
+
+    const characters = Array.from(
+      stageElement.querySelectorAll<HTMLElement>(".collision-description-character"),
+    );
+    const targets = Array.from(stageElement.querySelectorAll<HTMLElement>(".collision-target"));
+
+    for (const character of characters) {
+      const textRect = getLayoutRect(character);
+      const textCenter = {
+        x: textRect.left + textRect.width / 2,
+        y: textRect.top + textRect.height / 2,
+      };
+      let displacementX = 0;
+      let displacementY = 0;
+
+      for (const target of targets) {
+        const targetKind = getTargetElementKind(target);
+        if (!targetKind) {
+          continue;
+        }
+
+        const targetRect = target.getBoundingClientRect();
+        if (!rectsOverlap(textRect, targetRect)) {
+          continue;
+        }
+
+        const targetCenter = {
+          x: targetRect.left + targetRect.width / 2,
+          y: targetRect.top + targetRect.height / 2,
+        };
+        const awayX = textCenter.x - targetCenter.x;
+        const awayY = textCenter.y - targetCenter.y;
+        const distance = Math.hypot(awayX, awayY);
+        const direction =
+          distance > 0.001
+            ? { x: awayX / distance, y: awayY / distance }
+            : { x: 1, y: 0 };
+        const influenceRadius = Math.max(targetRect.width, targetRect.height) * 0.8;
+        const closeness = clamp(1 - distance / influenceRadius, 0, 1);
+        const distanceFactor = Math.pow(closeness, DESCRIPTION_DISPLACEMENT_POWER);
+        const displacement =
+          DESCRIPTION_DISPLACEMENT_MIN +
+          distanceFactor * (DESCRIPTION_DISPLACEMENT_MAX - DESCRIPTION_DISPLACEMENT_MIN) +
+          (targetKind === "square"
+            ? getDescriptionSquareCornerBonus(textCenter, targetCenter, targetRect, direction)
+            : 0);
+        const cappedDisplacement = Math.min(displacement, DESCRIPTION_DISPLACEMENT_MAX);
+
+        displacementX += direction.x * cappedDisplacement;
+        displacementY += direction.y * cappedDisplacement;
       }
-    });
 
-    resizeObserver.observe(containerEl);
+      const displacementLength = Math.hypot(displacementX, displacementY);
+      if (displacementLength > DESCRIPTION_DISPLACEMENT_MAX) {
+        const clampFactor = DESCRIPTION_DISPLACEMENT_MAX / displacementLength;
+        displacementX *= clampFactor;
+        displacementY *= clampFactor;
+      }
 
-    return () => {
-      resizeObserver.disconnect();
-    };
-  });
-</script>
-
-<HighlightCardShell
-  className="collision-card theme-secondary-1"
-  title="Collision Detection"
-  description="Built-in collision engine to detect overlaps and contacts."
->
-
-
-  <div class="collision-demo-container" bind:this={containerEl}>
-    <div class="dot-grid-background"></div>
-    <Engine id="collision-card-canvas" bind:engine={engine} debug={debugState.enabled}>
-      <div class="collision-demo">
-       
-        <div class="collision-grid">
-          {#each collisionCircles as circle (circle.id)}
-            <CollisionCircle
-              title={`Circle ${circle.id + 1}`}
-              initialX={circle.initialX}
-              initialY={circle.initialY}
-              radius={CIRCLE_RADIUS}
-              onCollisionBegin={handleCollisionBegin}
-              onCollisionEnd={handleCollisionEnd}
-            />
-          {/each}
-        </div> <CollisionBox
-          title="Box"
-          initialX={boxX}
-          initialY={boxY}
-          width={BOX_SIZE}
-          height={BOX_SIZE}
-          onCollisionBegin={handleCollisionBegin}
-          onCollisionEnd={handleCollisionEnd}
-        />
-        <CollisionCircle
-          title="Circle"
-          initialX={heroCircleX}
-          initialY={heroCircleY}
-          radius={HERO_CIRCLE_RADIUS}
-          onCollisionBegin={handleCollisionBegin}
-          onCollisionEnd={handleCollisionEnd}
-        />
-      </div>
-    </Engine>
-  </div>
-    <div class="collision-counter card" class:active={isColliding}>
-    <span class="count pixel-font">{collisionCount}</span>
-    <span class="label pixel-font">collisions</span>
-  </div>
-</HighlightCardShell>
-
-<style lang="scss">
-  .collision-counter {
-    --card-color: #222628;
-    display: flex;
-    flex-direction: column;
-    align-items: center;
-    padding: 0.4rem 0.7rem;
-    position: absolute;
-    bottom: 1rem;
-    left: 50%;
-    transform: translateX(-50%);
-
-    span {
-      color: #fff;
+      const isActive = displacementLength > ACTIVE_DISPLACEMENT_EPSILON;
+      const characterObject = descriptionCharacterObjects.get(character);
+      const baseClassList =
+        descriptionCharacterClassLists.get(character) ?? ["collision-description-character"];
+      characterObject?.queueUpdate(
+        "WRITE_2",
+        () => {
+          setObjectActiveClass(characterObject, baseClassList, isActive);
+          character.style.transform = isActive
+            ? `translate(${displacementX.toFixed(2)}px, ${displacementY.toFixed(2)}px)`
+            : "";
+        },
+        "description-character-displacement",
+      );
     }
   }
 
-  .collision-counter .count {
-    font-size: 1.2rem;
-    font-weight: 700;
-    line-height: 1;
+  function scheduleDescriptionDisplacementUpdate() {
+    if (descriptionDisplacementUpdateQueued || typeof requestAnimationFrame === "undefined") {
+      return;
+    }
+
+    descriptionDisplacementUpdateQueued = true;
+    requestAnimationFrame(() => {
+      descriptionDisplacementUpdateQueued = false;
+      updateDescriptionTextDisplacements();
+    });
   }
 
-  .collision-counter .label {
-    font-size: 0.55rem;
-    text-transform: uppercase;
-    letter-spacing: 0.05em;
-  }
+  const stageRef: Action<HTMLDivElement> = (node) => {
+    stageElement = node;
+    scheduleDescriptionDisplacementUpdate();
 
-  .collision-demo-container {
-    height: 360px;
-    border-top-left-radius: 0;
-    border-top-right-radius: 0;
+    return {
+      destroy() {
+        if (stageElement === node) {
+          stageElement = null;
+        }
+      },
+    };
+  };
+
+  const circleColliderRef: Action<
+    HTMLDivElement,
+    { engine: EngineType | null }
+  > = (
+    node,
+    params,
+  ) => {
+    let object: ElementObject | null = null;
+    let collider: CircleCollider | null = null;
+    const baseClassList = Array.from(node.classList);
+    const activeTargetCollisions = new Set<Collider>();
+    const previousTargetCenters = new Map<symbol, { x: number; y: number }>();
+
+    function getDotCenter() {
+      const offsetParent = node.offsetParent as HTMLElement | null;
+      if (!offsetParent) {
+        const rect = node.getBoundingClientRect();
+        return {
+          x: rect.left + rect.width / 2,
+          y: rect.top + rect.height / 2,
+        };
+      }
+
+      const parentRect = offsetParent.getBoundingClientRect();
+      return {
+        x: parentRect.left + node.offsetLeft + node.offsetWidth / 2,
+        y: parentRect.top + node.offsetTop + node.offsetHeight / 2,
+      };
+    }
+
+    function getFallbackDirection(targetCenter: { x: number; y: number }, target: Collider) {
+      const previousCenter = previousTargetCenters.get(target.uuid);
+      const motionX = previousCenter ? targetCenter.x - previousCenter.x : 0;
+      const motionY = previousCenter ? targetCenter.y - previousCenter.y : 0;
+      const motionDistance = Math.hypot(motionX, motionY);
+      if (motionDistance > 0.001) {
+        return { x: motionX / motionDistance, y: motionY / motionDistance };
+      }
+
+      const offsetParent = node.offsetParent as HTMLElement | null;
+      if (offsetParent) {
+        const parentX = node.offsetLeft - offsetParent.clientWidth / 2;
+        const parentY = node.offsetTop - offsetParent.clientHeight / 2;
+        const parentDistance = Math.hypot(parentX, parentY);
+        if (parentDistance > 0.001) {
+          return { x: parentX / parentDistance, y: parentY / parentDistance };
+        }
+      }
+
+      return { x: 1, y: 0 };
+    }
+
+    function setDotDisplacement(x: number, y: number) {
+      object?.queueUpdate(
+        "WRITE_2",
+        () => {
+          const isActive = Math.hypot(x, y) > ACTIVE_DISPLACEMENT_EPSILON;
+          setObjectActiveClass(object, baseClassList, isActive);
+          if (isActive) {
+            node.style.transform = `translate(${x.toFixed(2)}px, ${y.toFixed(2)}px)`;
+          } else {
+            node.style.transform = "";
+          }
+        },
+        "dot-displacement",
+      );
+    }
+
+    function getSquareCornerBonus(
+      dotCenter: { x: number; y: number },
+      targetCenter: { x: number; y: number },
+      targetRect: DOMRect,
+      direction: { x: number; y: number },
+    ) {
+      const halfWidth = targetRect.width / 2;
+      const halfHeight = targetRect.height / 2;
+      const minHalfSize = Math.min(halfWidth, halfHeight);
+      const absDirectionX = Math.abs(direction.x);
+      const absDirectionY = Math.abs(direction.y);
+      const rayBoundaryDistance = Math.min(
+        absDirectionX > 0.001 ? halfWidth / absDirectionX : Number.POSITIVE_INFINITY,
+        absDirectionY > 0.001 ? halfHeight / absDirectionY : Number.POSITIVE_INFINITY,
+      );
+      const angleBoost = clamp(rayBoundaryDistance / minHalfSize, 1, Math.SQRT2);
+      const localX = clamp(Math.abs(dotCenter.x - targetCenter.x) / halfWidth, 0, 1);
+      const localY = clamp(Math.abs(dotCenter.y - targetCenter.y) / halfHeight, 0, 1);
+      const cornerCloseness = Math.sqrt(localX * localY);
+      const normalizedAngleBoost = clamp((angleBoost - 1) / (Math.SQRT2 - 1), 0, 1);
+
+      return cornerCloseness * normalizedAngleBoost * DOT_SQUARE_CORNER_BONUS;
+    }
+
+    function updateDotState() {
+      if (activeTargetCollisions.size === 0) {
+        setDotDisplacement(0, 0);
+        return;
+      }
+
+      const dotCenter = getDotCenter();
+      let displacementX = 0;
+      let displacementY = 0;
+
+      for (const target of activeTargetCollisions) {
+        const element = getColliderElement(target);
+        if (!element) {
+          continue;
+        }
+
+        const targetKind = getCollisionTargetKind(target);
+        const targetRect = element.getBoundingClientRect();
+        const targetCenter = {
+          x: targetRect.left + targetRect.width / 2,
+          y: targetRect.top + targetRect.height / 2,
+        };
+        const awayX = dotCenter.x - targetCenter.x;
+        const awayY = dotCenter.y - targetCenter.y;
+        const distance = Math.hypot(awayX, awayY);
+        const direction =
+          distance > 0.001
+            ? { x: awayX / distance, y: awayY / distance }
+            : getFallbackDirection(targetCenter, target);
+        const influenceRadius = Math.max(targetRect.width, targetRect.height) * 0.7;
+        const closeness = clamp(1 - distance / influenceRadius, 0, 1);
+        const distanceFactor = Math.pow(closeness, DOT_DISPLACEMENT_POWER);
+        const displacement =
+          DOT_DISPLACEMENT_MIN +
+          distanceFactor * (DOT_DISPLACEMENT_MAX - DOT_DISPLACEMENT_MIN) +
+          (targetKind === "square"
+            ? getSquareCornerBonus(dotCenter, targetCenter, targetRect, direction)
+            : 0);
+
+        const cappedDisplacement = Math.min(displacement, DOT_DISPLACEMENT_MAX);
+        displacementX += direction.x * cappedDisplacement;
+        displacementY += direction.y * cappedDisplacement;
+        previousTargetCenters.set(target.uuid, targetCenter);
+      }
+
+      const displacementLength = Math.hypot(displacementX, displacementY);
+      if (displacementLength > DOT_DISPLACEMENT_MAX) {
+        const clampFactor = DOT_DISPLACEMENT_MAX / displacementLength;
+        displacementX *= clampFactor;
+        displacementY *= clampFactor;
+      }
+
+      setDotDisplacement(displacementX, displacementY);
+    }
+
+    function detach() {
+      if (collider) {
+        engine?.collisionEngine?.removeObject(collider.uuid);
+      }
+      object?.destroy();
+      activeTargetCollisions.clear();
+      previousTargetCenters.clear();
+      collider = null;
+      object = null;
+    }
+
+    function attach(currentEngine: EngineType | null) {
+      if (!currentEngine || object) {
+        return;
+      }
+
+      object = new ElementObject(currentEngine, null);
+      object.element = node;
+      object.classList = baseClassList;
+      const radius = node.getBoundingClientRect().width / 2;
+      collider = new CircleCollider(currentEngine, object, radius, radius, radius);
+      object.addCollider(collider);
+
+      collider.event.collider.onBeginContact = (_, other) => {
+        const targetKind = getCollisionTargetKind(other);
+        if (!targetKind) {
+          return;
+        }
+
+        activeTargetCollisions.add(other);
+        updateDotState();
+      };
+
+      collider.event.collider.onCollide = (_, other) => {
+        if (!isCollisionTarget(other)) {
+          return;
+        }
+
+        activeTargetCollisions.add(other);
+        updateDotState();
+      };
+
+      collider.event.collider.onEndContact = (_, other) => {
+        if (!isCollisionTarget(other)) {
+          return;
+        }
+
+        activeTargetCollisions.delete(other);
+        previousTargetCenters.delete(other.uuid);
+        updateDotState();
+      };
+    }
+
+    attach(params.engine);
+
+    return {
+      update(nextParams) {
+        attach(nextParams.engine);
+      },
+      destroy() {
+        detach();
+      },
+    };
+  };
+
+  const collisionTargetRef: Action<
+    HTMLDivElement,
+    {
+      engine: EngineType | null;
+      size: number;
+      shape: "rect" | "circle";
+    }
+  > = (node, params) => {
+    let object: ElementObject | null = null;
+    let collider: RectCollider | CircleCollider | null = null;
+    let isDragging = false;
+    let dragStartX = 0;
+    let dragStartY = 0;
+    let pointerStartX = 0;
+    let pointerStartY = 0;
+    const activeTargetContacts = new Set<symbol>();
+
+    function moveTo(x: number, y: number) {
+      if (!object) {
+        return;
+      }
+
+      object.worldPosition = [x, y];
+      object.requestTransform();
+      scheduleDescriptionDisplacementUpdate();
+    }
+
+    function attach(currentEngine: EngineType | null) {
+      if (!currentEngine || object) {
+        return;
+      }
+
+      object = new ElementObject(currentEngine, null);
+      object.transformMode = "relative";
+      object.element = node;
+
+      collider =
+        params.shape === "circle"
+          ? new CircleCollider(
+              currentEngine,
+              object,
+              params.size / 2,
+              params.size / 2,
+              params.size / 2,
+            )
+          : new RectCollider(currentEngine, object, 0, 0, params.size, params.size);
+      object.addCollider(collider);
+      collider.event.collider.onBeginContact = (_, other) => {
+        if (!isCollisionTarget(other)) {
+          return;
+        }
+
+        activeTargetContacts.add(other.uuid);
+        node.style.color = TARGET_COMBINED_COLOR;
+      };
+      collider.event.collider.onEndContact = (_, other) => {
+        if (!isCollisionTarget(other)) {
+          return;
+        }
+
+        activeTargetContacts.delete(other.uuid);
+        if (activeTargetContacts.size === 0) {
+          node.style.color = "";
+        }
+      };
+      object.event.input.dragStart = (prop) => {
+        if (!object) {
+          return;
+        }
+
+        object.global.data.allowCameraControl = false;
+        isDragging = true;
+        dragStartX = object.transform.x;
+        dragStartY = object.transform.y;
+        pointerStartX = prop.start.x;
+        pointerStartY = prop.start.y;
+      };
+
+      object.event.input.drag = (prop) => {
+        if (!object) {
+          return;
+        }
+
+        moveTo(
+          dragStartX + prop.position.x - pointerStartX,
+          dragStartY + prop.position.y - pointerStartY,
+        );
+      };
+
+      object.event.input.dragEnd = () => {
+        if (object) {
+          object.global.data.allowCameraControl = true;
+        }
+
+        isDragging = false;
+      };
+    }
+
+    attach(params.engine);
+
+    return {
+      update(nextParams) {
+        attach(nextParams.engine);
+      },
+      destroy() {
+        if (collider) {
+          engine?.collisionEngine?.removeObject(collider.uuid);
+        }
+        object?.destroy();
+        collider = null;
+        object = null;
+      },
+    };
+  };
+
+  const descriptionCharacterRef: Action<HTMLSpanElement, { engine: EngineType | null }> = (
+    node,
+    params,
+  ) => {
+    let object: ElementObject | null = null;
+    const baseClassList = Array.from(node.classList);
+    descriptionCharacterClassLists.set(node, baseClassList);
+
+    function attach(currentEngine: EngineType | null) {
+      if (!currentEngine || object) {
+        return;
+      }
+
+      object = new ElementObject(currentEngine, null);
+      object.element = node;
+      object.classList = baseClassList;
+      descriptionCharacterObjects.set(node, object);
+    }
+
+    attach(params.engine);
+
+    return {
+      update(nextParams) {
+        attach(nextParams.engine);
+      },
+      destroy() {
+        descriptionCharacterObjects.delete(node);
+        object?.destroy();
+        object = null;
+      },
+    };
+  };
+
+</script>
+
+<article class="collision-card theme-secondary-1">
+  <h3 class="sr-only">Collision Detection</h3>
+
+  <Engine id="collision-card-canvas" bind:engine debug={debugState.enabled}>
+    <div class="collision-stage" use:stageRef>
+      <div class="collision-content">
+        <div
+          class="dot-title"
+          style={`--dot-columns: ${gridColumns}; --dot-rows: ${gridRows};`}
+          aria-hidden="true"
+        >
+          {#each dots as dot (dot.key)}
+            <div
+              class="dot-cell"
+              style={`grid-column: ${dot.x + 1}; grid-row: ${dot.y + 1};`}
+              use:circleColliderRef={{ engine }}
+            ></div>
+          {/each}
+        </div>
+
+        <p class="collision-description">
+          {#each descriptionCharacters as segment (segment.key)}
+            <span class="collision-description-character" use:descriptionCharacterRef={{ engine }}>
+              {segment.character}
+            </span>
+          {/each}
+        </p>
+      </div>
+
+      {#if dots.length > 0}
+        <div
+          class="collision-target collision-target--square"
+          style={`width: ${BOX_SIZE}px; height: ${BOX_SIZE}px;`}
+          use:collisionTargetRef={{
+            engine,
+            size: BOX_SIZE,
+            shape: "rect",
+          }}
+          aria-label="Drag collision box"
+        >
+          <span class="collision-target-handle card card-round">
+            <span class="material-symbols-rounded" aria-hidden="true">open_with</span>
+          </span>
+        </div>
+
+        <div
+          class="collision-target collision-target--circle"
+          style={`width: ${CIRCLE_SIZE}px; height: ${CIRCLE_SIZE}px;`}
+          use:collisionTargetRef={{
+            engine,
+            size: CIRCLE_SIZE,
+            shape: "circle",
+          }}
+          aria-label="Drag collision circle"
+        >
+          <span class="collision-target-handle card card-round">
+            <span class="material-symbols-rounded" aria-hidden="true">open_with</span>
+          </span>
+        </div>
+      {/if}
+    </div>
+  </Engine>
+</article>
+
+<style lang="scss">
+  .collision-card {
+    --card-padding: var(--size-48);
+    --dot-gap: 0px;
+    --title-description-gap: 36px;
+    min-height: 520px;
+    height: 100%;
     display: flex;
     align-items: center;
     justify-content: center;
+    box-sizing: border-box;
+    padding: 0;
+    background-color: var(--color-background-tint);
+    border-radius: var(--ui-radius);
     overflow: hidden;
-    position: relative;
+    text-align: center;
 
     :global(#snap-canvas) {
-      width: 100%;  
+      width: 100%;
+      height: 100%;
+    }
+
+    @media (max-width: 720px) {
+      --card-padding: var(--size-24);
+      --title-description-gap: 30px;
+      grid-column: span 2;
     }
   }
 
-  .dot-grid-background {
-    position: absolute;
-    top: 50%;
-    left: 50%;
-    width: 400%;
-    height: 400%;
-    transform: translate(-50%, -50%);
-    background-image: radial-gradient(circle, rgba(47, 31, 26, 0.15) 1px, transparent 1px);
-    background-size: 16px 16px;
-    pointer-events: none;
-  }
-
-  .collision-demo {
+  .collision-stage {
     position: relative;
     width: 100%;
     height: 100%;
+    overflow: hidden;
   }
 
-  .collision-grid {
+  .collision-content {
+    position: absolute;
+    inset: 0;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: var(--title-description-gap);
     pointer-events: none;
-
-    :global(.collision-box) {
-      cursor: default;
-    }
   }
 
-  @media (max-width: 480px) {
-    .collision-demo-container {
-      height: 300px;
-    }
-
-    .collision-demo {
-      transform: scale(0.85);
-      transform-origin: center;
-    }
+  .dot-title {
+    width: min(75%, calc(100% - var(--size-32) * 2));
+    aspect-ratio: var(--dot-columns) / var(--dot-rows);
+    display: grid;
+    grid-template-columns: repeat(var(--dot-columns), minmax(0, 1fr));
+    grid-template-rows: repeat(var(--dot-rows), minmax(0, 1fr));
+    gap: var(--dot-gap);
   }
 
-  /* Override collision component styles for the card */
-  :global(.collision-card .collision-box.card) {
-    border: 1px solid #d3d3d3;
+  .dot-cell {
+    align-self: center;
+    justify-self: center;
+    width: 100%;
+    height: 100%;
+    border-radius: 50%;
+    background: #000000;
+    transform-origin: center;
+  }
+
+  .dot-cell.is-active {
+    transition: transform 320ms cubic-bezier(0.22, 1, 0.36, 1);
+    will-change: transform, background-color;
+  }
+
+  .collision-description {
+    width: min(26rem, calc(100% - var(--size-48)));
+    margin: 0;
+    color: #000000;
+    font-family: "Geist", sans-serif;
+    font-size: var(--font-size-16);
+    line-height: 1.35;
+    text-align: center;
+    white-space: normal;
+  }
+
+  .collision-description-character {
+    display: inline-block;
+    transform-origin: center;
+    white-space: pre;
+  }
+
+  .collision-description-character.is-active {
+    transition: transform 220ms cubic-bezier(0.22, 1, 0.36, 1);
+    will-change: transform;
+  }
+
+  .collision-target {
+    position: absolute;
+    display: grid;
+    place-items: center;
+    box-sizing: border-box;
+    padding: 0;
+    border: 0;
+    background: rgba(0, 0, 0, 0.035);
     box-shadow: none;
-  }
-  :global(.collision-card .collision-box.card.colliding) {
-    border-color: red;
-  }
-
-  :global(.collision-card .collision-box.card .box-header) {
-    display: none;
+    color: #34383a;
+    cursor: grab;
+    touch-action: none;
+    user-select: none;
   }
 
-  :global(.collision-card .collision-box.card .box-content) {
-    display: none;
+  .collision-target--square {
+    left: 18%;
+    top: 58%;
   }
 
+  .collision-target:active {
+    cursor: grabbing;
+  }
+
+  .collision-target--circle {
+    right: 18%;
+    top: 29%;
+    border-radius: 50%;
+  }
+
+  .collision-target-handle {
+    --ui-radius: var(--size-12);
+    display: grid;
+    place-items: center;
+    box-sizing: border-box;
+    padding: 6px;
+    width: var(--size-32);
+    aspect-ratio: 1 / 1;
+    min-width: var(--size-32);
+    min-height: var(--size-32);
+    border-radius: var(--size-12) !important;
+  }
+
+  .collision-target .material-symbols-rounded {
+    font-family: "Material Symbols Rounded";
+    font-size: var(--size-16);
+    font-variation-settings: "FILL" 0, "wght" 500, "GRAD" 0, "opsz" 24;
+    line-height: 1;
+  }
+
+  .sr-only {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    padding: 0;
+    margin: -1px;
+    overflow: hidden;
+    clip: rect(0, 0, 0, 0);
+    white-space: nowrap;
+    border: 0;
+  }
 </style>

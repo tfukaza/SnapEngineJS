@@ -81,7 +81,7 @@
           The most useful abstraction is the one that keeps a frame predictable.
         </blockquote>
 
-        <pre class="slot shallow"><code>object.queueUpdate("READ_1", () => &#123;
+        <pre class="display code-display"><code>object.queueUpdate("READ_1", () => &#123;
   object.readDom(true, "READ_1");
 &#125;);
 
@@ -144,14 +144,14 @@ object.queueUpdate("WRITE_1", () => &#123;
       </div>
     </section>
 
-    <!-- Cards & Slots Section -->
+    <!-- Cards, Slots & Displays Section -->
     <section class="showcase-section">
-      <h2>Cards & Slots</h2>
+      <h2>Cards, Slots & Displays</h2>
       <div class="card-slot-grid">
-        <div class="card ground">
+        <div class="card">
           <h3>Card</h3>
-          <p>A ground card variant with subtle shadows to make it look as if
-            it is a bump on the ground.
+          <p>A default card with subtle shadows to make it look as if it is a
+            bump on the ground.
           </p>
         </div>
         <div class="slot">
@@ -160,7 +160,12 @@ object.queueUpdate("WRITE_1", () => &#123;
             <span>Inset container for drop zones and recessed UI areas</span>
           </div>
         </div>
-
+        <div class="display">
+          <div class="display-content">
+            <p>LCD Display</p>
+            <span>ENGINE READY</span>
+          </div>
+        </div>
       </div>
     </section>
 
@@ -174,7 +179,6 @@ object.queueUpdate("WRITE_1", () => &#123;
             <div class="button-row">
               <button>Default Button</button>
               <button class="primary">Primary Button</button>
-              <button class="small">Small Button</button>
               <button class="active">Active State</button>
               <button class="primary" disabled>Disabled</button>
             </div>
@@ -257,13 +261,13 @@ object.queueUpdate("WRITE_1", () => &#123;
           <div class="form-control-group">
             <h3>Range Sliders</h3>
             <div class="form-group">
-              <label>Default Range</label>
-              <input type="range" min="0" max="100" bind:value={rangeValue} />
+              <label for="range-default">Default Range</label>
+              <input id="range-default" type="range" min="0" max="100" bind:value={rangeValue} />
               <span class="range-value">{rangeValue}</span>
             </div>
             <div class="form-group">
-              <label>Large Range</label>
-              <input type="range" class="large" min="0" max="100" value="75" />
+              <label for="range-large">Large Range</label>
+              <input id="range-large" type="range" class="large" min="0" max="100" value="75" />
             </div>
           </div>
 
@@ -318,20 +322,20 @@ object.queueUpdate("WRITE_1", () => &#123;
           <div class="form-control-group">
             <h3>Progress Bars</h3>
             <div class="form-group">
-              <label>Default Progress ({progressValue}%)</label>
-              <progress value={progressValue} max="100"></progress>
+              <label for="progress-default">Default Progress ({progressValue}%)</label>
+              <progress id="progress-default" value={progressValue} max="100"></progress>
             </div>
             <div class="form-group">
-              <label>Complete (100%)</label>
-              <progress value="100" max="100"></progress>
+              <label for="progress-complete">Complete (100%)</label>
+              <progress id="progress-complete" value="100" max="100"></progress>
             </div>
             <div class="form-group">
-              <label>Indeterminate</label>
-              <progress></progress>
+              <label for="progress-indeterminate">Indeterminate</label>
+              <progress id="progress-indeterminate"></progress>
             </div>
             <div class="form-group">
-              <label>Adjust Progress</label>
-              <input type="range" min="0" max="100" bind:value={progressValue} />
+              <label for="progress-adjust">Adjust Progress</label>
+              <input id="progress-adjust" type="range" min="0" max="100" bind:value={progressValue} />
             </div>
           </div>
 
@@ -358,6 +362,60 @@ object.queueUpdate("WRITE_1", () => &#123;
       </div>
     </section>
 
+    <!-- UI Elements Section -->
+    <section class="showcase-section">
+      <h2>UI Elements</h2>
+      <div class="ui-elements-grid">
+        <div class="ui-example">
+          <h3>Table</h3>
+          <div class="table-shell">
+            <table>
+              <thead>
+                <tr>
+                  <th>Asset</th>
+                  <th>Status</th>
+                  <th>Package</th>
+                  <th>Updated</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr>
+                  <td>SnapSort</td>
+                  <td><span class="chip chip-ready">Ready</span></td>
+                  <td><code>@snap-engine/snapsort</code></td>
+                  <td>Today</td>
+                </tr>
+                <tr>
+                  <td>SnapLine</td>
+                  <td><span class="chip chip-draft">Draft</span></td>
+                  <td><code>@snap-engine/snapline</code></td>
+                  <td>This week</td>
+                </tr>
+                <tr>
+                  <td>SnapZap</td>
+                  <td><span class="chip chip-muted">Queued</span></td>
+                  <td><code>@snap-engine/snapzap</code></td>
+                  <td>Later</td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+
+        <div class="ui-example">
+          <h3>Chips</h3>
+          <div class="chip-board">
+            <span class="chip chip-ready">Ready</span>
+            <span class="chip chip-active">Active</span>
+            <span class="chip chip-warning">Needs read</span>
+            <span class="chip chip-draft">Draft</span>
+            <span class="chip chip-muted">Disabled</span>
+            <span class="chip chip-code">READ_1</span>
+          </div>
+        </div>
+      </div>
+    </section>
+
 </div>
 
 
@@ -366,6 +424,8 @@ object.queueUpdate("WRITE_1", () => &#123;
     width: 100%;
     height: 100%;
     position: relative;
+    box-sizing: border-box;
+    padding: clamp(var(--size-24), 4vw, var(--size-64));
     background: #fff;
   }
 
@@ -392,15 +452,15 @@ object.queueUpdate("WRITE_1", () => &#123;
   .showcase-section {
     background: var(--color-background-tint);
     border-radius: 12px;
-    padding: var(--size-48);
+    padding: clamp(var(--size-32), 4vw, var(--size-48));
     margin-bottom: var(--size-48);
 
     > h2 {
-      font-family: "Geist Mono", monospace;
-      font-size: 14px;
+      font-family: "Bitcount Grid Single", monospace;
+      font-size: 18px;
       font-weight: 300;
       color: var(--color-background-dark);
-      margin-bottom: var(--size-16);
+      margin-bottom: var(--size-24);
       text-transform: lowercase;
     }
   }
@@ -424,6 +484,11 @@ object.queueUpdate("WRITE_1", () => &#123;
     }
   }
 
+  .code-display {
+    white-space: pre-wrap;
+    margin-bottom: var(--size-32);
+  }
+
   @media (max-width: 900px) {
     .type-article {
       column-count: 1;
@@ -439,14 +504,14 @@ object.queueUpdate("WRITE_1", () => &#123;
   .controls-top {
     display: grid;
     grid-template-columns: repeat(2, minmax(0, 1fr));
-    gap: var(--size-24);
+    gap: var(--size-32);
     align-items: start;
   }
 
   .form-grid {
     display: grid;
     grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
-    gap: var(--size-48) var(--size-24);
+    gap: var(--size-48) var(--size-32);
   }
 
   .form-control-group h3,
@@ -455,10 +520,10 @@ object.queueUpdate("WRITE_1", () => &#123;
   }
 
   .form-group {
-    margin-bottom: var(--size-12);
+    margin-bottom: var(--size-16);
     display: flex;
     flex-direction: column;
-    gap: var(--size-4);
+    gap: var(--size-8);
 
     input[type="text"],
     input[type="number"] {
@@ -544,7 +609,7 @@ object.queueUpdate("WRITE_1", () => &#123;
     width: 100%;
     display: grid;
     grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
-    gap: var(--size-16);
+    gap: var(--size-24);
   }
 
   @media (max-width: 640px) {
@@ -600,8 +665,8 @@ object.queueUpdate("WRITE_1", () => &#123;
 
   .card-slot-grid {
     display: grid;
-    grid-template-columns: repeat(2, minmax(0, 1fr));
-    gap: var(--size-24);
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: var(--size-32);
     align-items: stretch;
   }
 
@@ -615,7 +680,8 @@ object.queueUpdate("WRITE_1", () => &#123;
     }
   }
 
-  .card-slot-grid .slot {
+  .card-slot-grid .slot,
+  .card-slot-grid .display {
     min-height: 120px;
     display: flex;
     align-items: center;
@@ -632,6 +698,27 @@ object.queueUpdate("WRITE_1", () => &#123;
     }
   }
 
+  .display-content {
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+    gap: var(--size-8);
+    min-height: 100%;
+    width: 100%;
+    padding: var(--size-16);
+    text-transform: uppercase;
+
+    p {
+      margin: 0;
+      font-size: 1rem;
+    }
+
+    span {
+      opacity: 0.72;
+      font-size: 0.78rem;
+    }
+  }
+
   .range-value {
     font-family: "IBM Plex Mono", monospace;
     font-size: 1rem;
@@ -641,5 +728,36 @@ object.queueUpdate("WRITE_1", () => &#123;
   .checkbox-label,
   .radio-label {
     cursor: pointer;
+  }
+
+  .ui-elements-grid {
+    display: grid;
+    grid-template-columns: minmax(0, 1.45fr) minmax(240px, 0.55fr);
+    gap: var(--size-32);
+    align-items: start;
+  }
+
+  .ui-example {
+    min-width: 0;
+
+    h3 {
+      margin-bottom: var(--size-16);
+    }
+  }
+
+  .chip-board {
+    display: flex;
+    flex-wrap: wrap;
+    gap: var(--size-8);
+    align-content: flex-start;
+    padding: var(--size-16);
+    border-radius: var(--ui-radius);
+    background: var(--color-background);
+  }
+
+  @media (max-width: 900px) {
+    .ui-elements-grid {
+      grid-template-columns: 1fr;
+    }
   }
 </style>

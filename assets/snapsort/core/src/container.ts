@@ -12,12 +12,34 @@ export interface ContainerAnimations {
   clickMove?: AnimationConfig | null;
 }
 
+export interface SnapSortDomRemoveEvent {
+  item: ItemObject;
+  itemMetadata: Record<string, unknown>;
+  container: ItemContainer;
+  containerMetadata: Record<string, unknown>;
+}
+
+export interface SnapSortDomInsertEvent {
+  item: ItemObject;
+  itemMetadata: Record<string, unknown>;
+  container: ItemContainer;
+  containerMetadata: Record<string, unknown>;
+  index: number;
+  beforeElement: HTMLElement | null;
+}
+
+export interface ItemContainerCallbacks {
+  onDomRemove?: (event: SnapSortDomRemoveEvent) => void;
+  onDomInsert?: (event: SnapSortDomInsertEvent) => void;
+}
+
 export interface ItemContainerConfig {
   groupID?: string;
   direction?: "column" | "row";
   name?: string;
   animation?: ContainerAnimations | null;
   noDrop?: boolean;
+  callbacks?: ItemContainerCallbacks;
 }
 
 export class ItemContainer extends ItemObject {
@@ -96,6 +118,10 @@ export class ItemContainer extends ItemObject {
     return this.#config;
   }
 
+  get callbacks() {
+    return this.#config.callbacks;
+  }
+
   get itemList() {
     return this.#itemList;
   }
@@ -112,10 +138,6 @@ export class ItemContainer extends ItemObject {
   //   this.#itemList.push(item);
   //   item.setContainer(this);
   // }
-
-  removeItem(item: ItemObject) {
-    this.#itemList = this.#itemList.filter((i) => i !== item);
-  }
 
   // insertItemAt(item: ItemObject, index: number) {
   //   if (index >= this.#itemList.length) {

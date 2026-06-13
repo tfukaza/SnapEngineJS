@@ -1,6 +1,6 @@
 // @ts-nocheck
 /**
- * Remark plugin that transforms GitHub-flavored alert blockquotes into styled alert boxes.
+ * Remark plugin that transforms GitHub-flavored alert blockquotes into docs callouts.
  *
  * Usage in MDX:
  * > [!NOTE]
@@ -12,11 +12,11 @@
 import { visit } from 'unist-util-visit';
 
 const ALERT_TYPES = {
-	NOTE: { label: 'Note', icon: 'ℹ️' },
-	TIP: { label: 'Tip', icon: '💡' },
-	INFO: { label: 'Info', icon: 'ℹ️' },
-	WARNING: { label: 'Warning', icon: '⚠️' },
-	CAUTION: { label: 'Caution', icon: '🚨' }
+	NOTE: { label: 'Note', icon: 'info', tone: 'note' },
+	TIP: { label: 'Tip', icon: 'info', tone: 'note' },
+	INFO: { label: 'Info', icon: 'info', tone: 'note' },
+	WARNING: { label: 'Warning', icon: 'warning', tone: 'warning' },
+	CAUTION: { label: 'Caution', icon: 'warning', tone: 'warning' }
 };
 
 const VALID_TYPES = new Set(Object.keys(ALERT_TYPES));
@@ -48,6 +48,16 @@ function extractAlertType(node) {
 	return null;
 }
 
+function isBreakOnlyNode(node) {
+	if (node.type === 'break') return true;
+	if (node.type === 'html') return /^<br\s*\/?>$/i.test(node.value.trim());
+	if (node.type === 'mdxJsxFlowElement' || node.type === 'mdxJsxTextElement') {
+		return node.name === 'br' && (!node.children || node.children.length === 0);
+	}
+
+	return false;
+}
+
 export function remarkAlerts() {
 	return (tree) => {
 		visit(tree, 'blockquote', (node, index, parent) => {
@@ -55,7 +65,6 @@ export function remarkAlerts() {
 			if (!alertType) return;
 
 			const alertInfo = ALERT_TYPES[alertType];
-			const typeLower = alertType.toLowerCase();
 
 			// Strip the [!TYPE] marker from the first paragraph's children
 			const firstParagraph = node.children[0];
@@ -81,10 +90,14 @@ export function remarkAlerts() {
 				node.children.splice(0, 1);
 			}
 
+			while (node.children.length > 0 && isBreakOnlyNode(node.children[node.children.length - 1])) {
+				node.children.pop();
+			}
+
 			// Build replacement nodes
 			const openingHtml = {
 				type: 'html',
-				value: `<div class="doc-alert doc-alert-${typeLower}"><div class="doc-alert-header"><span class="doc-alert-icon">${alertInfo.icon}</span><span class="doc-alert-label">${alertInfo.label}</span></div><div class="doc-alert-body">`
+				value: `<div class="doc-callout doc-callout-${alertInfo.tone}"><div class="doc-callout-header"><span class="doc-callout-icon material-symbols-outlined" aria-hidden="true">${alertInfo.icon}</span><span class="doc-callout-label">${alertInfo.label}</span></div><div class="doc-callout-body">`
 			};
 
 			const closingHtml = {

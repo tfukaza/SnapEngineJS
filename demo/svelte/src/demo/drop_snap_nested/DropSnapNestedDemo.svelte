@@ -5,7 +5,6 @@
 
   let engineInstance: EngineClass | null = $state(null);
   let debugMode = $state(false);
-  let devStyleLoaded = false;
 
   const DEBUG_TAGS = [
     { id: "grid", label: "Grid" },
@@ -57,13 +56,6 @@
   export function setDebug(enabled: boolean) {
     debugMode = enabled;
   }
-
-  $effect(() => {
-    if (!devStyleLoaded) {
-      devStyleLoaded = true;
-      import("../css_showcase/style.dev.scss");
-    }
-  });
 
   $effect(() => {
     if (engineInstance) {

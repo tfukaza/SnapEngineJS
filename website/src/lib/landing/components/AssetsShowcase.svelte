@@ -1,112 +1,63 @@
 <script lang="ts">
-  // Data for SnapSort card preview
-  const dsKanbanTodo = [
-    { id: "ds-k1", text: "Fix Scroll Bug", tag: "Bug", color: "#e74c3c", user: "JS" },
-    { id: "ds-k2", text: "New Icon Set", tag: "Design", color: "#9b59b6", user: "AL" },
-    { id: "ds-k3", text: "Optimize Images", tag: "Perf", color: "#f39c12", user: "MK" },
-    { id: "ds-k7", text: "Write Docs", tag: "Misc", color: "#95a5a6", user: "JS" },
-    { id: "ds-k8", text: "Update Deps", tag: "Maint", color: "#34495e", user: "RT" }
-  ];
-  
-  const dsKanbanProgress = [
-    { id: "ds-k4", text: "Sidebar Nav", tag: "Feat", color: "#3498db", user: "MK" },
-    { id: "ds-k5", text: "User Auth", tag: "Back", color: "#2ecc71", user: "AL" },
-    { id: "ds-k9", text: "Dark Mode", tag: "Feat", color: "#8e44ad", user: "RT" }
-  ];
-  
-  const dsKanbanDone = [
-     { id: "ds-k6", text: "v1.0 Release", tag: "Dep", color: "#34495e" }
-  ];
+  import SnapSortPreview from "./SnapSortPreview.svelte";
 
-  const dsTodoItems = [
-    { id: "ds-t1", text: "Buy groceries", checked: false, priority: "Med", color: "#f39c12" },
-    { id: "ds-t2", text: "Walk the dog", checked: true, priority: "Low", color: "#3498db" },
-    { id: "ds-t3", text: "Reply to emails", checked: false, priority: "High", color: "#e74c3c" },
-    { id: "ds-t4", text: "Water plants", checked: false, priority: "Med", color: "#f39c12" },
-    { id: "ds-t5", text: "Schedule Dentist", checked: false, priority: "High", color: "#e74c3c" },
-    { id: "ds-t6", text: "Pay Bills", checked: true, priority: "High", color: "#e74c3c" },
-    { id: "ds-t7", text: "Call Mom", checked: false, priority: "Low", color: "#3498db" }
-  ];
+  const pendingPlusCells = Array.from({ length: 96 }, (_, index) => index);
 </script>
 
-<section class="assets-showcase">
-    <h2 class="eyebrow">Assets</h2>
-    <p class="subhead">Interactive UI elements, ready out of the box.</p>
+<section id="assets" class="assets-showcase landing-section-gap">
+    <div class="assets-header">
+      <h2 class="eyebrow landing-section-heading">Composable assets</h2>
+      <p class="subhead">
+        Start with reusable patterns built on SnapEngine, then shape them into
+        the exact interface your product needs.
+      </p>
+    </div>
 
     <div class="assets-grid">
-      <div class="asset-card card ground">
-        <h3>SnapZap</h3>
-        <p>Zoom and pan any DOM element.</p>
-        <span class="coming-soon-label">Coming Soon</span>
-      </div>
-      <a href="/dropandsnap" class="asset-card drop-snap-card card ground">
-        <div class="card-content-wrapper">
-          <h3>SnapSort</h3>
-          <p>Sortable lists and items.</p>
+      <a href="/snapsort" class="asset-card drop-snap-card">
+        <div class="asset-copy">
+          <div class="asset-card-header">
+            <h3>SnapSort</h3>
+          </div>
+          <p>Sortable lists, nested drop zones, and direct drag feedback.</p>
         </div>
 
-        <div class="ds-preview">
-          <div class="ds-board-transform">
-              <div class="ds-grid">
-                <!-- Cell 1: Kanban -->
-                <div class="ds-grid-cell kanban-cell card ground">
-                  <h6>Kanban Board</h6>
-                  <div class="ds-kanban-row">
-                     <div class="ds-col">
-                        <div class="ds-static-container">
-                          {#each dsKanbanTodo as item (item.id)}
-                            <div style="margin-bottom: 8px; width: 100%;">
-                              <div class="ds-card">
-                                <span class="ds-tag" style="background-color: {item.color}">{item.tag}</span>
-                                <span class="ds-text">{item.text}</span>
-                                <div class="ds-card-footer">
-                                  <div class="ds-user-avatar" style="background-color: {item.color}20; color: {item.color}">{item.user}</div>
-                                </div>
-                              </div>
-                            </div>
-                          {/each}
-                        </div>
-                     </div>
-                     <div class="ds-col">
-                        <div class="ds-static-container ">
-                          {#each dsKanbanProgress as item (item.id)}
-                            <div style="margin-bottom: 8px; width: 100%;">
-                              <div class="ds-card">
-                                <span class="ds-tag" style="background-color: {item.color}">{item.tag}</span>
-                                <span class="ds-text">{item.text}</span>
-                                <div class="ds-card-footer">
-                                  <div class="ds-user-avatar" style="background-color: {item.color}20; color: {item.color}">{item.user}</div>
-                                </div>
-                              </div>
-                            </div>
-                          {/each}
-                        </div>
-                     </div>
-                  </div>
-                </div>
-
-                <!-- Cell 2: Todo List -->
-                <div class="ds-grid-cell todo-cell card ground">
-                   <div class="ds-static-container ">
-                      {#each dsTodoItems as item (item.id)}
-                        <div style="margin-bottom: 8px; width: 100%;">
-                           <div class="ds-todo-item">
-                              <div class="ds-checkbox {item.checked ? 'checked' : ''}"></div>
-                              <span class="ds-text {item.checked ? 'strikethrough' : ''}">{item.text}</span>
-                              <span class="ds-badge" style="background-color: {item.color}">{item.priority}</span>
-                           </div>
-                        </div>
-                      {/each}
-                   </div>
-                </div>
-              </div>
-          </div>
+        <div class="asset-preview">
+          <SnapSortPreview />
         </div>
       </a>
-      <div class="asset-card card ground">
-        <h3>SnapLine</h3>
-        <p>Node based UI.</p>
-        <span class="coming-soon-label">Coming Soon</span>
+      <div class="asset-card planned-card">
+        <div class="asset-copy">
+          <div class="asset-card-header">
+            <h3>SnapZap</h3>
+          </div>
+          <p>Zoom and pan any DOM element without taking over the rest of the page.</p>
+        </div>
+        <div class="asset-preview pending-preview" aria-hidden="true">
+          <div class="pending-plus-grid">
+            {#each pendingPlusCells as cell (cell)}
+              <span>+</span>
+            {/each}
+          </div>
+          <span>Coming soon</span>
+        </div>
+      </div>
+
+      <div class="asset-card planned-card">
+        <div class="asset-copy">
+          <div class="asset-card-header">
+            <h3>SnapLine</h3>
+          </div>
+          <p>Node-based UI primitives for graph editors and visual tools.</p>
+        </div>
+        <div class="asset-preview pending-preview" aria-hidden="true">
+          <div class="pending-plus-grid">
+            {#each pendingPlusCells as cell (cell)}
+              <span>+</span>
+            {/each}
+          </div>
+          <span>Coming soon</span>
+        </div>
       </div>
     </div>
 
@@ -115,249 +66,171 @@
 <style lang="scss">
   @use "../landing.scss";
 
-  .explainer-surface {
-    background: transparent;
-    border-radius: 0;
-    padding: clamp(1.5rem, 4vw, 3rem);
+  .assets-header {
+    width: min(100%, 760px);
+    margin: 0 auto;
     text-align: center;
   }
 
   .eyebrow {
-    margin-bottom: 0.5rem;
+    margin: 0 0 var(--size-16);
     text-align: center;
   }
 
   .subhead {
-    color: #5e4d44;
-    font-size: 1rem;
-    max-width: 32rem;
-    margin: 0 auto clamp(2rem, 4vw, 3rem);
-    line-height: 1.6;
+    color: #5d6266;
+    font-size: clamp(1rem, 1.3vw, 1.18rem);
+    max-width: 620px;
+    margin: 0 auto;
+    line-height: 1.7;
+    text-align: center;
   }
  
   .assets-showcase {
-    margin-top: clamp(3rem, 6vw, 6rem);
+    --assets-content-gap: clamp(2rem, 4vw, 3rem);
     margin-bottom: clamp(3rem, 6vw, 6rem);
   }
 
   .assets-grid {
     display: grid;
-    grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+    grid-template-columns: 1fr;
     gap: 1.5rem;
     text-align: left;
-    margin-top: 2rem;
-  }
-
-  .kanban-cell {
-    transition: transform 0.2s ease;
-  }
-
-  .todo-cell {
-    transition: transform 0.2s ease;
+    margin-top: var(--assets-content-gap);
   }
 
   .asset-card {
-    background: rgba(255, 255, 255, 0.4);
-    // border: 1px solid rgba(125, 106, 95, 0.1);
-    // border-radius: var(--size-4);
-    padding: 1.5rem;
-    transition: transform 0.2s ease, box-shadow 0.2s ease;
-    display: block;
-    min-height: 400px;
+    display: flex;
+    align-items: center;
+    gap: clamp(1.5rem, 4vw, 3rem);
+    padding: clamp(1.5rem, 3vw, 2.5rem);
+    transition: transform 0.2s ease;
     text-decoration: none;
     color: inherit;
+    font-family: "Geist", sans-serif;
+    background: var(--color-background-tint);
+    border: 1px solid rgba(0, 0, 0, 0.12);
+    border-radius: var(--ui-radius);
+    box-sizing: border-box;
+
+    h3 {
+      margin: 0;
+      font-family: "Geist Pixel Circle", "Doto", sans-serif;
+      font-size: clamp(1.75rem, 3vw, 2.75rem);
+      font-weight: 500;
+      letter-spacing: 0;
+      line-height: 0.95;
+    }
+
+    p {
+      margin: 0;
+      color: #5d6266;
+      font-family: "Geist", sans-serif;
+      font-size: clamp(0.95rem, 1.1vw, 1.05rem);
+      font-weight: 400;
+      line-height: 1.6;
+      max-width: 22rem;
+    }
 
     &:hover {
       transform: translateY(-2px);
-      // box-shadow: 0 4px 12px rgba(0,0,0,0.05);
-      background: rgba(255, 255, 255, 0.6);
-
-      .kanban-cell {
-        transform: translateY(20px);
-      }
-
-      .todo-cell {
-        transform: translateY(-20px);
-      }
     }
 
+  }
+
+  .planned-card {
+    min-height: 0;
   }
 
   :global(.drop-snap-card) {
+    --demo-window-height: 320px;
+    --demo-stack-height: 392px;
     position: relative;
+    height: var(--demo-window-height);
     overflow: hidden;
-    display: flex;
-    flex-direction: column;
   }
   
-  .card-content-wrapper {
+  .asset-copy {
     position: relative;
-    z-index: 2;
-  }
-  
-  .coming-soon-label {
-    display: inline-block;
-    margin-top: 1rem;
-    font-size: 0.75rem;
-    font-weight: 600;
-    color: #888;
-    background: rgba(0, 0, 0, 0.05);
-    padding: 0.25rem 0.5rem;
-    border-radius: 4px;
-    letter-spacing: 0.05em;
-    text-transform: uppercase;
-  }
-
-  .ds-preview {
-    position: absolute;
-    top: 0;
-    left: 0;
-    width: 100%;
-    height: 100%;
     z-index: 1;
-    pointer-events: none;
-    overflow: hidden;
-    background-color: var(--color-background-tint);
-    mask-image: linear-gradient(to bottom, transparent 90px, black 150px, black 100%);
-    -webkit-mask-image: linear-gradient(to bottom, transparent 90px, black 150px, black 100%);
-
+    flex: 0 1 42%;
+    min-width: 0;
   }
 
-  .ds-board-transform {
-    transform-origin: center center;
-    transform: rotate(30deg) scale(0.9) translateX(10%) translateY(15%);
-    width: 100%; 
-    height: 100%;
+  .asset-card-header {
     display: flex;
-    align-items: center;
-    justify-content: center;
-  }
-  
-  .ds-grid {
-    display: flex;
-    flex-direction: row;
-    gap: 24px;
+    flex-direction: column;
     align-items: flex-start;
+    gap: var(--size-12);
+    margin-bottom: var(--size-16);
   }
 
-  .ds-static-container {
-    display: flex;
-    flex-direction: column;
-    width: 100%;
+  .asset-preview {
+    position: relative;
+    flex: 1 1 58%;
+    min-width: 0;
+    min-height: 180px;
   }
 
-  .ds-grid-cell {
-    width: 280px;
-    padding: 16px;
-    display: flex;
-    flex-direction: column;
-    
-    h6 {
-      margin: 0 0 12px 0;
-      font-size: 0.8rem;
-      text-transform: uppercase;
-      letter-spacing: 0.05em;
-      color: #726a66;
-    }
-  }
-
-  .ds-kanban-row {
-    display: flex;
-    gap: 10px;
-    flex: 1;
-  }
-
-  .ds-col {
-    flex: 1;
-    background: rgba(255, 255, 255, 0.3);
-    border-radius: 6px;
-    padding: 8px;
-  }
-  
-  .ds-card {
-    background: white;
-    padding: 12px;
-    border-radius: 8px;
-    box-shadow: 0 2px 5px rgba(0,0,0,0.05);
-    display: flex;
-    flex-direction: column;
-    gap: 8px;
-  }
-  
-  .ds-card-footer {
-    display: flex;
-    justify-content: flex-end;
-    margin-top: 4px;
-    border-top: 1px solid rgba(0,0,0,0.05);
-    padding-top: 8px;
-  }
-
-  .ds-user-avatar {
-    width: 20px;
-    height: 20px;
-    border-radius: 50%;
-    font-size: 0.6rem;
+  .pending-preview {
     display: flex;
     align-items: center;
     justify-content: center;
-    font-weight: 700;
-  }
-  
-  .ds-tag {
-    font-size: 0.6rem;
-    color: white;
-    padding: 3px 8px;
-    border-radius: 4px;
-    align-self: flex-start;
-    font-weight: 600;
-  }
-  
-  .ds-text {
-    font-size: 0.85rem;
-    color: #222;
-    font-weight: 600;
-    line-height: 1.3;
-    
-    &.strikethrough {
-      text-decoration: line-through;
-      opacity: 0.6;
-    }
+    min-height: 180px;
+    border-radius: var(--size-8);
   }
 
-  .ds-todo-item {
-    display: flex;
-    align-items: center;
-    gap: 10px;
-    background: white;
-    padding: 8px 12px;
-    border-radius: 6px;
-    box-shadow: 0 1px 2px rgba(0,0,0,0.05);
+  .pending-preview > span {
+    position: relative;
+    z-index: 1;
+    color: rgba(32, 36, 38, 0.24);
+    font-family: "Bitcount Grid Single", monospace;
+    font-size: clamp(2rem, 4vw, 3.5rem);
+    font-weight: 300;
+    line-height: 1;
+    text-align: center;
   }
 
-  .ds-checkbox {
-    width: 14px;
-    height: 14px;
-    border: 2px solid #ddd;
-    border-radius: 4px;
-    
-    &.checked {
-      background-color: var(--color-secondary-2);
-      border-color: var(--color-secondary-2);
-    }
+  .pending-plus-grid {
+    position: absolute;
+    inset: 10px;
+    z-index: 0;
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(36px, 1fr));
+    grid-auto-rows: 36px;
+    overflow: hidden;
+    pointer-events: none;
+    color: rgba(0, 0, 0, 0.08);
+    font-family: "Bitcount Grid Single", monospace;
+    font-size: 10px;
+    font-weight: 300;
+    line-height: 1;
+    place-items: center;
+    user-select: none;
   }
 
-  .ds-badge {
-    margin-left: auto;
-    font-size: 0.5rem;
-    padding: 2px 6px;
-    color: white;
-    border-radius: 10px;
+  .pending-plus-grid span {
+    color: inherit;
+    margin: 0;
   }
 
-  @media (max-width: 600px) {
+  @media (max-width: 900px) {
     .asset-card {
-      min-height: 200px;
-      max-height: 250px;
+      flex-direction: column;
+      align-items: stretch;
+      min-height: 0;
     }
+
+    :global(.drop-snap-card) {
+      height: auto;
+      overflow: hidden;
+    }
+
+    .asset-copy,
+    .asset-preview {
+      flex-basis: auto;
+      min-height: 160px;
+    }
+
   }
 </style>

@@ -1,746 +1,612 @@
 <script lang="ts">
-  import { onDestroy, onMount } from "svelte";
-  import { Engine } from "@snap-engine/asset-base-svelte";
-  import SvgLine from "$lib/SvgLine.svelte";
-  import { ElementObject } from "@snapline/object";
-  import type { Engine as EngineType } from "@snapline/index";
-  import type {
-    pointerDownProp,
-    pointerMoveProp,
-    pointerUpProp,
-    dragStartProp,
-    dragProp,
-    dragEndProp,
-  } from "@snapline/input";
-  import mouseIconSvg from "$lib/assets/icons/mouse.svg?raw";
-  import penIconSvg from "$lib/assets/icons/vector-pen.svg?raw";
-  import handIconSvg from "$lib/assets/icons/hand-index.svg?raw";
-  import HighlightCardShell from "./HighlightCardShell.svelte";
-  import { debugState } from "$lib/landing/debugState.svelte";
+  import { onDestroy, onMount, tick } from "svelte";
 
-  type PanelId = "mouse" | "pen" | "touch";
-
-  type PanelTemplate = {
-    id: PanelId;
-    label: string;
-    helper: string;
-    accent: string;
+  type RowId = "move" | "dragStart" | "drag" | "pinch";
+  type Point = {
+    x: number;
+    y: number;
+    xp: number;
+    yp: number;
+  };
+  type PointerMarker = Point & {
+    id: number;
+  };
+  type DragLine = {
+    id: number;
+    start: Point;
+    current: Point;
   };
 
-  type PanelInstance = PanelTemplate & {
-    element: HTMLDivElement | null;
-    object: ElementObject | null;
+  const rows: RowId[] = ["move", "dragStart", "drag", "pinch"];
+  const plusCells = Array.from({ length: 180 }, (_, index) => index);
+  const rowLabels: Record<RowId, string> = {
+    move: "pointerMove",
+    dragStart: "dragStart",
+    drag: "drag",
+    pinch: "pinch",
   };
+  const asciiBoxRows = ["┌──┬──┐", "│  □  │", "├─────┤", "└─────┘"];
+  const spinnerFrames = ["⠋", "⠙", "⠹", "⠸", "⠼", "⠴", "⠦", "⠧", "⠇", "⠏"];
+  const spinnerRows = new Set<RowId>(["move", "drag", "pinch"]);
+  const touchColumns = [2, 3, 3, 2];
 
-  const PANEL_PRESETS: PanelTemplate[] = [
-    {
-      id: "mouse",
-      label: "Mouse",
-      helper: "Desktop cursor + wheel",
-      accent: "var(--color-secondary-1)",
-    },
-    {
-      id: "pen",
-      label: "Pen",
-      helper: "Pressure + tilt aware",
-      accent: "var(--color-secondary-4)",
-    },
-    {
-      id: "touch",
-      label: "Touch",
-      helper: "Gestures + inertia",
-      accent: "var(--color-secondary-3)",
-    },
-  ];
+  let activeRow = $state<RowId | null>(null);
+  let rowValues = $state<Record<RowId, string>>({
+    move: "x:null y:null",
+    dragStart: "x:null y:null",
+    drag: "x:null y:null",
+    pinch: "d:null",
+  });
+  let rowArrows = $state<Record<RowId, string>>({
+    move: "",
+    dragStart: "",
+    drag: "",
+    pinch: "",
+  });
+  let rowSpinnerFrames = $state<Record<RowId, number>>({
+    move: 0,
+    dragStart: 0,
+    drag: 0,
+    pinch: 0,
+  });
+  let mouseButtons = $state(0);
+  let inputMode = $state<"mouse" | "touch">("mouse");
+  let activePointers = $state<PointerMarker[]>([]);
+  let dragLines = $state<DragLine[]>([]);
+  let glyphPanelHidden = $state(false);
+  let tapDisplayElement: HTMLDivElement | null = null;
+  let displayResizeObserver: ResizeObserver | null = null;
+  let glyphPanelCheckPending = false;
+  let rowTimer: ReturnType<typeof setTimeout> | null = null;
+  const previousPoints = new Map<number, Point>();
+  const pointerArrows = new Map<number, string>();
+  const leftMousePressed = $derived((mouseButtons & 1) !== 0);
+  const rightMousePressed = $derived((mouseButtons & 2) !== 0);
+  const middleMousePressed = $derived((mouseButtons & 4) !== 0);
 
-  const PANEL_ICONS: Record<PanelId, string> = {
-    mouse: mouseIconSvg,
-    pen: penIconSvg,
-    touch: handIconSvg,
-  };
+  const pinchLine = $derived(
+    activePointers.length >= 2
+      ? {
+          a: activePointers[0],
+          b: activePointers[1],
+        }
+      : null,
+  );
 
-  type Viewport = { minX: number; minY: number; width: number; height: number };
+  function pointFromEvent(event: PointerEvent & { currentTarget: HTMLElement }): Point {
+    const rect = event.currentTarget.getBoundingClientRect();
+    const x = Math.max(0, Math.min(rect.width, event.clientX - rect.left));
+    const y = Math.max(0, Math.min(rect.height, event.clientY - rect.top));
 
-  const EVENT_LINE_VIEWPORT_FALLBACK: Viewport = {
-    minX: 0,
-    minY: 0,
-    width: 300,
-    height: 140,
-  };
-
-  type EventLineConfig = {
-    id: PanelId;
-    fixedRatio: number;
-    fallbackRatio: number;
-  };
-
-  type EventLine = {
-    id: PanelId;
-    stroke: string;
-    x1: number;
-    y1: number;
-    x2: number;
-    y2: number;
-    x3: number;
-    y3: number;
-    x4: number;
-    y4: number;
-  };
-
-  const EVENT_LINE_COLOR = "#AAAAAA";
-
-  const EVENT_LINE_CONFIG: EventLineConfig[] = [
-    {
-      id: "mouse",
-      fixedRatio: 0.165,
-      fallbackRatio: 0.12,
-    },
-    {
-      id: "pen",
-      fixedRatio: 0.5,
-      fallbackRatio: 0.5,
-    },
-    {
-      id: "touch",
-      fixedRatio: 0.835,
-      fallbackRatio: 0.88,
-    },
-  ];
-
-  let eventLineViewport = $state<Viewport>(EVENT_LINE_VIEWPORT_FALLBACK);
-  let eventLines = $state<EventLine[]>(createDefaultLines());
-  let eventArrowsRef: HTMLDivElement | null = null;
-  let eventPanelRef: HTMLDivElement | null = null;
-  let panelGridRef: HTMLDivElement | null = null;
-  let panelGridObserver: ResizeObserver | null = null;
-
-  let panels: PanelInstance[] = PANEL_PRESETS.map((panel) => ({
-    ...panel,
-    element: null,
-    object: null,
-  }));
-  let engine: EngineType | null = $state(null);
-  let canvasComponent: Engine | null = null;
-  let pointer = $state({ x: 0.5, y: 0.5 });
-  let activePanel: PanelId | null = $state(null);
-  let isInteracting = $state(false);
-  let demoInitialized = $state(false);
-  let panelElementsVersion = $state(0);
-  type EventKind =
-    | "pointerDown"
-    | "pointerMove"
-    | "pointerUp"
-    | "dragStart"
-    | "drag"
-    | "dragEnd";
-  let lastEvent = $state<string | null>(null);
-  let dragActive = $state(false);
-  let linesGlowing = $state(false);
-  let glowTimeout: ReturnType<typeof setTimeout> | null = null;
-
-  function clamp(value: number, min = 0, max = 1) {
-    return Math.max(min, Math.min(max, value));
-  }
-
-  function updatePointerFromScreen(
-    panel: PanelInstance,
-    screenX: number,
-    screenY: number,
-  ) {
-    const rect = panel.element?.getBoundingClientRect();
-    if (!rect) return;
-    pointer = {
-      x: clamp((screenX - rect.left) / rect.width),
-      y: clamp((screenY - rect.top) / rect.height),
+    return {
+      x,
+      y,
+      xp: (x / rect.width) * 100,
+      yp: (y / rect.height) * 100,
     };
-    activePanel = panel.id;
-    // isInteracting = true;
   }
 
-  function triggerLineGlow() {
-    linesGlowing = true;
-    if (glowTimeout) {
-      clearTimeout(glowTimeout);
-    }
-    glowTimeout = setTimeout(() => {
-      linesGlowing = false;
-      glowTimeout = null;
-    }, 200);
+  function coordText(point: Point) {
+    return `x:${Math.round(point.x)} y:${Math.round(point.y)}`;
   }
 
-  function recordEvent(
-    kind: EventKind,
-    panel: PanelInstance,
-    button: number,
-    x: number,
-    y: number,
-  ) {
-    if (kind === "dragStart") {
-      dragActive = true;
-    } else if (kind === "dragEnd") {
-      dragActive = false;
+  function directionArrow(from: Point | undefined, to: Point) {
+    if (!from) return "";
+
+    const dx = to.x - from.x;
+    const dy = to.y - from.y;
+    if (Math.hypot(dx, dy) < 2) return "";
+
+    const angle = Math.atan2(dy, dx);
+    const directions = ["→︎", "↘︎", "↓︎", "↙︎", "←︎", "↖︎", "↑︎", "↗︎"];
+    const index = Math.round(angle / (Math.PI / 4));
+    return directions[(index + 8) % 8];
+  }
+
+  function activateRow(row: RowId, value: string, arrows = "") {
+    activeRow = row;
+    rowValues = { ...rowValues, [row]: value };
+    rowArrows = { ...rowArrows, [row]: arrows };
+    if (spinnerRows.has(row)) {
+      rowSpinnerFrames = {
+        ...rowSpinnerFrames,
+        [row]: (rowSpinnerFrames[row] + 1) % spinnerFrames.length,
+      };
     }
-    if (dragActive && kind === "pointerMove") {
+
+    if (rowTimer) clearTimeout(rowTimer);
+    rowTimer = setTimeout(() => {
+      activeRow = null;
+      rowTimer = null;
+    }, 420);
+    scheduleGlyphPanelCheck();
+  }
+
+  function updatePointer(id: number, point: Point) {
+    const existing = activePointers.find((pointer) => pointer.id === id);
+    if (existing) {
+      activePointers = activePointers.map((pointer) =>
+        pointer.id === id ? { id, ...point } : pointer,
+      );
       return;
     }
-    lastEvent = `${kind}(x = ${x.toFixed(1)}, y = ${y.toFixed(1)}, btn = ${button})`;
-    triggerLineGlow();
+
+    activePointers = [...activePointers, { id, ...point }];
   }
 
-  function handlePointerDown(panel: PanelInstance, prop: pointerDownProp) {
-    isInteracting = true;
-    updatePointerFromScreen(
-      panel,
-      prop.position.screenX,
-      prop.position.screenY,
-    );
-    recordEvent(
-      "pointerDown",
-      panel,
-      prop.button,
-      prop.position.x,
-      prop.position.y,
+  function updateDragLine(id: number, point: Point) {
+    dragLines = dragLines.map((line) =>
+      line.id === id ? { ...line, current: point } : line,
     );
   }
 
-  function handlePointerMove(panel: PanelInstance, prop: pointerMoveProp) {
-    updatePointerFromScreen(
-      panel,
-      prop.position.screenX,
-      prop.position.screenY,
-    );
-    recordEvent(
-      "pointerMove",
-      panel,
-      prop.button,
-      prop.position.x,
-      prop.position.y,
-    );
+  function handlePointerDown(event: PointerEvent & { currentTarget: HTMLElement }) {
+    event.currentTarget.setPointerCapture(event.pointerId);
+    inputMode = event.pointerType === "touch" ? "touch" : "mouse";
+    mouseButtons = event.buttons;
+    const point = pointFromEvent(event);
+    updatePointer(event.pointerId, point);
+    previousPoints.set(event.pointerId, point);
+    pointerArrows.set(event.pointerId, "");
+    dragLines = [...dragLines, { id: event.pointerId, start: point, current: point }];
+    activateRow("dragStart", coordText(point));
+    scheduleGlyphPanelCheck();
   }
 
-  function handlePointerUp(panel: PanelInstance, prop: pointerUpProp) {
-    isInteracting = false;
-    dragActive = false;
-    recordEvent(
-      "pointerUp",
-      panel,
-      prop.button,
-      prop.position.x,
-      prop.position.y,
-    );
-  }
+  function handlePointerMove(event: PointerEvent & { currentTarget: HTMLElement }) {
+    inputMode = event.pointerType === "touch" ? "touch" : "mouse";
+    mouseButtons = event.buttons;
+    const point = pointFromEvent(event);
+    const arrow = directionArrow(previousPoints.get(event.pointerId), point);
+    if (arrow) pointerArrows.set(event.pointerId, arrow);
 
-  function handleDragStart(panel: PanelInstance, prop: dragStartProp) {
-    recordEvent("dragStart", panel, prop.button, prop.start.x, prop.start.y);
-  }
-
-  function handleDrag(panel: PanelInstance, prop: dragProp) {
-    recordEvent("drag", panel, prop.button, prop.position.x, prop.position.y);
-  }
-
-  function handleDragEnd(panel: PanelInstance, prop: dragEndProp) {
-    recordEvent("dragEnd", panel, prop.button, prop.end.x, prop.end.y);
-  }
-
-  function handlePointerLeave() {
-    // When cursor leaves the panels, move cursor to vertical center
-    pointer = { x: 0.5, y: 0.5 };
-    isInteracting = false;
-    activePanel = null;
-  }
-
-  function attachPanel(panel: PanelInstance, currentEngine: EngineType) {
-    if (panel.object || !panel.element) return;
-    panel.object = new ElementObject(currentEngine, null);
-    panel.object.element = panel.element;
-    panel.object.event.input.pointerDown = (prop: pointerDownProp) =>
-      handlePointerDown(panel, prop);
-    panel.object.event.input.pointerMove = (prop: pointerMoveProp) =>
-      handlePointerMove(panel, prop);
-    panel.object.event.input.pointerUp = (prop: pointerUpProp) =>
-      handlePointerUp(panel, prop);
-    panel.object.event.input.dragStart = (prop: dragStartProp) =>
-      handleDragStart(panel, prop);
-    panel.object.event.input.drag = (prop: dragProp) => handleDrag(panel, prop);
-    panel.object.event.input.dragEnd = (prop: dragEndProp) =>
-      handleDragEnd(panel, prop);
-  }
-
-  function initializeDemo(currentEngine: EngineType) {
-    if (demoInitialized) return;
-    const ready = panels.every((panel) => panel.element);
-    if (!ready) return;
-    for (const panel of panels) {
-      attachPanel(panel, currentEngine);
+    const isDragging = dragLines.some((line) => line.id === event.pointerId);
+    if (isDragging) {
+      updatePointer(event.pointerId, point);
+      updateDragLine(event.pointerId, point);
+      activateRow("drag", coordText(point), arrow);
+    } else {
+      activateRow("move", coordText(point), arrow);
     }
-    demoInitialized = true;
+
+    if (activePointers.length >= 2) {
+      const [first, second] = activePointers;
+      const distance = Math.hypot(second.x - first.x, second.y - first.y);
+      const pinchArrows = [first, second]
+        .map((pointer) => pointerArrows.get(pointer.id))
+        .filter(Boolean)
+        .join(" ");
+      activateRow("pinch", `d:${Math.round(distance)}`, pinchArrows);
+    }
+
+    previousPoints.set(event.pointerId, point);
+    scheduleGlyphPanelCheck();
+  }
+
+  function handlePointerUp(event: PointerEvent & { currentTarget: HTMLElement }) {
+    inputMode = event.pointerType === "touch" ? "touch" : "mouse";
+    mouseButtons = event.buttons;
+    if (event.currentTarget.hasPointerCapture(event.pointerId)) {
+      event.currentTarget.releasePointerCapture(event.pointerId);
+    }
+    activePointers = activePointers.filter((pointer) => pointer.id !== event.pointerId);
+    dragLines = dragLines.filter((line) => line.id !== event.pointerId);
+    previousPoints.delete(event.pointerId);
+    pointerArrows.delete(event.pointerId);
+    scheduleGlyphPanelCheck();
+  }
+
+  function rowOutput(row: RowId) {
+    return `${rowLabels[row]}(${rowValues[row]})`;
+  }
+
+  function bulletGlyph(row: RowId) {
+    if (activeRow === row && spinnerRows.has(row)) {
+      return spinnerFrames[rowSpinnerFrames[row]];
+    }
+
+    return "•";
+  }
+
+  function asciiBoxRow(index: number) {
+    if (inputMode === "touch") {
+      return touchGridRow(index);
+    }
+
+    if (index === 1) {
+      const leftFill = leftMousePressed ? "██" : "  ";
+      const rightFill = rightMousePressed ? "██" : "  ";
+      return `│${leftFill}${middleMousePressed ? "■" : "□"}${rightFill}│`;
+    }
+
+    return asciiBoxRows[index];
+  }
+
+  function touchGridRow(row: number) {
+    const activeCount = Math.min(activePointers.length, 10);
+    const squares: string[] = [];
+    let fingerIndex = 0;
+
+    for (let previousRow = 0; previousRow < row; previousRow += 1) {
+      fingerIndex += touchColumns.filter((columnHeight) => previousRow < columnHeight).length;
+    }
+
+    for (const columnHeight of touchColumns) {
+      if (row >= columnHeight) {
+        squares.push(" ");
+        continue;
+      }
+
+      fingerIndex += 1;
+      squares.push(fingerIndex <= activeCount ? "■" : "□");
+    }
+
+    return squares.join(" ");
+  }
+
+  function handleContextMenu(event: MouseEvent) {
+    event.preventDefault();
+  }
+
+  async function scheduleGlyphPanelCheck() {
+    if (glyphPanelCheckPending) return;
+    glyphPanelCheckPending = true;
+    glyphPanelHidden = false;
+    await tick();
+    glyphPanelCheckPending = false;
+
+    if (!tapDisplayElement) return;
+    const displayRows = tapDisplayElement.querySelectorAll<HTMLElement>(".display-row");
+    glyphPanelHidden = Array.from(displayRows).some(
+      (row) => row.scrollWidth > row.clientWidth + 1,
+    );
   }
 
   onMount(() => {
-    if (engine && !demoInitialized) {
-      initializeDemo(engine);
-    }
-  });
+    scheduleGlyphPanelCheck();
 
-  $effect(() => {
-    panelElementsVersion;
-    if (engine && !demoInitialized) {
-      initializeDemo(engine);
+    if (typeof ResizeObserver === "undefined" || !tapDisplayElement) {
+      return;
     }
+
+    displayResizeObserver = new ResizeObserver(() => scheduleGlyphPanelCheck());
+    displayResizeObserver.observe(tapDisplayElement);
   });
 
   onDestroy(() => {
-    for (const panel of panels) {
-      if (panel.object) {
-        panel.object.event.input.pointerDown = null;
-        panel.object.event.input.pointerMove = null;
-        panel.object.event.input.pointerUp = null;
-        panel.object.event.input.dragStart = null;
-        panel.object.event.input.drag = null;
-        panel.object.event.input.dragEnd = null;
-        panel.object = null;
-      }
-      panel.element = null;
-    }
-    cleanupPanelGridObserver();
-    if (glowTimeout) {
-      clearTimeout(glowTimeout);
-      glowTimeout = null;
-    }
-  });
-
-  function registerPanel(node: HTMLElement, panel: PanelInstance) {
-    panel.element = node as HTMLDivElement;
-    panelElementsVersion += 1;
-    
-    // Add pointerleave listener to handle cursor leaving the panel
-    const onPointerLeave = () => handlePointerLeave();
-    node.addEventListener("pointerleave", onPointerLeave);
-    
-    return {
-      destroy() {
-        node.removeEventListener("pointerleave", onPointerLeave);
-        if (panel.object) {
-          panel.object.event.input.pointerDown = null;
-          panel.object.event.input.pointerMove = null;
-          panel.object.event.input.pointerUp = null;
-          panel.object.event.input.dragStart = null;
-          panel.object.event.input.drag = null;
-          panel.object.event.input.dragEnd = null;
-          panel.object = null;
-        }
-        panel.element = null;
-        panelElementsVersion += 1;
-      },
-    };
-  }
-
-  function buildLine(
-    config: EventLineConfig,
-    startRatio: number,
-    targetRatio: number,
-    viewport = eventLineViewport,
-  ): EventLine {
-    const width = Math.max(1, viewport.width);
-    const height = Math.max(1, viewport.height);
-    const startX = startRatio * width;
-    const targetX = targetRatio * width;
-    const elbowBase = height * 0.6;
-    const elbowY = clamp(elbowBase, 0, height);
-
-    return {
-      id: config.id,
-      stroke: EVENT_LINE_COLOR,
-      x1: startX,
-      y1: 0,
-      x2: startX,
-      y2: elbowY,
-      x3: targetX,
-      y3: elbowY,
-      x4: targetX,
-      y4: height,
-    };
-  }
-
-  function createDefaultLines(
-    targetRatio = 0.5,
-    viewport = EVENT_LINE_VIEWPORT_FALLBACK,
-  ) {
-    return EVENT_LINE_CONFIG.map((config) =>
-      buildLine(
-        config,
-        config.fixedRatio ?? config.fallbackRatio,
-        targetRatio,
-        viewport,
-      ),
-    );
-  }
-
-  function resolveStartRatio(
-    config: EventLineConfig,
-    arrowsRect: DOMRect,
-    panelGridRect?: DOMRect,
-  ) {
-    const fallback = config.fixedRatio ?? config.fallbackRatio;
-    if (!panelGridRect || !panelGridRect.width) {
-      return fallback;
-    }
-
-    const normalizedRatio = clamp(fallback, 0, 1);
-    const panelOffset = panelGridRect.left - arrowsRect.left;
-    const absoluteStartX = panelOffset + panelGridRect.width * normalizedRatio;
-    if (!arrowsRect.width) {
-      return fallback;
-    }
-    return clamp(absoluteStartX / arrowsRect.width, 0, 1);
-  }
-
-  function updateEventLines() {
-    if (typeof window === "undefined") {
-      eventLines = createDefaultLines();
-      return;
-    }
-
-    if (!eventArrowsRef) {
-      eventLineViewport = EVENT_LINE_VIEWPORT_FALLBACK;
-      eventLines = createDefaultLines();
-      return;
-    }
-
-    const arrowsRect = eventArrowsRef.getBoundingClientRect();
-    if (!arrowsRect.width || !arrowsRect.height) {
-      eventLineViewport = EVENT_LINE_VIEWPORT_FALLBACK;
-      eventLines = createDefaultLines();
-      return;
-    }
-
-    const viewport = {
-      minX: 0,
-      minY: 0,
-      width: arrowsRect.width,
-      height: arrowsRect.height,
-    } as const;
-    eventLineViewport = viewport;
-
-    const panelGridRect = panelGridRef?.getBoundingClientRect();
-    const eventPanelRect = eventPanelRef?.getBoundingClientRect();
-    const eventPanelCenter = eventPanelRect
-      ? eventPanelRect.left + eventPanelRect.width / 2
-      : arrowsRect.left + arrowsRect.width / 2;
-    const eventPanelRatio = clamp(
-      (eventPanelCenter - arrowsRect.left) / arrowsRect.width,
-    );
-
-    eventLines = EVENT_LINE_CONFIG.map((config) => {
-      const startRatio = resolveStartRatio(config, arrowsRect, panelGridRect);
-      return buildLine(config, startRatio, eventPanelRatio, viewport);
-    });
-  }
-
-  onMount(() => {
-    const handleResize = () => updateEventLines();
-    if (typeof window !== "undefined") {
-      window.addEventListener("resize", handleResize);
-    }
-    updateEventLines();
-
-    return () => {
-      if (typeof window !== "undefined") {
-        window.removeEventListener("resize", handleResize);
-      }
-    };
-  });
-
-  $effect(() => {
-    panelElementsVersion;
-    updateEventLines();
-  });
-
-  function cleanupPanelGridObserver() {
-    if (panelGridObserver) {
-      panelGridObserver.disconnect();
-      panelGridObserver = null;
-    }
-  }
-
-  $effect(() => {
-    eventArrowsRef;
-    eventPanelRef;
-    updateEventLines();
-  });
-
-  $effect(() => {
-    const node = panelGridRef;
-    cleanupPanelGridObserver();
-    if (!node || typeof ResizeObserver === "undefined") {
-      updateEventLines();
-      return;
-    }
-
-    const observer = new ResizeObserver(() => updateEventLines());
-    panelGridObserver = observer;
-    observer.observe(node);
-    updateEventLines();
-
-    return () => {
-      observer.disconnect();
-      if (panelGridObserver === observer) {
-        panelGridObserver = null;
-      }
-    };
+    if (rowTimer) clearTimeout(rowTimer);
+    displayResizeObserver?.disconnect();
   });
 </script>
 
-<HighlightCardShell
-  className="input-handling-card theme-secondary-5"
-  title="Input Handling"
-  description="Common API for multiple types of input devices."
->
-  <div class="pointer-demo-wrapper">
-    <Engine id="input-handling-sync" bind:engine bind:this={canvasComponent} debug={debugState.enabled}>
-      <div class="pointer-surface">
-        <div
-          class="panel-grid"
-          aria-label="Synced input devices"
-          bind:this={panelGridRef}
-        >
-          {#each panels as panel (panel.id)}
-            <div class="pointer-slot slot">
-              <div
-                class={`pointer-panel card ${panel.id} ${activePanel === panel.id ? "active" : ""}`}
-                style={`--panel-accent: ${panel.accent};`}
-                use:registerPanel={panel}
-              >
-                <header>
-                  <span class="panel-label">{panel.label}</span>
-                  <!-- <span class="panel-helper">{panel.helper}</span> -->
-                </header>
+<article class="input-handling-card theme-secondary-5">
+  <div class="input-card-heading">
+    <h3>Input Handling</h3>
+    <p>Common API for multiple types of input devices. Includes support for touch gestures.</p>
+  </div>
 
-                <div
-                  class={`cursor ${isInteracting ? "live" : ""}`}
-                  style={`left: ${pointer.x * 100}%; top: ${pointer.y * 100}%;`}
-                  aria-hidden="true"
-                >
-                  <span class="cursor-icon" aria-hidden="true">
-                    {@html PANEL_ICONS[panel.id]}
-                  </span>
-                </div>
-              </div>
-            </div>
-          {/each}
-        </div>
-        <div class="event-arrows" aria-hidden="true" bind:this={eventArrowsRef}>
-          {#each eventLines as line (line.id)}
-            <SvgLine
-              className={`event-line ${line.id} ${linesGlowing ? "glow" : ""}`}
-              x1={line.x1}
-              y1={line.y1}
-              x2={line.x2}
-              y2={line.y2}
-              x3={line.x3}
-              y3={line.y3}
-              x4={line.x4}
-              y4={line.y4}
-              stroke={line.stroke}
-              strokeWidth={2}
-              strokeLinecap="round"
-              strokeLinejoin="round"
-              padding={0}
-              cornerRadius={18}
-              viewport={eventLineViewport}
-              ariaHidden={true}
-              ariaLabel={`${line.id} input event path`}
-            />
-          {/each}
-        </div>
-        <div
-          class="card ground event-panel"
-          aria-live="polite"
-          bind:this={eventPanelRef}
-        >
-          {#if lastEvent}
-            <p class="event-line">{lastEvent}</p>
-          {:else}
-            <p class="empty">Interact with any panel to stream events.</p>
+  <div class="input-card-body card">
+    <div
+      class={`tap-display display ${glyphPanelHidden ? "glyph-panel-hidden" : ""}`}
+      aria-live="polite"
+      bind:this={tapDisplayElement}
+    >
+      {#each rows as row, index (row)}
+        <div class={`display-row ${activeRow === row ? "is-active" : ""}`}>
+          <span class="display-bullet" aria-hidden="true">{bulletGlyph(row)}</span>
+          <span class="display-value">{rowOutput(row)}</span>
+          <span class="display-arrow" aria-hidden="true">{rowArrows[row]}</span>
+          {#if !glyphPanelHidden}
+            <span class="ascii-box-row" aria-hidden="true">{asciiBoxRow(index)}</span>
           {/if}
         </div>
+      {/each}
+    </div>
+
+    <div
+      class="tap-surface"
+      role="application"
+      aria-label="Input gesture area"
+      onpointerdown={handlePointerDown}
+      onpointermove={handlePointerMove}
+      onpointerup={handlePointerUp}
+      onpointercancel={handlePointerUp}
+      oncontextmenu={handleContextMenu}
+    >
+      <div class="touch-plus-grid" aria-hidden="true">
+        {#each plusCells as cell (cell)}
+          <span>+</span>
+        {/each}
       </div>
-    </Engine>
+
+      <svg class="gesture-lines" viewBox="0 0 100 100" preserveAspectRatio="none" aria-hidden="true">
+        {#each dragLines as line (line.id)}
+          <line
+            class="drag-line"
+            x1={line.start.xp}
+            y1={line.start.yp}
+            x2={line.current.xp}
+            y2={line.current.yp}
+          />
+        {/each}
+        {#if pinchLine}
+          <line
+            class="pinch-line"
+            x1={pinchLine.a.xp}
+            y1={pinchLine.a.yp}
+            x2={pinchLine.b.xp}
+            y2={pinchLine.b.yp}
+          />
+        {/if}
+      </svg>
+
+      {#each dragLines as line (line.id)}
+        <span
+          class="gesture-pin start-pin"
+          style={`left: ${line.start.xp}%; top: ${line.start.yp}%;`}
+          aria-hidden="true"
+        ></span>
+      {/each}
+
+      {#each activePointers as pointer (pointer.id)}
+        <span
+          class="gesture-pin active-pin"
+          style={`left: ${pointer.xp}%; top: ${pointer.yp}%;`}
+          aria-hidden="true"
+        ></span>
+      {/each}
+    </div>
   </div>
-</HighlightCardShell>
+</article>
 
 <style lang="scss">
-  .pointer-demo-wrapper {
-    display: flex;
-    flex-direction: column;
-    gap: 0;
-    align-items: stretch;
-    padding: var(--size-24);
-  }
-
-  :global(.pointer-demo-wrapper #snap-canvas) {
-    overflow: visible !important;
-  }
-
-  .pointer-surface {
-    width: 100%;
-  }
-
-  .panel-grid {
-    display: grid;
-    grid-template-columns: repeat(3, minmax(0, 1fr));
-    gap: var(--size-16);
-  }
-
-  .pointer-slot {
+  .input-handling-card {
+    --card-padding: var(--size-48);
+    container-type: inline-size;
+    container-name: input-handling-card;
+    min-height: 520px;
+    height: 100%;
     overflow: hidden;
-  }
-
-  .pointer-panel {
-    position: relative;
-    min-height: 150px;
-    padding: var(--size-24);
-    cursor: none;
-  }
-
-  .pointer-panel header {
     display: flex;
     flex-direction: column;
-    gap: 0.1rem;
-    font-size: 0.75rem;
-    text-transform: uppercase;
-    letter-spacing: 0.08em;
-    color: rgba(58, 42, 34, 0.78);
-  }
+    gap: var(--size-32);
+    box-sizing: border-box;
+    background: var(--color-background-tint);
+    border-radius: var(--ui-radius);
 
-  .panel-label {
-    font-weight: 600;
-    color: #a3a1a0;
-    letter-spacing: 2px;
-    font-size: 0.7rem;
-  }
+    @media (max-width: 720px) {
+      --card-padding: var(--size-24);
+      grid-column: span 2;
+    }
 
-  .panel-helper {
-    font-size: 0.65rem;
-    color: rgba(58, 42, 34, 0.65);
-  }
-
-  .cursor {
-    position: absolute;
-    transform: translate(-50%, -50%);
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    pointer-events: none;
-    color: var(--panel-accent);
-    filter: drop-shadow(0 4px 12px rgba(0, 0, 0, 0.15));
-    
-    &.live {
-      transform: translate(-50%, -50%) scale(0.9);
+    @container input-handling-card (max-width: 500px) {
+      gap: 0;
     }
   }
 
-  .cursor-icon {
-    display: block;
-    line-height: 0;
-  }
+  .input-card-heading {
+    display: grid;
+    grid-template-columns: auto 1fr;
+    align-items: start;
+    justify-content: space-between;
+    gap: var(--size-48);
+    padding: var(--card-padding) var(--card-padding) 0 var(--card-padding);
 
-  .cursor-icon :global(svg) {
-    width: 20px;
-    height: 20px;
-    display: block;
-  }
-
-  .event-arrows {
-    position: relative;
-    width: 100%;
-    max-width: 100%;
-    height: 80px;
-    align-self: stretch;
-    margin: 0;
-    pointer-events: none;
-  }
-
-  .event-arrows :global(.event-line) {
-    position: absolute;
-    inset: 0;
-    width: 100%;
-    height: 100%;
-    opacity: 0.95;
-    filter: drop-shadow(0 3px 6px rgba(0, 0, 0, 0.08));
-    transition:
-      filter 0.25s ease,
-      opacity 0.3s ease;
-  }
-
-  // .event-arrows :global(.event-line.glow) {
-  //   filter: drop-shadow(0 0 8px rgba(0, 0, 0, 0.4))
-  //     drop-shadow(0 0 18px rgba(0, 0, 0, 0.25));
-  //   animation: event-line-glow 0.2s ease-out;
-  // }
-
-  .event-panel {
-    align-self: center;
-    // background: #fff;
-    --card-color: #181a1d;
+    h3 {
+      width: min-content;
+      margin: 0;
+      font-family: "Geist Pixel Circle", "Doto", sans-serif;
+      font-size: 58px;
+      line-height: 0.88;
+    }
 
     p {
       margin: 0;
-      font-family: "Geist Pixel Circle", "Doto", monospace;
-      font-weight: 900;
-      font-size: 12px;
-      color: #ffffff;
-      white-space: nowrap;
-      max-width: clamp(220px, 60vw, 360px);
-      overflow: hidden;
-      text-overflow: ellipsis;
+    }
+
+    @container input-handling-card (max-width: 500px) {
+      gap: var(--size-12);
+      grid-template-columns: 1fr;
+
+      > * {
+        grid-column: auto;
+      }
     }
   }
 
-  @keyframes event-line-glow {
-    0% {
-      opacity: 1;
-    }
-    30% {
-      opacity: 1;
-    }
-    100% {
-      opacity: 0.55;
+  .input-card-body {
+    flex: 1;
+    min-height: 360px;
+    margin: 0 var(--card-padding) var(--card-padding) var(--card-padding);
+    margin-top: calc(var(--size-48) * -1);
+    overflow: hidden;
+    display: flex;
+    flex-direction: column;
+    align-items: stretch;
+    justify-content: flex-start;
+    gap: var(--size-24);
+    padding: var(--size-24);
+    box-sizing: border-box;
+    transform: translateY(var(--size-80));
+
+    @container input-handling-card (max-width: 500px) {
+      margin-top: 0;
+      transform: none;
     }
   }
 
-  @media (max-width: 720px) {
-    // .panel-grid {
-    //   grid-template-columns: repeat(auto-fit, minmax(130px, 1fr));
-    //   gap: 0.4rem;
-    // }
+  .tap-display {
+    width: 100%;
+    display: grid;
+    grid-template-columns: 1fr;
+    gap: 0;
+    padding: var(--size-16) var(--size-12);
+    box-sizing: border-box;
+    border-radius: var(--ui-radius);
+    overflow: hidden;
+  }
 
-    .pointer-demo-wrapper {
-      padding: var(--size-24);
-    }
+  .display-row {
+    min-width: 0;
+    display: grid;
+    grid-template-columns: 10px max-content minmax(20px, max-content) minmax(7ch, 1fr);
+    align-items: center;
+    gap: 6px;
+    min-height: 13px;
+    color: inherit;
+    letter-spacing: 0;
+  }
 
-    .pointer-panel {
-      min-height: 125px;
-      padding: 0.55rem;
-    }
+  .tap-display.glyph-panel-hidden .display-row {
+    grid-template-columns: 10px max-content minmax(20px, max-content);
+  }
 
-    .event-arrows {
-      height: 70px;
-      width: 100%;
-    }
+  .display-bullet {
+    width: 10px;
+    justify-self: center;
+    overflow: hidden;
+    font-family: "Bitcount Grid Single", monospace !important;
+    font-size: 10px;
+    line-height: 13px;
+    color: #4b4b4b;
+    opacity: 0.72;
+    text-align: center;
+    white-space: pre;
+  }
 
-    .event-panel {
-      padding: 0.5rem 0.9rem;
-      flex-direction: column;
-      text-align: center;
-      gap: 0.35rem;
-      margin-top: 0.65rem;
-    }
+  .display-row.is-active .display-bullet {
+    font-size: 12px;
+    color: inherit;
+    opacity: 1;
+  }
 
-    .event-panel .event-line,
-    .event-panel .empty {
-      max-width: 100%;
-      white-space: normal;
-    }
+  .display-value {
+    min-width: 0;
+    overflow: visible;
+    font-family: "Bitcount Grid Single", monospace !important;
+    font-optical-sizing: auto;
+    font-style: normal;
+    font-size: 12px;
+    font-weight: 300;
+    line-height: 13px;
+    color: inherit;
+    letter-spacing: 0;
+    margin: 0;
+    white-space: nowrap;
+    text-overflow: clip;
+  }
+
+  .display-arrow {
+    min-width: 20px;
+    overflow: hidden;
+    font-family: "Bitcount Grid Single", monospace !important;
+    font-size: 12px;
+    line-height: 13px;
+    color: inherit;
+    letter-spacing: 0;
+    margin: 0;
+    white-space: nowrap;
+  }
+
+  .ascii-box-row {
+    display: inline-block;
+    justify-self: end;
+    overflow: hidden;
+    font-family: "Bitcount Grid Single", monospace !important;
+    font-size: 12px;
+    line-height: 13px;
+    color: inherit;
+    letter-spacing: 0;
+    margin: 0;
+    white-space: pre;
+  }
+
+  .tap-surface {
+    width: 100%;
+    flex: 1;
+    min-height: 180px;
+    position: relative;
+    overflow: hidden;
+    touch-action: none;
+    isolation: isolate;
+    box-sizing: border-box;
+    border-radius: var(--ui-radius);
+    border: 1px solid rgba(0, 0, 0, 0.14);
+    background-color: var(--color-background-tint);
+  }
+
+  .touch-plus-grid {
+    position: absolute;
+    inset: 10px;
+    z-index: 0;
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(36px, 1fr));
+    grid-auto-rows: 36px;
+    overflow: hidden;
+    pointer-events: none;
+    color: rgba(0, 0, 0, 0.08);
+    font-family: "Bitcount Grid Single", monospace;
+    font-size: 10px;
+    font-weight: 300;
+    line-height: 1;
+    place-items: center;
+    user-select: none;
+  }
+
+  .touch-plus-grid span {
+    color: inherit;
+    margin: 0;
+  }
+
+  .gesture-lines {
+    position: absolute;
+    inset: 0;
+    z-index: 1;
+    width: 100%;
+    height: 100%;
+    pointer-events: none;
+  }
+
+  .drag-line,
+  .pinch-line {
+    vector-effect: non-scaling-stroke;
+    stroke-linecap: round;
+  }
+
+  .drag-line {
+    stroke: rgba(255, 117, 58, 0.88);
+    stroke-width: 2;
+    filter: drop-shadow(0 0 4px rgba(255, 117, 58, 0.48));
+  }
+
+  .pinch-line {
+    stroke: rgba(255, 31, 31, 0.8);
+    stroke-width: 2.5;
+    stroke-dasharray: 5 4;
+    filter: drop-shadow(0 0 5px rgba(255, 31, 31, 0.45));
+  }
+
+  .gesture-pin {
+    position: absolute;
+    z-index: 2;
+    width: 14px;
+    height: 14px;
+    border-radius: 999px;
+    transform: translate(-50%, -50%);
+    pointer-events: none;
+  }
+
+  .start-pin {
+    background: var(--color-primary);
+    box-shadow:
+      0 0 0 5px rgba(255, 117, 58, 0.12),
+      0 0 12px rgba(255, 117, 58, 0.36);
+  }
+
+  .active-pin {
+    background: var(--color-primary);
+    box-shadow:
+      0 0 0 6px rgba(255, 117, 58, 0.16),
+      0 0 14px rgba(255, 117, 58, 0.42);
   }
 </style>
