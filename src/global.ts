@@ -1,5 +1,4 @@
 import { BaseObject, queueEntry } from "./object";
-import { GlobalInputControl } from "./input";
 
 type renderEntry = Map<string, Map<string, queueEntry>>;
 
@@ -17,7 +16,6 @@ interface RenderQueue {
  *
  * Manages global state including:
  * - Unique object ID generation
- * - Global input control
  * - Shared render queues for synchronized rendering across all engines
  * - Shared data storage
  * - Engine instance registry
@@ -36,7 +34,6 @@ class GlobalManager {
   private static instance: GlobalManager | null = null;
   private static readonly GLOBAL_ENGINE_KEY = "__global__";
 
-  inputEngine: GlobalInputControl | null;
   objectTable: Record<string, Record<string, BaseObject>>;
   data: any;
   gid: number;
@@ -58,7 +55,6 @@ class GlobalManager {
 
   private constructor() {
     this.objectTable = {};
-    this.inputEngine = null;
     this.data = {};
     this.gid = 0;
     this.#engineIdCounter = 0;
@@ -114,7 +110,6 @@ class GlobalManager {
   registerEngine(engine: any): void {
     this.engines.add(engine);
     this.#ensureEngineId(engine);
-    this.#ensureInputEngine(engine);
 
     // Start the global render loop if this is the first engine
     if (this.engines.size === 1) {
@@ -140,8 +135,6 @@ class GlobalManager {
 
     // Stop the global render loop if no engines remain
     if (this.engines.size === 0) {
-      this.inputEngine?.destroy();
-      this.inputEngine = null;
       this.#stopRenderLoop();
     }
   }
@@ -253,13 +246,6 @@ class GlobalManager {
     return this.gid.toString();
   }
 
-  getInputEngine(engine: any | null): GlobalInputControl | null {
-    if (!engine && !this.inputEngine) {
-      return null;
-    }
-    return this.inputEngine ?? this.#ensureInputEngine(engine);
-  }
-
   getEngineId(engine: any | null): string | null {
     if (!engine) {
       return null;
@@ -317,13 +303,6 @@ class GlobalManager {
           : GlobalManager.GLOBAL_ENGINE_KEY;
       delete this.objectTable[key];
     }
-  }
-
-  #ensureInputEngine(_engine: any): GlobalInputControl {
-    if (!this.inputEngine) {
-      this.inputEngine = new GlobalInputControl(this);
-    }
-    return this.inputEngine;
   }
 
   #ensureEngineId(engine: any): string {

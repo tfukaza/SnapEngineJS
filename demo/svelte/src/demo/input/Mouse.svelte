@@ -15,11 +15,7 @@
     //     }
     // }
     // onMount(() => {
-    //     const globalInputEngine = engine.global.getInputEngine(engine);
-    //     if (globalInputEngine) {
-    //         // globalInputEngine._inputControl.event.pointerMove = updateMousePosition;
-    //         globalInputEngine.subscribeGlobalCursorEvent("pointerMove", "100", updateMousePosition);
-    //     }
+    //     engine.input.subscribeGlobalCursorEvent("pointerMove", "100", updateMousePosition, engine);
     // });
 
 

@@ -30,7 +30,7 @@
         engine.global.data.select = [];
     }
 
-    // Create box object (for dragging) - use ElementObject for inputEngine
+    // Create box object for dragging.
     boxObject = new ElementObject(engine, null);
     boxObject.element = boxElement;
     boxObject.transform.x = initialX;

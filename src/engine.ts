@@ -1,6 +1,7 @@
 import { StationaryCamera } from "./camera";
 import type { Camera } from "./camera";
 import { GlobalManager } from "./global";
+import { InputControl } from "./input";
 import {
   BaseObject,
   ElementObject,
@@ -51,7 +52,7 @@ type AnimationProcessor = (timestamp: number) => void;
  * and optional features like animations, collisions, camera controls, and debugging.
  *
  * Multiple Engine instances can coexist, each managing their own canvas and render pipeline
- * while sharing a global GlobalManager singleton for ID generation and global input.
+ * while sharing a global GlobalManager singleton for ID generation and render scheduling.
  *
  * Features can be enabled on-demand to keep bundle sizes small:
  * - Animation engine via `enableAnimationEngine()`
@@ -78,6 +79,7 @@ type AnimationProcessor = (timestamp: number) => void;
 class Engine {
   engineConfig: EngineConfig; // Engine configuration options
   global: GlobalManager | null = null; // Reference to the global manager
+  input: InputControl;
 
   containerElement: HTMLElement | null = null; // The DOM element for the engine's container.
   containerBounds: ContainerBounds | null = null; // Cached bounding rect of the container
@@ -123,6 +125,7 @@ class Engine {
 
   constructor(config: EngineConfig = {}) {
     this.global = GlobalManager.getInstance();
+    this.input = new InputControl(this.global, this);
     this.global.registerEngine(this);
     this.engineConfig = {
       ...DEFAULT_ENGINE_CONFIG,
@@ -224,6 +227,7 @@ class Engine {
 
     // Always compute initial container bounds
     this.#updateContainerBounds(element);
+    this.input.bindContainer(element);
 
     // Set up resize observer
     this.#resizeObserver = new ResizeObserver(() => {
@@ -452,6 +456,8 @@ class Engine {
    * ```
    */
   destroy() {
+    this.input.destroy();
+
     // Unregister from global manager
     this.global!.unregisterEngine(this);
 

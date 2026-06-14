@@ -1,6 +1,5 @@
-import { GlobalManager } from "./global";
-import { BaseObject } from "./object";
-import { EventProxyFactory } from "./util";
+import type { GlobalManager } from "./global";
+import type { ElementObject } from "./object";
 
 export enum mouseButton {
   LEFT = 0,
@@ -27,9 +26,6 @@ export interface eventPosition {
   screenY: number;
 }
 
-/**
- * Events common to mouse and touch
- */
 export interface pointerDownProp {
   event: PointerEvent;
   gid: string | null;
@@ -52,7 +48,6 @@ export interface pointerUpProp {
   button: number;
 }
 
-/** Mouse events */
 export interface mouseWheelProp {
   event: WheelEvent;
   gid: string | null;
@@ -61,7 +56,7 @@ export interface mouseWheelProp {
 }
 
 export interface dragStartProp {
-  gid: string | null; // Object that triggered the event
+  gid: string | null;
   pointerId: number;
   start: eventPosition;
   button: number;
@@ -85,47 +80,30 @@ export interface dragEndProp {
   button: number;
 }
 
+export interface PinchSnapshot {
+  pointerList: eventPosition[];
+  distance: number;
+}
+
 export interface pinchStartProp {
   gid: string | null;
   gestureID: string;
-  start: {
-    pointerList: eventPosition[];
-    distance: number;
-  };
+  start: PinchSnapshot;
 }
 
-/** Touch Event */
 export interface pinchProp {
   gid: string | null;
   gestureID: string;
-  start: {
-    pointerList: eventPosition[];
-    distance: number;
-  };
-  pointerList: eventPosition[];
-  distance: number;
+  start: PinchSnapshot;
+  current: PinchSnapshot;
 }
 
 export interface pinchEndProp {
   gid: string | null;
   gestureID: string;
-  start: {
-    pointerList: eventPosition[];
-    distance: number;
-  };
-  pointerList: eventPosition[];
-  distance: number;
-  end: {
-    pointerList: eventPosition[];
-    distance: number;
-  };
-}
-
-export interface touchMultiMoveProp {
-  gid: string | null;
-  position: eventPosition;
-  positionCount: number;
-  positionList: eventPosition[];
+  start: PinchSnapshot;
+  current: PinchSnapshot;
+  end: PinchSnapshot;
 }
 
 export interface InputEventCallback {
@@ -143,13 +121,6 @@ export interface InputEventCallback {
   pinchEnd: null | ((prop: pinchEndProp) => void);
 }
 
-export type touchData = {
-  x: number;
-  y: number;
-  target: Element | null;
-  identifier: number;
-};
-
 /**
  * General input event data struct for both mouse and touch pointers.
  */
@@ -157,7 +128,7 @@ export type pointerData = {
   id: number; // pointer id
   callerGID: string | null; // GID of the element that triggered the pointer event
   timestamp: number; // Timestamp of the pointer event
-  x: number; // All coordinates are in word space
+  x: number; // Screen-space x coordinate
   y: number;
   startX: number;
   startY: number;
@@ -170,146 +141,491 @@ export type pointerData = {
   isWithinEngine: boolean;
 };
 
-const GLOBAL_GID = "global";
+const INPUT_CONTROL_EVENT_SUBSCRIPTION_ID = "__input_control_event__";
 const DRAG_START_THRESHOLD_PX = 3;
 
-export interface InputControlOption {
-  pinch: {
-    returnOnlyFirst: boolean;
-  };
+type InputEventPayloadMap = {
+  pointerDown: pointerDownProp;
+  pointerMove: pointerMoveProp;
+  pointerUp: pointerUpProp;
+  mouseWheel: mouseWheelProp;
+  dragStart: dragStartProp;
+  drag: dragProp;
+  dragEnd: dragEndProp;
+  pinchStart: pinchStartProp;
+  pinch: pinchProp;
+  pinchEnd: pinchEndProp;
+};
+
+type InputEventPayload = InputEventPayloadMap[keyof InputEventPayloadMap];
+type GlobalInputCallback = (prop: InputEventPayload) => void;
+
+type GlobalCallbackRegistry = Record<
+  keyof InputEventCallback,
+  Record<string, { callback: GlobalInputCallback; engine: any | null }>
+>;
+
+type TrackedPointer = pointerData & {
+  owner: ElementObject | null;
+  currentOwner: ElementObject | null;
+};
+
+interface dragGesture {
+  type: "drag";
+  state: "pending" | "drag" | "release";
+  member: ElementObject | null;
+  pointerId: number;
+}
+
+interface pinchGesture {
+  type: "pinch";
+  state: "idle" | "pinch" | "release";
+  member: ElementObject | null;
+  pointerId0: number;
+  pointerId1: number;
+  start: PinchSnapshot;
+  current: PinchSnapshot;
 }
 
 /**
- * Unified input handler that converts mouse and touch events into a consistent format.
+ * Configuration options for input handling.
+ */
+export interface InputControlConfig {
+  /**
+   * Maximum number of simultaneous drag gestures allowed.
+   * When exceeded, the oldest drag gesture will be cancelled.
+   * Set to 0 or Infinity for unlimited. Default is Infinity.
+   */
+  maxSimultaneousDrags: number;
+}
+
+const DEFAULT_INPUT_CONTROL_CONFIG: InputControlConfig = {
+  maxSimultaneousDrags: Infinity,
+};
+
+const inputEventKeys: Array<keyof InputEventCallback> = [
+  "pointerDown",
+  "pointerMove",
+  "pointerUp",
+  "mouseWheel",
+  "dragStart",
+  "drag",
+  "dragEnd",
+  "pinchStart",
+  "pinch",
+  "pinchEnd",
+];
+
+/**
+ * Input event manager for a single engine instance.
  *
- * Provides:
- * - Pointer events (works for both mouse and touch)
- * - Gesture recognition (drag, pinch)
- * - Coordinate transformation (screen, camera, world space)
- * - Event propagation to global input system
- *
- * Events are automatically bound to the owner object and propagated through
- * the global input engine for centralized handling.
- *
- * @example
- * ```typescript
- * const engine = new Engine();
- * const input = new InputControl(engine, false, object.gid);
- * input.event.pointerDown = (props) => {
- *   console.log('Pointer at', props.position.x, props.position.y);
- * };
- * ```
+ * Object DOM elements register ownership here. Native listeners stay centralized
+ * on the engine container/document, and dispatch resolves the current owner from
+ * the native event path.
  */
 class InputControl {
-  /**
-   * Functions as a middleware that converts mouse and touch events into a unified event format.
-   */
-  _element: HTMLElement | null;
+  #container: HTMLElement | null = null;
+  #containerController: AbortController | null = null;
+  #document: Document;
+  #documentController: AbortController | null = null;
+  #elementByObjectGID: Map<string, HTMLElement>;
+  #engine: any;
+  #event: InputEventCallback;
+  #gestureDict: { [key: string]: dragGesture | pinchGesture };
+  #objectByElement: WeakMap<HTMLElement, ElementObject>;
+  #pointerDict: { [key: number]: TrackedPointer };
+
   global: GlobalManager | null;
 
-  _sortedTouchArray: touchData[]; // List of touches for touch events, sorted by the times they are pressed
-  _sortedTouchDict: { [key: number]: touchData }; // Dictionary of touches for touch events, indexed by the touch identifier
-  _localPointerDict: { [key: number]: pointerData };
-  _event: InputEventCallback;
+  globalCallbacks: GlobalCallbackRegistry;
+
   event: InputEventCallback;
-  _isGlobal: boolean;
-  _uuid: symbol;
-  _ownerGID: string | null;
 
-  #debugObject: BaseObject;
-
-  #dragMemberList: InputControl[];
-
-  #listenerControllers: AbortController[];
-
-  engine: any;
+  /**
+   * Configuration options for input handling.
+   */
+  config: InputControlConfig;
 
   constructor(
+    global: GlobalManager,
     engine: any,
-    isGlobal: boolean = true,
-    ownerGID: string | null = null,
+    config: Partial<InputControlConfig> = {},
   ) {
+    this.global = global;
+    this.#document = document;
+    this.#engine = engine;
+    this.config = { ...DEFAULT_INPUT_CONTROL_CONFIG, ...config };
 
-    this.engine = engine;
-    this.global = engine.global;
-  
-    this._element = null;
-    this._isGlobal = isGlobal;
-    this._sortedTouchArray = [];
-    this._sortedTouchDict = {};
-    this._ownerGID = ownerGID;
-    this._localPointerDict = {};
-    this.#dragMemberList = [];
-    this.#listenerControllers = [];
-    this._event = {
-      pointerDown: null,
-      pointerMove: null,
-      pointerUp: null,
-      mouseWheel: null,
-      dragStart: null,
-      drag: null,
-      dragEnd: null,
-      pinchStart: null,
-      pinch: null,
-      pinchEnd: null,
-    };
-    this.event = EventProxyFactory<InputControl, InputEventCallback>(
-      this,
-      this._event,
-      this._isGlobal ? null : this.globalInputEngine?._inputControl.event,
+    this.#elementByObjectGID = new Map();
+    this.#gestureDict = {};
+    this.#objectByElement = new WeakMap();
+    this.#pointerDict = {};
+
+    this.globalCallbacks = this.#createGlobalCallbackRegistry();
+    this.#event = this.#createInputEventCallback();
+    this.event = new Proxy(this.#event, {
+      set: (_target, prop, value) => {
+        if (typeof prop !== "string" || !this.#isInputEventKey(prop)) {
+          return true;
+        }
+        const event = prop as keyof InputEventCallback;
+        this.#event[event] = value as any;
+        if (value != null) {
+          this.subscribeGlobalCursorEvent(
+            event,
+            INPUT_CONTROL_EVENT_SUBSCRIPTION_ID,
+            (value as CallableFunction).bind(this) as any,
+            this.#engine,
+          );
+        } else {
+          this.unsubscribeGlobalCursorEvent(
+            event,
+            INPUT_CONTROL_EVENT_SUBSCRIPTION_ID,
+          );
+        }
+        return true;
+      },
+    });
+  }
+
+  bindContainer(container: HTMLElement) {
+    this.#destroyListeners();
+    this.#container = container;
+    this.#pointerDict = {};
+    this.#gestureDict = {};
+
+    this.#containerController = new AbortController();
+    this.#documentController = new AbortController();
+
+    container.addEventListener("pointerdown", this.#onPointerDown, {
+      signal: this.#containerController.signal,
+    });
+    container.addEventListener("pointermove", this.#onContainerPointerMove, {
+      signal: this.#containerController.signal,
+    });
+    container.addEventListener("wheel", this.#onWheel, {
+      signal: this.#containerController.signal,
+    });
+
+    this.#document.addEventListener(
+      "pointermove",
+      this.#onDocumentPointerMove,
+      {
+        signal: this.#documentController.signal,
+      },
     );
-    this._uuid = Symbol();
-    this.#debugObject = new BaseObject(this.global!, null);
+    this.#document.addEventListener("pointerup", this.#onPointerUp, {
+      signal: this.#documentController.signal,
+    });
+    this.#document.addEventListener("pointercancel", this.#onPointerCancel, {
+      signal: this.#documentController.signal,
+    });
   }
 
   destroy() {
-    for (const controller of this.#listenerControllers) {
-      controller.abort();
-    }
-    this.#listenerControllers = [];
-    this._element = null;
-    this._sortedTouchArray = [];
-    this._sortedTouchDict = {};
-    this._localPointerDict = {};
+    this.#destroyListeners();
+    this.globalCallbacks = this.#createGlobalCallbackRegistry();
+    this.#container = null;
+    this.#elementByObjectGID.clear();
+    this.#gestureDict = {};
+    this.#objectByElement = new WeakMap();
+    this.#pointerDict = {};
   }
 
-  get globalInputEngine() {
-    if (!this.global) {
-      return null;
-    }
-    return this.global.getInputEngine(this.engine ?? null);
+  registerObjectElement(object: ElementObject, element: HTMLElement) {
+    this.unregisterObjectElement(object);
+    this.#objectByElement.set(element, object);
+    this.#elementByObjectGID.set(object.gid, element);
   }
 
-  get globalPointerDict(): { [key: number]: pointerData } {
-    if (this.globalInputEngine == null) {
-      return {};
+  unregisterObjectElement(object: ElementObject, element?: HTMLElement) {
+    const registeredElement =
+      element ?? this.#elementByObjectGID.get(object.gid) ?? null;
+    if (registeredElement) {
+      this.#objectByElement.delete(registeredElement);
     }
-    return this.globalInputEngine._pointerDict;
+
+    if (
+      !element ||
+      this.#elementByObjectGID.get(object.gid) === registeredElement
+    ) {
+      this.#elementByObjectGID.delete(object.gid);
+    }
+
+    for (const pointer of Object.values(this.#pointerDict)) {
+      if (pointer.owner === object) {
+        pointer.owner = null;
+        pointer.callerGID = null;
+      }
+      if (pointer.currentOwner === object) {
+        pointer.currentOwner = null;
+      }
+    }
+
+    for (const gesture of Object.values(this.#gestureDict)) {
+      if (gesture.member === object) {
+        gesture.member = null;
+      }
+    }
   }
 
-  get globalGestureDict(): { [key: string]: dragGesture | pinchGesture } {
-    if (this.globalInputEngine == null) {
-      return {};
+  setPointerDragOwner(pointerId: number, owner: ElementObject | null) {
+    const pointer = this.#pointerDict[pointerId];
+    if (pointer) {
+      pointer.owner = owner;
+      pointer.callerGID = this.#getOwnerGID(owner);
     }
-    return this.globalInputEngine._gestureDict;
-  }
-  // convertMouseToCursorState(buttons: number): cursorState {
-  //   switch (buttons) {
-  //     case 1:
-  //       return cursorState.mouseLeft;
-  //     case 2:
-  //       return cursorState.mouseRight;
-  //     case 4:
-  //       return cursorState.mouseMiddle;
-  //     default:
-  //       return cursorState.none;
-  //   }
-  // }
 
-  getCoordinates(screenX: number, screenY: number) {
-    if (this.engine == null || this.engine.camera == null) {
-      // This generally should not happen, because even engines that don't use camera 
-      // control still have a default camera instance.
+    const gesture = this.#gestureDict[pointerId];
+    if (gesture?.type === "drag") {
+      gesture.member = owner;
+    }
+  }
+
+  subscribeGlobalCursorEvent<EventName extends keyof InputEventCallback>(
+    event: EventName,
+    gid: string,
+    callback: (prop: InputEventPayloadMap[EventName]) => void,
+    engine: any | null,
+  ) {
+    const callbacks = this.globalCallbacks[event] as Record<
+      string,
+      { callback: GlobalInputCallback; engine: any | null }
+    >;
+    callbacks[gid] = {
+      callback: callback as GlobalInputCallback,
+      engine,
+    };
+  }
+
+  unsubscribeGlobalCursorEvent(event: keyof InputEventCallback, gid: string) {
+    delete this.globalCallbacks[event][gid];
+  }
+
+  #destroyListeners() {
+    this.#containerController?.abort();
+    this.#documentController?.abort();
+    this.#containerController = null;
+    this.#documentController = null;
+  }
+
+  #getActiveDragCount(): number {
+    return Object.values(this.#gestureDict).filter(
+      (g) => g.type === "drag" && g.state === "drag",
+    ).length;
+  }
+
+  #getActiveDragsSortedByTime(): {
+    pointerId: number;
+    gesture: dragGesture;
+    timestamp: number;
+  }[] {
+    const drags: {
+      pointerId: number;
+      gesture: dragGesture;
+      timestamp: number;
+    }[] = [];
+
+    for (const [key, gesture] of Object.entries(this.#gestureDict)) {
+      if (gesture.type !== "drag" || gesture.state !== "drag") continue;
+      const pointerId = parseInt(key, 10);
+      const pointerData = this.#pointerDict[pointerId];
+      if (pointerData) {
+        drags.push({
+          pointerId,
+          gesture,
+          timestamp: pointerData.timestamp,
+        });
+      }
+    }
+
+    return drags.sort((a, b) => a.timestamp - b.timestamp);
+  }
+
+  #cancelOldestDrag(): void {
+    const drags = this.#getActiveDragsSortedByTime();
+    if (drags.length === 0) return;
+
+    const oldest = drags[0];
+    const pointerData = this.#pointerDict[oldest.pointerId];
+    if (!pointerData) return;
+
+    this.#fireDragEnd(pointerData, 0);
+    delete this.#gestureDict[oldest.pointerId];
+    delete this.#pointerDict[oldest.pointerId];
+  }
+
+  #enforceMaxDragLimit(): void {
+    const maxDrags = this.config.maxSimultaneousDrags;
+    if (maxDrags <= 0 || maxDrags === Infinity) return;
+
+    while (this.#getActiveDragCount() > maxDrags) {
+      this.#cancelOldestDrag();
+    }
+  }
+
+  #onPointerDown = (event: PointerEvent) => {
+    if (!this.#isEventInsideContainer(event)) {
+      return;
+    }
+
+    const owner = this.#getTargetOwner(event);
+    const position = this.#getCoordinates(event.clientX, event.clientY);
+    const isWithinEngine = this.#isCoordinateWithinEngine(
+      event.clientX,
+      event.clientY,
+    );
+    this.#pointerDict[event.pointerId] = {
+      id: event.pointerId,
+      callerGID: owner?.gid ?? null,
+      timestamp: event.timeStamp,
+      x: event.clientX,
+      y: event.clientY,
+      startX: event.clientX,
+      startY: event.clientY,
+      prevX: event.clientX,
+      prevY: event.clientY,
+      endX: null,
+      endY: null,
+      moveCount: 0,
+      button: event.buttons,
+      isWithinEngine,
+      owner,
+      currentOwner: owner,
+    };
+
+    this.#gestureDict[event.pointerId] = {
+      type: "drag",
+      state: "pending",
+      member: owner,
+      pointerId: event.pointerId,
+    };
+
+    const prop: pointerDownProp = {
+      event,
+      gid: owner?.gid ?? null,
+      position,
+      button: event.buttons,
+      isWithinEngine,
+    };
+
+    this.#dispatchObjectEvent(owner, "pointerDown", prop);
+    this.#dispatchGlobalEvent("pointerDown", prop);
+  };
+
+  #onContainerPointerMove = (event: PointerEvent) => {
+    this.#handlePointerMove(event);
+  };
+
+  #onDocumentPointerMove = (event: PointerEvent) => {
+    if (this.#isEventInsideContainer(event)) {
+      return;
+    }
+    if (this.#pointerDict[event.pointerId] == null) {
+      return;
+    }
+    this.#handlePointerMove(event);
+  };
+
+  #handlePointerMove(event: PointerEvent) {
+    const pointer = this.#pointerDict[event.pointerId] ?? null;
+    const isInsideContainer = this.#isEventInsideContainer(event);
+    if (!pointer && !isInsideContainer) {
+      return;
+    }
+
+    const currentOwner = isInsideContainer ? this.#getTargetOwner(event) : null;
+    const position = this.#getCoordinates(event.clientX, event.clientY);
+    const prop: pointerMoveProp = {
+      event,
+      gid: currentOwner?.gid ?? null,
+      position,
+      button: event.buttons,
+    };
+
+    this.#dispatchObjectEvent(currentOwner, "pointerMove", prop);
+    this.#dispatchGlobalEvent("pointerMove", prop);
+
+    if (pointer) {
+      Object.assign(pointer, {
+        prevX: pointer.x,
+        prevY: pointer.y,
+        x: event.clientX,
+        y: event.clientY,
+        currentOwner,
+      });
+      pointer.moveCount++;
+      this.#handleDrag(pointer);
+      this.#handlePinchGestures();
+    }
+  }
+
+  #onPointerUp = (event: PointerEvent) => {
+    this.#finishPointer(event);
+  };
+
+  #onPointerCancel = (event: PointerEvent) => {
+    this.#finishPointer(event);
+  };
+
+  #finishPointer(event: PointerEvent) {
+    const pointer = this.#pointerDict[event.pointerId] ?? null;
+    const isInsideContainer = this.#isEventInsideContainer(event);
+    if (!pointer && !isInsideContainer) {
+      return;
+    }
+
+    const currentOwner = isInsideContainer ? this.#getTargetOwner(event) : null;
+    const position = this.#getCoordinates(event.clientX, event.clientY);
+    const prop: pointerUpProp = {
+      event,
+      gid: currentOwner?.gid ?? null,
+      position,
+      button: event.buttons,
+    };
+
+    this.#dispatchObjectEvent(currentOwner, "pointerUp", prop);
+    this.#dispatchGlobalEvent("pointerUp", prop);
+
+    if (!pointer) {
+      return;
+    }
+
+    pointer.endX = event.clientX;
+    pointer.endY = event.clientY;
+
+    const gesture = this.#gestureDict[event.pointerId];
+    if (gesture?.type === "drag") {
+      gesture.state = "release";
+      if (this.#isPastDragStartThreshold(pointer)) {
+        this.#fireDragEnd(pointer, pointer.button);
+      }
+      delete this.#gestureDict[event.pointerId];
+    }
+
+    this.#endPinchGesturesForPointer(event.pointerId);
+    delete this.#pointerDict[event.pointerId];
+  }
+
+  #onWheel = (event: WheelEvent) => {
+    if (!this.#isEventInsideContainer(event)) {
+      return;
+    }
+
+    const owner = this.#getTargetOwner(event);
+    const prop: mouseWheelProp = {
+      event,
+      gid: owner?.gid ?? null,
+      position: this.#getCoordinates(event.clientX, event.clientY),
+      delta: event.deltaY,
+    };
+
+    this.#dispatchObjectEvent(owner, "mouseWheel", prop);
+    this.#dispatchGlobalEvent("mouseWheel", prop);
+  };
+
+  #getCoordinates(screenX: number, screenY: number): eventPosition {
+    if (this.#engine == null || this.#engine.camera == null) {
       return {
         x: screenX,
         y: screenY,
@@ -319,11 +635,11 @@ class InputControl {
         screenY,
       };
     }
-    const [cameraX, cameraY] = this.engine.camera!.getCameraFromScreen(
+    const [cameraX, cameraY] = this.#engine.camera.getCameraFromScreen(
       screenX,
       screenY,
     );
-    const [worldX, worldY] = this.engine.camera!.getWorldFromCamera(
+    const [worldX, worldY] = this.#engine.camera.getWorldFromCamera(
       cameraX,
       cameraY,
     );
@@ -337,55 +653,253 @@ class InputControl {
     };
   }
 
-  #isPointerTracked(pointerId: number) {
-    return this.globalPointerDict[pointerId] != null;
+  #handleDrag(pointer: TrackedPointer) {
+    const gesture = this.#gestureDict[pointer.id];
+    if (!gesture || gesture.type !== "drag") {
+      return;
+    }
+
+    if (gesture.state === "pending") {
+      if (!this.#isPastDragStartThreshold(pointer)) {
+        return;
+      }
+      this.#startDragGesture(pointer, gesture);
+      if (this.#gestureDict[pointer.id] !== gesture) {
+        return;
+      }
+    }
+
+    if (gesture.state !== "drag") {
+      return;
+    }
+
+    this.#fireDrag(pointer);
   }
 
-  #isEventWithinEngine(target: EventTarget | null) {
-    const container = this.engine?.containerElement;
-    // For the global InputControl, engine is not a real Engine instance,
-    // so containerElement will be undefined. In that case, check against
-    // all registered engines' containers.
-    if (container == null && this._isGlobal && this.global) {
-      for (const engine of this.global.engines) {
-        if (engine.containerElement && target instanceof Node && engine.containerElement.contains(target)) {
-          return true;
-        }
+  #isPastDragStartThreshold(pointer: pointerData) {
+    return (
+      Math.hypot(pointer.x - pointer.startX, pointer.y - pointer.startY) >=
+      DRAG_START_THRESHOLD_PX
+    );
+  }
+
+  #startDragGesture(pointer: TrackedPointer, gesture: dragGesture) {
+    gesture.state = "drag";
+    this.#enforceMaxDragLimit();
+    if (this.#gestureDict[pointer.id] !== gesture) {
+      return;
+    }
+
+    const prop: dragStartProp = {
+      gid: this.#getOwnerGID(pointer.owner),
+      pointerId: pointer.id,
+      start: this.#getCoordinates(pointer.startX, pointer.startY),
+      button: pointer.button,
+      isWithinEngine: pointer.isWithinEngine,
+    };
+
+    this.#dispatchObjectEvent(pointer.owner, "dragStart", prop);
+    this.#dispatchGlobalEvent("dragStart", prop);
+  }
+
+  #fireDrag(pointer: TrackedPointer) {
+    const start = this.#getCoordinates(pointer.startX, pointer.startY);
+    const position = this.#getCoordinates(pointer.x, pointer.y);
+    const prop: dragProp = {
+      gid: this.#getOwnerGID(pointer.owner),
+      pointerId: pointer.id,
+      start,
+      position,
+      delta: {
+        x: position.x - start.x,
+        y: position.y - start.y,
+        cameraX: position.cameraX - start.cameraX,
+        cameraY: position.cameraY - start.cameraY,
+        screenX: position.screenX - start.screenX,
+        screenY: position.screenY - start.screenY,
+      },
+      button: pointer.button,
+    };
+
+    this.#dispatchObjectEvent(pointer.owner, "drag", prop);
+    this.#dispatchGlobalEvent("drag", prop);
+  }
+
+  #fireDragEnd(pointer: TrackedPointer, button: number) {
+    const prop: dragEndProp = {
+      gid: this.#getOwnerGID(pointer.owner),
+      pointerId: pointer.id,
+      start: this.#getCoordinates(pointer.startX, pointer.startY),
+      end: this.#getCoordinates(
+        pointer.endX ?? pointer.x,
+        pointer.endY ?? pointer.y,
+      ),
+      button,
+    };
+
+    this.#dispatchObjectEvent(pointer.owner, "dragEnd", prop);
+    this.#dispatchGlobalEvent("dragEnd", prop);
+  }
+
+  #handlePinchGestures() {
+    const pointerList = Object.values(this.#pointerDict);
+    if (pointerList.length < 2) return;
+
+    pointerList.sort((a, b) => a.timestamp - b.timestamp);
+
+    for (let i = 0; i < pointerList.length - 1; i++) {
+      const pointer0 = pointerList[i];
+      const pointer1 = pointerList[i + 1];
+      const gestureKey = `${pointer0.id}-${pointer1.id}`;
+
+      const currentPointer0 = this.#getCoordinates(pointer0.x, pointer0.y);
+      const currentPointer1 = this.#getCoordinates(pointer1.x, pointer1.y);
+      const currentDistance = Math.hypot(
+        pointer0.x - pointer1.x,
+        pointer0.y - pointer1.y,
+      );
+
+      if (this.#gestureDict[gestureKey] == null) {
+        const startDistance = Math.hypot(
+          pointer0.startX - pointer1.startX,
+          pointer0.startY - pointer1.startY,
+        );
+        this.#gestureDict[gestureKey] = {
+          type: "pinch",
+          state: "pinch",
+          member: pointer0.owner,
+          pointerId0: pointer0.id,
+          pointerId1: pointer1.id,
+          start: {
+            pointerList: [currentPointer0, currentPointer1],
+            distance: startDistance,
+          },
+          current: {
+            pointerList: [currentPointer0, currentPointer1],
+            distance: startDistance,
+          },
+        };
+
+        const pinchStartGesture = this.#gestureDict[gestureKey] as pinchGesture;
+        const prop: pinchStartProp = {
+          gid: this.#getOwnerGID(pinchStartGesture.member),
+          gestureID: gestureKey,
+          start: pinchStartGesture.start,
+        };
+        this.#dispatchObjectEvent(pinchStartGesture.member, "pinchStart", prop);
+        this.#dispatchGlobalEvent("pinchStart", prop);
       }
-      // If no engines have containers yet, allow the event
-      return this.global.engines.size === 0;
+
+      const gesture = this.#gestureDict[gestureKey] as pinchGesture;
+      gesture.current = {
+        pointerList: [currentPointer0, currentPointer1],
+        distance: currentDistance,
+      };
+
+      const prop: pinchProp = {
+        gid: this.#getOwnerGID(gesture.member),
+        gestureID: gestureKey,
+        start: gesture.start,
+        current: gesture.current,
+      };
+      this.#dispatchObjectEvent(gesture.member, "pinch", prop);
+      this.#dispatchGlobalEvent("pinch", prop);
     }
-    if (container == null) {
-      return true;
+  }
+
+  #endPinchGesturesForPointer(pointerId: number) {
+    for (const [gestureKey, gesture] of Object.entries(this.#gestureDict)) {
+      if (gesture.type !== "pinch") {
+        continue;
+      }
+      if (
+        gesture.pointerId0 !== pointerId &&
+        gesture.pointerId1 !== pointerId
+      ) {
+        continue;
+      }
+
+      const prop: pinchEndProp = {
+        gid: this.#getOwnerGID(gesture.member),
+        gestureID: gestureKey,
+        start: gesture.start,
+        current: gesture.current,
+        end: gesture.current,
+      };
+      this.#dispatchObjectEvent(gesture.member, "pinchEnd", prop);
+      this.#dispatchGlobalEvent("pinchEnd", prop);
+      delete this.#gestureDict[gestureKey];
     }
-    if (!(target instanceof Node)) {
-      return false;
+  }
+
+  #dispatchObjectEvent<EventName extends keyof InputEventCallback>(
+    owner: ElementObject | null,
+    event: EventName,
+    prop: InputEventPayloadMap[EventName],
+  ) {
+    if (!owner || !this.#isOwnerRegistered(owner)) {
+      return;
     }
-    return container.contains(target);
+    owner.event.input[event]?.(prop as any);
+  }
+
+  #dispatchGlobalEvent<EventName extends keyof InputEventCallback>(
+    event: EventName,
+    prop: InputEventPayloadMap[EventName],
+  ) {
+    for (const { callback, engine } of Object.values(
+      this.globalCallbacks[event],
+    )) {
+      if (engine && engine !== this.#engine) {
+        continue;
+      }
+      callback(prop);
+    }
+  }
+
+  #getTargetOwner(event: Event): ElementObject | null {
+    for (const target of this.#getEventPath(event)) {
+      if (!(target instanceof HTMLElement)) {
+        continue;
+      }
+      const owner = this.#objectByElement.get(target);
+      if (owner && this.#isOwnerRegistered(owner)) {
+        return owner;
+      }
+    }
+    return null;
+  }
+
+  #getEventPath(event: Event): EventTarget[] {
+    if (typeof event.composedPath === "function") {
+      return event.composedPath();
+    }
+
+    const path: EventTarget[] = [];
+    let node = event.target;
+    while (node) {
+      path.push(node);
+      node = (node as Node).parentNode;
+    }
+    return path;
+  }
+
+  #getOwnerGID(owner: ElementObject | null) {
+    if (!owner || !this.#isOwnerRegistered(owner)) {
+      return null;
+    }
+    return owner.gid;
+  }
+
+  #isOwnerRegistered(owner: ElementObject) {
+    const element = this.#elementByObjectGID.get(owner.gid);
+    return !!element && this.#objectByElement.get(element) === owner;
   }
 
   #isCoordinateWithinEngine(screenX: number, screenY: number) {
-    const rect = this.engine?.containerBounds;
-    // For the global InputControl, engine is not a real Engine instance,
-    // so containerBounds will be undefined. In that case, check against
-    // all registered engines' bounds.
-    if (rect == null && this._isGlobal && this.global) {
-      for (const engine of this.global.engines) {
-        const bounds = engine.containerBounds;
-        if (bounds &&
-          screenX >= bounds.left &&
-          screenX <= bounds.right &&
-          screenY >= bounds.top &&
-          screenY <= bounds.bottom
-        ) {
-          return true;
-        }
-      }
-      return false;
-    }
+    const rect = this.#engine?.containerBounds;
     if (rect == null) {
-      console.warn("Engine container bounds not found. Coordinate-based event handling may not work correctly.");
-      return false;
+      return true;
     }
     return (
       screenX >= rect.left &&
@@ -395,616 +909,20 @@ class InputControl {
     );
   }
 
-  #shouldHandlePointerEvent(
-    event: PointerEvent,
-    options: { allowHover?: boolean } = {},
-  ) {
-    const { allowHover = false } = options;
-    if (this.#isPointerTracked(event.pointerId)) {
+  #isEventInsideContainer(event: Event) {
+    if (!this.#container) {
+      return false;
+    }
+    if (this.#getEventPath(event).includes(this.#container)) {
       return true;
     }
-    if (allowHover) {
-      return this.#isEventWithinEngine(event.target);
-    }
-    return this.#isEventWithinEngine(event.target);
-  }
-
-  #shouldHandleWheelEvent(event: WheelEvent) {
-    return this.#isEventWithinEngine(event.target);
-  }
-
-  /**
-   * Called when the user pressed the mouse button.
-   * This and all other pointer/gesture events automatically propagate to global input engine as well.
-   * @param e
-   * @returns
-   */
-  onPointerDown(e: PointerEvent) {
-    const isWithinEngine = this.#isCoordinateWithinEngine(e.clientX, e.clientY);
-    if (!isWithinEngine) {
-      return;
-    }
-    // Also check DOM containment to avoid intercepting events from elements
-    // that visually overlap the engine but aren't part of its DOM tree
-    // (e.g., an absolutely-positioned dropdown above the engine).
-    if (!this.#isEventWithinEngine(e.target)) {
-      return;
-    }
-    e.preventDefault();
-    e.stopPropagation();
-    const coordinates = this.getCoordinates(e.clientX, e.clientY);
-    this.event.pointerDown?.({
-      event: e,
-      position: coordinates,
-      gid: this._isGlobal ? GLOBAL_GID : this._ownerGID,
-      button: e.buttons,
-      isWithinEngine,
-    });
-    const pointerData = {
-      id: e.pointerId,
-      callerGID: this._isGlobal ? GLOBAL_GID : this._ownerGID,
-      timestamp: e.timeStamp,
-      x: e.clientX,
-      y: e.clientY,
-      startX: e.clientX,
-      startY: e.clientY,
-      prevX: e.clientX,
-      prevY: e.clientY,
-      endX: null,
-      endY: null,
-      moveCount: 0,
-      button: e.buttons,
-      isWithinEngine,
-    };
-
-    this.globalPointerDict[e.pointerId] = pointerData;
-
-    if (this.globalGestureDict[e.pointerId]) {
-      this.globalGestureDict[e.pointerId].memberList.push(this);
-    } else {
-      this.globalGestureDict[e.pointerId] = {
-        type: "drag",
-        state: "pending",
-        memberList: [this, ...this.#dragMemberList],
-        initiatorID: this._isGlobal ? GLOBAL_GID : this._ownerGID ?? "",
-      };
-    }
-    this.#debugObject.addDebugPoint(
-      coordinates.x,
-      coordinates.y,
-      "red",
-      true,
-      "pointerDown",
+    return (
+      event.target instanceof Node && this.#container.contains(event.target)
     );
   }
 
-  /**
-   * Called when the user moves the mouse
-   * @param e
-   */
-  onPointerMove(e: PointerEvent) {
-    if (!this.#shouldHandlePointerEvent(e, { allowHover: true })) {
-      return;
-    }
-    e.preventDefault();
-    const coordinates = this.getCoordinates(e.clientX, e.clientY);
-    // console.debug("onPointerMove", e.pointerId, coordinates);
-    this.event.pointerMove?.({
-      event: e,
-      position: coordinates,
-      gid: this._isGlobal ? GLOBAL_GID : this._ownerGID,
-      button: e.buttons,
-    });
-    const id = e.pointerId;
-    const pointerData = this.globalPointerDict[id]; // || this._localPointerDict[id];
-    if (pointerData != null) {
-      const updatedPointerData = {
-        prevX: pointerData.x,
-        prevY: pointerData.y,
-        x: e.clientX,
-        y: e.clientY,
-        callerGID: this._isGlobal ? GLOBAL_GID : this._ownerGID,
-      };
-      Object.assign(pointerData, updatedPointerData);
-      this.#handleMultiPointer();
-    }
-    e.stopPropagation();
-  }
-
-  /**
-   * Called when the user releases the mouse button
-   * @param e
-   */
-  onPointerUp(e: PointerEvent) {
-    if (!this.#shouldHandlePointerEvent(e)) {
-      return;
-    }
-    e.preventDefault();
-    const coordinates = this.getCoordinates(e.clientX, e.clientY);
-    this.event.pointerUp?.({
-      event: e,
-      position: coordinates,
-      gid: this._isGlobal ? GLOBAL_GID : this._ownerGID,
-      button: e.buttons,
-    });
-    const pointerData = this.globalPointerDict[e.pointerId];
-    // this._localPointerDict[e.pointerId];
-    if (pointerData != null) {
-      const gesture = this.globalGestureDict[e.pointerId];
-      if (gesture != null && gesture.type === "drag") {
-        const wasDragging = gesture.state === "drag";
-        gesture.state = "release";
-
-        if (wasDragging) {
-          for (const member of gesture.memberList) {
-            const start = member.getCoordinates(
-              pointerData.startX,
-              pointerData.startY,
-            );
-            const end = member.getCoordinates(e.clientX, e.clientY);
-            member.event.dragEnd?.({
-              gid: member._isGlobal ? GLOBAL_GID : member._ownerGID,
-              pointerId: e.pointerId,
-              start: start,
-              end: end,
-              button: pointerData.button,
-            });
-          }
-        }
-        delete this.globalGestureDict[e.pointerId];
-      }
-      // delete this._localPointerDict[e.pointerId];
-      delete this.globalPointerDict[e.pointerId];
-
-      // Check if any pinch gesture uses this pointer
-      for (const gestureKey of Object.keys(this.globalGestureDict)) {
-        if (!gestureKey.includes("-")) {
-          continue;
-        }
-        const [pointerId_0, pointerId_1] = gestureKey.split("-").map(Number);
-        if (pointerId_0 == e.pointerId || pointerId_1 == e.pointerId) {
-          const gesture = this.globalGestureDict[gestureKey] as pinchGesture;
-          this.event.pinchEnd?.({
-            gid: this._isGlobal ? GLOBAL_GID : this._ownerGID,
-            gestureID: gestureKey,
-            start: gesture.start,
-            pointerList: gesture.pointerList,
-            distance: gesture.distance,
-            end: {
-              pointerList: gesture.pointerList,
-              distance: gesture.distance,
-            },
-          });
-          delete this.globalGestureDict[gestureKey];
-        }
-      }
-    }
-    e.stopPropagation();
-  }
-
-  /**
-   * Called when a pointer event is cancelled (e.g., touch interrupted by system gesture).
-   * Treated as a pointer up event to clean up any ongoing gestures.
-   * @param e
-   */
-  onPointerCancel(e: PointerEvent) {
-    // Treat cancel as pointer up to clean up gesture state
-    this.onPointerUp(e);
-  }
-
-  /**
-   * Called when the user scrolls the mouse wheel
-   * @param e
-   */
-  onWheel(e: WheelEvent) {
-    if (!this.#shouldHandleWheelEvent(e)) {
-      return;
-    }
-    const coordinates = this.getCoordinates(e.clientX, e.clientY);
-    this.event.mouseWheel?.({
-      event: e,
-      position: coordinates,
-      delta: e.deltaY,
-      gid: this._isGlobal ? GLOBAL_GID : this._ownerGID,
-    });
-    // console.debug("onWheel", coordinates);
-    e.stopPropagation();
-  }
-
-  #handleMultiPointer() {
-    // Only handle global pointer dict
-    const numKeys = Object.keys(this.globalPointerDict).length;
-    // Handle drag gestures of each pointer
-    if (numKeys >= 1) {
-      // console.info("handleDragGesture");
-      for (const pointer of Object.values(this.globalPointerDict)) {
-        const thisGID = this._isGlobal ? GLOBAL_GID : this._ownerGID;
-        if (thisGID != pointer.callerGID) {
-          continue;
-        }
-        pointer.moveCount++;
-        // Drag gestures are only handled by the global input engine
-        // to avoid edge cases where the pointer leaves the DOM element while dragging,
-        // which can happen if the user is dragging very quickly
-        const gesture = this.globalGestureDict[pointer.id];
-        if (!gesture) {
-          continue;
-        }
-        if (gesture.type !== "drag") {
-          continue;
-        }
-        if (gesture.state === "pending") {
-          if (!this.#isPastDragStartThreshold(pointer)) {
-            continue;
-          }
-          this.#startDragGesture(pointer, gesture);
-          if (this.globalGestureDict[pointer.id] !== gesture) {
-            continue;
-          }
-        }
-        if (gesture.state !== "drag") {
-          continue;
-        }
-        // console.info("drag gesture", gesture.memberList, this._isGlobal);
-        // NOTE: The for loop is needed for non-touch devices.
-        // It seems like that on touch devices, the pointerMove event continues working even after the cursor has
-        // left the DOM element, which is not the case for mouse events.
-        for (const member of gesture.memberList) {
-          // Use the member's engine to transform coordinates, not the global InputControl's engine
-          const startPosition = member.getCoordinates(
-            pointer.startX,
-            pointer.startY,
-          );
-          const currentPosition = member.getCoordinates(pointer.x, pointer.y);
-          const deltaCoordinates = {
-            x: currentPosition.x - startPosition.x,
-            y: currentPosition.y - startPosition.y,
-            cameraX: currentPosition.cameraX - startPosition.cameraX,
-            cameraY: currentPosition.cameraY - startPosition.cameraY,
-            screenX: currentPosition.screenX - startPosition.screenX,
-            screenY: currentPosition.screenY - startPosition.screenY,
-          };
-          member.event.drag?.({
-            gid: member._isGlobal ? GLOBAL_GID : member._ownerGID,
-            pointerId: pointer.id,
-            start: startPosition,
-            position: currentPosition,
-            delta: deltaCoordinates,
-            button: pointer.button,
-          });
-        }
-      }
-    }
-    // Handle pinch gestures.
-    // Pinch gestures need to be handled by the global input engine since they involve
-    // multiple pointers that may start on different elements.
-    if (numKeys >= 2) {
-      if (this._isGlobal) {
-        // Global InputControl handles pinch detection directly
-        this._detectAndFirePinchGestures();
-      } else {
-        // Non-global InputControl delegates to global InputControl
-        const globalInput = this.globalInputEngine;
-        if (globalInput) {
-          globalInput._inputControl._detectAndFirePinchGestures();
-        }
-      }
-    }
-  }
-
-  #isPastDragStartThreshold(pointer: pointerData) {
-    return Math.hypot(
-      pointer.x - pointer.startX,
-      pointer.y - pointer.startY,
-    ) >= DRAG_START_THRESHOLD_PX;
-  }
-
-  #startDragGesture(pointer: pointerData, gesture: dragGesture) {
-    gesture.state = "drag";
-
-    // Enforce drag limits before firing dragStart so cancelled older drags clean up first.
-    this.globalInputEngine?.enforceMaxDragLimit();
-    if (this.globalGestureDict[pointer.id] !== gesture) {
-      return;
-    }
-
-    for (const member of gesture.memberList) {
-      member.event.dragStart?.({
-        gid: member._isGlobal ? GLOBAL_GID : member._ownerGID,
-        pointerId: pointer.id,
-        start: member.getCoordinates(pointer.startX, pointer.startY),
-        button: pointer.button,
-        isWithinEngine: pointer.isWithinEngine,
-      });
-    }
-  }
-
-  /**
-   * Detects and fires pinch gesture events based on current pointer state.
-   * Called by #handleMultiPointer when 2+ pointers are tracked.
-   * @internal
-   */
-  _detectAndFirePinchGestures() {
-    const pointerList = Object.values(this.globalPointerDict);
-    if (pointerList.length < 2) return;
-    
-    // Sort the pointer list by the time they are pressed
-    pointerList.sort((a, b) => a.timestamp - b.timestamp);
-
-    // Every 2 pointers that are adjacent chronologically are considered to be a pinch gesture
-    for (let i = 0; i < pointerList.length - 1; i++) {
-      const pointer_0 = pointerList[i];
-      const pointer_1 = pointerList[i + 1];
-
-      const gestureKey = `${pointer_0.id}-${pointer_1.id}`;
-
-      // const startMiddleX = (pointer_0.startX + pointer_1.startX) / 2;
-      // const startMiddleY = (pointer_0.startY + pointer_1.startY) / 2;
-      // const startMiddle = this.getCoordinates(startMiddleX, startMiddleY);
-      const startDistance = Math.sqrt(
-        Math.pow(pointer_0.startX - pointer_1.startX, 2) +
-          Math.pow(pointer_0.startY - pointer_1.startY, 2),
-      );
-      const currentPointer0 = this.getCoordinates(pointer_0.x, pointer_0.y);
-      const currentPointer1 = this.getCoordinates(pointer_1.x, pointer_1.y);
-      const currentDistance = Math.sqrt(
-        Math.pow(pointer_0.x - pointer_1.x, 2) +
-          Math.pow(pointer_0.y - pointer_1.y, 2),
-      );
-
-      if (this.globalGestureDict[gestureKey] == null) {
-        this.globalGestureDict[gestureKey] = {
-          type: "pinch",
-          state: "pinch",
-          memberList: [this],
-          start: {
-            pointerList: [currentPointer0, currentPointer1],
-            distance: startDistance,
-          },
-          pointerList: [currentPointer0, currentPointer1],
-          distance: startDistance,
-        };
-        this.event.pinchStart?.({
-          gid: this._isGlobal ? GLOBAL_GID : this._ownerGID,
-          gestureID: gestureKey,
-          start: {
-            pointerList: [currentPointer0, currentPointer1],
-            distance: startDistance,
-          },
-        });
-      }
-
-      const pinchGesture = this.globalGestureDict[gestureKey] as pinchGesture;
-      pinchGesture.pointerList = [currentPointer0, currentPointer1];
-      pinchGesture.distance = currentDistance;
-      this.event.pinch?.({
-        gid: this._isGlobal ? GLOBAL_GID : this._ownerGID,
-        gestureID: gestureKey,
-        start: pinchGesture.start,
-        pointerList: pinchGesture.pointerList,
-        distance: pinchGesture.distance,
-      });
-    }
-  }
-
-  addListener(
-    dom: HTMLElement | Document,
-    event: string,
-    callback: (...args: any[]) => void,
-  ) {
-    const controller = new AbortController();
-    const boundCallback = callback.bind(this);
-    dom.addEventListener(event, boundCallback, { signal: controller.signal });
-    this.#listenerControllers.push(controller);
-  }
-
-  addCursorEventListener(dom: HTMLElement | Document) {
-    this.addListener(dom, "pointerdown", this.onPointerDown);
-    this.addListener(dom, "pointermove", this.onPointerMove);
-    this.addListener(dom, "pointerup", this.onPointerUp);
-    this.addListener(dom, "pointercancel", this.onPointerCancel);
-    this.addListener(dom, "wheel", this.onWheel);
-  }
-
-  addDragMember(member: InputControl) {
-    this.#dragMemberList.push(member);
-  }
-
-  resetDragMembers() {
-    this.#dragMemberList = [];
-  }
-}
-
-interface dragGesture {
-  type: "drag";
-  state: "pending" | "drag" | "release";
-  initiatorID: string;
-  memberList: InputControl[];
-}
-
-interface pinchGesture {
-  type: "pinch";
-  state: "idle" | "pinch" | "release";
-  memberList: InputControl[];
-  start: {
-    pointerList: eventPosition[];
-    distance: number;
-  };
-  pointerList: eventPosition[];
-  distance: number;
-}
-
-/**
- * Configuration options for the global input control.
- */
-export interface GlobalInputConfig {
-  /**
-   * Maximum number of simultaneous drag gestures allowed.
-   * When exceeded, the oldest drag gesture will be cancelled.
-   * Set to 0 or Infinity for unlimited. Default is Infinity.
-   */
-  maxSimultaneousDrags: number;
-}
-
-const DEFAULT_GLOBAL_INPUT_CONFIG: GlobalInputConfig = {
-  maxSimultaneousDrags: Infinity,
-};
-
-/**
- * Global input event manager for the entire engine instance.
- *
- * Manages:
- * - Document-level event listeners
- * - Global event subscription system
- * - Pointer tracking across all objects
- * - Gesture coordination (drag and pinch)
- *
- * Objects can subscribe to global input events to receive updates regardless of
- * which element the user interacts with. This is useful for camera controls,
- * global drag-and-drop, and other system-level interactions.
- *
- * @example
- * ```typescript
- * const globalInput = new GlobalInputControl(global, engine);
- * globalInput.config.maxSimultaneousDrags = 1; // Only allow one drag at a time
- * // Objects subscribe via: engine.enableCameraControl()
- * // or object.event.global.pointerMove = (props) => { ... }
- * ```
- */
-class GlobalInputControl {
-  #document: Document;
-  global: GlobalManager | null;
-
-  _inputControl: InputControl;
-  globalCallbacks: Record<string, Record<string, { callback: (prop: any) => void, engine: any | null }>>;
-  _pointerDict: { [key: number]: pointerData };
-  _gestureDict: { [key: string]: dragGesture | pinchGesture };
-
-  _event: InputEventCallback;
-  event: InputEventCallback;
-
-  /**
-   * Configuration options for global input handling.
-   */
-  config: GlobalInputConfig;
-
-  constructor(global: GlobalManager, config: Partial<GlobalInputConfig> = {}) {
-    this.global = global;
-    this.#document = document;
-    this.config = { ...DEFAULT_GLOBAL_INPUT_CONFIG, ...config };
-    this._inputControl = new InputControl({ global: global }, true, null);
-    this._inputControl.addCursorEventListener(
-      this.#document,
-    );
-
-    this.globalCallbacks = {
-      pointerDown: {},
-      pointerMove: {},
-      pointerUp: {},
-      mouseWheel: {},
-      dragStart: {},
-      drag: {},
-      dragEnd: {},
-      pinchStart: {},
-      pinch: {},
-      pinchEnd: {},
-    };
-
-    this._pointerDict = {}; // Dictionary of pointers for pointer events, indexed by the pointer identifier
-    this._gestureDict = {}; // Dictionary of gestures for gesture events, indexed by the gesture identifier
-
-    type inputCallbackKey = keyof InputEventCallback;
-
-    // Helper function to transform screen coordinates to world coordinates
-    const transformPosition = (pos: eventPosition | undefined, camera: any): eventPosition | undefined => {
-      if (!pos || pos.screenX == null || pos.screenY == null || !camera) {
-        return pos;
-      }
-      const [cameraX, cameraY] = camera.getCameraFromScreen(pos.screenX, pos.screenY);
-      const [worldX, worldY] = camera.getWorldFromCamera(cameraX, cameraY);
-      return {
-        x: worldX,
-        y: worldY,
-        cameraX,
-        cameraY,
-        screenX: pos.screenX,
-        screenY: pos.screenY,
-      };
-    };
-
-    // Helper function to transform pinch pointer lists
-    const transformPinchPointerList = (pointerList: eventPosition[] | undefined, camera: any): eventPosition[] | undefined => {
-      if (!pointerList || !camera) {
-        return pointerList;
-      }
-      return pointerList.map(pos => transformPosition(pos, camera)!);
-    };
-
-    for (const [key] of Object.entries(this.globalCallbacks)) {
-      this._inputControl.event[key as inputCallbackKey] = (
-        prop: any,
-      ) => {
-        for (const { callback, engine } of Object.values(
-          this.globalCallbacks[key],
-        )) {
-          const transformWithEngine = (targetEngine: any) => {
-            if (!targetEngine?.camera) {
-              return prop;
-            }
-            const transformed: any = { ...prop };
-            // Transform all position-related properties
-            if (prop.position) {
-              transformed.position = transformPosition(prop.position, targetEngine.camera);
-            }
-            if (prop.start) {
-              // Handle pinch events where start is { pointerList, distance }
-              if (prop.start.pointerList) {
-                transformed.start = {
-                  ...prop.start,
-                  pointerList: transformPinchPointerList(prop.start.pointerList, targetEngine.camera),
-                };
-              } else {
-                transformed.start = transformPosition(prop.start, targetEngine.camera);
-              }
-            }
-            if (prop.end) {
-              // Handle pinch events where end is { pointerList, distance }
-              if (prop.end.pointerList) {
-                transformed.end = {
-                  ...prop.end,
-                  pointerList: transformPinchPointerList(prop.end.pointerList, targetEngine.camera),
-                };
-              } else {
-                transformed.end = transformPosition(prop.end, targetEngine.camera);
-              }
-            }
-            if (prop.delta) {
-              transformed.delta = transformPosition(prop.delta, targetEngine.camera);
-            }
-            // Handle pinch events pointerList array
-            if (prop.pointerList) {
-              transformed.pointerList = transformPinchPointerList(prop.pointerList, targetEngine.camera);
-            }
-            return transformed;
-          };
-
-          if (!engine) {
-            // No engine specified - this is a truly global listener, call for all engines
-            if (this.global && this.global.engines && this.global.engines.size > 0) {
-              for (const currentEngine of this.global.engines) {
-                callback(transformWithEngine(currentEngine));
-              }
-            } else {
-              callback(prop);
-            }
-          } else {
-            // Engine specified - transform coordinates using that specific engine only
-            callback(transformWithEngine(engine));
-          }
-        }
-      };
-    }
-    this._event = {
+  #createInputEventCallback(): InputEventCallback {
+    return {
       pointerDown: null,
       pointerMove: null,
       pointerUp: null,
@@ -1016,131 +934,18 @@ class GlobalInputControl {
       pinch: null,
       pinchEnd: null,
     };
-    this.event = new Proxy(this._event, {
-      set: (_target, prop, value) => {
-        if (value != null) {
-          this.subscribeGlobalCursorEvent(
-            prop as keyof InputEventCallback,
-            GLOBAL_GID,
-            value.bind(this),
-            null,
-          );
-        } else {
-          this.unsubscribeGlobalCursorEvent(
-            prop as keyof InputEventCallback,
-            GLOBAL_GID,
-          );
-        }
-        return true;
-      },
-    });
   }
 
-  destroy() {
-    this._inputControl.destroy();
-    this.globalCallbacks = {
-      pointerDown: {},
-      pointerMove: {},
-      pointerUp: {},
-      mouseWheel: {},
-      dragStart: {},
-      drag: {},
-      dragEnd: {},
-      pinchStart: {},
-      pinch: {},
-      pinchEnd: {},
-    };
-    this._pointerDict = {};
-    this._gestureDict = {};
+  #createGlobalCallbackRegistry(): GlobalCallbackRegistry {
+    return inputEventKeys.reduce((registry, key) => {
+      registry[key] = {};
+      return registry;
+    }, {} as GlobalCallbackRegistry);
   }
 
-  subscribeGlobalCursorEvent(
-    event: keyof InputEventCallback,
-    gid: string,
-    callback: (prop: any) => void,
-    engine: any | null,
-  ) {
-    this.globalCallbacks[event][gid] = { callback, engine };
-  }
-
-  unsubscribeGlobalCursorEvent(event: keyof InputEventCallback, gid: string) {
-    delete this.globalCallbacks[event][gid];
-  }
-
-  /**
-   * Gets the number of active drag gestures.
-   */
-  getActiveDragCount(): number {
-    return Object.values(this._gestureDict).filter(g =>
-      g.type === "drag" && g.state === "drag",
-    ).length;
-  }
-
-  /**
-   * Gets active drag gestures sorted by timestamp (oldest first).
-   */
-  getActiveDragsSortedByTime(): { pointerId: number; gesture: dragGesture; timestamp: number }[] {
-    const drags: { pointerId: number; gesture: dragGesture; timestamp: number }[] = [];
-    
-    for (const [key, gesture] of Object.entries(this._gestureDict)) {
-      if (gesture.type !== "drag" || gesture.state !== "drag") continue;
-      const pointerId = parseInt(key, 10);
-      const pointerData = this._pointerDict[pointerId];
-      if (pointerData) {
-        drags.push({
-          pointerId,
-          gesture: gesture as dragGesture,
-          timestamp: pointerData.timestamp,
-        });
-      }
-    }
-    
-    return drags.sort((a, b) => a.timestamp - b.timestamp);
-  }
-
-  /**
-   * Cancels the oldest drag gesture by firing dragEnd for all its members.
-   * Used to enforce maxSimultaneousDrags limit.
-   */
-  cancelOldestDrag(): void {
-    const drags = this.getActiveDragsSortedByTime();
-    if (drags.length === 0) return;
-    
-    const oldest = drags[0];
-    const pointerData = this._pointerDict[oldest.pointerId];
-    if (!pointerData) return;
-
-    // Fire dragEnd for all members of this gesture
-    for (const member of oldest.gesture.memberList) {
-      const startPosition = member.getCoordinates(pointerData.startX, pointerData.startY);
-      const endPosition = member.getCoordinates(pointerData.x, pointerData.y);
-      
-      member.event.dragEnd?.({
-        gid: member._isGlobal ? GLOBAL_GID : member._ownerGID,
-        pointerId: oldest.pointerId,
-        start: startPosition,
-        end: endPosition,
-        button: 0, // No button info available for cancelled drag
-      });
-    }
-    
-    // Clean up the gesture and pointer data
-    delete this._gestureDict[oldest.pointerId];
-    delete this._pointerDict[oldest.pointerId];
-  }
-
-  /**
-   * Enforces the maxSimultaneousDrags limit by cancelling oldest drags if needed.
-   * Should be called after a new drag is registered.
-   */
-  enforceMaxDragLimit(): void {
-    const maxDrags = this.config.maxSimultaneousDrags;
-    if (maxDrags <= 0 || maxDrags === Infinity) return;
-    
-    while (this.getActiveDragCount() > maxDrags) {
-      this.cancelOldestDrag();
-    }
+  #isInputEventKey(key: string): key is keyof InputEventCallback {
+    return inputEventKeys.includes(key as keyof InputEventCallback);
   }
 }
 
-export { InputControl, GlobalInputControl, GLOBAL_GID };
+export { InputControl };

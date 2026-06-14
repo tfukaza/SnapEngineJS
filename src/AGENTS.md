@@ -42,25 +42,31 @@ Defined in `vite.config.mjs`:
 ## Module Overview
 
 ### `index.ts`
+
 Public API entry point. All external-facing exports.
 
 **Main exports:**
+
 - `Engine`, `BaseObject`, `ElementObject`, `Camera`
 - Input types (dragProp, pointerDownProp, etc.)
 - Utilities (getDomProperty, EventProxyFactory)
 
 ### `engine.ts`
+
 Engine class - main orchestrator for a container.
 
 **Responsibilities:**
+
 - Manages container DOM and camera
 - Holds collision engine and debug renderer
 - Processes render stages
 
 ### `global.ts`
+
 GlobalManager singleton - central coordinator.
 
 **Responsibilities:**
+
 - 6-stage render pipeline (READ_1, WRITE_1, READ_2, WRITE_2, READ_3, WRITE_3)
 - requestAnimationFrame loop
 - Engine instance registry
@@ -68,86 +74,101 @@ GlobalManager singleton - central coordinator.
 - Shared state
 
 ### `object.ts`
+
 Core entity classes.
 
 **BaseObject:**
+
 - Transform properties
 - Parent-child hierarchy
 - Event subscriptions
 - Render stage queueing
 
 **ElementObject:**
+
 - Extends BaseObject
 - DOM element management
 - DOM property caching
 - Transform modes
 
 ### `camera.ts`
+
 Camera and coordinate systems.
 
 **Coordinate spaces:**
+
 - Screen (browser viewport)
 - Camera (container-relative)
 - World (scene coordinates)
 
 **Features:**
+
 - Coordinate conversions
 - Pan and zoom
 - Transform management
 
 ### `input.ts`
+
 Unified input handling.
 
-**GlobalInputControl:**
+**InputControl:**
+
 - Container-level events
 - Mouse and touch normalization
 - Drag gesture detection
-
-**InputControl:**
-- Element-specific events
-- Per-object input handling
+- Object DOM ownership lookup
 
 **Event types:**
+
 - pointerDown, pointerMove, pointerUp
 - mouseWheel
 - dragStart, drag, dragEnd
 - pinchStart, pinch, pinchEnd
 
 ### `collision.ts`
+
 Collision detection system.
 
 **CollisionEngine:**
+
 - Frame-based detection
 - State tracking
 - Collision callbacks
 
 **Collider shapes:**
+
 - RectCollider
 - CircleCollider
 - LineCollider
 - PointCollider
 
 ### `animation.ts`
+
 Web Animations API wrapper.
 
 **AnimationObject:**
+
 - CSS property animation
 - Custom variables
 - Easing per keyframe
 
 **SequenceObject:**
+
 - Sequential animation chain
 
 ### `debug.ts`
+
 Visual debugging overlay.
 
 **Features:**
+
 - Canvas-based rendering
 - Object bounding boxes
 - Collider visualization
 - Custom debug markers
 
 ### `util.ts`
+
 Utility functions for DOM operations and transforms.
 
 ## Render Pipeline
@@ -162,6 +183,7 @@ Utility functions for DOM operations and transforms.
 6. **WRITE_3** - Final writes
 
 **Usage:**
+
 ```typescript
 object.queueUpdate("READ_1", callback);
 object.queueUpdate("WRITE_2", callback);
@@ -170,6 +192,7 @@ object.queueUpdate("WRITE_2", callback);
 ## Build Configuration
 
 **Entry points (vite.config.mjs):**
+
 - snapengine (main)
 - debug (optional)
 - animation (optional)
@@ -196,6 +219,7 @@ dist/
 ## Import Patterns
 
 **External consumers:**
+
 ```typescript
 import { Engine, ElementObject } from "@snap-engine/core";
 import { AnimationObject } from "@snap-engine/core/animation";
@@ -205,6 +229,7 @@ import { DebugRenderer } from "@snap-engine/core/debug";
 
 **Asset packages:**
 Must use package imports, never relative paths:
+
 ```typescript
 // ✅ Correct
 import { Engine } from "@snap-engine/core";

@@ -1,8 +1,8 @@
 <script lang="ts">
   import { onMount } from "svelte";
   import { Engine } from "@snap-engine/asset-base-svelte";
+  import type { Engine as SnapEngine } from "@snap-engine/core";
   import { Item, ItemContainer as Container } from "@snap-engine/snapsort-svelte";
-  import { GlobalManager } from "@snapline/index";
 
   type TitleLinePosition = {
     id: string;
@@ -12,9 +12,22 @@
 
   let heroSection: HTMLElement | undefined = $state();
   let titleSection: HTMLElement | undefined = $state();
+  let heroEngine: SnapEngine | null = $state(null);
+  let examplesEngine: SnapEngine | null = $state(null);
   let titleLetterElements: HTMLSpanElement[] = [];
   let titleLinePositions = $state<TitleLinePosition[]>([]);
   let titleLineCenterY = $state(0);
+
+  function configureInput(engine: SnapEngine | null) {
+    if (engine) {
+      engine.input.config.maxSimultaneousDrags = 1;
+    }
+  }
+
+  $effect(() => {
+    configureInput(heroEngine);
+    configureInput(examplesEngine);
+  });
 
   function cssLengthToPixels(value: string, element: HTMLElement) {
     const amount = Number.parseFloat(value);
@@ -64,12 +77,6 @@
 
   // Set max simultaneous drags to 1 for this demo (runs after engines are created)
   onMount(() => {
-    const globalManager = GlobalManager.getInstance();
-    const globalInput = globalManager.getInputEngine(null);
-    if (globalInput) {
-      globalInput.config.maxSimultaneousDrags = 1;
-    }
-
     let frame = 0;
     const tick = () => {
       updateTitleLinePositions();
@@ -267,7 +274,7 @@
 <svelte:window onkeydown={handleKeydown} />
 
 <section id="landing">
-  <Engine id="snapsort-canvas" bind:this={canvasComponent} {debug}>
+  <Engine id="snapsort-canvas" bind:this={canvasComponent} bind:engine={heroEngine} {debug}>
 
       <div class="hero-section" bind:this={heroSection}>
         <div class="hero-letter-lines" aria-hidden="true">
@@ -319,7 +326,7 @@
   </p>
 </section>
 <section>
-  <Engine id="snapsort-examples-canvas" bind:this={canvasComponent} {debug}>
+  <Engine id="snapsort-examples-canvas" bind:this={canvasComponent} bind:engine={examplesEngine} {debug}>
 
     <div class="examples-grid">
       <div class="example-card pm-example">

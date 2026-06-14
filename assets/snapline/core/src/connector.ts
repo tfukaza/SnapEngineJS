@@ -3,7 +3,11 @@ import type { frameStats } from "@snap-engine/core";
 import { NodeComponent } from "./node";
 import { LineComponent } from "./line";
 import type { pointerDownProp, dragProp, dragEndProp } from "@snap-engine/core";
-import { Collider, CircleCollider, PointCollider } from "@snap-engine/core/collision";
+import {
+  Collider,
+  CircleCollider,
+  PointCollider,
+} from "@snap-engine/core/collision";
 import { GlobalManager, EventProxyFactory } from "@snap-engine/core";
 
 enum ConnectorState {
@@ -56,7 +60,13 @@ class ConnectorComponent extends ElementObject {
     this.#name = config.name || this.gid || "";
     this.event.input.pointerDown = this.onCursorDown;
 
-    this.#hitCircle = new CircleCollider(engine, this, 0, 0, config.colliderRadius ?? 30);
+    this.#hitCircle = new CircleCollider(
+      engine,
+      this,
+      0,
+      0,
+      config.colliderRadius ?? 30,
+    );
     this.addCollider(this.#hitCircle);
 
     this.#mouseHitBox = new PointCollider(engine, this, 0, 0);
@@ -144,7 +154,6 @@ class ConnectorComponent extends ElementObject {
     if (prop.event.button != 0) {
       return;
     }
-    this.inputEngine.resetDragMembers();
     if (currentIncomingLines.length > 0) {
       this.startPickUpLine(currentIncomingLines[0], prop);
       return;
@@ -321,7 +330,6 @@ class ConnectorComponent extends ElementObject {
   }
 
   endDragOutLine(_: dragEndProp) {
-    this.inputEngine.resetDragMembers();
     if (
       this.#targetConnector &&
       this.#targetConnector instanceof ConnectorComponent
@@ -367,8 +375,7 @@ class ConnectorComponent extends ElementObject {
     line.start.disconnectFromConnector(this);
     this.disconnectFromConnector(line.start);
     line.start.deleteLine(line.start.outgoingLines.indexOf(line));
-    this.inputEngine.resetDragMembers();
-    this.inputEngine.addDragMember(line.start.inputEngine);
+    this.engine?.input.setPointerDragOwner(prop.event.pointerId, line.start);
     line.start.targetConnector = this;
     line.start.startDragOutLine(prop);
     this.#state = ConnectorState.DRAGGING;

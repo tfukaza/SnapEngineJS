@@ -187,31 +187,32 @@
     function pinch(prop: pinchProp) {
         const id = "pinch-" + prop.gestureID;
         const source = getEventSource(prop.gid);
+        const { current } = prop;
         
         Object.assign(pinchMarker[prop.gestureID], {
-            x0: prop.pointerList[0].x, 
-            y0: prop.pointerList[0].y, 
-            x1: prop.pointerList[1].x, 
-            y1: prop.pointerList[1].y, 
+            x0: current.pointerList[0].x,
+            y0: current.pointerList[0].y,
+            x1: current.pointerList[1].x,
+            y1: current.pointerList[1].y,
         });
 
         if (debugHelper) {
             // Update points at each finger position
-            debugHelper.addDebugPoint(prop.pointerList[0].x, prop.pointerList[0].y, "cyan", true, id + "-p0");
-            debugHelper.addDebugPoint(prop.pointerList[1].x, prop.pointerList[1].y, "cyan", true, id + "-p1");
+            debugHelper.addDebugPoint(current.pointerList[0].x, current.pointerList[0].y, "cyan", true, id + "-p0");
+            debugHelper.addDebugPoint(current.pointerList[1].x, current.pointerList[1].y, "cyan", true, id + "-p1");
             // Update line between fingers
             debugHelper.addDebugLine(
-                prop.pointerList[0].x, prop.pointerList[0].y,
-                prop.pointerList[1].x, prop.pointerList[1].y,
+                current.pointerList[0].x, current.pointerList[0].y,
+                current.pointerList[1].x, current.pointerList[1].y,
                 "cyan", true, id + "-line"
             );
             // Show distance and scale text at midpoint
-            const midX = (prop.pointerList[0].x + prop.pointerList[1].x) / 2;
-            const midY = (prop.pointerList[0].y + prop.pointerList[1].y) / 2;
-            const scale = prop.distance / prop.start.distance;
+            const midX = (current.pointerList[0].x + current.pointerList[1].x) / 2;
+            const midY = (current.pointerList[0].y + current.pointerList[1].y) / 2;
+            const scale = current.distance / prop.start.distance;
             debugHelper.addDebugText(
                 midX, midY - 20,
-                `${source} Pinch\nDist: ${round(prop.distance)}\nScale: ${round(scale)}x`,
+                `${source} Pinch\nDist: ${round(current.distance)}\nScale: ${round(scale)}x`,
                 "cyan", true, id + "-text"
             );
         }
@@ -305,37 +306,37 @@
             return;
         }
 
-        const globalInputEngine = currentEngine.global!.getInputEngine(currentEngine);
-        if (globalInputEngine) {
+        const inputControl = currentEngine.input;
+        if (inputControl) {
             listenerGID = currentEngine.global!.getGlobalId();
             
-            globalInputEngine.subscribeGlobalCursorEvent("pointerDown", listenerGID, (prop: pointerDownProp) => {
+            inputControl.subscribeGlobalCursorEvent("pointerDown", listenerGID, (prop: pointerDownProp) => {
                 pointerDown(prop, "#000", "Global");
             }, currentEngine);
-            globalInputEngine.subscribeGlobalCursorEvent("pointerUp", listenerGID, (prop: pointerUpProp) => {
+            inputControl.subscribeGlobalCursorEvent("pointerUp", listenerGID, (prop: pointerUpProp) => {
                 pointerUp(prop);
             }, currentEngine);
-            globalInputEngine.subscribeGlobalCursorEvent("pointerMove", listenerGID, (prop: pointerMoveProp) => {
+            inputControl.subscribeGlobalCursorEvent("pointerMove", listenerGID, (prop: pointerMoveProp) => {
                 pointerMove(prop, "#000", "Global");
             }, currentEngine);
             
-            globalInputEngine.subscribeGlobalCursorEvent("dragStart", listenerGID, (prop: dragStartProp) => {
+            inputControl.subscribeGlobalCursorEvent("dragStart", listenerGID, (prop: dragStartProp) => {
                 dragStart(prop, "#000", "Global");
             }, currentEngine);
-             globalInputEngine.subscribeGlobalCursorEvent("drag", listenerGID, (prop: dragProp) => {
+             inputControl.subscribeGlobalCursorEvent("drag", listenerGID, (prop: dragProp) => {
                 drag(prop, "Global");
             }, currentEngine);
-             globalInputEngine.subscribeGlobalCursorEvent("dragEnd", listenerGID, (prop: dragEndProp) => {
+             inputControl.subscribeGlobalCursorEvent("dragEnd", listenerGID, (prop: dragEndProp) => {
                 dragEnd(prop, "Global");
             }, currentEngine);
             
-             globalInputEngine.subscribeGlobalCursorEvent("pinchStart", listenerGID, (prop: pinchStartProp) => {
+             inputControl.subscribeGlobalCursorEvent("pinchStart", listenerGID, (prop: pinchStartProp) => {
                 pinchStart(prop);
             }, currentEngine);
-             globalInputEngine.subscribeGlobalCursorEvent("pinch", listenerGID, (prop: pinchProp) => {
+             inputControl.subscribeGlobalCursorEvent("pinch", listenerGID, (prop: pinchProp) => {
                 pinch(prop);
             }, currentEngine);
-             globalInputEngine.subscribeGlobalCursorEvent("pinchEnd", listenerGID, (prop: pinchEndProp) => {
+             inputControl.subscribeGlobalCursorEvent("pinchEnd", listenerGID, (prop: pinchEndProp) => {
                 pinchEnd(prop);
             }, currentEngine);
         }
@@ -358,17 +359,17 @@
 
     onDestroy(() => {
         if (engine && listenerGID) {
-            const globalInputEngine = engine.global!.getInputEngine(engine);
-            if (globalInputEngine) {
-                globalInputEngine.unsubscribeGlobalCursorEvent("pointerDown", listenerGID);
-                globalInputEngine.unsubscribeGlobalCursorEvent("pointerUp", listenerGID);
-                globalInputEngine.unsubscribeGlobalCursorEvent("pointerMove", listenerGID);
-                globalInputEngine.unsubscribeGlobalCursorEvent("dragStart", listenerGID);
-                globalInputEngine.unsubscribeGlobalCursorEvent("drag", listenerGID);
-                globalInputEngine.unsubscribeGlobalCursorEvent("dragEnd", listenerGID);
-                globalInputEngine.unsubscribeGlobalCursorEvent("pinchStart", listenerGID);
-                globalInputEngine.unsubscribeGlobalCursorEvent("pinch", listenerGID);
-                globalInputEngine.unsubscribeGlobalCursorEvent("pinchEnd", listenerGID);
+            const inputControl = engine.input;
+            if (inputControl) {
+                inputControl.unsubscribeGlobalCursorEvent("pointerDown", listenerGID);
+                inputControl.unsubscribeGlobalCursorEvent("pointerUp", listenerGID);
+                inputControl.unsubscribeGlobalCursorEvent("pointerMove", listenerGID);
+                inputControl.unsubscribeGlobalCursorEvent("dragStart", listenerGID);
+                inputControl.unsubscribeGlobalCursorEvent("drag", listenerGID);
+                inputControl.unsubscribeGlobalCursorEvent("dragEnd", listenerGID);
+                inputControl.unsubscribeGlobalCursorEvent("pinchStart", listenerGID);
+                inputControl.unsubscribeGlobalCursorEvent("pinch", listenerGID);
+                inputControl.unsubscribeGlobalCursorEvent("pinchEnd", listenerGID);
             }
         }
     });

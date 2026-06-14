@@ -4,7 +4,6 @@
 import { GlobalManager } from "./global";
 import { BaseObject } from "./object";
 import { getDomProperty } from "./util";
-import { InputControl } from "./input";
 import { EventProxyFactory } from "./util";
 import { Engine } from "./engine";
 
@@ -66,7 +65,6 @@ class Collider {
   type: "rect" | "circle" | "line" | "point" | "svg";
   uuid: symbol;
   _element: HTMLElement | null;
-  inputEngine: InputControl;
 
   local: ColliderProperty;
 
@@ -97,7 +95,6 @@ class Collider {
     this._iterationCollisions = new Set();
     this._currentCollisions = new Set();
     this.recalculate();
-    this.inputEngine = new InputControl(this.engine);
   }
 
   get worldPosition(): [number, number] {
@@ -382,10 +379,15 @@ class CollisionEngine {
             const bx = this.#colliderCenterX(collider);
             const by = this.#colliderCenterY(collider);
             entry.collider.parent.addDebugLine(
-              ax, ay, bx, by,
-              "rgba(255, 50, 50, 0.35)", false,
+              ax,
+              ay,
+              bx,
+              by,
+              "rgba(255, 50, 50, 0.35)",
+              false,
               `collision-${collisionIdx++}`,
-              1, "collisions",
+              1,
+              "collisions",
             );
           }
         }
@@ -480,8 +482,7 @@ class CollisionEngine {
       a.uuid !== b.uuid &&
       a.worldPosition[1] <
         b.worldPosition[1] + (b as RectCollider).local.height &&
-      a.worldPosition[1] + (a as RectCollider).local.height >
-        b.worldPosition[1]
+      a.worldPosition[1] + (a as RectCollider).local.height > b.worldPosition[1]
     );
   }
 

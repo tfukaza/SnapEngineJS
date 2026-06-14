@@ -2,7 +2,8 @@ import { Engine } from "./engine";
 import { ElementObject, BaseObject, ReactiveTransform } from "./object";
 import type { DomProperty } from "./object";
 import { GlobalManager } from "./global";
-import {
+import { InputControl, mouseButtonBitmap } from "./input";
+import type {
   pointerDownProp,
   pointerMoveProp,
   pointerUpProp,
@@ -13,7 +14,8 @@ import {
   pinchStartProp,
   pinchProp,
   pinchEndProp,
-  mouseButtonBitmap,
+  PinchSnapshot,
+  InputControlConfig,
 } from "./input";
 import { getDomProperty, cloneDomProperty, EventProxyFactory } from "./util";
 import { Camera } from "./camera";
@@ -25,6 +27,7 @@ export {
   ReactiveTransform,
   GlobalManager,
   Camera,
+  InputControl,
   getDomProperty,
   cloneDomProperty,
   EventProxyFactory,
@@ -38,6 +41,8 @@ export {
   type pinchStartProp,
   type pinchProp,
   type pinchEndProp,
+  type PinchSnapshot,
+  type InputControlConfig,
   type DomProperty,
   mouseButtonBitmap,
 };

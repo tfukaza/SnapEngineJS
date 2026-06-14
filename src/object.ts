@@ -1,4 +1,4 @@
-import { InputControl, InputEventCallback } from "./input";
+import type { InputEventCallback } from "./input";
 import {
   setDomStyle,
   EventProxyFactory,
@@ -43,16 +43,13 @@ class EventCallback {
     };
     this.global = new Proxy(this._global, {
       set: (_, prop: any, value: CallableFunction | null) => {
-        const globalInputEngine = this._object.global.getInputEngine(
-          this._object.engine,
-        );
         if (value == null) {
-          globalInputEngine?.unsubscribeGlobalCursorEvent(
+          this._object.engine?.input.unsubscribeGlobalCursorEvent(
             prop,
             this._object.gid,
           );
         } else {
-          globalInputEngine?.subscribeGlobalCursorEvent(
+          this._object.engine?.input.subscribeGlobalCursorEvent(
             prop,
             this._object.gid,
             (value as any).bind(this._object),
@@ -276,11 +273,10 @@ export class BaseObject {
     };
     this.globalInput = new Proxy(this._globalInput, {
       set: (_, prop: any, value: CallableFunction | null) => {
-        const globalInputEngine = this.global.getInputEngine(this.engine);
         if (value == null) {
-          globalInputEngine?.unsubscribeGlobalCursorEvent(prop, this.gid);
+          this.engine?.input.unsubscribeGlobalCursorEvent(prop, this.gid);
         } else {
-          globalInputEngine?.subscribeGlobalCursorEvent(
+          this.engine?.input.subscribeGlobalCursorEvent(
             prop,
             this.gid,
             value.bind(this) as (prop: any) => void,
@@ -874,7 +870,13 @@ export class DomElement {
   }
 
   addElement(element: HTMLElement) {
+    if (this.element) {
+      this._engine?.input.unregisterObjectElement(this._owner, this.element);
+      this.resizeObserver?.disconnect();
+      this.mutationObserver?.disconnect();
+    }
     this.element = element;
+    this._engine?.input.registerObjectElement(this._owner, element);
     this._owner.requestWrite();
     this._owner.requestRead();
 
@@ -1061,6 +1063,9 @@ export class DomElement {
   }
 
   destroyDom(): void {
+    if (this.element) {
+      this._engine?.input.unregisterObjectElement(this._owner, this.element);
+    }
     this.resizeObserver?.disconnect();
     this.mutationObserver?.disconnect();
     if (this.element) {
@@ -1106,8 +1111,6 @@ export class ElementObject extends BaseObject {
   inScene: boolean = false;
   _callback: RenderCallback;
   callback: RenderCallback;
-
-  inputEngine: InputControl;
 
   constructor(engine: any, parent: BaseObject | null = null) {
     super(engine, parent);
@@ -1165,12 +1168,9 @@ export class ElementObject extends BaseObject {
         return true;
       },
     });
-
-    this.inputEngine = new InputControl(this.engine, false, this.gid);
   }
 
   destroy() {
-    // this.inputEngine.destroy();
     this._dom.destroyDom();
     super.destroy();
   }
@@ -1253,16 +1253,6 @@ export class ElementObject extends BaseObject {
       return;
     }
     this._dom.addElement(element);
-    this.inputEngine?.addCursorEventListener(element);
-
-    type Keys = keyof InputEventCallback;
-    const keys = Object.keys(this.inputEngine.event) as Keys[];
-    for (const event of keys) {
-      const callback: InputEventCallback[typeof event] =
-        this.event.input[event]?.bind(this) || null;
-      this.inputEngine.event[event] = callback as any;
-    }
-
     this.event.dom.onAssignDom?.();
   }
 
