@@ -16,6 +16,15 @@ export interface CameraConfig {
   handleResize?: boolean; // Whether to handle resize events and update camera properties
 }
 
+export interface CameraPinchUpdate {
+  anchorWorldX: number;
+  anchorWorldY: number;
+  baseZoom: number;
+  baseDistance: number;
+  currentDistance: number;
+  currentCameraX: number;
+  currentCameraY: number;
+}
 
 export class Camera {
   /**
@@ -303,21 +312,7 @@ export class Camera {
       return;
     }
 
-    // Limit zoom
-    if (this.#zoom + deltaZoom < 0.2) {
-      deltaZoom = 0.2 - this.#zoom;
-    } else if (this.#zoom + deltaZoom > 1) {
-      deltaZoom = 1 - this.#zoom;
-    }
-
-    if (this.#config.zoomBounds) {
-      if (this.#zoom + deltaZoom < this.#config.zoomBounds.min) {
-        deltaZoom = 0;
-      } else if (this.#zoom + deltaZoom > this.#config.zoomBounds.max) {
-        deltaZoom = 0;
-      }
-    }
-
+    deltaZoom = this.#constrainDeltaZoom(deltaZoom);
     const zoomRatio = this.#zoom / (this.#zoom + deltaZoom); // Ratio of current zoom to new zoom
     // Move camera to zoom in on the mouse position
     if (this.#config.enablePan) {
@@ -333,6 +328,56 @@ export class Camera {
     this.#zoom += deltaZoom;
 
     this.updateCamera();
+  }
+
+  handlePinch(update: CameraPinchUpdate) {
+    if (!this.#config.enableZoom && !this.#config.enablePan) {
+      return;
+    }
+
+    let nextZoom = this.#zoom;
+
+    if (
+      this.#config.enableZoom &&
+      update.baseDistance > 0 &&
+      update.currentDistance > 0
+    ) {
+      nextZoom = this.#constrainTargetZoom(
+        update.baseZoom * (update.currentDistance / update.baseDistance),
+      );
+    }
+
+    if (this.#config.enablePan) {
+      this.#cameraPositionX =
+        update.anchorWorldX - update.currentCameraX / nextZoom;
+      this.#cameraPositionY =
+        update.anchorWorldY - update.currentCameraY / nextZoom;
+    }
+
+    this.#zoom = nextZoom;
+    this.updateCamera();
+  }
+
+  #constrainDeltaZoom(deltaZoom: number) {
+    if (this.#zoom + deltaZoom < 0.2) {
+      deltaZoom = 0.2 - this.#zoom;
+    } else if (this.#zoom + deltaZoom > 1) {
+      deltaZoom = 1 - this.#zoom;
+    }
+
+    if (this.#config.zoomBounds) {
+      if (this.#zoom + deltaZoom < this.#config.zoomBounds.min) {
+        deltaZoom = 0;
+      } else if (this.#zoom + deltaZoom > this.#config.zoomBounds.max) {
+        deltaZoom = 0;
+      }
+    }
+
+    return deltaZoom;
+  }
+
+  #constrainTargetZoom(targetZoom: number) {
+    return this.#zoom + this.#constrainDeltaZoom(targetZoom - this.#zoom);
   }
 
   /**

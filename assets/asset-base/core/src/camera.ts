@@ -3,6 +3,7 @@ import type {
   pointerMoveProp,
   pointerUpProp,
   mouseWheelProp,
+  pinchProp,
 } from "@snap-engine/core";
 import { ElementObject } from "@snap-engine/core";
 import { Camera } from "@snap-engine/core";
@@ -17,19 +18,27 @@ const DEFAULT_CONFIG: CameraControlConfig = {
   panLock: false,
 };
 
+type PinchAnchor = {
+  centerX: number;
+  centerY: number;
+  distance: number;
+  worldX: number;
+  worldY: number;
+  zoom: number;
+};
+
 class CameraControl extends ElementObject {
-  #state: "idle" | "panning" = "idle";
+  #state: "idle" | "panning" | "pinching" = "idle";
   #mouseDownX: number;
   #mouseDownY: number;
+  #panPointerId: number | null = null;
+  #pinchAnchor: PinchAnchor | null = null;
 
   config: CameraControlConfig = {};
 
   camera: Camera | null = null;
 
-  constructor(
-    engine: any,
-    config: CameraControlConfig = {}
-  ) {
+  constructor(engine: any, config: CameraControlConfig = {}) {
     super(engine, null);
     this.config = { ...DEFAULT_CONFIG, ...config };
     this.#mouseDownX = 0;
@@ -39,6 +48,9 @@ class CameraControl extends ElementObject {
     this.event.global.pointerMove = this.onCursorMove;
     this.event.global.pointerUp = this.onCursorUp;
     this.event.global.mouseWheel = this.onZoom;
+    this.event.global.pinchStart = this.onPinchStart;
+    this.event.global.pinch = this.onPinch;
+    this.event.global.pinchEnd = this.onPinchEnd;
     this.transformMode = "direct";
 
     this.style = {
@@ -114,6 +126,9 @@ class CameraControl extends ElementObject {
     if (prop.event.button != 0) {
       return;
     }
+    if (this.#state !== "idle") {
+      return;
+    }
     if (this.config.panLock) {
       return;
     }
@@ -124,14 +139,19 @@ class CameraControl extends ElementObject {
       return;
     }
     this.#state = "panning";
+    this.#panPointerId = prop.event.pointerId;
     this.#mouseDownX = prop.position.screenX;
     this.#mouseDownY = prop.position.screenY;
+    this.#pinchAnchor = null;
     this.engine.camera?.handlePanStart();
     prop.event.preventDefault();
   }
 
   onCursorMove(prop: pointerMoveProp) {
     if (this.#state != "panning") {
+      return;
+    }
+    if (prop.event?.pointerId !== this.#panPointerId) {
       return;
     }
     if (this.global.data.allowCameraControl === false) {
@@ -144,11 +164,15 @@ class CameraControl extends ElementObject {
     this.requestTransform("WRITE_2");
   }
 
-  onCursorUp(_prop: pointerUpProp) {
+  onCursorUp(prop: pointerUpProp) {
     if (this.#state != "panning") {
       return;
     }
+    if (prop.event.pointerId !== this.#panPointerId) {
+      return;
+    }
     this.#state = "idle";
+    this.#panPointerId = null;
     this.engine.camera?.handlePanEnd();
     this.style.transform = this.engine.camera?.canvasStyle as string;
     this.requestTransform("WRITE_2");
@@ -167,8 +191,92 @@ class CameraControl extends ElementObject {
     ) {
       return;
     }
-    this.zoomBy(prop.delta / 2000, prop.position.cameraX, prop.position.cameraY);
+    this.zoomBy(
+      prop.delta / 2000,
+      prop.position.cameraX,
+      prop.position.cameraY,
+    );
     prop.event.preventDefault();
+  }
+
+  onPinchStart() {
+    if (this.config.zoomLock && this.config.panLock) {
+      return;
+    }
+    if (this.global.data.allowCameraControl === false) {
+      return;
+    }
+    this.#state = "pinching";
+    this.#panPointerId = null;
+    this.#pinchAnchor = null;
+    this.engine.camera?.handlePanEnd();
+  }
+
+  onPinch(prop: pinchProp) {
+    if (this.config.zoomLock && this.config.panLock) {
+      return;
+    }
+    if (this.global.data.allowCameraControl === false) {
+      return;
+    }
+    const [pointer0, pointer1] = prop.current.pointerList;
+    const center = {
+      x: (pointer0.cameraX + pointer1.cameraX) / 2,
+      y: (pointer0.cameraY + pointer1.cameraY) / 2,
+    };
+    const camera = this.engine.camera;
+    if (!camera) {
+      return;
+    }
+
+    if (this.#state !== "pinching") {
+      this.#state = "pinching";
+      this.#pinchAnchor = this.#createPinchAnchor(center, prop.current.distance);
+      return;
+    }
+    if (this.#pinchAnchor == null || this.#pinchAnchor.distance === 0) {
+      this.#pinchAnchor = this.#createPinchAnchor(center, prop.current.distance);
+      return;
+    }
+
+    camera.handlePinch({
+      anchorWorldX: this.#pinchAnchor.worldX,
+      anchorWorldY: this.#pinchAnchor.worldY,
+      baseZoom: this.#pinchAnchor.zoom,
+      baseDistance: this.config.zoomLock
+        ? prop.current.distance
+        : this.#pinchAnchor.distance,
+      currentDistance: prop.current.distance,
+      currentCameraX: this.config.panLock
+        ? this.#pinchAnchor.centerX
+        : center.x,
+      currentCameraY: this.config.panLock
+        ? this.#pinchAnchor.centerY
+        : center.y,
+    });
+
+    this.style.transform = camera.canvasStyle as string;
+    this.requestTransform("WRITE_2");
+  }
+
+  onPinchEnd() {
+    if (this.#state === "pinching") {
+      this.#state = "idle";
+    }
+    this.#panPointerId = null;
+    this.#pinchAnchor = null;
+  }
+
+  #createPinchAnchor(center: { x: number; y: number }, distance: number) {
+    const camera = this.engine.camera!;
+    return {
+      centerX: center.x,
+      centerY: center.y,
+      distance,
+      worldX: camera.cameraPositionX + center.x / camera.zoom,
+      worldY: camera.cameraPositionY + center.y / camera.zoom,
+      zoom: camera.zoom,
+    };
   }
 }
 

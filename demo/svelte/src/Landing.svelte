@@ -10,6 +10,7 @@
   import DropSnapNestedDemo from "./demo/drop_snap_nested/DropSnapNestedDemo.svelte";
   import SnapSortComponentsDemo from "./demo/snapsort_components/SnapSortComponentsDemo.svelte";
   import CollisionDemo from "./demo/collision/CollisionDemo.svelte";
+  import CameraControlDemo from "./demo/camera_control/CameraControlDemo.svelte";
 
   type DemoOption = {
     label: string;
@@ -17,26 +18,29 @@
   };
 
   const demoOptions: DemoOption[] = [
-    { label: "Welcome Background", value: "welcome" },
-    { label: "Animation", value: "gallery" },
-    { label: "Input", value: "drag" },
-    { label: "Snap Line", value: "node_ui" },
-    { label: "SnapSort", value: "drop_snap_nested" },
-    { label: "SnapSort Components", value: "snapsort_components" },
-    { label: "Collision", value: "collision" },
+    { label: "Gallery", value: "gallery" },
+    { label: "Drag", value: "drag" },
+    { label: "CameraControlDemo", value: "camera_control" },
+    { label: "NodeUIDemo", value: "node_ui" },
+    { label: "DropSnapNestedDemo", value: "drop_snap_nested" },
+    { label: "SnapSortComponentsDemo", value: "snapsort_components" },
+    { label: "CollisionDemo", value: "collision" },
   ];
 
   function getDemoFromUrl() {
-    if (typeof window === "undefined") return "welcome";
+    if (typeof window === "undefined") return demoOptions[0].value;
     const params = new URLSearchParams(window.location.search);
     const demo = params.get("demo");
+    if (demo === "welcome") {
+      return demoOptions[0].value;
+    }
     if (demo === "drag_drop" || demo === "nested_items") {
       return "drop_snap_nested";
     }
     if (demo && demoOptions.some((o) => o.value === demo)) {
       return demo;
     }
-    return "welcome";
+    return demoOptions[0].value;
   }
 
   let selectedDemo = $state(getDemoFromUrl());
@@ -107,14 +111,12 @@
   </div>
 
   <div class="demo-content">
-    {#if selectedDemo === "welcome"}
-      <div class="welcome-placeholder">
-        <p>Select a demo from the dropdown to begin.</p>
-      </div>
-    {:else if selectedDemo === "gallery"}
+    {#if selectedDemo === "gallery"}
       <GalleryDemo />
     {:else if selectedDemo === "drag"}
       <DragDemo bind:this={dragDemoRef} />
+    {:else if selectedDemo === "camera_control"}
+      <CameraControlDemo />
     {:else if selectedDemo === "node_ui"}
       <NodeUIDemo />
     {:else if selectedDemo === "drop_snap_nested"}
@@ -184,17 +186,6 @@
 
     background-color: var(--color-background-tint);
     position: relative;
-  }
-
-  .welcome-placeholder {
-    width: 100%;
-    height: 100%;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    color: var(--color-text-muted, var(--color-text));
-    opacity: 0.6;
-    font-size: 14px;
   }
 
   .debug-toggle.disabled {

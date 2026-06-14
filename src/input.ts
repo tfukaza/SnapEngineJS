@@ -764,6 +764,14 @@ class InputControl {
           pointer0.startX - pointer1.startX,
           pointer0.startY - pointer1.startY,
         );
+        const startPointer0 = this.#getCoordinates(
+          pointer0.startX,
+          pointer0.startY,
+        );
+        const startPointer1 = this.#getCoordinates(
+          pointer1.startX,
+          pointer1.startY,
+        );
         this.#gestureDict[gestureKey] = {
           type: "pinch",
           state: "pinch",
@@ -771,12 +779,12 @@ class InputControl {
           pointerId0: pointer0.id,
           pointerId1: pointer1.id,
           start: {
-            pointerList: [currentPointer0, currentPointer1],
+            pointerList: [startPointer0, startPointer1],
             distance: startDistance,
           },
           current: {
             pointerList: [currentPointer0, currentPointer1],
-            distance: startDistance,
+            distance: currentDistance,
           },
         };
 
