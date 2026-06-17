@@ -152,74 +152,77 @@ class GlobalManager {
     }
 
     const step = () => {
-      const timestamp = Date.now();
+      void (async () => {
+        const timestamp = Date.now();
 
-      // Process each stage for ALL engines before moving to the next stage
-      // This prevents layout thrashing by batching DOM reads and writes
+        // Process each stage for ALL engines before moving to the next stage.
+        // Stages are awaited so framework adapters can flush DOM work from
+        // queued callbacks before the next layout read.
 
-      // READ_1 stage for all engines
-      this.currentStage = "READ_1";
-      for (const engine of this.engines) {
-        engine._processStage("READ_1", this.queue.READ_1, timestamp);
-      }
-      this.queue.READ_1 = new Map();
+        // READ_1 stage for all engines
+        this.currentStage = "READ_1";
+        for (const engine of this.engines) {
+          await engine._processStage("READ_1", this.queue.READ_1, timestamp);
+        }
+        this.queue.READ_1 = new Map();
 
-      // Collision detection after READ_1 so colliders have up-to-date positions
-      for (const engine of this.engines) {
-        engine._processCollisions();
-      }
+        // Collision detection after READ_1 so colliders have up-to-date positions
+        for (const engine of this.engines) {
+          engine._processCollisions();
+        }
 
-      // WRITE_1 stage for all engines
-      this.currentStage = "WRITE_1";
-      for (const engine of this.engines) {
-        engine._processStage("WRITE_1", this.queue.WRITE_1, timestamp);
-      }
-      this.queue.WRITE_1 = new Map();
+        // WRITE_1 stage for all engines
+        this.currentStage = "WRITE_1";
+        for (const engine of this.engines) {
+          await engine._processStage("WRITE_1", this.queue.WRITE_1, timestamp);
+        }
+        this.queue.WRITE_1 = new Map();
 
-      // READ_2 stage for all engines
-      this.currentStage = "READ_2";
-      for (const engine of this.engines) {
-        engine._processStage("READ_2", this.queue.READ_2, timestamp);
-      }
-      this.queue.READ_2 = new Map();
+        // READ_2 stage for all engines
+        this.currentStage = "READ_2";
+        for (const engine of this.engines) {
+          await engine._processStage("READ_2", this.queue.READ_2, timestamp);
+        }
+        this.queue.READ_2 = new Map();
 
-      // WRITE_2 stage for all engines
-      this.currentStage = "WRITE_2";
-      for (const engine of this.engines) {
-        engine._processStage("WRITE_2", this.queue.WRITE_2, timestamp);
-      }
-      this.queue.WRITE_2 = new Map();
+        // WRITE_2 stage for all engines
+        this.currentStage = "WRITE_2";
+        for (const engine of this.engines) {
+          await engine._processStage("WRITE_2", this.queue.WRITE_2, timestamp);
+        }
+        this.queue.WRITE_2 = new Map();
 
-      // Animation processing for all engines
-      for (const engine of this.engines) {
-        engine._processAnimations(timestamp);
-      }
+        // Animation processing for all engines
+        for (const engine of this.engines) {
+          engine._processAnimations(timestamp);
+        }
 
-      // READ_3 stage for all engines
-      this.currentStage = "READ_3";
-      for (const engine of this.engines) {
-        engine._processStage("READ_3", this.queue.READ_3, timestamp);
-      }
-      this.queue.READ_3 = new Map();
+        // READ_3 stage for all engines
+        this.currentStage = "READ_3";
+        for (const engine of this.engines) {
+          await engine._processStage("READ_3", this.queue.READ_3, timestamp);
+        }
+        this.queue.READ_3 = new Map();
 
-      // WRITE_3 stage for all engines
-      this.currentStage = "WRITE_3";
-      for (const engine of this.engines) {
-        engine._processStage("WRITE_3", this.queue.WRITE_3, timestamp);
-      }
-      this.queue.WRITE_3 = new Map();
+        // WRITE_3 stage for all engines
+        this.currentStage = "WRITE_3";
+        for (const engine of this.engines) {
+          await engine._processStage("WRITE_3", this.queue.WRITE_3, timestamp);
+        }
+        this.queue.WRITE_3 = new Map();
 
-      this.currentStage = "IDLE";
+        this.currentStage = "IDLE";
 
-      // Post-render processing (collisions, debug) for all engines
-      for (const engine of this.engines) {
-        engine._processPostRender(timestamp);
-      }
+        // Post-render processing (collisions, debug) for all engines
+        for (const engine of this.engines) {
+          engine._processPostRender(timestamp);
+        }
 
-      this.#animationFrameId = window.requestAnimationFrame(step);
+        this.#animationFrameId = window.requestAnimationFrame(step);
 
-      // When rAF callback ends, and if there are no more Event callbacks,
-      // the browser can begin painting.
+        // When rAF callback ends, and if there are no more Event callbacks,
+        // the browser can begin painting.
+      })();
     };
 
     this.#animationFrameId = window.requestAnimationFrame(step);

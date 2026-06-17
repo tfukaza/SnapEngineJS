@@ -20,13 +20,21 @@ function debugLog(...args: unknown[]) {
 
 interface FlipSnapshot {
   item: ItemObject;
+  key: string;
   first: DOMRect | null;
   last: DOMRect | null;
+  targetElement: HTMLElement | null;
+}
+
+export type ItemId = string;
+
+export interface ItemMetadata extends Record<string, unknown> {
+  itemId?: ItemId;
 }
 
 export class ItemObject extends ElementObject {
   #rootContainer: ItemContainer | null = null;
-  #metadata: Record<string, unknown> = {};
+  #metadata: ItemMetadata = {};
   #locked: boolean = false; // Locked items cannot be dragged
   noDrop: boolean = false; // Containers marked as noDrop cannot be a drop target
 
@@ -68,13 +76,11 @@ export class ItemObject extends ElementObject {
   }
 
   #itemID(item: ItemObject) {
-    const id = item.metadata.id ?? item.metadata.itemId;
-    return typeof id === "string" || typeof id === "number"
-      ? String(id)
-      : item.gid;
+    const id = item.metadata.itemId;
+    return id ?? item.gid;
   }
 
-  removeItem(id: string) {
+  removeItem(id: ItemId) {
     const item =
       this.#itemOrderedList.find((item) => this.#itemID(item) === id) ??
       this.children.find(
@@ -84,6 +90,86 @@ export class ItemObject extends ElementObject {
     if (!item) return;
 
     this.removeItemFrom(this as unknown as ItemContainer, item);
+  }
+
+  /**
+   * Find a SnapSort item by its stable item metadata id within this subtree.
+   *
+   * This searches the engine-owned item tree first, which is the normal path
+   * when SnapSort still has an up-to-date object hierarchy.
+   *
+   * @param id Stable item id from `metadata.itemId`.
+   * @returns Matching item object, or null when the tree has no matching item.
+   */
+  #findItemByID(id: ItemId): ItemObject | null {
+    const directItem =
+      this.#itemOrderedList.find((item) => this.#itemID(item) === id) ??
+      this.children.find(
+        (item): item is ItemObject =>
+          item instanceof ItemObject && this.#itemID(item) === id,
+      );
+    if (directItem) return directItem;
+
+    for (const child of this.#itemOrderedList) {
+      const found = child.#findItemByID(id);
+      if (found) return found;
+    }
+
+    return null;
+  }
+
+  /**
+   * Recover an item object from the rendered DOM using the Svelte item key.
+   *
+   * Framework-driven moves can briefly leave SnapSort's object tree stale while
+   * the DOM already contains the correct keyed element. This fallback finds that
+   * element and maps its `data-engine-gid` back to the engine object table.
+   *
+   * @param id Stable DOM item key, usually the same value as `metadata.itemId`.
+   * @returns Matching item object, or null when no keyed DOM element can be mapped.
+   */
+  #findItemByDomKey(id: ItemId): ItemObject | null {
+    const root = (this.#rootContainer as unknown as ItemObject | null) ?? this;
+    const element = root.#findFlipElement(root, id);
+    const gid = element?.getAttribute("data-engine-gid");
+    if (!gid) return null;
+
+    const table = this.global.getEngineObjectTable(this.engine ?? null, false);
+    const object = table?.[gid];
+    return object instanceof ItemObject ? object : null;
+  }
+
+  /**
+   * Move an item identified by stable metadata id into a target container.
+   *
+   * This is the imperative API used by frameworks. It accepts
+   * an id instead of an `ItemObject` so callers do not need to retain engine
+   * object references. If framework DOM and SnapSort's parent links are out of
+   * sync, it repairs the local parent/list relationship before moving the item.
+   *
+   * @param id Stable item id from `metadata.itemId`.
+   * @param container Destination SnapSort container.
+   * @param index Destination index in the target container.
+   * @returns True when a matching item was found and a move was requested.
+   */
+  moveItem(id: ItemId, container: ItemContainer, index: number) {
+    this.#findRootContainer();
+    const root = (this.#rootContainer as unknown as ItemObject | null) ?? this;
+    const item = root.#findItemByID(id) ?? root.#findItemByDomKey(id);
+    if (!item) return false;
+    if (item.parent !== this && this.element?.contains(item.element)) {
+      const staleParent = item.parent as ItemObject | null;
+      staleParent?.removeChild(item);
+      if (staleParent) {
+        staleParent.#itemOrderedList = staleParent.#itemOrderedList.filter(
+          (candidate) => candidate !== item,
+        );
+      }
+      this.addItem(item);
+    }
+
+    this.moveItemToContainer(container, item, index);
+    return true;
   }
 
   get locked(): boolean {
@@ -109,11 +195,11 @@ export class ItemObject extends ElementObject {
     return { index: idx, container: parentContainer };
   }
 
-  get metadata(): Record<string, unknown> {
+  get metadata(): ItemMetadata {
     return this.#metadata;
   }
 
-  set metadata(value: Record<string, unknown>) {
+  set metadata(value: ItemMetadata) {
     this.#metadata = value;
   }
 
@@ -330,7 +416,52 @@ export class ItemObject extends ElementObject {
     if (!container) return null;
     const config = container.configuration;
     if (config.animation === null) return null;
+    if (config.disableFlip) return null;
     return config.animation?.reorder ?? null;
+  }
+
+  /**
+   * Wait for the caller's framework to flush DOM after SnapSort mutates data.
+   *
+   * Svelte updates keyed DOM in a microtask, so FLIP's final geometry read must
+   * wait for the user-provided callback before SnapEngine advances to READ_3.
+   *
+   * @param container Container whose callback should run after mutation.
+   * @returns A promise that resolves once the caller's DOM flush hook completes.
+   */
+  async #afterDomMutation(container: ItemContainer | null) {
+    await container?.callbacks?.afterDomMutation?.();
+  }
+
+  /**
+   * Escape a value so it can be safely used inside a quoted CSS attribute selector.
+   *
+   * @param value Raw item key.
+   * @returns Escaped selector value.
+   */
+  #escapeAttributeSelectorValue(value: string) {
+    if (typeof CSS !== "undefined" && CSS.escape) {
+      return CSS.escape(value);
+    }
+    return value.replace(/\\/g, "\\\\").replace(/"/g, '\\"');
+  }
+
+  /**
+   * Find the current DOM element for a FLIP snapshot key.
+   *
+   * This lets an animation continue even if a framework re-created the element
+   * during the data update, as long as the new element carries the same
+   * `data-snapsort-item-key`.
+   *
+   * @param root Root item whose DOM subtree should be searched.
+   * @param key Stable item key captured before mutation.
+   * @returns Current DOM element for the key, or null if it no longer exists.
+   */
+  #findFlipElement(root: ItemObject, key: string): HTMLElement | null {
+    if (!root.element) return null;
+    return root.element.querySelector(
+      `[data-snapsort-item-key="${this.#escapeAttributeSelectorValue(key)}"]`,
+    );
   }
 
   /**
@@ -343,7 +474,7 @@ export class ItemObject extends ElementObject {
    */
   #collectFlipItems(
     node: ItemObject,
-    exclude: ItemObject,
+    exclude: ItemObject | null,
     items: ItemObject[] = [],
   ): ItemObject[] {
     for (const child of node.#itemOrderedList) {
@@ -366,11 +497,16 @@ export class ItemObject extends ElementObject {
    * @param exclude Item that should not be animated.
    * @returns Items with current visual rectangles captured as first positions.
    */
-  #captureFlipSnapshot(root: ItemObject, exclude: ItemObject): FlipSnapshot[] {
+  #captureFlipSnapshot(
+    root: ItemObject,
+    exclude: ItemObject | null,
+  ): FlipSnapshot[] {
     return root.#collectFlipItems(root, exclude).map((item) => ({
       item,
+      key: this.#itemID(item),
       first: item.element!.getBoundingClientRect(),
       last: null,
+      targetElement: item.element,
     }));
   }
 
@@ -378,11 +514,25 @@ export class ItemObject extends ElementObject {
    * Capture the final visual positions after the DOM mutation.
    *
    * @param snapshot Items whose final positions should be measured.
+   * @param root Root of the SnapSort tree after the DOM mutation.
    * @returns Nothing.
    */
-  #captureFlipLast(snapshot: FlipSnapshot[]) {
+  #captureFlipLast(snapshot: FlipSnapshot[], root: ItemObject) {
+    const currentItems = new Map(
+      root
+        .#collectFlipItems(root, null)
+        .map((item) => [this.#itemID(item), item]),
+    );
+
     for (const entry of snapshot) {
-      entry.last = entry.item.element?.getBoundingClientRect() ?? null;
+      const currentItem = currentItems.get(entry.key) ?? null;
+      if (currentItem) {
+        entry.item = currentItem;
+        entry.targetElement = currentItem.element;
+      } else {
+        entry.targetElement = this.#findFlipElement(root, entry.key);
+      }
+      entry.last = entry.targetElement?.getBoundingClientRect() ?? null;
     }
   }
 
@@ -394,17 +544,19 @@ export class ItemObject extends ElementObject {
    *
    * @param snapshot Visual rectangles captured before and after the DOM mutation.
    * @param animationConfig Reorder animation configuration.
+   * @param animationOwner Fallback object that owns animations for re-created DOM nodes.
    * @returns Nothing.
    */
   #playFlipAnimations(
     snapshot: FlipSnapshot[],
     animationConfig: AnimationConfig,
+    animationOwner: ItemObject,
   ) {
     const movingAncestors = new Set<ItemObject>();
     const duration = animationConfig.duration ?? 160;
     const easing = animationConfig.timing_function ?? "ease-out";
 
-    for (const { item, first, last } of snapshot) {
+    for (const { item, first, last, targetElement } of snapshot) {
       const hasMovingAncestor =
         movingAncestors.size > 0 &&
         (() => {
@@ -417,7 +569,7 @@ export class ItemObject extends ElementObject {
           }
           return false;
         })();
-      if (hasMovingAncestor || !item.element || !first || !last) continue;
+      if (hasMovingAncestor || !targetElement || !first || !last) continue;
 
       const dx = first.x - last.x;
       const dy = first.y - last.y;
@@ -440,15 +592,17 @@ export class ItemObject extends ElementObject {
           duration,
           easing,
           tick: (vars) => {
-            item.element!.style.transform = transformAt(vars.$t);
+            targetElement.style.transform = transformAt(vars.$t);
           },
           finish: () => {
-            item.element!.style.transform = "";
+            targetElement.style.transform = "";
           },
         },
       );
-      item.element.style.transform = transformAt(0);
-      item.addAnimation(animation);
+      targetElement.style.transform = transformAt(0);
+      (targetElement === item.element ? item : animationOwner).addAnimation(
+        animation,
+      );
       animation.play();
     }
   }
@@ -457,17 +611,22 @@ export class ItemObject extends ElementObject {
    * Run a DOM mutation with optional FLIP animation for affected items.
    *
    * @param container Container whose reorder animation config controls the mutation.
-   * @param original Actively dragged item, excluded from reorder animation.
+   * @param excludedItem Item that should not be animated, usually the active drag item.
    * @param mutate DOM mutation to perform between first and last measurements.
    * @returns Nothing.
    */
   #withReorderAnimation(
     container: ItemContainer | null,
-    original: ItemObject,
+    excludedItem: ItemObject | null,
     mutate: () => void,
   ) {
     const animationConfig = this.#reorderAnimationConfig(container);
-    const root = (this.#rootContainer as unknown as ItemObject) ?? this;
+    const targetRoot = container
+      ? ((container as unknown as ItemObject)
+          .#rootContainer as unknown as ItemObject | null)
+      : null;
+    const root =
+      targetRoot ?? (this.#rootContainer as unknown as ItemObject) ?? this;
 
     if (!animationConfig) {
       mutate();
@@ -480,19 +639,20 @@ export class ItemObject extends ElementObject {
     root.queueUpdate(
       "READ_2",
       () => {
-        snapshot = this.#captureFlipSnapshot(root, original);
+        snapshot = this.#captureFlipSnapshot(root, excludedItem);
       },
       `${queuePrefix}-read-first`,
     );
 
     root.queueUpdate(
       "WRITE_2",
-      () => {
+      async () => {
         for (const { item } of snapshot) {
           item.cancelAnimations();
           item.element!.style.transform = "";
         }
         mutate();
+        await this.#afterDomMutation(container);
       },
       `${queuePrefix}-mutate`,
     );
@@ -500,7 +660,7 @@ export class ItemObject extends ElementObject {
     root.queueUpdate(
       "READ_3",
       () => {
-        this.#captureFlipLast(snapshot);
+        this.#captureFlipLast(snapshot, root);
       },
       `${queuePrefix}-read-last`,
     );
@@ -508,7 +668,7 @@ export class ItemObject extends ElementObject {
     root.queueUpdate(
       "WRITE_3",
       () => {
-        this.#playFlipAnimations(snapshot, animationConfig);
+        this.#playFlipAnimations(snapshot, animationConfig, root);
       },
       `${queuePrefix}-play`,
     );
@@ -549,6 +709,13 @@ export class ItemObject extends ElementObject {
     // }
   }
 
+  /**
+   * Collect the root and all descendant SnapSort items for drag positioning.
+   *
+   * @param node Current subtree root.
+   * @param items Accumulator for collected items.
+   * @returns Items whose inline position may need temporary adjustment.
+   */
   #collectPositionContextItems(
     node: ItemObject,
     items: ItemObject[] = [],
@@ -560,12 +727,27 @@ export class ItemObject extends ElementObject {
     return items;
   }
 
+  /**
+   * Apply a temporary inline `position` while remembering the previous value.
+   *
+   * @param element Element to update.
+   * @param position Temporary CSS position value.
+   * @returns Nothing.
+   */
   #setTemporaryPosition(element: HTMLElement | null, position: string) {
     if (!element || this.#dragPositionContextSnapshot.has(element)) return;
     this.#dragPositionContextSnapshot.set(element, element.style.position);
     element.style.position = position;
   }
 
+  /**
+   * Make the root the absolute-positioning context during an active drag.
+   *
+   * Children are temporarily set to static so a dragged `width: 100%` item keeps
+   * the measured item width instead of expanding to the root container width.
+   *
+   * @returns Nothing.
+   */
   #applyDragPositionContext() {
     const root = this.#rootContainer as unknown as ItemObject | null;
     if (!root?.element) return;
@@ -579,6 +761,11 @@ export class ItemObject extends ElementObject {
     }
   }
 
+  /**
+   * Restore inline position values changed by `#applyDragPositionContext`.
+   *
+   * @returns Nothing.
+   */
   #restoreDragPositionContext() {
     for (const [element, position] of this.#dragPositionContextSnapshot) {
       element.style.position = position;
@@ -594,47 +781,66 @@ export class ItemObject extends ElementObject {
    * @param index Destination index in the destination container.
    * @returns Nothing.
    */
-  moveItemToContainer(container: ItemContainer, item: ItemObject, index: number) {
-    const sourceContainer = item.parent as unknown as ItemObject | null;
-    const sourceIndex = sourceContainer
-      ? sourceContainer.#itemOrderedList.indexOf(item)
-      : -1;
-    DEBUG_LOGS &&
-      debugLog(
-        `[moveItemToContainer] item=${item.gid} from=${sourceContainer?.gid ?? "null"}[${sourceIndex}] to=${(container as unknown as ItemObject).gid}[${index}]`,
-      );
-    DEBUG_LOGS &&
-      debugLog(
-        `[moveItemToContainer]   source orderedList=[${sourceContainer ? sourceContainer.#itemOrderedList.map((i) => i.gid).join(", ") : "N/A"}]`,
-      );
-    DEBUG_LOGS &&
-      debugLog(
-        `[moveItemToContainer]   target orderedList=[${container.#itemOrderedList.map((i) => i.gid).join(", ")}]`,
-      );
-    // If the source and target container is the same, we must adjust the index
-    // to account for the removal of the item from its original position.
-    if (item.parent === container) {
-      // If the source and target index is the same, no need to move.
-      if (container.#itemOrderedList.indexOf(item) === index) {
-        DEBUG_LOGS &&
-          debugLog(`[moveItemToContainer]   SKIP: same container, same index`);
-        return;
+  moveItemToContainer(
+    container: ItemContainer,
+    item: ItemObject,
+    index: number,
+  ) {
+    const move = () => {
+      const sourceContainer = item.parent as unknown as ItemObject | null;
+      const sourceIndex = sourceContainer
+        ? sourceContainer.#itemOrderedList.indexOf(item)
+        : -1;
+      DEBUG_LOGS &&
+        debugLog(
+          `[moveItemToContainer] item=${item.gid} from=${sourceContainer?.gid ?? "null"}[${sourceIndex}] to=${(container as unknown as ItemObject).gid}[${index}]`,
+        );
+      DEBUG_LOGS &&
+        debugLog(
+          `[moveItemToContainer]   source orderedList=[${sourceContainer ? sourceContainer.#itemOrderedList.map((i) => i.gid).join(", ") : "N/A"}]`,
+        );
+      DEBUG_LOGS &&
+        debugLog(
+          `[moveItemToContainer]   target orderedList=[${container.#itemOrderedList.map((i) => i.gid).join(", ")}]`,
+        );
+      // If the source and target container is the same, we must adjust the index
+      // to account for the removal of the item from its original position.
+      if (item.parent === container) {
+        // If the source and target index is the same, no need to move.
+        if (container.#itemOrderedList.indexOf(item) === index) {
+          DEBUG_LOGS &&
+            debugLog(
+              `[moveItemToContainer]   SKIP: same container, same index`,
+            );
+          return;
+        }
+        const currentIndex = container.#itemOrderedList.indexOf(item);
+        if (currentIndex !== -1 && currentIndex < index) {
+          DEBUG_LOGS &&
+            debugLog(
+              `[moveItemToContainer]   adjusting index: ${index} → ${index - 1} (same container, current=${currentIndex} < target=${index})`,
+            );
+          index -= 1;
+        }
       }
-      const currentIndex = container.#itemOrderedList.indexOf(item);
-      if (currentIndex !== -1 && currentIndex < index) {
-        DEBUG_LOGS &&
-          debugLog(
-            `[moveItemToContainer]   adjusting index: ${index} → ${index - 1} (same container, current=${currentIndex} < target=${index})`,
-          );
-        index -= 1;
-      }
+      this.#detachItemFromContainer(item.container, item);
+      this.insertItemAt(container, item, index);
+      DEBUG_LOGS &&
+        debugLog(
+          `[moveItemToContainer]   DONE. target orderedList=[${container.#itemOrderedList.map((i) => i.gid).join(", ")}]`,
+        );
+    };
+
+    if (
+      item.parent === container &&
+      container.#itemOrderedList.indexOf(item) === index
+    ) {
+      DEBUG_LOGS &&
+        debugLog(`[moveItemToContainer]   SKIP: same container, same index`);
+      return;
     }
-    this.#detachItemFromContainer(item.container, item);
-    this.insertItemAt(container, item, index);
-    DEBUG_LOGS &&
-      debugLog(
-        `[moveItemToContainer]   DONE. target orderedList=[${container.#itemOrderedList.map((i) => i.gid).join(", ")}]`,
-      );
+
+    this.#withReorderAnimation(container, null, move);
   }
 
   #attachItemToContainer(
@@ -655,7 +861,11 @@ export class ItemObject extends ElementObject {
     }
   }
 
-  #insertItemElement(container: ItemContainer, item: ItemObject, index: number) {
+  #insertItemElement(
+    container: ItemContainer,
+    item: ItemObject,
+    index: number,
+  ) {
     const itemAfterIndex =
       index >= container.#itemOrderedList.length - 1
         ? null
@@ -1027,12 +1237,15 @@ export class ItemObject extends ElementObject {
       const hoistOffsetY = rootSnapshot
         ? -(rootSnapshot.border.top + rootSnapshot.padding.top)
         : 0;
+      const dragSnapshot = this.dragSnapshot;
       this.style = {
         cursor: "grabbing",
         position: "absolute",
         zIndex: "1000",
         top: `${hoistOffsetY}px`,
         left: `${hoistOffsetX}px`,
+        width: dragSnapshot ? `${dragSnapshot.width}px` : "",
+        height: dragSnapshot ? `${dragSnapshot.height}px` : "",
       };
       this.#applyDragPositionContext();
       // this.#hoistElementToRoot();
@@ -1071,7 +1284,7 @@ export class ItemObject extends ElementObject {
 
   dragEnd(_: dragEndProp) {
     const root = (this.#rootContainer as unknown as ItemObject) ?? this;
-    this.requestWrite(true, () => {
+    this.requestWrite(true, async () => {
       // Get ghost's current position — this is where the item should land
       const ghostItem = this.#rootContainer?.ghostItem;
       const ghostPos = ghostItem?.getIndexAndContainer();
@@ -1088,6 +1301,7 @@ export class ItemObject extends ElementObject {
         const destinationContainer =
           ghostPos.container as unknown as ItemContainer;
         this.insertItemAt(destinationContainer, this, ghostPos.index);
+        await this.#afterDomMutation(destinationContainer);
         DEBUG_LOGS &&
           debugLog(
             `[dragEnd] re-inserted item at ${(ghostPos.container as unknown as ItemObject).gid}[${ghostPos.index}]`,
@@ -1100,6 +1314,8 @@ export class ItemObject extends ElementObject {
         zIndex: "",
         top: "",
         left: "",
+        width: "",
+        height: "",
       };
       this.transformMode = "none";
       this.transformOrigin = null;

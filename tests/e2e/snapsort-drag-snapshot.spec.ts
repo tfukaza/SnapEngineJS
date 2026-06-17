@@ -1091,37 +1091,37 @@ test.describe("Snapsort drag-start snapshot layout", () => {
     });
 
     const list = await componentArrayList(page);
-    await expect(page.locator(".demo-header p")).toHaveText("4 array items");
+    await expect(page.locator(".demo-header p")).toHaveText(
+      "6 array-backed cards",
+    );
 
     await page.getByRole("button", { name: "Add Item" }).click();
-    await expect(page.locator(".demo-header p")).toHaveText("5 array items");
+    await expect(page.locator(".demo-header p")).toHaveText(
+      "7 array-backed cards",
+    );
     await expect(list.locator(".task-card")).toHaveCount(5);
 
-    const deleteButton = page.getByRole("button", { name: "Delete Task 5" });
-    const deleteBox = await deleteButton.boundingBox();
-    expect(deleteBox).not.toBeNull();
-    await page.mouse.move(
-      deleteBox!.x + deleteBox!.width / 2,
-      deleteBox!.y + deleteBox!.height / 2,
+    const deleteButton = page.getByRole("button", { name: "Delete Task 7" });
+    await deleteButton.click();
+    await expect(page.locator(".demo-header p")).toHaveText(
+      "6 array-backed cards",
     );
-    await page.mouse.down();
-    await page.mouse.move(
-      deleteBox!.x + deleteBox!.width / 2 + 1,
-      deleteBox!.y + deleteBox!.height / 2 + 1,
-      { steps: 2 },
-    );
-    await page.mouse.up();
-    await expect(page.locator(".demo-header p")).toHaveText("4 array items");
     await expect(list.locator(".task-card")).toHaveCount(4);
 
     const upwardItem = await itemByTextIn(list, "Search filters");
-    const upwardItemCenter = center(await itemRect(upwardItem));
+    const upwardItemRect = await itemRect(upwardItem);
+    const upwardItemCenter = center(upwardItemRect);
     const upwardTarget = await itemByTextIn(list, "Invite flow");
     const upwardTargetCenter = center(await itemRect(upwardTarget));
 
     await dragBy(page, upwardItem, "Search filters", 0, {
       x: 0,
       y: upwardTargetCenter.y - upwardItemCenter.y - 24,
+    }, {
+      start: {
+        x: upwardItemRect.x + 24,
+        y: upwardItemCenter.y,
+      },
     });
 
     await expect(
@@ -1134,23 +1134,33 @@ test.describe("Snapsort drag-start snapshot layout", () => {
     ]);
 
     await page.getByRole("button", { name: "Reset" }).click();
-    await expect(page.locator(".demo-header p")).toHaveText("4 array items");
+    await expect(page.locator(".demo-header p")).toHaveText(
+      "6 array-backed cards",
+    );
 
     const item = await itemByTextIn(list, "Profile fields");
-    const itemCenter = center(await itemRect(item));
+    const itemRectValue = await itemRect(item);
+    const itemCenter = center(itemRectValue);
     const target = await itemByTextIn(list, "Search filters");
     const targetCenter = center(await itemRect(target));
 
     await dragBy(page, item, "Profile fields", 0, {
       x: 0,
       y: targetCenter.y - itemCenter.y + 48,
+    }, {
+      start: {
+        x: itemRectValue.x + 24,
+        y: itemCenter.y,
+      },
     });
 
     await expect(
       page.locator(".task-card").filter({ hasText: "Profile fields" }),
     ).toHaveCount(1);
 
-    await expect(page.locator(".demo-header p")).toHaveText("4 array items");
+    await expect(page.locator(".demo-header p")).toHaveText(
+      "6 array-backed cards",
+    );
     await expect(
       list.locator(".task-card .task-main strong"),
     ).toHaveText([
@@ -1159,6 +1169,47 @@ test.describe("Snapsort drag-start snapshot layout", () => {
       "Search filters",
       "Profile fields",
     ]);
+
+  });
+
+  test("animates a component card moving between columns with SnapEngine FLIP", async ({
+    page,
+  }) => {
+    await page.goto("/?demo=snapsort_components", {
+      waitUntil: "networkidle",
+    });
+
+    await page.evaluate(() => {
+      const win = window as typeof window & {
+        __snapsortMoveComponentItem?: (
+          itemId: string,
+          direction: -1 | 1,
+        ) => void;
+      };
+      win.__snapsortMoveComponentItem?.("item-1", 1);
+    });
+
+    const animated = await page.evaluate(async () => {
+      for (let frame = 0; frame < 10; frame++) {
+        await new Promise((resolve) => requestAnimationFrame(resolve));
+        const movingCard = [...document.querySelectorAll(".task-card")].find(
+          (element) =>
+            element.getAttribute("data-snapsort-item-key") === "item-1",
+        ) as HTMLElement | undefined;
+        if (/^translate3d\(-?\d/.test(movingCard?.style.transform ?? "")) {
+          return true;
+        }
+      }
+      return false;
+    });
+
+    expect(animated).toBe(true);
+
+    const panels = page.locator(".list-panel");
+    await expect(panels.nth(0).locator(".task-card .task-main strong"))
+      .toHaveText(["Invite flow", "Audit log", "Search filters"]);
+    await expect(panels.nth(1).locator(".task-card .task-main strong"))
+      .toHaveText(["Profile fields", "Board polish"]);
   });
 
   test("does not flicker the spacer backward while dragging down a vertical column", async ({

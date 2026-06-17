@@ -8,3 +8,4 @@ export type {
   SnapSortDomRemoveEvent,
 } from "./container";
 export { ItemObject } from "./item";
+export type { ItemId, ItemMetadata } from "./item";

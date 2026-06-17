@@ -289,7 +289,10 @@ class Engine {
     }
   }
 
-  #processQueue(stage: string, queue: Map<string, Map<string, queueEntry>>) {
+  async #processQueue(
+    stage: string,
+    queue: Map<string, Map<string, queueEntry>>,
+  ) {
     // Keep a set of all objects that have been processed
     const processedObjects: Set<BaseObject> = new Set();
     for (const queueEntry of queue.values()) {
@@ -305,7 +308,7 @@ class Engine {
           continue;
         }
         for (const callback of objectEntry.callback) {
-          callback();
+          await callback();
         }
         if (!processedObjects.has(objectEntry.object)) {
           processedObjects.add(objectEntry.object);
@@ -338,8 +341,8 @@ class Engine {
     stage: string,
     queue: Map<string, Map<string, queueEntry>>,
     _timestamp: number,
-  ): void {
-    this.#processQueue(stage, queue);
+  ): Promise<void> {
+    return this.#processQueue(stage, queue);
   }
 
   /**

@@ -151,17 +151,17 @@ export class ReactiveTransform implements TransformProperty {
 export class queueEntry {
   uuid: UUID | string;
   object: BaseObject;
-  callback: null | Array<() => void>;
+  callback: null | Array<RenderQueueCallback>;
   constructor(
     object: BaseObject,
-    callback: null | (() => void),
+    callback: null | RenderQueueCallback,
     uuid: UUID | string | null = null,
   ) {
     this.uuid = uuid ?? object.global.getGlobalId();
     this.object = object;
     this.callback = callback ? [callback.bind(object)] : null;
   }
-  addCallback(callback: () => void) {
+  addCallback(callback: RenderQueueCallback) {
     if (this.callback) {
       this.callback.push(callback.bind(this.object));
     } else {
@@ -179,6 +179,8 @@ export class queueEntry {
 export interface frameStats {
   timestamp: number;
 }
+
+export type RenderQueueCallback = () => void | Promise<void>;
 
 const animationOwnerMap = new WeakMap<AnimationInterface, BaseObject>();
 
@@ -428,7 +430,7 @@ export class BaseObject {
       | "WRITE_2"
       | "READ_3"
       | "WRITE_3" = "READ_1",
-    callback: null | (() => void) = null,
+    callback: null | RenderQueueCallback = null,
     queueID: string | null = null,
   ): queueEntry {
     const request = new queueEntry(this, callback, queueID);
@@ -1339,14 +1341,14 @@ export class ElementObject extends BaseObject {
 
   requestWrite(
     mutate: boolean = true,
-    writeCallback: null | (() => void) = null,
+    writeCallback: null | RenderQueueCallback = null,
     stage: "WRITE_1" | "WRITE_2" | "WRITE_3" = "WRITE_1",
   ): queueEntry {
-    const callback = () => {
+    const callback = async () => {
       if (mutate) {
         this.writeDom();
       }
-      writeCallback?.();
+      await writeCallback?.();
     };
     return this.queueUpdate(stage, callback, stage);
   }

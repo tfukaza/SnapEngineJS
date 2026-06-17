@@ -1,5 +1,6 @@
 import { BaseObject } from "@snap-engine/core";
 import { ItemObject } from "./item";
+import type { ItemMetadata } from "./item";
 
 export interface AnimationConfig {
   timing_function?: string;
@@ -14,14 +15,14 @@ export interface ContainerAnimations {
 
 export interface SnapSortDomRemoveEvent {
   item: ItemObject;
-  itemMetadata: Record<string, unknown>;
+  itemMetadata: ItemMetadata;
   container: ItemContainer;
   containerMetadata: Record<string, unknown>;
 }
 
 export interface SnapSortDomInsertEvent {
   item: ItemObject;
-  itemMetadata: Record<string, unknown>;
+  itemMetadata: ItemMetadata;
   container: ItemContainer;
   containerMetadata: Record<string, unknown>;
   index: number;
@@ -31,6 +32,7 @@ export interface SnapSortDomInsertEvent {
 export interface ItemContainerCallbacks {
   onDomRemove?: (event: SnapSortDomRemoveEvent) => void;
   onDomInsert?: (event: SnapSortDomInsertEvent) => void;
+  afterDomMutation?: () => void | Promise<void>;
 }
 
 export interface ItemContainerConfig {
@@ -38,6 +40,7 @@ export interface ItemContainerConfig {
   direction?: "column" | "row";
   name?: string;
   animation?: ContainerAnimations | null;
+  disableFlip?: boolean;
   noDrop?: boolean;
   callbacks?: ItemContainerCallbacks;
 }
