@@ -1,6 +1,11 @@
 {
   "name": "@snap-engine/snapline-react",
   "version": "0.1.0",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/tfukaza/SnapEngineJS",
+    "directory": "assets/snapline/react"
+  },
   "description": "React components for node graph UI",
   "type": "module",
   "keywords": [

@@ -1,6 +1,11 @@
 {
   "name": "@snap-engine/snapsort-svelte",
   "version": "0.2.0",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/tfukaza/SnapEngineJS",
+    "directory": "assets/snapsort/svelte"
+  },
   "description": "Svelte components for drag-and-drop system",
   "type": "module",
   "svelte": "./src/index.ts",

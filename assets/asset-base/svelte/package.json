@@ -1,6 +1,11 @@
 {
   "name": "@snap-engine/asset-base-svelte",
   "version": "0.2.0",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/tfukaza/SnapEngineJS",
+    "directory": "assets/asset-base/svelte"
+  },
   "type": "module",
   "svelte": "./src/index.ts",
   "exports": {

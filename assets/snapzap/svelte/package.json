@@ -1,6 +1,11 @@
 {
   "name": "@snap-engine/snapzap-svelte",
   "version": "0.1.0",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/tfukaza/SnapEngineJS",
+    "directory": "assets/snapzap/svelte"
+  },
   "description": "Svelte components for camera control and background",
   "type": "module",
   "keywords": [
