@@ -6,8 +6,8 @@
     let style = $state("position: absolute; overflow: visible; pointer-events: none; will-change: transform; transform: translate3d(0px, 0px, 0);");
     let dx = $state(0);
     let dy = $state(0);
-    let x0 = $state(line.transform.x);
-    let y0 = $state(line.transform.y);
+    let x0 = $state(line.worldTransform.x);
+    let y0 = $state(line.worldTransform.y);
     let x1 = $state(0);
     let y1 = $state(0);
     let x2 = $state(0);
@@ -17,11 +17,11 @@
 
     function renderLine() {
       const thisLine: LineComponent = line;
-      x0 = thisLine.transform.x;
-      y0 = thisLine.transform.y;
+      x0 = thisLine.worldTransform.x;
+      y0 = thisLine.worldTransform.y;
       style = `position: absolute; overflow: visible; pointer-events: none; will-change: transform; transform: translate3d(${x0}px, ${y0}px, 0);`;
-      dx = thisLine.endWorldX - thisLine.transform.x;
-      dy = thisLine.endWorldY - thisLine.transform.y;
+      dx = thisLine.endWorldX - thisLine.worldTransform.x;
+      dy = thisLine.endWorldY - thisLine.worldTransform.y;
         x1 = Math.abs(dx / 2);
         y1 = 0;
         x2 = dx - Math.abs(dx / 2);

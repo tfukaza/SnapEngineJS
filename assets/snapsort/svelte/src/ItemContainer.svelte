@@ -14,6 +14,7 @@
   itemContainer.locked = locked;
   itemContainer.metadata = metadata;
   container = itemContainer;
+  const justifyContent = $derived(config.mainAxisAlign === "center" ? "center" : "flex-start");
   // If there's a parent container context, register this container as an item in it
   const parent: ItemContainer | Item = getContext("container");
   setContext("container", itemContainer);
@@ -35,7 +36,7 @@
 
 <div
   class="snapsort-container {className}"
-  style="flex-direction: {config.direction}"
+  style="flex-direction: {config.direction}; justify-content: {justifyContent}"
   bind:this={itemContainer.element}
 >
   {@render children?.()}

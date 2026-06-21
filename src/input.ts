@@ -28,7 +28,7 @@ export interface eventPosition {
 
 export interface pointerDownProp {
   event: PointerEvent;
-  gid: string | null;
+  objectId: string | null;
   position: eventPosition;
   button: number;
   isWithinEngine: boolean;
@@ -36,27 +36,27 @@ export interface pointerDownProp {
 
 export interface pointerMoveProp {
   event: PointerEvent | null;
-  gid: string | null;
+  objectId: string | null;
   position: eventPosition;
   button: number;
 }
 
 export interface pointerUpProp {
   event: PointerEvent;
-  gid: string | null;
+  objectId: string | null;
   position: eventPosition;
   button: number;
 }
 
 export interface mouseWheelProp {
   event: WheelEvent;
-  gid: string | null;
+  objectId: string | null;
   position: eventPosition;
   delta: number;
 }
 
 export interface dragStartProp {
-  gid: string | null;
+  objectId: string | null;
   pointerId: number;
   start: eventPosition;
   button: number;
@@ -64,7 +64,7 @@ export interface dragStartProp {
 }
 
 export interface dragProp {
-  gid: string | null;
+  objectId: string | null;
   pointerId: number;
   start: eventPosition;
   position: eventPosition;
@@ -73,7 +73,7 @@ export interface dragProp {
 }
 
 export interface dragEndProp {
-  gid: string | null;
+  objectId: string | null;
   pointerId: number;
   start: eventPosition;
   end: eventPosition;
@@ -86,20 +86,20 @@ export interface PinchSnapshot {
 }
 
 export interface pinchStartProp {
-  gid: string | null;
+  objectId: string | null;
   gestureID: string;
   start: PinchSnapshot;
 }
 
 export interface pinchProp {
-  gid: string | null;
+  objectId: string | null;
   gestureID: string;
   start: PinchSnapshot;
   current: PinchSnapshot;
 }
 
 export interface pinchEndProp {
-  gid: string | null;
+  objectId: string | null;
   gestureID: string;
   start: PinchSnapshot;
   current: PinchSnapshot;
@@ -126,7 +126,7 @@ export interface InputEventCallback {
  */
 export type pointerData = {
   id: number; // pointer id
-  callerGID: string | null; // GID of the element that triggered the pointer event
+  callerObjectId: string | null; // ID of the object that triggered the pointer event
   timestamp: number; // Timestamp of the pointer event
   x: number; // Screen-space x coordinate
   y: number;
@@ -228,17 +228,14 @@ class InputControl {
   #containerController: AbortController | null = null;
   #document: Document;
   #documentController: AbortController | null = null;
-  #elementByObjectGID: Map<string, HTMLElement>;
+  #elementByObjectId: Map<string, HTMLElement>;
   #engine: any;
-  #event: InputEventCallback;
   #gestureDict: { [key: string]: dragGesture | pinchGesture };
   #objectByElement: WeakMap<HTMLElement, ElementObject>;
   #pointerDict: { [key: number]: TrackedPointer };
-
   global: GlobalManager | null;
-
   globalCallbacks: GlobalCallbackRegistry;
-
+  #event: InputEventCallback;
   event: InputEventCallback;
 
   /**
@@ -256,7 +253,7 @@ class InputControl {
     this.#engine = engine;
     this.config = { ...DEFAULT_INPUT_CONTROL_CONFIG, ...config };
 
-    this.#elementByObjectGID = new Map();
+    this.#elementByObjectId = new Map();
     this.#gestureDict = {};
     this.#objectByElement = new WeakMap();
     this.#pointerDict = {};
@@ -326,7 +323,7 @@ class InputControl {
     this.#destroyListeners();
     this.globalCallbacks = this.#createGlobalCallbackRegistry();
     this.#container = null;
-    this.#elementByObjectGID.clear();
+    this.#elementByObjectId.clear();
     this.#gestureDict = {};
     this.#objectByElement = new WeakMap();
     this.#pointerDict = {};
@@ -335,27 +332,27 @@ class InputControl {
   registerObjectElement(object: ElementObject, element: HTMLElement) {
     this.unregisterObjectElement(object);
     this.#objectByElement.set(element, object);
-    this.#elementByObjectGID.set(object.gid, element);
+    this.#elementByObjectId.set(object.id, element);
   }
 
   unregisterObjectElement(object: ElementObject, element?: HTMLElement) {
     const registeredElement =
-      element ?? this.#elementByObjectGID.get(object.gid) ?? null;
+      element ?? this.#elementByObjectId.get(object.id) ?? null;
     if (registeredElement) {
       this.#objectByElement.delete(registeredElement);
     }
 
     if (
       !element ||
-      this.#elementByObjectGID.get(object.gid) === registeredElement
+      this.#elementByObjectId.get(object.id) === registeredElement
     ) {
-      this.#elementByObjectGID.delete(object.gid);
+      this.#elementByObjectId.delete(object.id);
     }
 
     for (const pointer of Object.values(this.#pointerDict)) {
       if (pointer.owner === object) {
         pointer.owner = null;
-        pointer.callerGID = null;
+        pointer.callerObjectId = null;
       }
       if (pointer.currentOwner === object) {
         pointer.currentOwner = null;
@@ -373,7 +370,7 @@ class InputControl {
     const pointer = this.#pointerDict[pointerId];
     if (pointer) {
       pointer.owner = owner;
-      pointer.callerGID = this.#getOwnerGID(owner);
+      pointer.callerObjectId = this.#getOwnerId(owner);
     }
 
     const gesture = this.#gestureDict[pointerId];
@@ -384,7 +381,7 @@ class InputControl {
 
   subscribeGlobalCursorEvent<EventName extends keyof InputEventCallback>(
     event: EventName,
-    gid: string,
+    id: string,
     callback: (prop: InputEventPayloadMap[EventName]) => void,
     engine: any | null,
   ) {
@@ -392,14 +389,14 @@ class InputControl {
       string,
       { callback: GlobalInputCallback; engine: any | null }
     >;
-    callbacks[gid] = {
+    callbacks[id] = {
       callback: callback as GlobalInputCallback,
       engine,
     };
   }
 
-  unsubscribeGlobalCursorEvent(event: keyof InputEventCallback, gid: string) {
-    delete this.globalCallbacks[event][gid];
+  unsubscribeGlobalCursorEvent(event: keyof InputEventCallback, id: string) {
+    delete this.globalCallbacks[event][id];
   }
 
   #destroyListeners() {
@@ -477,7 +474,7 @@ class InputControl {
     );
     this.#pointerDict[event.pointerId] = {
       id: event.pointerId,
-      callerGID: owner?.gid ?? null,
+      callerObjectId: owner?.id ?? null,
       timestamp: event.timeStamp,
       x: event.clientX,
       y: event.clientY,
@@ -503,7 +500,7 @@ class InputControl {
 
     const prop: pointerDownProp = {
       event,
-      gid: owner?.gid ?? null,
+      objectId: owner?.id ?? null,
       position,
       button: event.buttons,
       isWithinEngine,
@@ -538,7 +535,7 @@ class InputControl {
     const position = this.#getCoordinates(event.clientX, event.clientY);
     const prop: pointerMoveProp = {
       event,
-      gid: currentOwner?.gid ?? null,
+      objectId: currentOwner?.id ?? null,
       position,
       button: event.buttons,
     };
@@ -579,7 +576,7 @@ class InputControl {
     const position = this.#getCoordinates(event.clientX, event.clientY);
     const prop: pointerUpProp = {
       event,
-      gid: currentOwner?.gid ?? null,
+      objectId: currentOwner?.id ?? null,
       position,
       button: event.buttons,
     };
@@ -615,7 +612,7 @@ class InputControl {
     const owner = this.#getTargetOwner(event);
     const prop: mouseWheelProp = {
       event,
-      gid: owner?.gid ?? null,
+      objectId: owner?.id ?? null,
       position: this.#getCoordinates(event.clientX, event.clientY),
       delta: event.deltaY,
     };
@@ -691,7 +688,7 @@ class InputControl {
     }
 
     const prop: dragStartProp = {
-      gid: this.#getOwnerGID(pointer.owner),
+      objectId: this.#getOwnerId(pointer.owner),
       pointerId: pointer.id,
       start: this.#getCoordinates(pointer.startX, pointer.startY),
       button: pointer.button,
@@ -706,7 +703,7 @@ class InputControl {
     const start = this.#getCoordinates(pointer.startX, pointer.startY);
     const position = this.#getCoordinates(pointer.x, pointer.y);
     const prop: dragProp = {
-      gid: this.#getOwnerGID(pointer.owner),
+      objectId: this.#getOwnerId(pointer.owner),
       pointerId: pointer.id,
       start,
       position,
@@ -727,7 +724,7 @@ class InputControl {
 
   #fireDragEnd(pointer: TrackedPointer, button: number) {
     const prop: dragEndProp = {
-      gid: this.#getOwnerGID(pointer.owner),
+      objectId: this.#getOwnerId(pointer.owner),
       pointerId: pointer.id,
       start: this.#getCoordinates(pointer.startX, pointer.startY),
       end: this.#getCoordinates(
@@ -790,7 +787,7 @@ class InputControl {
 
         const pinchStartGesture = this.#gestureDict[gestureKey] as pinchGesture;
         const prop: pinchStartProp = {
-          gid: this.#getOwnerGID(pinchStartGesture.member),
+          objectId: this.#getOwnerId(pinchStartGesture.member),
           gestureID: gestureKey,
           start: pinchStartGesture.start,
         };
@@ -805,7 +802,7 @@ class InputControl {
       };
 
       const prop: pinchProp = {
-        gid: this.#getOwnerGID(gesture.member),
+        objectId: this.#getOwnerId(gesture.member),
         gestureID: gestureKey,
         start: gesture.start,
         current: gesture.current,
@@ -828,7 +825,7 @@ class InputControl {
       }
 
       const prop: pinchEndProp = {
-        gid: this.#getOwnerGID(gesture.member),
+        objectId: this.#getOwnerId(gesture.member),
         gestureID: gestureKey,
         start: gesture.start,
         current: gesture.current,
@@ -892,15 +889,15 @@ class InputControl {
     return path;
   }
 
-  #getOwnerGID(owner: ElementObject | null) {
+  #getOwnerId(owner: ElementObject | null) {
     if (!owner || !this.#isOwnerRegistered(owner)) {
       return null;
     }
-    return owner.gid;
+    return owner.id;
   }
 
   #isOwnerRegistered(owner: ElementObject) {
-    const element = this.#elementByObjectGID.get(owner.gid);
+    const element = this.#elementByObjectId.get(owner.id);
     return !!element && this.#objectByElement.get(element) === owner;
   }
 

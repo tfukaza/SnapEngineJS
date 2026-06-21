@@ -34,10 +34,10 @@ engine.assignDom(document.getElementById("container") as HTMLElement);
 const object = new ElementObject(engine, null);
 object.element = document.getElementById("item");
 
-object.queueUpdate("WRITE_1", () => {
+object.schedule(() => {
   object.worldPosition = [100, 200];
   object.writeTransform();
-});
+}, { stage: "WRITE_1" });
 ````
 
 ## License

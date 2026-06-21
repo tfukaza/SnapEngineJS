@@ -39,7 +39,7 @@ const ConnectorReact = forwardRef<ConnectorRef, ConnectorProps>(
         return;
       }
 
-      connectorRef.current = new ConnectorComponent(engine.global, nodeObject, {
+      connectorRef.current = new ConnectorComponent(engine, nodeObject, {
         name: name,
         maxConnectors: maxConnectors,
         allowDragOut: allowDragOut,

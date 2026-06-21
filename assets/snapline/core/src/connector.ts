@@ -1,5 +1,4 @@
 import { ElementObject, BaseObject } from "@snap-engine/core";
-import type { frameStats } from "@snap-engine/core";
 import { NodeComponent } from "./node";
 import { LineComponent } from "./line";
 import type { pointerDownProp, dragProp, dragEndProp } from "@snap-engine/core";
@@ -8,7 +7,7 @@ import {
   CircleCollider,
   PointCollider,
 } from "@snap-engine/core/collision";
-import { GlobalManager, EventProxyFactory } from "@snap-engine/core";
+import { EventProxyFactory } from "@snap-engine/core";
 
 enum ConnectorState {
   IDLE,
@@ -31,7 +30,6 @@ interface ConnectorCallback {
 }
 
 class ConnectorComponent extends ElementObject {
-  declare parent: NodeComponent;
   #config: ConnectorConfig;
   #name: string;
   #prop: { [key: string]: any };
@@ -46,6 +44,14 @@ class ConnectorComponent extends ElementObject {
 
   #connectorCallback: ConnectorCallback | null = null;
 
+  get parent(): NodeComponent {
+    return super.parent as NodeComponent;
+  }
+
+  set parent(parent: BaseObject | null) {
+    super.parent = parent;
+  }
+
   constructor(
     engine: any,
     parent: NodeComponent,
@@ -57,7 +63,7 @@ class ConnectorComponent extends ElementObject {
     this.#outgoingLines = [];
     this.#incomingLines = [];
     this.#config = config;
-    this.#name = config.name || this.gid || "";
+    this.#name = config.name || this.id || "";
     this.event.input.pointerDown = this.onCursorDown;
 
     this.#hitCircle = new CircleCollider(
@@ -77,16 +83,17 @@ class ConnectorComponent extends ElementObject {
 
     // Center colliders on the connector element once DOM is assigned
     this.event.dom.onAssignDom = () => {
-      this.queueUpdate("READ_1", () => {
-        this.readDom();
-        const prop = this.getDomProperty("READ_1");
-        const centerX = prop.width / 2;
-        const centerY = prop.height / 2;
-        this.#hitCircle.local.x = centerX;
-        this.#hitCircle.local.y = centerY;
-        this.#mouseHitBox.local.x = centerX;
-        this.#mouseHitBox.local.y = centerY;
-      });
+      this.schedule(
+        () => {
+          this.readDom();
+          const prop = this.getDomProperty("READ_1");
+          const centerX = prop.width / 2;
+          const centerY = prop.height / 2;
+          this.#hitCircle.localPosition = [centerX, centerY];
+          this.#mouseHitBox.localPosition = [centerX, centerY];
+        },
+        { stage: "READ_1" },
+      );
     };
 
     this.#connectorCallback = {
@@ -137,8 +144,8 @@ class ConnectorComponent extends ElementObject {
   get center(): { x: number; y: number } {
     const prop = this.getDomProperty("READ_1");
     return {
-      x: this.transform.x + prop.width / 2,
-      y: this.transform.y + prop.height / 2,
+      x: this.worldTransform.x + prop.width / 2,
+      y: this.worldTransform.y + prop.height / 2,
     };
   }
 
@@ -148,7 +155,7 @@ class ConnectorComponent extends ElementObject {
 
   onCursorDown(prop: pointerDownProp): void {
     const currentIncomingLines = this.#incomingLines.filter(
-      (i) => !i._requestDelete,
+      (i) => !i.isDeleteRequested,
     );
     // Skip if it's not a left click
     if (prop.event.button != 0) {
@@ -189,7 +196,6 @@ class ConnectorComponent extends ElementObject {
 
   assignToNode(parent: NodeComponent) {
     this.parent = parent;
-    parent.children.push(this);
     let parent_ref = this.parent as NodeComponent;
     parent_ref._prop[this.#name] = null;
     this.#prop = parent_ref._prop;
@@ -208,7 +214,6 @@ class ConnectorComponent extends ElementObject {
     } else {
       line = new LineComponent(this.engine, this);
     }
-    this.children.push(line);
     return line;
   }
 
@@ -233,14 +238,14 @@ class ConnectorComponent extends ElementObject {
       _: Collider,
       __: Collider,
     ) => {
-      // console.log("onCollide", this.gid);
+      // console.log("onCollide", this.id);
       this.findClosestConnector();
     };
     this.#mouseHitBox.event.collider.onEndContact = (
       _: Collider,
       otherObject: Collider,
     ) => {
-      if (this.#targetConnector?.gid == otherObject.parent.gid) {
+      if (this.#targetConnector?.id == otherObject.parent.id) {
         this.#targetConnector = null;
       }
     };
@@ -248,32 +253,31 @@ class ConnectorComponent extends ElementObject {
     this.runDragOutLine({
       position: prop.position,
       start: {
-        x: this.transform.x,
-        y: this.transform.y,
+        x: this.worldTransform.x,
+        y: this.worldTransform.y,
       },
       delta: {
-        x: prop.position.x - this.transform.x,
-        y: prop.position.y - this.transform.y,
+        x: prop.position.x - this.worldTransform.x,
+        y: prop.position.y - this.worldTransform.y,
       },
     } as dragProp);
   }
 
   findClosestConnector() {
     let connectorCollider: Array<Collider> = Array.from(
-      this.#mouseHitBox._currentCollisions,
+      this.#mouseHitBox.currentCollisions,
     ).filter((c) => c.parent instanceof ConnectorComponent);
     let connectors: Array<ConnectorComponent> = connectorCollider
       .map((c) => c.parent as ConnectorComponent)
       .sort((a, b) => {
         const centerA = a.center;
         const centerB = b.center;
+        const [mouseX, mouseY] = this.#mouseHitBox.worldPosition;
         let da = Math.sqrt(
-          Math.pow(centerA.x - this.#mouseHitBox.local.x, 2) +
-            Math.pow(centerA.y - this.#mouseHitBox.local.y, 2),
+          Math.pow(centerA.x - mouseX, 2) + Math.pow(centerA.y - mouseY, 2),
         );
         let db = Math.sqrt(
-          Math.pow(centerB.x - this.#mouseHitBox.local.x, 2) +
-            Math.pow(centerB.y - this.#mouseHitBox.local.y, 2),
+          Math.pow(centerB.x - mouseX, 2) + Math.pow(centerB.y - mouseY, 2),
         );
         return da - db;
       });
@@ -293,8 +297,7 @@ class ConnectorComponent extends ElementObject {
       console.error(`Error: Outgoing lines is empty`);
       return;
     }
-    this.#mouseHitBox.local.x = prop.position.x - this.transform.x;
-    this.#mouseHitBox.local.y = prop.position.y - this.transform.y;
+    this.#mouseHitBox.worldPosition = [prop.position.x, prop.position.y];
 
     let line = this.#outgoingLines[0];
 
@@ -321,7 +324,7 @@ class ConnectorComponent extends ElementObject {
     if (targetConnector == null) {
       return;
     }
-    if (targetConnector.gid == this.gid) {
+    if (targetConnector.id == this.id) {
       return;
     }
     const connectorCenter = targetConnector.center;
@@ -348,7 +351,10 @@ class ConnectorComponent extends ElementObject {
 
       target.#prop[target.#name] = this.#prop[this.#name];
 
-      this.#outgoingLines[0].setLineEnd(target.transform.x, target.transform.y);
+      this.#outgoingLines[0].setLineEnd(
+        target.worldTransform.x,
+        target.worldTransform.y,
+      );
     } else {
       this.deleteLine(0);
     }
@@ -367,8 +373,7 @@ class ConnectorComponent extends ElementObject {
     this.#targetConnector = null;
     this.#mouseHitBox.event.collider.onBeginContact = null;
     this.#mouseHitBox.event.collider.onEndContact = null;
-    this.#mouseHitBox.local.x = 0;
-    this.#mouseHitBox.local.y = 0;
+    this.#mouseHitBox.localPosition = [0, 0];
   }
 
   startPickUpLine(line: LineComponent, prop: pointerDownProp) {
@@ -386,7 +391,7 @@ class ConnectorComponent extends ElementObject {
     line: LineComponent | null,
   ): boolean {
     const currentIncomingLines = connector.incomingLines.filter(
-      (i) => !i._requestDelete,
+      (i) => !i.isDeleteRequested,
     );
 
     if (currentIncomingLines.some((i) => i.start == this)) {
@@ -417,7 +422,7 @@ class ConnectorComponent extends ElementObject {
   disconnectFromConnector(connector: ConnectorComponent) {
     for (const line of this.#outgoingLines) {
       if (line.target == connector) {
-        line._requestDelete = true;
+        line.isDeleteRequested = true;
         break;
       }
     }

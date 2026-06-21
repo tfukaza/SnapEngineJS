@@ -49,6 +49,11 @@ export class ItemObject extends ElementObject {
   #isGhost: boolean = false;
   #depth: number = 0;
   ghostItem: ItemObject | null = null; // The ghost item instance, so we can remove it later
+  #pendingGhostTarget: {
+    ghostItem: ItemObject;
+    container: ItemContainer;
+    index: number;
+  } | null = null;
 
   constructor(
     engine: any,
@@ -60,6 +65,9 @@ export class ItemObject extends ElementObject {
     this.event.input.dragStart = this.dragStart;
     this.event.input.drag = this.drag;
     this.event.input.dragEnd = this.dragEnd;
+    this.event.dom.onAssignDom = () => {
+      this.writeDom();
+    };
     this.transformMode = "none";
 
     this.ghostItem = null;
@@ -77,7 +85,7 @@ export class ItemObject extends ElementObject {
 
   #itemID(item: ItemObject) {
     const id = item.metadata.itemId;
-    return id ?? item.gid;
+    return id ?? item.id;
   }
 
   removeItem(id: ItemId) {
@@ -123,7 +131,7 @@ export class ItemObject extends ElementObject {
    *
    * Framework-driven moves can briefly leave SnapSort's object tree stale while
    * the DOM already contains the correct keyed element. This fallback finds that
-   * element and maps its `data-engine-gid` back to the engine object table.
+   * element and maps its `data-engine-id` back to the engine object table.
    *
    * @param id Stable DOM item key, usually the same value as `metadata.itemId`.
    * @returns Matching item object, or null when no keyed DOM element can be mapped.
@@ -131,11 +139,11 @@ export class ItemObject extends ElementObject {
   #findItemByDomKey(id: ItemId): ItemObject | null {
     const root = (this.#rootContainer as unknown as ItemObject | null) ?? this;
     const element = root.#findFlipElement(root, id);
-    const gid = element?.getAttribute("data-engine-gid");
-    if (!gid) return null;
+    const objectId = element?.getAttribute("data-engine-id");
+    if (!objectId) return null;
 
-    const table = this.global.getEngineObjectTable(this.engine ?? null, false);
-    const object = table?.[gid];
+    const table = this.global.getEngineObjectTable(this.engine);
+    const object = table?.[objectId];
     return object instanceof ItemObject ? object : null;
   }
 
@@ -183,14 +191,14 @@ export class ItemObject extends ElementObject {
   getIndexAndContainer(): { index: number; container: ItemObject | null } {
     if (!this.parent) {
       DEBUG_LOGS &&
-        debugLog(`[getIndexAndContainer] ${this.gid} has no parent → index=-1`);
+        debugLog(`[getIndexAndContainer] ${this.id} has no parent → index=-1`);
       return { index: -1, container: null };
     }
     const parentContainer = this.parent as unknown as ItemObject;
     const idx = parentContainer.#itemOrderedList.indexOf(this);
     DEBUG_LOGS &&
       debugLog(
-        `[getIndexAndContainer] ${this.gid} → container=${parentContainer.gid}, index=${idx}, orderedList=[${parentContainer.#itemOrderedList.map((i) => i.gid).join(", ")}]`,
+        `[getIndexAndContainer] ${this.id} → container=${parentContainer.id}, index=${idx}, orderedList=[${parentContainer.#itemOrderedList.map((i) => i.id).join(", ")}]`,
       );
     return { index: idx, container: parentContainer };
   }
@@ -211,7 +219,7 @@ export class ItemObject extends ElementObject {
     return this.parent as unknown as ItemContainer;
   }
 
-  setContainer(value: ItemContainer) {
+  setContainer(_value: ItemContainer) {
     // this.#containerObject = value;
   }
 
@@ -262,16 +270,16 @@ export class ItemObject extends ElementObject {
 
   static #containerColors = new Map<string, string>();
 
-  static #colorForContainer(gid: string): string {
-    let color = ItemObject.#containerColors.get(gid);
+  static #colorForContainer(id: string): string {
+    let color = ItemObject.#containerColors.get(id);
     if (!color) {
       let hash = 0;
-      for (let i = 0; i < gid.length; i++) {
-        hash = ((hash << 5) - hash + gid.charCodeAt(i)) | 0;
+      for (let i = 0; i < id.length; i++) {
+        hash = ((hash << 5) - hash + id.charCodeAt(i)) | 0;
       }
       const hue = ((hash % 360) + 360) % 360;
       color = `hsl(${hue}, 80%, 55%)`;
-      ItemObject.#containerColors.set(gid, color);
+      ItemObject.#containerColors.set(id, color);
     }
     return color;
   }
@@ -283,10 +291,10 @@ export class ItemObject extends ElementObject {
   debugAllItems(
     node: ItemObject = (this.#rootContainer as unknown as ItemObject) ?? this,
   ) {
-    const color = ItemObject.#colorForContainer(node.gid);
+    const color = ItemObject.#colorForContainer(node.id);
     for (const child of node.children) {
       if (!(child instanceof ItemObject)) continue;
-      const prop = child.getDomProperty("READ_1");
+      const prop = child.dragSnapshot ?? child.currentDomProperty;
       if (prop) {
         const cx = prop.x + prop.width / 2;
         const cy = prop.y + prop.height / 2;
@@ -296,7 +304,7 @@ export class ItemObject extends ElementObject {
           4,
           color,
           true,
-          `center-read1-${child.gid}`,
+          `center-read1-${child.id}`,
           "item-positions",
         );
       }
@@ -317,10 +325,38 @@ export class ItemObject extends ElementObject {
   #findRootContainer() {
     if (this.parent == null) {
       this.#updateState(this as unknown as ItemContainer);
-      this.requestRead(false, true, "READ_1", true);
+      this.#queueReadTree("READ_1", `snapsort-read-root-${this.id}`);
     } else {
       const parentContainer = this.parent as unknown as ItemObject;
       parentContainer.#findRootContainer();
+    }
+  }
+
+  #queueReadTree(
+    stage: "READ_1" | "READ_2" | "READ_3",
+    queueId: string,
+    config: { unapplyTransform?: boolean; saveWorldPosition?: boolean } = {},
+  ) {
+    this.schedule(
+      () => {
+        this.#readDomTree(config);
+      },
+      { stage, queueId },
+    );
+  }
+
+  #readDomTree(
+    config: { unapplyTransform?: boolean; saveWorldPosition?: boolean } = {},
+  ) {
+    this.readDom({ unapplyTransform: config.unapplyTransform });
+    if (config.saveWorldPosition ?? true) {
+      const prop = this.currentDomProperty;
+      this.worldPosition = [prop.x, prop.y];
+    }
+    for (const child of this.children) {
+      if (child instanceof ItemObject) {
+        child.#readDomTree(config);
+      }
     }
   }
 
@@ -354,7 +390,7 @@ export class ItemObject extends ElementObject {
    * @returns Nothing.
    */
   #captureDragSnapshotTree() {
-    this.#dragSnapshot = cloneDomProperty(this.getDomProperty("READ_1"));
+    this.#dragSnapshot = cloneDomProperty(this.currentDomProperty);
     this.#dragSnapshotOrderedList = this.#itemOrderedList.slice();
     for (const child of this.#dragSnapshotOrderedList) {
       child.#captureDragSnapshotTree();
@@ -634,18 +670,16 @@ export class ItemObject extends ElementObject {
     }
 
     let snapshot: FlipSnapshot[] = [];
-    const queuePrefix = `snapsort-flip-${root.gid}`;
+    const queuePrefix = `snapsort-flip-${root.id}`;
 
-    root.queueUpdate(
-      "READ_2",
+    root.schedule(
       () => {
         snapshot = this.#captureFlipSnapshot(root, excludedItem);
       },
-      `${queuePrefix}-read-first`,
+      { stage: "READ_2", queueId: `${queuePrefix}-read-first` },
     );
 
-    root.queueUpdate(
-      "WRITE_2",
+    root.schedule(
       async () => {
         for (const { item } of snapshot) {
           item.cancelAnimations();
@@ -654,77 +688,22 @@ export class ItemObject extends ElementObject {
         mutate();
         await this.#afterDomMutation(container);
       },
-      `${queuePrefix}-mutate`,
+      { stage: "WRITE_2", queueId: `${queuePrefix}-mutate` },
     );
 
-    root.queueUpdate(
-      "READ_3",
+    root.schedule(
       () => {
         this.#captureFlipLast(snapshot, root);
       },
-      `${queuePrefix}-read-last`,
+      { stage: "READ_3", queueId: `${queuePrefix}-read-last` },
     );
 
-    root.queueUpdate(
-      "WRITE_3",
+    root.schedule(
       () => {
         this.#playFlipAnimations(snapshot, animationConfig, root);
       },
-      `${queuePrefix}-play`,
+      { stage: "WRITE_3", queueId: `${queuePrefix}-play` },
     );
-  }
-
-  /**
-   * Temporarily move the DOM element of an item to the root container during dragging,
-   * so it can be positioned absolutely within the root container without affecting the
-   * layout of its original container.
-   *
-   * @returns Nothing.
-   */
-  #hoistElementToRoot() {
-    // Prototype: avoid moving framework-owned DOM during drag.
-    // if (this.#rootContainer) {
-    //   // Move the DOM element to be a child of the root container's DOM element,
-    //   // so it can be positioned absolutely within it.
-    //   const element = this.element;
-    //   const rootElement = this.#rootContainer.element;
-    //   if (element && rootElement) {
-    //     rootElement.appendChild(element);
-    //   }
-    // }
-  }
-
-  /**
-   * Move the DOM element of an item back to its original container.
-   *
-   * @param container Container that should receive the dragged element.
-   * @returns Nothing.
-   */
-  #lowerElementToContainer(container: ItemContainer) {
-    // Prototype: avoid moving framework-owned DOM during drag.
-    // const element = this.element;
-    // const containerElement = container.element;
-    // if (element && containerElement) {
-    //   containerElement.appendChild(element);
-    // }
-  }
-
-  /**
-   * Collect the root and all descendant SnapSort items for drag positioning.
-   *
-   * @param node Current subtree root.
-   * @param items Accumulator for collected items.
-   * @returns Items whose inline position may need temporary adjustment.
-   */
-  #collectPositionContextItems(
-    node: ItemObject,
-    items: ItemObject[] = [],
-  ): ItemObject[] {
-    items.push(node);
-    for (const child of node.#itemOrderedList) {
-      this.#collectPositionContextItems(child, items);
-    }
-    return items;
   }
 
   /**
@@ -741,10 +720,7 @@ export class ItemObject extends ElementObject {
   }
 
   /**
-   * Make the root the absolute-positioning context during an active drag.
-   *
-   * Children are temporarily set to static so a dragged `width: 100%` item keeps
-   * the measured item width instead of expanding to the root container width.
+   * Prepare the root as a fallback absolute-positioning context.
    *
    * @returns Nothing.
    */
@@ -753,12 +729,7 @@ export class ItemObject extends ElementObject {
     if (!root?.element) return;
 
     this.#dragPositionContextSnapshot.clear();
-    for (const item of this.#collectPositionContextItems(root)) {
-      this.#setTemporaryPosition(
-        item.element,
-        item === root ? "relative" : "static",
-      );
-    }
+    this.#setTemporaryPosition(root.element, "relative");
   }
 
   /**
@@ -771,6 +742,46 @@ export class ItemObject extends ElementObject {
       element.style.position = position;
     }
     this.#dragPositionContextSnapshot.clear();
+  }
+
+  /**
+   * Move the active dragged DOM node under the current target container.
+   *
+   * The item intentionally stays out of the destination container's ordered
+   * list until drop; the ghost owns layout space while this absolute element
+   * follows the closest useful positioning parent.
+   *
+   * @param container Container that currently owns the ghost/drop target.
+   * @returns Nothing.
+   */
+  #moveDraggedElementToContainer(container: ItemContainer) {
+    const containerItem = container as unknown as ItemObject;
+    if (!this.element || !containerItem.element) return;
+
+    this.#setTemporaryPosition(containerItem.element, "relative");
+    if (this.element.parentElement !== containerItem.element) {
+      containerItem.element.appendChild(this.element);
+    }
+    this.transformMode = "relative";
+    this.transformOrigin = null;
+    this.style = {
+      position: "absolute",
+      top: "0px",
+      left: "0px",
+    };
+    this.writeDom();
+    this.schedule(
+      () => {
+        this.readDom({ unapplyTransform: true });
+      },
+      { stage: "READ_2", queueId: `dragged-read-${this.id}` },
+    );
+    this.schedule(
+      () => {
+        this.writeTransform();
+      },
+      { stage: "WRITE_2", queueId: `dragged-transform-${this.id}` },
+    );
   }
 
   /**
@@ -793,15 +804,15 @@ export class ItemObject extends ElementObject {
         : -1;
       DEBUG_LOGS &&
         debugLog(
-          `[moveItemToContainer] item=${item.gid} from=${sourceContainer?.gid ?? "null"}[${sourceIndex}] to=${(container as unknown as ItemObject).gid}[${index}]`,
+          `[moveItemToContainer] item=${item.id} from=${sourceContainer?.id ?? "null"}[${sourceIndex}] to=${(container as unknown as ItemObject).id}[${index}]`,
         );
       DEBUG_LOGS &&
         debugLog(
-          `[moveItemToContainer]   source orderedList=[${sourceContainer ? sourceContainer.#itemOrderedList.map((i) => i.gid).join(", ") : "N/A"}]`,
+          `[moveItemToContainer]   source orderedList=[${sourceContainer ? sourceContainer.#itemOrderedList.map((i) => i.id).join(", ") : "N/A"}]`,
         );
       DEBUG_LOGS &&
         debugLog(
-          `[moveItemToContainer]   target orderedList=[${container.#itemOrderedList.map((i) => i.gid).join(", ")}]`,
+          `[moveItemToContainer]   target orderedList=[${container.#itemOrderedList.map((i) => i.id).join(", ")}]`,
         );
       // If the source and target container is the same, we must adjust the index
       // to account for the removal of the item from its original position.
@@ -827,7 +838,7 @@ export class ItemObject extends ElementObject {
       this.insertItemAt(container, item, index);
       DEBUG_LOGS &&
         debugLog(
-          `[moveItemToContainer]   DONE. target orderedList=[${container.#itemOrderedList.map((i) => i.gid).join(", ")}]`,
+          `[moveItemToContainer]   DONE. target orderedList=[${container.#itemOrderedList.map((i) => i.id).join(", ")}]`,
         );
     };
 
@@ -872,7 +883,7 @@ export class ItemObject extends ElementObject {
         : container.#itemOrderedList[index + 1].element;
     DEBUG_LOGS &&
       debugLog(
-        `[insertItemAt]   DOM insertBefore: item.element=${item.element?.id ?? "null"}, before=${itemAfterIndex ? (itemAfterIndex as any).element?.id ?? itemAfterIndex.gid : "null (append)"}`,
+        `[insertItemAt]   DOM insertBefore: item.element=${item.element?.id ?? "null"}, before=${itemAfterIndex ? (itemAfterIndex as any).element?.id ?? itemAfterIndex.id : "null (append)"}`,
       );
 
     const onDomInsert = item.isGhost ? null : container.callbacks?.onDomInsert;
@@ -904,16 +915,16 @@ export class ItemObject extends ElementObject {
   insertItemAt(container: ItemContainer, item: ItemObject, index: number) {
     DEBUG_LOGS &&
       debugLog(
-        `[insertItemAt] item=${item.gid} into container=${(container as unknown as ItemObject).gid} at index=${index}`,
+        `[insertItemAt] item=${item.id} into container=${(container as unknown as ItemObject).id} at index=${index}`,
       );
     DEBUG_LOGS &&
       debugLog(
-        `[insertItemAt]   BEFORE orderedList=[${container.#itemOrderedList.map((i) => i.gid).join(", ")}] (len=${container.#itemOrderedList.length})`,
+        `[insertItemAt]   BEFORE orderedList=[${container.#itemOrderedList.map((i) => i.id).join(", ")}] (len=${container.#itemOrderedList.length})`,
       );
     this.#attachItemToContainer(container, item, index);
     DEBUG_LOGS &&
       debugLog(
-        `[insertItemAt]   AFTER orderedList=[${container.#itemOrderedList.map((i) => i.gid).join(", ")}]`,
+        `[insertItemAt]   AFTER orderedList=[${container.#itemOrderedList.map((i) => i.id).join(", ")}]`,
       );
     this.#insertItemElement(container, item, index);
   }
@@ -950,16 +961,16 @@ export class ItemObject extends ElementObject {
   removeItemFrom(container: ItemContainer, item: ItemObject) {
     DEBUG_LOGS &&
       debugLog(
-        `[removeItemFrom] item=${item.gid} from container=${(container as unknown as ItemObject).gid}`,
+        `[removeItemFrom] item=${item.id} from container=${(container as unknown as ItemObject).id}`,
       );
     DEBUG_LOGS &&
       debugLog(
-        `[removeItemFrom]   BEFORE orderedList=[${container.#itemOrderedList.map((i) => i.gid).join(", ")}]`,
+        `[removeItemFrom]   BEFORE orderedList=[${container.#itemOrderedList.map((i) => i.id).join(", ")}]`,
       );
     this.#detachItemFromContainer(container, item);
     DEBUG_LOGS &&
       debugLog(
-        `[removeItemFrom]   AFTER orderedList=[${container.#itemOrderedList.map((i) => i.gid).join(", ")}]`,
+        `[removeItemFrom]   AFTER orderedList=[${container.#itemOrderedList.map((i) => i.id).join(", ")}]`,
       );
     this.#removeItemElement(container, item);
   }
@@ -1030,22 +1041,27 @@ export class ItemObject extends ElementObject {
     container: ItemContainer | null,
     index: number,
   ) {
-    let ghostItem = this.#rootContainer?.ghostItem;
+    const root = (this.#rootContainer as unknown as ItemObject | null) ?? this;
+    let ghostItem = root.ghostItem;
     DEBUG_LOGS &&
       debugLog(
-        `[updateGhostElement] original=${original.gid} container=${container ? (container as unknown as ItemObject).gid : "null"} index=${index} existingGhost=${ghostItem ? ghostItem.gid : "none"}`,
+        `[updateGhostElement] original=${original.id} container=${container ? (container as unknown as ItemObject).id : "null"} index=${index} existingGhost=${ghostItem ? ghostItem.id : "none"}`,
       );
 
     if (container === null) {
+      root.#pendingGhostTarget = null;
       if (ghostItem) {
         DEBUG_LOGS &&
           debugLog(
-            `[updateGhostElement] removing ghost ${ghostItem.gid} from ${(ghostItem.container as unknown as ItemObject)?.gid}`,
+            `[updateGhostElement] removing ghost ${ghostItem.id} from ${(ghostItem.parent as ItemObject | null)?.id ?? "null"}`,
           );
-        // Remove the ghost item and element from the root container.
-        this.removeItemFrom(ghostItem.container, ghostItem);
+        const ghostContainer = ghostItem.parent as unknown as ItemContainer | null;
+        if (ghostContainer) {
+          // Remove the ghost item and element from its current container.
+          this.removeItemFrom(ghostContainer, ghostItem);
+        }
         ghostItem.destroy();
-        this.#rootContainer!.ghostItem = null;
+        root.ghostItem = null;
       }
       return;
     }
@@ -1057,25 +1073,38 @@ export class ItemObject extends ElementObject {
       const ghostElement = document.createElement("div");
       ghostElement.id = "spacer";
 
-      const origProp =
-        original.dragSnapshot ?? original.getDomProperty("READ_1");
+      const origProp = original.dragSnapshot ?? original.currentDomProperty;
       ghostElement.style.width = origProp.width + "px";
       ghostElement.style.height = origProp.height + "px";
       ghostElement.style.margin = `${origProp.margin.top}px ${origProp.margin.right}px ${origProp.margin.bottom}px ${origProp.margin.left}px`;
-      // ghostElement.style.padding = "" + original.getDomProperty("READ_1").padding;
       ghostElement.style.boxSizing = "border-box";
       ghostElement.classList.add("ghost");
 
       ghostItem = new ItemObject(this.engine, null, true);
       ghostItem.element = ghostElement;
     }
+    root.ghostItem = ghostItem;
+    root.#pendingGhostTarget = { ghostItem, container, index };
 
     const moveGhost = () => {
+      const pendingTarget = root.#pendingGhostTarget;
+      if (
+        root.ghostItem !== ghostItem ||
+        pendingTarget?.ghostItem !== ghostItem ||
+        pendingTarget.container !== container ||
+        pendingTarget.index !== index ||
+        !ghostItem.element ||
+        !container.element
+      ) {
+        DEBUG_LOGS &&
+          debugLog(`[updateGhostElement] skipping stale ghost move`);
+        return;
+      }
       // Remove ghost from its current container before re-inserting at the new position
       if (ghostItem.parent) {
         DEBUG_LOGS &&
           debugLog(
-            `[updateGhostElement] removing ghost from current container=${(ghostItem.container as unknown as ItemObject)?.gid}`,
+            `[updateGhostElement] removing ghost from current container=${(ghostItem.container as unknown as ItemObject)?.id}`,
           );
         this.#detachItemFromContainer(ghostItem.container, ghostItem);
       } else {
@@ -1086,7 +1115,7 @@ export class ItemObject extends ElementObject {
       // This also sets the ghost item's container to the new container.
       DEBUG_LOGS &&
         debugLog(
-          `[updateGhostElement] inserting ghost at container=${(container as unknown as ItemObject).gid} index=${index}`,
+          `[updateGhostElement] inserting ghost at container=${(container as unknown as ItemObject).id} index=${index}`,
         );
       this.insertItemAt(container, ghostItem, index);
     };
@@ -1096,9 +1125,6 @@ export class ItemObject extends ElementObject {
     } else {
       moveGhost();
     }
-
-    // Root is responsible for maintaining the ghost element and removing it when necessary
-    this.#rootContainer!.ghostItem = ghostItem;
 
     // let item =
     //   itemIndex > this.#itemList.length - 1 ? null : this.#itemList[itemIndex];
@@ -1126,7 +1152,7 @@ export class ItemObject extends ElementObject {
     if (!root.#hasDragSnapshotTree() || !item.#dragSnapshot) {
       DEBUG_LOGS &&
         debugLog(
-          `[updateDropTarget] SKIP: waiting for drag snapshot root=${root.gid} item=${item.gid}`,
+          `[updateDropTarget] SKIP: waiting for drag snapshot root=${root.id} item=${item.id}`,
         );
       return;
     }
@@ -1142,7 +1168,7 @@ export class ItemObject extends ElementObject {
         : -1;
     DEBUG_LOGS &&
       debugLog(
-        `[updateDropTarget] item=${item.gid} target=${target ? `${target.container.gid}[snapshot:${target.index} live:${targetIndex}]` : "null"} ghostPos=${ghostSource?.container ? `${(ghostSource.container as unknown as ItemObject).gid}[${ghostSource.index}]` : "null"}`,
+        `[updateDropTarget] item=${item.id} target=${target ? `${target.container.id}[snapshot:${target.index} live:${targetIndex}]` : "null"} ghostPos=${ghostSource?.container ? `${(ghostSource.container as unknown as ItemObject).id}[${ghostSource.index}]` : "null"}`,
       );
     if (target?.container && ghostSource?.container) {
       const sameContainer = target.container === ghostSource.container;
@@ -1154,16 +1180,22 @@ export class ItemObject extends ElementObject {
       if (!sameContainer || !sameIndex) {
         DEBUG_LOGS &&
           debugLog(
-            `[updateDropTarget]   >>> MOVING ghost to ${target.container.gid}[${targetIndex}]`,
+            `[updateDropTarget]   >>> MOVING ghost to ${target.container.id}[${targetIndex}]`,
           );
         this.#updateGhostElement(
           item,
           target.container as unknown as ItemContainer,
           targetIndex,
         );
+        this.#moveDraggedElementToContainer(
+          target.container as unknown as ItemContainer,
+        );
       } else {
         DEBUG_LOGS &&
           debugLog(`[updateDropTarget]   SKIP: ghost already at target`);
+        this.#moveDraggedElementToContainer(
+          target.container as unknown as ItemContainer,
+        );
       }
     } else if (target?.container) {
       DEBUG_LOGS && debugLog(`[updateDropTarget]   >>> PLACING initial ghost`);
@@ -1172,6 +1204,9 @@ export class ItemObject extends ElementObject {
         target.container as unknown as ItemContainer,
         targetIndex,
       );
+      this.#moveDraggedElementToContainer(
+        target.container as unknown as ItemContainer,
+      );
     } else {
       DEBUG_LOGS && debugLog(`[updateDropTarget]   SKIP: no target`);
     }
@@ -1179,7 +1214,7 @@ export class ItemObject extends ElementObject {
 
   dragStart(prop: dragStartProp) {
     if (this.#locked) return;
-    DEBUG_LOGS && debugLog(`[dragStart] item=${this.gid}`);
+    DEBUG_LOGS && debugLog(`[dragStart] item=${this.id}`);
     // Set the root container for all items, and queue READ to update the state of all containers and items.
     this.#findRootContainer();
     const root = (this.#rootContainer as unknown as ItemObject) ?? this;
@@ -1189,142 +1224,159 @@ export class ItemObject extends ElementObject {
       this.getIndexAndContainer();
     DEBUG_LOGS &&
       debugLog(
-        `[dragStart] currentIndex=${currentIndex} currentContainer=${currentContainer?.gid ?? "null"}`,
+        `[dragStart] currentIndex=${currentIndex} currentContainer=${currentContainer?.id ?? "null"}`,
       );
     // Compute the drag offset in READ_1, after DOM positions are read but before any WRITE_1
     // callbacks (including drag events). This prevents race conditions where drag events
     // modify this.transform before the offset is calculated.
-    this.queueUpdate(
-      "READ_1",
+    this.schedule(
       () => {
-        this.#dragOffsetX = prop.start.x - this.transform.x;
-        this.#dragOffsetY = prop.start.y - this.transform.y;
+        this.#dragOffsetX = prop.start.x - this.worldTransform.x;
+        this.#dragOffsetY = prop.start.y - this.worldTransform.y;
         DEBUG_LOGS &&
           debugLog(
-            `[dragStart READ_1] offset=(${this.#dragOffsetX}, ${this.#dragOffsetY}) start=(${prop.start.x}, ${prop.start.y}) transform=(${this.transform.x}, ${this.transform.y})`,
+            `[dragStart READ_1] offset=(${this.#dragOffsetX}, ${this.#dragOffsetY}) start=(${prop.start.x}, ${prop.start.y}) transform=(${this.worldTransform.x}, ${this.worldTransform.y})`,
           );
         root.#captureDragSnapshotTree();
       },
-      `drag-start-offset-${this.gid}`,
+      { stage: "READ_1", queueId: `drag-start-offset-${this.id}` },
     );
 
-    this.queueUpdate("WRITE_1", () => {
-      DEBUG_LOGS &&
-        debugLog(
-          `[dragStart WRITE_1 callback] placing ghost at container=${currentContainer?.gid ?? "null"} index=${currentIndex}`,
-        );
+    this.schedule(
+      () => {
+        DEBUG_LOGS &&
+          debugLog(
+            `[dragStart WRITE_1 callback] placing ghost at container=${currentContainer?.id ?? "null"} index=${currentIndex}`,
+          );
 
-      this.#updateGhostElement(
-        this,
-        currentContainer as unknown as ItemContainer,
-        currentIndex,
-      );
-      // Remove the dragged item from its container's orderedList and engine children.
-      // The ghost now takes its place in the layout. The DOM element is kept (hoisted to root below).
-      this.#detachItemFromContainer(
-        currentContainer as unknown as ItemContainer,
-        this,
-      );
-      DEBUG_LOGS &&
-        debugLog(
-          `[dragStart] after removing dragged item, orderedList=[${(currentContainer as unknown as ItemObject).#itemOrderedList.map((i) => i.gid).join(", ")}]`,
+        this.#updateGhostElement(
+          this,
+          currentContainer as unknown as ItemContainer,
+          currentIndex,
         );
+        // Remove the dragged item from its container's orderedList and engine children.
+        // The ghost now takes its place in the layout. The DOM element is kept (hoisted to root below).
+        this.#detachItemFromContainer(
+          currentContainer as unknown as ItemContainer,
+          this,
+        );
+        DEBUG_LOGS &&
+          debugLog(
+            `[dragStart] after removing dragged item, orderedList=[${(currentContainer as unknown as ItemObject).#itemOrderedList.map((i) => i.id).join(", ")}]`,
+          );
 
-      const rootSnapshot = root.dragSnapshot;
-      const hoistOffsetX = rootSnapshot
-        ? -(rootSnapshot.border.left + rootSnapshot.padding.left)
-        : 0;
-      const hoistOffsetY = rootSnapshot
-        ? -(rootSnapshot.border.top + rootSnapshot.padding.top)
-        : 0;
-      const dragSnapshot = this.dragSnapshot;
-      this.style = {
-        cursor: "grabbing",
-        position: "absolute",
-        zIndex: "1000",
-        top: `${hoistOffsetY}px`,
-        left: `${hoistOffsetX}px`,
-        width: dragSnapshot ? `${dragSnapshot.width}px` : "",
-        height: dragSnapshot ? `${dragSnapshot.height}px` : "",
-      };
-      this.#applyDragPositionContext();
-      // this.#hoistElementToRoot();
-      this.transformMode = "origin";
-      this.transformOrigin = this.#rootContainer;
-      this.transform.x = prop.start.x - this.#dragOffsetX;
-      this.transform.y = prop.start.y - this.#dragOffsetY;
-      this.writeDom();
-      this.writeTransform();
-      this.debugAllItems();
-    });
+        const rootSnapshot = root.dragSnapshot;
+        const hoistOffsetX = rootSnapshot
+          ? -(rootSnapshot.border.left + rootSnapshot.padding.left)
+          : 0;
+        const hoistOffsetY = rootSnapshot
+          ? -(rootSnapshot.border.top + rootSnapshot.padding.top)
+          : 0;
+        const dragSnapshot = this.dragSnapshot;
+        this.style = {
+          cursor: "grabbing",
+          position: "absolute",
+          zIndex: "1000",
+          top: `${hoistOffsetY}px`,
+          left: `${hoistOffsetX}px`,
+          width: dragSnapshot ? `${dragSnapshot.width}px` : "",
+          height: dragSnapshot ? `${dragSnapshot.height}px` : "",
+        };
+        this.#applyDragPositionContext();
+        this.transformMode = "origin";
+        this.worldTransform.x = prop.start.x - this.#dragOffsetX;
+        this.worldTransform.y = prop.start.y - this.#dragOffsetY;
+        this.#moveDraggedElementToContainer(
+          currentContainer as unknown as ItemContainer,
+        );
+        this.debugAllItems();
+      },
+      { stage: "WRITE_1" },
+    );
   }
 
   drag(prop: dragProp) {
-    this.queueUpdate(
-      "WRITE_1",
+    this.schedule(
       () => {
         // Move the item according to mouse position
-        this.transform.x = prop.position.x - this.#dragOffsetX;
-        this.transform.y = prop.position.y - this.#dragOffsetY;
+        this.worldTransform.x = prop.position.x - this.#dragOffsetX;
+        this.worldTransform.y = prop.position.y - this.#dragOffsetY;
         this.writeTransform();
 
         this.updateDropTarget(this);
       },
-      `drag-${this.gid}`,
+      { stage: "WRITE_1", queueId: `drag-${this.id}` },
     );
     // Re-read positions of all items
-    this.#rootContainer?.requestRead(
-      false,
-      true,
-      "READ_2",
-      true,
-      `drag-${this.gid}`,
-    );
+    const root = this.#rootContainer as unknown as ItemObject | null;
+    if (root) {
+      root.#queueReadTree("READ_2", `drag-${this.id}`);
+    }
   }
 
   dragEnd(_: dragEndProp) {
     const root = (this.#rootContainer as unknown as ItemObject) ?? this;
-    this.requestWrite(true, async () => {
-      // Get ghost's current position — this is where the item should land
-      const ghostItem = this.#rootContainer?.ghostItem;
-      const ghostPos = ghostItem?.getIndexAndContainer();
-      DEBUG_LOGS &&
-        debugLog(
-          `[dragEnd] item=${this.gid} ghostPos=${ghostPos?.container ? `${(ghostPos.container as unknown as ItemObject).gid}[${ghostPos.index}]` : "null"}`,
-        );
-
-      // Remove the ghost first
-      this.#updateGhostElement(this, null, -1);
-
-      // Re-insert the dragged item at the ghost's former position
-      if (ghostPos?.container) {
-        const destinationContainer =
-          ghostPos.container as unknown as ItemContainer;
-        this.insertItemAt(destinationContainer, this, ghostPos.index);
-        await this.#afterDomMutation(destinationContainer);
+    this.schedule(
+      async () => {
+        // Get ghost's current position — this is where the item should land
+        const ghostItem = this.#rootContainer?.ghostItem;
+        const pendingGhostTarget =
+          root.#pendingGhostTarget?.ghostItem === ghostItem
+            ? root.#pendingGhostTarget
+            : null;
+        const liveGhostPos = ghostItem?.getIndexAndContainer();
+        const usePendingGhostTarget =
+          !!pendingGhostTarget &&
+          (!liveGhostPos?.container ||
+            liveGhostPos.container !== pendingGhostTarget.container);
+        const ghostPos = usePendingGhostTarget
+          ? {
+              index: pendingGhostTarget.index,
+              container: pendingGhostTarget.container as unknown as ItemObject,
+            }
+          : liveGhostPos;
         DEBUG_LOGS &&
           debugLog(
-            `[dragEnd] re-inserted item at ${(ghostPos.container as unknown as ItemObject).gid}[${ghostPos.index}]`,
+            `[dragEnd] item=${this.id} ghostPos=${ghostPos?.container ? `${(ghostPos.container as unknown as ItemObject).id}[${ghostPos.index}]` : "null"}`,
           );
-      }
 
-      this.style = {
-        cursor: "grab",
-        position: "relative",
-        zIndex: "",
-        top: "",
-        left: "",
-        width: "",
-        height: "",
-      };
-      this.transformMode = "none";
-      this.transformOrigin = null;
-      this.writeDom();
-      this.writeTransform();
-      this.#restoreDragPositionContext();
-      root.#clearDragSnapshotTree();
-      resetDropSnapshotDebugDump(this);
-    });
+        this.style = {
+          cursor: "grab",
+          position: "relative",
+          zIndex: "",
+          top: "",
+          left: "",
+          width: "",
+          height: "",
+        };
+        this.transformMode = "none";
+        this.transformOrigin = null;
+        if (this.element) {
+          this.writeDom();
+          this.writeTransform();
+        }
+
+        // Remove the ghost first
+        this.#updateGhostElement(this, null, -1);
+
+        // Re-insert the dragged item at the ghost's former position
+        if (ghostPos?.container) {
+          const destinationContainer =
+            ghostPos.container as unknown as ItemContainer;
+          this.insertItemAt(destinationContainer, this, ghostPos.index);
+          await this.#afterDomMutation(destinationContainer);
+          DEBUG_LOGS &&
+            debugLog(
+              `[dragEnd] re-inserted item at ${(ghostPos.container as unknown as ItemObject).id}[${ghostPos.index}]`,
+            );
+        }
+
+        this.#restoreDragPositionContext();
+        root.#clearDragSnapshotTree();
+        resetDropSnapshotDebugDump(this);
+      },
+      { stage: "WRITE_1", queueId: `drag-end-${this.id}` },
+    );
   }
 
   destroy() {

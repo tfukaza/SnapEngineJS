@@ -39,41 +39,41 @@
     // Create point 1 object with element for dragging
     point1Object = new ElementObject(engine, null);
     point1Object.element = point1Element;
-    point1Object.transform.x = x1;
-    point1Object.transform.y = y1;
+    point1Object.worldTransform.x = x1;
+    point1Object.worldTransform.y = y1;
 
     // Create point 2 object with element for dragging
     point2Object = new ElementObject(engine, null);
     point2Object.element = point2Element;
-    point2Object.transform.x = x2;
-    point2Object.transform.y = y2;
+    point2Object.worldTransform.x = x2;
+    point2Object.worldTransform.y = y2;
 
     // Add point colliders
-    collider1 = new PointCollider(engine.global, point1Object, 8, 8);
+    collider1 = new PointCollider(engine, point1Object, 8, 8);
     point1Object.addCollider(collider1);
 
-    collider2 = new PointCollider(engine.global, point2Object, 8, 8);
+    collider2 = new PointCollider(engine, point2Object, 8, 8);
     point2Object.addCollider(collider2);
 
     // Collision events for point 1
     collider1.event.collider.onBeginContact = (_, other) => {
-        const otherId = (other.parent as any).element?.querySelector('h2, h1')?.innerText || other.parent.gid;
+        const otherId = (other.parent as any).element?.querySelector('h2, h1')?.innerText || other.parent.id;
         addLog(`P1 Hit: ${otherId}`);
     };
 
     collider1.event.collider.onEndContact = (_, other) => {
-        const otherId = (other.parent as any).element?.querySelector('h2, h1')?.innerText || other.parent.gid;
+        const otherId = (other.parent as any).element?.querySelector('h2, h1')?.innerText || other.parent.id;
         addLog(`P1 Left: ${otherId}`);
     };
 
     // Collision events for point 2
     collider2.event.collider.onBeginContact = (_, other) => {
-        const otherId = (other.parent as any).element?.querySelector('h2, h1')?.innerText || other.parent.gid;
+        const otherId = (other.parent as any).element?.querySelector('h2, h1')?.innerText || other.parent.id;
         addLog(`P2 Hit: ${otherId}`);
     };
 
     collider2.event.collider.onEndContact = (_, other) => {
-        const otherId = (other.parent as any).element?.querySelector('h2, h1')?.innerText || other.parent.gid;
+        const otherId = (other.parent as any).element?.querySelector('h2, h1')?.innerText || other.parent.id;
         addLog(`P2 Left: ${otherId}`);
     };
 
@@ -85,8 +85,8 @@
     point1Object.event.input.drag = (prop: dragProp) => {
         x1 = prop.position.x;
         y1 = prop.position.y;
-        point1Object.transform.x = x1;
-        point1Object.transform.y = y1;
+        point1Object.worldTransform.x = x1;
+        point1Object.worldTransform.y = y1;
     };
 
     point1Object.event.input.dragEnd = (_: dragEndProp) => {
@@ -101,8 +101,8 @@
     point2Object.event.input.drag = (prop: dragProp) => {
         x2 = prop.position.x;
         y2 = prop.position.y;
-        point2Object.transform.x = x2;
-        point2Object.transform.y = y2;
+        point2Object.worldTransform.x = x2;
+        point2Object.worldTransform.y = y2;
     };
 
     point2Object.event.input.dragEnd = (_: dragEndProp) => {

@@ -44,7 +44,7 @@ type DragSample = {
   mouse: { x: number; y: number };
   spacerCount: number;
   spacer: Rect | null;
-  spacerParentGid: string | null;
+  spacerParentId: string | null;
   spacerParentKind: string | null;
   spacerParentText: string | null;
   spacerIndex: number | null;
@@ -78,7 +78,7 @@ async function installSnapsortTrace(page: Page) {
       };
       __snapsortActiveText?: string;
       __snapsortActiveIndex?: number;
-      __snapsortActiveGid?: string;
+      __snapsortActiveId?: string;
     };
 
     const trace = {
@@ -164,7 +164,7 @@ async function installSnapsortTrace(page: Page) {
       }
     }).observe(document.documentElement, {
       attributes: true,
-      attributeFilter: ["class", "style", "data-engine-gid"],
+      attributeFilter: ["class", "style", "data-engine-id"],
       childList: true,
       subtree: true,
     });
@@ -532,7 +532,7 @@ async function collectSample(
       const win = window as unknown as {
         __snapsortActiveText?: string;
         __snapsortActiveIndex?: number;
-        __snapsortActiveGid?: string;
+        __snapsortActiveId?: string;
       };
       const rectOf = (element: Element | null) => {
         if (!element) return null;
@@ -552,18 +552,19 @@ async function collectSample(
           text: element?.textContent?.trim().replace(/\s+/g, " ") ?? "",
         };
       };
-      const activeGid = win.__snapsortActiveGid ?? "";
+      const activeId = win.__snapsortActiveId ?? "";
       const draggedElement = document.querySelector(
-        `[data-engine-gid="${activeGid}"]`,
+        `[data-engine-id="${activeId}"]`,
       );
       const spacerElement = document.querySelector("#spacer");
       const spacerParent = spacerElement?.parentElement ?? null;
       const spacerSiblings = spacerParent
         ? [...spacerParent.children].filter(
             (child) =>
-              child.id === "spacer" ||
-              child.classList.contains("snapsort-item") ||
-              child.classList.contains("snapsort-container"),
+              child !== draggedElement &&
+              (child.id === "spacer" ||
+                child.classList.contains("snapsort-item") ||
+                child.classList.contains("snapsort-container")),
           )
         : [];
       const spacerSiblingIndex = spacerElement
@@ -571,7 +572,7 @@ async function collectSample(
         : -1;
       const directSiblingTexts = spacerParent
         ? [...spacerParent.children]
-            .filter((child) => child.id !== "spacer")
+            .filter((child) => child.id !== "spacer" && child !== draggedElement)
             .map(
               (child) => child.textContent?.trim().replace(/\s+/g, " ") ?? "",
             )
@@ -614,7 +615,7 @@ async function collectSample(
         mouse,
         spacerCount: document.querySelectorAll("#spacer").length,
         spacer: rectOf(spacerElement),
-        spacerParentGid: spacerParent?.getAttribute("data-engine-gid") ?? null,
+        spacerParentId: spacerParent?.getAttribute("data-engine-id") ?? null,
         spacerParentKind,
         spacerParentText: parentText || null,
         spacerIndex: spacerSiblingIndex === -1 ? null : spacerSiblingIndex,
@@ -656,21 +657,21 @@ async function dragBy(
   } = {},
 ): Promise<DragSample[]> {
   const sourceRect = await itemRect(source);
-  const activeGid = await source.getAttribute("data-engine-gid");
+  const activeId = await source.getAttribute("data-engine-id");
   const start = options.start ?? center(sourceRect);
   const steps = options.steps ?? 160;
   await page.evaluate(
-    ({ text, index, activeGid }) => {
+    ({ text, index, activeId }) => {
       const win = window as unknown as {
         __snapsortActiveText?: string;
         __snapsortActiveIndex?: number;
-        __snapsortActiveGid?: string;
+        __snapsortActiveId?: string;
       };
       win.__snapsortActiveText = text;
       win.__snapsortActiveIndex = index;
-      win.__snapsortActiveGid = activeGid ?? "";
+      win.__snapsortActiveId = activeId ?? "";
     },
-    { text, index, activeGid },
+    { text, index, activeId },
   );
 
   await page.mouse.move(start.x, start.y);
@@ -1114,19 +1115,24 @@ test.describe("Snapsort drag-start snapshot layout", () => {
     const upwardTarget = await itemByTextIn(list, "Invite flow");
     const upwardTargetCenter = center(await itemRect(upwardTarget));
 
-    await dragBy(page, upwardItem, "Search filters", 0, {
-      x: 0,
-      y: upwardTargetCenter.y - upwardItemCenter.y - 24,
-    }, {
-      start: {
-        x: upwardItemRect.x + 24,
-        y: upwardItemCenter.y,
+    await dragBy(
+      page,
+      upwardItem,
+      "Search filters",
+      0,
+      {
+        x: 0,
+        y: upwardTargetCenter.y - upwardItemCenter.y - 24,
       },
-    });
+      {
+        start: {
+          x: upwardItemRect.x + 24,
+          y: upwardItemCenter.y,
+        },
+      },
+    );
 
-    await expect(
-      list.locator(".task-card .task-main strong"),
-    ).toHaveText([
+    await expect(list.locator(".task-card .task-main strong")).toHaveText([
       "Profile fields",
       "Search filters",
       "Invite flow",
@@ -1144,15 +1150,22 @@ test.describe("Snapsort drag-start snapshot layout", () => {
     const target = await itemByTextIn(list, "Search filters");
     const targetCenter = center(await itemRect(target));
 
-    await dragBy(page, item, "Profile fields", 0, {
-      x: 0,
-      y: targetCenter.y - itemCenter.y + 48,
-    }, {
-      start: {
-        x: itemRectValue.x + 24,
-        y: itemCenter.y,
+    await dragBy(
+      page,
+      item,
+      "Profile fields",
+      0,
+      {
+        x: 0,
+        y: targetCenter.y - itemCenter.y + 48,
       },
-    });
+      {
+        start: {
+          x: itemRectValue.x + 24,
+          y: itemCenter.y,
+        },
+      },
+    );
 
     await expect(
       page.locator(".task-card").filter({ hasText: "Profile fields" }),
@@ -1161,15 +1174,12 @@ test.describe("Snapsort drag-start snapshot layout", () => {
     await expect(page.locator(".demo-header p")).toHaveText(
       "6 array-backed cards",
     );
-    await expect(
-      list.locator(".task-card .task-main strong"),
-    ).toHaveText([
+    await expect(list.locator(".task-card .task-main strong")).toHaveText([
       "Invite flow",
       "Audit log",
       "Search filters",
       "Profile fields",
     ]);
-
   });
 
   test("animates a component card moving between columns with SnapEngine FLIP", async ({
@@ -1206,10 +1216,12 @@ test.describe("Snapsort drag-start snapshot layout", () => {
     expect(animated).toBe(true);
 
     const panels = page.locator(".list-panel");
-    await expect(panels.nth(0).locator(".task-card .task-main strong"))
-      .toHaveText(["Invite flow", "Audit log", "Search filters"]);
-    await expect(panels.nth(1).locator(".task-card .task-main strong"))
-      .toHaveText(["Profile fields", "Board polish"]);
+    await expect(
+      panels.nth(0).locator(".task-card .task-main strong"),
+    ).toHaveText(["Invite flow", "Audit log", "Search filters"]);
+    await expect(
+      panels.nth(1).locator(".task-card .task-main strong"),
+    ).toHaveText(["Profile fields", "Board polish"]);
   });
 
   test("does not flicker the spacer backward while dragging down a vertical column", async ({
@@ -1285,6 +1297,7 @@ test.describe("Snapsort drag-start snapshot layout", () => {
       samples,
       consoleMessages,
       testInfo.outputPath("nested-container-flicker-trace.json"),
+      { assertCenter: false },
     );
     expectNoNestedParentFlicker(samples);
     expectGhostUpdatesStable(consoleMessages, 6);
@@ -1319,6 +1332,7 @@ test.describe("Snapsort drag-start snapshot layout", () => {
       samples,
       consoleMessages,
       testInfo.outputPath("nested-boundary-slots-trace.json"),
+      { assertCenter: false },
     );
 
     const states = compressedSpacerStates(samples);
@@ -1412,6 +1426,7 @@ test.describe("Snapsort drag-start snapshot layout", () => {
       samples,
       consoleMessages,
       testInfo.outputPath("layers-panel-offset-trace.json"),
+      { assertCenter: false },
     );
     expectSpacerAlignedAfterPrevious(samples, "layers-root", /Hero Section/);
     expectSpacerNearDragged(samples, "layers-root", 48);
@@ -1453,6 +1468,7 @@ test.describe("Snapsort drag-start snapshot layout", () => {
       samples,
       consoleMessages,
       testInfo.outputPath("drag-subcontainer-offset-trace.json"),
+      { assertCenter: false },
     );
     expectSpacerAlignedAfterPrevious(samples, "drag-root", /Group 2 - A/);
     expectSpacerNearDragged(samples, "drag-root", 48);

@@ -7,7 +7,7 @@
   let cameraControl: CameraControl = getContext("cameraControl");
 
   onMount(() => {   
-    cameraControl.queueUpdate("WRITE_2").addCallback(() => {
+    cameraControl.schedule(null, { stage: "WRITE_2" }).addCallback(() => {
       const cameraStart = cameraControl.getCameraCenterPosition();
       const cameraTarget = { x: 0, y: 0 };
       const anim = new AnimationObject(

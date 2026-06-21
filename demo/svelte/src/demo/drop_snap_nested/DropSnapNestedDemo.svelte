@@ -101,6 +101,18 @@
           </article>
 
           <article class="demo-cell wide">
+            <h2>Centered Row</h2>
+            <Container
+              config={{ direction: "row", mainAxisAlign: "center", groupID: "centered-row" }}
+              locked={true}
+            >
+              {#each ["Alpha", "Beta", "Gamma", "Delta", "Epsilon"] as label}
+                <Item className="demo-item row-item"><p>{label}</p></Item>
+              {/each}
+            </Container>
+          </article>
+
+          <article class="demo-cell wide">
             <h2>Horizontal Double Row</h2>
             <Container config={{ direction: "row", groupID: "double-row-group" }}>
               {#each Array.from({ length: 28 }, (_, index) => index + 1) as n}

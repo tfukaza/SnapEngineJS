@@ -40,7 +40,7 @@
         object.object.element,
         {
           // opacity: [0.5, 1, 0.5, 1],
-          backgroundColor: ["red", "blue", "green", "black"],
+          backgroundColor: ["white", "white", "white", "white"],
           transform: ["translate(-30px, 0px)", "translate(30px, 0px)", "translate(-30px, 0px)", "translate(30px, 0px)"],
           $x: [-30, 30, -50, 50],
         },
@@ -49,8 +49,9 @@
           easing: ["ease-in-out", "linear", "ease-in-out"],
           offset: [0, 0.33, 0.66, 1.0],
           delay: 50 * i,
+          persist: true,
           tick: (value: any) => {
-            object.object.element!.innerHTML = round(value.$x - object.prevX).toString();
+            object.object.element!.textContent = round(value.$x - object.prevX).toString();
             object.prevX = value.$x;
             // console.log("Tick", value);
             // object.object.dom.style.transform = `translate(${value.$x}px, 0px)`;
@@ -90,13 +91,16 @@
     .circle {
       width: 20px;
       height: 20px;
-      border-radius: 50%;
-      background-color: red;
+      border: 1px solid black;
+      border-radius: 0;
+      background-color: white;
+      box-sizing: border-box;
       padding: 4px;
       text-align: center;
       font-size: 10px;
-      color: white;
-      font-family: 'Inter', sans-serif;
+      color: black;
+      font-family: "Geist", sans-serif;
+      font-weight: 300;
     }
   
   </style>

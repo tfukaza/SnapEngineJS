@@ -2,16 +2,11 @@ import { StationaryCamera } from "./camera";
 import type { Camera } from "./camera";
 import { GlobalManager } from "./global";
 import { InputControl } from "./input";
-import {
-  BaseObject,
-  ElementObject,
-  frameStats,
-  queueEntry,
-  detachAnimationFromOwner,
-} from "./object";
+import { BaseObject, FrameTask, detachAnimationFromOwner } from "./object";
 import type { CollisionEngine } from "./collision";
 import type { AnimationInterface } from "./animation";
 import type { DebugRenderer } from "./debug";
+import type { FrameStats } from "./object";
 
 export interface EngineConfig {}
 
@@ -46,69 +41,54 @@ export interface EngineEventProps {
 }
 
 type AnimationProcessor = (timestamp: number) => void;
+type DebugMarker = {
+  type: "point" | "rect" | "circle" | "text" | "line";
+  objectId: string;
+  id: string;
+  persistent: boolean;
+  color: string;
+  tag?: string;
+  x: number;
+  y: number;
+  x2?: number;
+  y2?: number;
+  width?: number;
+  height?: number;
+  radius?: number;
+  text?: string;
+  filled?: boolean;
+  lineWidth?: number;
+  arrowEnd?: boolean;
+  arrowStart?: boolean;
+  arrowSize?: number;
+};
 
 /**
  * The main engine class that manages the rendering loop, object updates,
  * and optional features like animations, collisions, camera controls, and debugging.
  *
  * Multiple Engine instances can coexist, each managing their own canvas and render pipeline
- * while sharing a global GlobalManager singleton for ID generation and render scheduling.
+ * while sharing a GlobalManager singleton for ID generation and render scheduling.
  *
  * Features can be enabled on-demand to keep bundle sizes small:
  * - Animation engine via `enableAnimationEngine()`
  * - Collision detection via `enableCollisionEngine()`
  * - Camera controls via `enableCameraControl()`
  * - Debug visualization via `enableDebug()`
- *
- * @example
- * ```typescript
- * const engine = new Engine();
- * engine.assignDom(document.getElementById('container'));
- * await engine.enableAnimationEngine();
- * await engine.enableDebug();
- * ```
- *
- * @example
- * ```typescript
- * // Multiple engines sharing the same GlobalManager
- * const global = GlobalManager.getInstance();
- * const engine1 = new Engine();
- * const engine2 = new Engine();
- * ```
  */
 class Engine {
-  engineConfig: EngineConfig; // Engine configuration options
-  global: GlobalManager | null = null; // Reference to the global manager
-  input: InputControl;
+  #engineConfig: EngineConfig; // Engine configuration options
+  #global: GlobalManager | null = null; // Reference to the global manager
+  #input: InputControl;
 
-  containerElement: HTMLElement | null = null; // The DOM element for the engine's container.
-  containerBounds: ContainerBounds | null = null; // Cached bounding rect of the container
-  camera: Camera | null = null; // Optional camera instance
-  collisionEngine: CollisionEngine | null = null; // Optional collision engine instance
-  animationList: AnimationInterface[] = []; // List of active animations, if animation engine is enabled
+  #containerElement: HTMLElement | null = null; // The DOM element for the engine's container.
+  #containerBounds: ContainerBounds | null = null; // Cached bounding rect of the container
+  #camera: Camera | null = null; // Optional camera instance
+  #collisionEngine: CollisionEngine | null = null; // Optional collision engine instance
+  #animationList: AnimationInterface[] = []; // List of active animations, if animation engine is enabled
   #animationProcessor: AnimationProcessor | null = null;
-  debugMarkerList: Record<
-    string,
-    {
-      type: "point" | "rect" | "circle" | "text" | "line";
-      gid: string;
-      id: string;
-      persistent: boolean;
-      color: string;
-      tag?: string;
-      x: number;
-      y: number;
-      x2?: number;
-      y2?: number;
-      width?: number;
-      height?: number;
-      radius?: number;
-      text?: string;
-      filled?: boolean;
-      lineWidth?: number;
-    }
-  > = {}; // Debug markers by ID
-  debugEnabledTags: Set<string> | null = null; // null = show all, Set = filter to these tags
+  #debugMarkerList: Record<string, DebugMarker> = {}; // Debug markers by ID
+  #debugEnabledTags: Set<string> | null = null; // null = show all, Set = filter to these tags
   #debugRenderer: DebugRenderer | null = null;
 
   // Event subscribers - allows multiple listeners per event type
@@ -124,13 +104,99 @@ class Engine {
   #resizeObserver: ResizeObserver | null = null;
 
   constructor(config: EngineConfig = {}) {
-    this.global = GlobalManager.getInstance();
-    this.input = new InputControl(this.global, this);
-    this.global.registerEngine(this);
-    this.engineConfig = {
+    this.#global = GlobalManager.getInstance();
+    this.#input = new InputControl(this.#global, this);
+    this.#global.registerEngine(this);
+    this.#engineConfig = {
       ...DEFAULT_ENGINE_CONFIG,
       ...config,
     };
+  }
+
+  get engineConfig(): EngineConfig {
+    return this.#engineConfig;
+  }
+
+  set engineConfig(config: EngineConfig) {
+    this.#engineConfig = config;
+  }
+
+  get global(): GlobalManager | null {
+    return this.#global;
+  }
+
+  set global(global: GlobalManager | null) {
+    this.#global = global;
+  }
+
+  get input(): InputControl {
+    return this.#input;
+  }
+
+  set input(input: InputControl) {
+    this.#input = input;
+  }
+
+  get containerElement(): HTMLElement | null {
+    return this.#containerElement;
+  }
+
+  set containerElement(element: HTMLElement | null) {
+    this.#containerElement = element;
+  }
+
+  get containerBounds(): ContainerBounds | null {
+    return this.#containerBounds;
+  }
+
+  set containerBounds(bounds: ContainerBounds | null) {
+    this.#containerBounds = bounds;
+  }
+
+  get camera(): Camera | null {
+    return this.#camera;
+  }
+
+  set camera(camera: Camera | null) {
+    this.#camera = camera;
+  }
+
+  get collisionEngine(): CollisionEngine | null {
+    return this.#collisionEngine;
+  }
+
+  set collisionEngine(collisionEngine: CollisionEngine | null) {
+    this.#collisionEngine = collisionEngine;
+  }
+
+  get animationList(): AnimationInterface[] {
+    return this.#animationList;
+  }
+
+  set animationList(animationList: AnimationInterface[]) {
+    this.#animationList = animationList;
+  }
+
+  get debugMarkerList(): Record<string, DebugMarker> {
+    return this.#debugMarkerList;
+  }
+
+  set debugMarkerList(debugMarkerList: Record<string, DebugMarker>) {
+    this.#debugMarkerList = debugMarkerList;
+  }
+
+  get debugEnabledTags(): Set<string> | null {
+    return this.#debugEnabledTags;
+  }
+
+  set debugEnabledTags(tags: Set<string> | null) {
+    this.#debugEnabledTags = tags;
+  }
+
+  getObject(id: string): BaseObject | null {
+    const table = this.#global?.getEngineObjectTable(this);
+    if (!table) return null;
+    return table[id];
   }
 
   /**
@@ -140,13 +206,6 @@ class Engine {
    * @param event - The event type to subscribe to
    * @param id - A unique identifier for this subscription (used for unsubscribing)
    * @param callback - The callback function to invoke when the event fires
-   *
-   * @example
-   * ```typescript
-   * engine.subscribeEvent('containerAssigned', 'myComponent', (props) => {
-   *   console.log('Container assigned:', props.element, props.bounds);
-   * });
-   * ```
    */
   subscribeEvent(
     event: EngineEventType,
@@ -161,11 +220,6 @@ class Engine {
    *
    * @param event - The event type to unsubscribe from
    * @param id - The unique identifier used when subscribing
-   *
-   * @example
-   * ```typescript
-   * engine.unsubscribeEvent('containerAssigned', 'myComponent');
-   * ```
    */
   unsubscribeEvent(event: EngineEventType, id: string) {
     delete this.#eventSubscribers[event][id];
@@ -177,7 +231,7 @@ class Engine {
    */
   #updateContainerBounds(element: HTMLElement) {
     const rect = element.getBoundingClientRect();
-    this.containerBounds = {
+    this.#containerBounds = {
       left: rect.left,
       top: rect.top,
       right: rect.right,
@@ -202,7 +256,7 @@ class Engine {
 
     const props: EngineEventProps = {
       element,
-      bounds: this.containerBounds!,
+      bounds: this.#containerBounds!,
     };
 
     for (const callback of callbacks) {
@@ -211,35 +265,35 @@ class Engine {
   }
 
   /**
-   * Initialize dom elements, and event listeners for the library.
+   * Initialize DOM elements, and event listeners for the library.
    * This must be handled outside the constructor since many frontend frameworks
    * run Component constructors before the DOM element is available.
    *
    * @param element: The element acting as the container.
    */
   assignDom(element: HTMLElement) {
-    this.containerElement = element;
+    this.#containerElement = element;
     // Camera may not be set if cameraControl was not used
-    if (!this.camera) {
-      this.camera = new StationaryCamera(this);
+    if (!this.#camera) {
+      this.#camera = new StationaryCamera(this);
     }
-    this.camera.containerDom = element;
+    this.#camera.containerDom = element;
 
     // Always compute initial container bounds
     this.#updateContainerBounds(element);
-    this.input.bindContainer(element);
+    this.#input.bindContainer(element);
 
     // Set up resize observer
     this.#resizeObserver = new ResizeObserver(() => {
-      this.#updateContainerBounds(this.containerElement!);
-      this.#publishEvent("containerResized", this.containerElement!);
+      this.#updateContainerBounds(this.#containerElement!);
+      this.#publishEvent("containerResized", this.#containerElement!);
     });
     this.#resizeObserver?.observe(element);
     this.#resizeObserver?.observe(window.document.body);
     // Set up scroll listener
     window.addEventListener("scroll", () => {
-      this.#updateContainerBounds(this.containerElement!);
-      this.#publishEvent("containerMoved", this.containerElement!);
+      this.#updateContainerBounds(this.#containerElement!);
+      this.#publishEvent("containerMoved", this.#containerElement!);
     });
 
     this.#publishEvent("containerAssigned", element);
@@ -253,19 +307,9 @@ class Engine {
    * Sets the debug renderer for visualization overlay.
    *
    * @param renderer - The debug renderer instance to use
-   *
-   * @example
-   * ```typescript
-   * import { Engine } from 'snapengine';
-   * import { DebugRenderer } from 'snapengine/debug';
-   *
-   * const engine = new Engine();
-   * engine.element = document.getElementById('container');
-   * engine.setDebugRenderer(new DebugRenderer());
-   * ```
    */
   setDebugRenderer(renderer: DebugRenderer) {
-    if (this.containerElement == null) {
+    if (this.#containerElement == null) {
       return;
     }
     if (this.#debugRenderer) {
@@ -290,14 +334,12 @@ class Engine {
   }
 
   async #processQueue(
-    stage: string,
-    queue: Map<string, Map<string, queueEntry>>,
+    _stage: string,
+    queue: Map<string, Map<string, FrameTask>>,
   ) {
-    // Keep a set of all objects that have been processed
-    const processedObjects: Set<BaseObject> = new Set();
     for (const queueEntry of queue.values()) {
       // Check if the object belongs to this engine
-      // All entries in the inner map belong to the same object (same GID)
+      // All entries in the inner map belong to the same object.
       const firstEntry = queueEntry.values().next().value;
       if (!firstEntry || firstEntry.object.engine !== this) {
         continue;
@@ -310,24 +352,6 @@ class Engine {
         for (const callback of objectEntry.callback) {
           await callback();
         }
-        if (!processedObjects.has(objectEntry.object)) {
-          processedObjects.add(objectEntry.object);
-          if (objectEntry.object instanceof ElementObject) {
-            if (stage == "READ_1") {
-              objectEntry.object.callback.afterRead1?.();
-            } else if (stage == "READ_2") {
-              objectEntry.object.callback.afterRead2?.();
-            } else if (stage == "READ_3") {
-              objectEntry.object.callback.afterRead3?.();
-            } else if (stage == "WRITE_1") {
-              objectEntry.object.callback.afterWrite1?.();
-            } else if (stage == "WRITE_2") {
-              objectEntry.object.callback.afterWrite2?.();
-            } else if (stage == "WRITE_3") {
-              objectEntry.object.callback.afterWrite3?.();
-            }
-          }
-        }
       }
     }
   }
@@ -337,10 +361,9 @@ class Engine {
    * Called by GlobalManager's render loop.
    * @internal
    */
-  _processStage(
+  processStage(
     stage: string,
-    queue: Map<string, Map<string, queueEntry>>,
-    _timestamp: number,
+    queue: Map<string, Map<string, FrameTask>>,
   ): Promise<void> {
     return this.#processQueue(stage, queue);
   }
@@ -350,7 +373,7 @@ class Engine {
    * Called by GlobalManager's render loop between WRITE_2 and READ_3.
    * @internal
    */
-  _processAnimations(timestamp: number): void {
+  processAnimations(timestamp: number): void {
     this.#animationProcessor?.(timestamp);
   }
 
@@ -359,8 +382,8 @@ class Engine {
    * Called by GlobalManager's render loop before READ_1.
    * @internal
    */
-  _processCollisions(): void {
-    this.collisionEngine?.detectCollisions();
+  processCollisions(): void {
+    this.#collisionEngine?.detectCollisions();
   }
 
   /**
@@ -368,10 +391,9 @@ class Engine {
    * Called by GlobalManager's render loop after all stages complete.
    * @internal
    */
-  _processPostRender(timestamp: number): void {
-    const stats: frameStats = { timestamp };
-    const localObjectTable =
-      this.global!.getEngineObjectTable(this, false) ?? {};
+  processPostRender(timestamp: number): void {
+    const stats: FrameStats = { timestamp };
+    const localObjectTable = this.#global!.getEngineObjectTable(this) ?? {};
     this.#debugRenderer?.renderFrame(stats, this, localObjectTable);
   }
 
@@ -381,26 +403,13 @@ class Engine {
    * This method allows you to inject a collision engine from a separate import,
    * enabling true tree-shaking when collision detection is not used.
    *
-   * @param collisionEngine - The collision engine instance to use
-   *
-   * @example
-   * ```typescript
-   * import { Engine } from 'snapengine';
-   * import { CollisionEngine, CircleCollider } from 'snapengine/collision';
-   *
-   * const engine = new Engine();
-   * engine.element = document.getElementById('container');
-   * engine.setCollisionEngine(new CollisionEngine());
-   *
-   * const collider = new CircleCollider(engine, object, 50);
-   * object.addCollider(collider);
-   * ```
+   * @param collisionEngine - The collision engine instance to use`
    */
   setCollisionEngine(collisionEngine: CollisionEngine) {
-    if (this.collisionEngine) {
+    if (this.#collisionEngine) {
       return;
     }
-    this.collisionEngine = collisionEngine;
+    this.#collisionEngine = collisionEngine;
   }
 
   /**
@@ -408,20 +417,6 @@ class Engine {
    *
    * The animation engine processes animations each frame. This method only sets up
    * the processing loop - animation classes should be imported separately.
-   *
-   * @example
-   * ```typescript
-   * import { Engine } from 'snapengine';
-   * import { AnimationObject } from 'snapengine/animation';
-   *
-   * const engine = new Engine();
-   * engine.element = document.getElementById('container');
-   * engine.enableAnimationEngine();
-   *
-   * const animation = new AnimationObject(element, { x: [0, 100] }, { duration: 1000 });
-   * object.addAnimation(animation);
-   * animation.play();
-   * ```
    */
   enableAnimationEngine() {
     if (this.#animationProcessor) {
@@ -430,7 +425,7 @@ class Engine {
 
     this.#animationProcessor = (timestamp: number) => {
       const newAnimationList: AnimationInterface[] = [];
-      for (const animation of this.animationList) {
+      for (const animation of this.#animationList) {
         const shouldKeep =
           animation.calculateFrame(timestamp) === false &&
           animation.requestDelete === false;
@@ -441,7 +436,7 @@ class Engine {
           detachAnimationFromOwner(animation);
         }
       }
-      this.animationList = newAnimationList;
+      this.#animationList = newAnimationList;
     };
   }
 
@@ -450,23 +445,16 @@ class Engine {
    *
    * This stops the render loop, removes event listeners, and ensures the engine
    * no longer participates in global rendering.
-   *
-   * @example
-   * ```typescript
-   * const engine = new Engine();
-   * // ... use engine ...
-   * engine.destroy(); // Clean up when done
-   * ```
    */
   destroy() {
-    this.input.destroy();
+    this.#input.destroy();
 
     // Unregister from global manager
-    this.global!.unregisterEngine(this);
+    this.#global!.unregisterEngine(this);
 
     // Clean up resize observer
-    if (this.#resizeObserver && this.containerElement) {
-      this.#resizeObserver.unobserve(this.containerElement);
+    if (this.#resizeObserver && this.#containerElement) {
+      this.#resizeObserver.unobserve(this.#containerElement);
       this.#resizeObserver.unobserve(window.document.body);
       this.#resizeObserver = null;
     }
@@ -477,11 +465,11 @@ class Engine {
     }
 
     // Clear references
-    this.containerElement = null;
-    this.camera = null;
-    this.collisionEngine = null;
-    this.animationList = [];
-    this.debugMarkerList = {};
+    this.#containerElement = null;
+    this.#camera = null;
+    this.#collisionEngine = null;
+    this.#animationList = [];
+    this.#debugMarkerList = {};
     this.#animationProcessor = null;
   }
 }

@@ -26,6 +26,7 @@
       {
         duration: 3000,
         easing: "ease-in-out",
+        persist: true,
       },
     );
     object.addAnimation(anim);
@@ -53,8 +54,10 @@
     .circle {
       width: 32px;
       height: 32px;
-      border-radius: 50%;
-      background-color: rgb(255, 94, 0);
+      border: 1px solid black;
+      border-radius: 0;
+      background-color: white;
+      box-sizing: border-box;
     }
   
   </style>

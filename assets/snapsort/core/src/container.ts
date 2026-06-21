@@ -1,6 +1,7 @@
 import { BaseObject } from "@snap-engine/core";
 import { ItemObject } from "./item";
 import type { ItemMetadata } from "./item";
+import type { LayoutMainAxisAlign } from "./layout_engine";
 
 export interface AnimationConfig {
   timing_function?: string;
@@ -38,10 +39,12 @@ export interface ItemContainerCallbacks {
 export interface ItemContainerConfig {
   groupID?: string;
   direction?: "column" | "row";
+  mainAxisAlign?: LayoutMainAxisAlign;
   name?: string;
   animation?: ContainerAnimations | null;
   disableFlip?: boolean;
   noDrop?: boolean;
+  dropArea?: boolean;
   callbacks?: ItemContainerCallbacks;
 }
 
@@ -115,6 +118,22 @@ export class ItemContainer extends ItemObject {
 
   set direction(value: "column" | "row") {
     this.#config.direction = value;
+  }
+
+  get mainAxisAlign() {
+    return this.#config.mainAxisAlign ?? "start";
+  }
+
+  set mainAxisAlign(value: LayoutMainAxisAlign) {
+    this.#config.mainAxisAlign = value;
+  }
+
+  get dropArea() {
+    return this.#config.dropArea ?? false;
+  }
+
+  set dropArea(value: boolean) {
+    this.#config.dropArea = value;
   }
 
   get configuration() {

@@ -1,6 +1,7 @@
-import { BaseObject, queueEntry } from "./object";
+import { BaseObject, FrameTask } from "./object";
+import type { Engine } from "./engine";
 
-type renderEntry = Map<string, Map<string, queueEntry>>;
+type renderEntry = Map<string, Map<string, FrameTask>>;
 
 interface RenderQueue {
   READ_1: renderEntry;
@@ -22,25 +23,14 @@ interface RenderQueue {
  *
  * This is a singleton - only one instance exists per application.
  * Multiple Engine instances share the same GlobalManager and render pipeline.
- *
- * @example
- * ```typescript
- * const global = GlobalManager.getInstance();
- * const engine1 = new Engine();
- * const engine2 = new Engine(); // Shares the same GlobalManager and render queues
- * ```
  */
 class GlobalManager {
-  private static instance: GlobalManager | null = null;
-  private static readonly GLOBAL_ENGINE_KEY = "__global__";
+  static #instance: GlobalManager | null = null;
 
-  objectTable: Record<string, Record<string, BaseObject>>;
-  data: any;
-  gid: number;
-  #engineIdCounter: number;
-  #engineIds: WeakMap<any, string>;
+  #engineObjectTables: Map<Engine, Record<string, BaseObject>>;
+  #data: any;
+  #id: number;
 
-  // Shared render state across all engines
   currentStage:
     | "IDLE"
     | "READ_1"
@@ -50,23 +40,12 @@ class GlobalManager {
     | "READ_3"
     | "WRITE_3";
   queue: RenderQueue;
-  // Registry of all engine instances
-  engines: Set<any>;
 
   private constructor() {
-    this.objectTable = {};
-    this.data = {};
-    this.gid = 0;
-    this.#engineIdCounter = 0;
-    this.#engineIds = new WeakMap();
-
+    this.#engineObjectTables = new Map();
+    this.#data = {};
+    this.#id = 0;
     this.currentStage = "IDLE";
-    // this.read1Queue = new Map();
-    // this.write1Queue = new Map();
-    // this.read2Queue = new Map();
-    // this.write2Queue = new Map();
-    // this.read3Queue = new Map();
-    // this.write3Queue = new Map();
     this.queue = {
       READ_1: new Map(),
       WRITE_1: new Map(),
@@ -75,8 +54,6 @@ class GlobalManager {
       READ_3: new Map(),
       WRITE_3: new Map(),
     };
-
-    this.engines = new Set();
   }
 
   /**
@@ -86,10 +63,10 @@ class GlobalManager {
    * @returns The GlobalManager singleton instance
    */
   static getInstance(): GlobalManager {
-    if (!GlobalManager.instance) {
-      GlobalManager.instance = new GlobalManager();
+    if (!GlobalManager.#instance) {
+      GlobalManager.#instance = new GlobalManager();
     }
-    return GlobalManager.instance;
+    return GlobalManager.#instance;
   }
 
   /**
@@ -97,22 +74,25 @@ class GlobalManager {
    * WARNING: This will affect all Engine instances using this GlobalManager.
    */
   static resetInstance(): void {
-    GlobalManager.instance = null;
+    GlobalManager.#instance = null;
   }
 
   /**
-   * Registers an Engine instance with the global render pipeline.
+   * Registers an Engine instance.
    * Called automatically by Engine constructor.
    *
    * @param engine - The Engine instance to register
    * @internal
    */
-  registerEngine(engine: any): void {
-    this.engines.add(engine);
-    this.#ensureEngineId(engine);
+  registerEngine(engine: Engine): void {
+    const shouldStartRenderLoop = this.#engineObjectTables.size === 0;
+
+    if (!this.#engineObjectTables.has(engine)) {
+      this.#engineObjectTables.set(engine, {});
+    }
 
     // Start the global render loop if this is the first engine
-    if (this.engines.size === 1) {
+    if (shouldStartRenderLoop) {
       this.#startRenderLoop();
     }
   }
@@ -124,17 +104,11 @@ class GlobalManager {
    * @param engine - The Engine instance to unregister
    * @internal
    */
-  unregisterEngine(engine: any): void {
-    this.engines.delete(engine);
-
-    const engineId = this.#engineIds.get(engine);
-    if (engineId) {
-      delete this.objectTable[engineId];
-      this.#engineIds.delete(engine);
-    }
+  unregisterEngine(engine: Engine): void {
+    this.#engineObjectTables.delete(engine);
 
     // Stop the global render loop if no engines remain
-    if (this.engines.size === 0) {
+    if (this.#engineObjectTables.size === 0) {
       this.#stopRenderLoop();
     }
   }
@@ -161,64 +135,68 @@ class GlobalManager {
 
         // READ_1 stage for all engines
         this.currentStage = "READ_1";
-        for (const engine of this.engines) {
-          await engine._processStage("READ_1", this.queue.READ_1, timestamp);
+        for (const engine of this.#engineObjectTables.keys()) {
+          await engine.processStage("READ_1", this.queue.READ_1);
         }
         this.queue.READ_1 = new Map();
 
         // Collision detection after READ_1 so colliders have up-to-date positions
-        for (const engine of this.engines) {
-          engine._processCollisions();
+        for (const engine of this.#engineObjectTables.keys()) {
+          engine.processCollisions();
         }
 
         // WRITE_1 stage for all engines
         this.currentStage = "WRITE_1";
-        for (const engine of this.engines) {
-          await engine._processStage("WRITE_1", this.queue.WRITE_1, timestamp);
+        for (const engine of this.#engineObjectTables.keys()) {
+          await engine.processStage("WRITE_1", this.queue.WRITE_1);
         }
         this.queue.WRITE_1 = new Map();
 
         // READ_2 stage for all engines
         this.currentStage = "READ_2";
-        for (const engine of this.engines) {
-          await engine._processStage("READ_2", this.queue.READ_2, timestamp);
+        for (const engine of this.#engineObjectTables.keys()) {
+          await engine.processStage("READ_2", this.queue.READ_2);
         }
         this.queue.READ_2 = new Map();
 
         // WRITE_2 stage for all engines
         this.currentStage = "WRITE_2";
-        for (const engine of this.engines) {
-          await engine._processStage("WRITE_2", this.queue.WRITE_2, timestamp);
+        for (const engine of this.#engineObjectTables.keys()) {
+          await engine.processStage("WRITE_2", this.queue.WRITE_2);
         }
         this.queue.WRITE_2 = new Map();
 
         // Animation processing for all engines
-        for (const engine of this.engines) {
-          engine._processAnimations(timestamp);
+        for (const engine of this.#engineObjectTables.keys()) {
+          engine.processAnimations(timestamp);
         }
 
         // READ_3 stage for all engines
         this.currentStage = "READ_3";
-        for (const engine of this.engines) {
-          await engine._processStage("READ_3", this.queue.READ_3, timestamp);
+        for (const engine of this.#engineObjectTables.keys()) {
+          await engine.processStage("READ_3", this.queue.READ_3);
         }
         this.queue.READ_3 = new Map();
 
         // WRITE_3 stage for all engines
         this.currentStage = "WRITE_3";
-        for (const engine of this.engines) {
-          await engine._processStage("WRITE_3", this.queue.WRITE_3, timestamp);
+        for (const engine of this.#engineObjectTables.keys()) {
+          await engine.processStage("WRITE_3", this.queue.WRITE_3);
         }
         this.queue.WRITE_3 = new Map();
 
         this.currentStage = "IDLE";
 
         // Post-render processing (collisions, debug) for all engines
-        for (const engine of this.engines) {
-          engine._processPostRender(timestamp);
+        for (const engine of this.#engineObjectTables.keys()) {
+          engine.processPostRender(timestamp);
         }
 
-        this.#animationFrameId = window.requestAnimationFrame(step);
+        if (this.#engineObjectTables.size > 0) {
+          this.#animationFrameId = window.requestAnimationFrame(step);
+        } else {
+          this.#animationFrameId = null;
+        }
 
         // When rAF callback ends, and if there are no more Event callbacks,
         // the browser can begin painting.
@@ -244,89 +222,36 @@ class GlobalManager {
    *
    * @returns A unique string ID that increments with each call.
    */
-  getGlobalId() {
-    this.gid++;
-    return this.gid.toString();
+  createId() {
+    this.#id++;
+    return this.#id.toString();
   }
 
-  getEngineId(engine: any | null): string | null {
-    if (!engine) {
-      return null;
-    }
-    return this.#engineIds.get(engine) ?? null;
+  get data(): any {
+    return this.#data;
   }
 
-  getEngineObjectTable(
-    engine: any | null,
-    create: boolean = true,
-  ): Record<string, BaseObject> | null {
-    if (!engine) {
-      if (!create && !this.objectTable[GlobalManager.GLOBAL_ENGINE_KEY]) {
-        return null;
-      }
-      return this.#ensureGlobalObjectTable();
+  getEngineObjectTable(engine: Engine): Record<string, BaseObject> {
+    const table = this.#engineObjectTables.get(engine);
+    if (!table) {
+      throw new Error("Cannot get an object table for an unregistered engine.");
     }
 
-    let engineId = this.#engineIds.get(engine);
-    if (!engineId) {
-      if (!create) {
-        return null;
-      }
-      engineId = this.#ensureEngineId(engine);
-    }
-
-    if (!this.objectTable[engineId]) {
-      if (!create) {
-        return null;
-      }
-      this.objectTable[engineId] = {};
-    }
-
-    return this.objectTable[engineId];
+    return table;
   }
 
   registerObject(object: BaseObject): void {
-    const table = this.getEngineObjectTable(object.engine ?? null, true);
-    if (table) {
-      table[object.gid] = object;
+    if (!object.engine) {
+      throw new Error("Cannot register an object without an engine.");
     }
+
+    const table = this.getEngineObjectTable(object.engine);
+    table[object.id] = object;
   }
 
   unregisterObject(object: BaseObject): void {
-    const table = this.getEngineObjectTable(object.engine ?? null, false);
-    if (!table) {
-      return;
-    }
-    delete table[object.gid];
-
-    if (Object.keys(table).length === 0) {
-      const key =
-        object.engine && this.#engineIds.get(object.engine)
-          ? this.#engineIds.get(object.engine)!
-          : GlobalManager.GLOBAL_ENGINE_KEY;
-      delete this.objectTable[key];
-    }
-  }
-
-  #ensureEngineId(engine: any): string {
-    let engineId = this.#engineIds.get(engine);
-    if (!engineId) {
-      this.#engineIdCounter++;
-      engineId = `engine-${this.#engineIdCounter}`;
-      this.#engineIds.set(engine, engineId);
-    }
-    if (!this.objectTable[engineId]) {
-      this.objectTable[engineId] = {};
-    }
-    return engineId;
-  }
-
-  #ensureGlobalObjectTable(): Record<string, BaseObject> {
-    const key = GlobalManager.GLOBAL_ENGINE_KEY;
-    if (!this.objectTable[key]) {
-      this.objectTable[key] = {};
-    }
-    return this.objectTable[key];
+    const table = this.getEngineObjectTable(object.engine);
+    delete table[object.id];
   }
 }
 

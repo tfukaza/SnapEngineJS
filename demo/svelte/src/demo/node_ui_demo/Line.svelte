@@ -21,12 +21,12 @@
   function renderLine() {
     // For now, assume the line starts heading to the right
     const thisLine: LineComponent = line;
-    const x0 = thisLine.transform.x;
-    const y0 = thisLine.transform.y;
+    const x0 = thisLine.worldTransform.x;
+    const y0 = thisLine.worldTransform.y;
     style = `position: absolute; overflow: visible; pointer-events: none; will-change: transform;`;
     shadowStyle = `position: absolute; overflow: visible; pointer-events: none; will-change: transform; transform: translate3d(${x0 + shadowOffset}px, ${y0 + shadowOffset}px, 0);`;
-    const dx = thisLine.endWorldX - thisLine.transform.x;
-    const dy = thisLine.endWorldY - thisLine.transform.y;
+    const dx = thisLine.endWorldX - thisLine.worldTransform.x;
+    const dy = thisLine.endWorldY - thisLine.worldTransform.y;
     const x1 = dx > 0 ? Math.abs(dx / 2) : radius;
     const x3 = dx;
     const y3 = dy;

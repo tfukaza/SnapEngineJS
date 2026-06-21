@@ -1,9 +1,9 @@
 <script lang="ts">
-  import Landing from "./Landing.svelte";
+  import DemoRouter from "./DemoRouter.svelte";
 </script>
 
 <div class="svelte-demo-root dev-style">
-  <Landing />
+  <DemoRouter />
 </div>
 
 <style lang="scss">

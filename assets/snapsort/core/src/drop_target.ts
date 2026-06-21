@@ -1,5 +1,6 @@
 import type { ItemObject } from "./item";
 import type { DomProperty } from "@snap-engine/core";
+import { CollisionEngine, RectCollider } from "@snap-engine/core/collision";
 import {
   childRelativeOffset,
   contentBoxOrigin,
@@ -10,6 +11,7 @@ import {
   pointFromAxes,
   virtualDimensions as layoutVirtualDimensions,
   type LayoutNode,
+  type LayoutMainAxisAlign,
   type VirtualGhost as LayoutVirtualGhost,
 } from "./layout_engine";
 
@@ -19,6 +21,7 @@ const TAG_COLLISIONS = "drop-collisions"; // collision debug: DOM boxes
 const TAG_CANDIDATES = "drop-candidates"; // candidates: result lines, best pick
 const TAG_NEIGHBORS = "drop-neighbors"; // per-candidate prev/next reference points and links
 const TAG_SNAPSHOT = "drop-snapshot"; // drag-start snapshot geometry and simulation deltas
+const TAG_ZONES = "drop-zones"; // full-container hitboxes that can scope candidates
 
 const snapshotDumpedForDrag = new WeakSet<ItemObject>();
 const SNAPSHOT_DUMP_TRACE = false;
@@ -43,6 +46,12 @@ function getDirection(node: ItemObject): "column" | "row" {
   return "direction" in node && typeof (node as any).direction === "string"
     ? (node as any).direction
     : "column";
+}
+
+function getMainAxisAlign(node: ItemObject): LayoutMainAxisAlign {
+  return "mainAxisAlign" in node && (node as any).mainAxisAlign === "center"
+    ? "center"
+    : "start";
 }
 
 /**
@@ -91,7 +100,7 @@ function isSubContainer(item: ItemObject) {
 function requireDragSnapshot(item: ItemObject): DomProperty {
   const snapshot = item.dragSnapshot;
   if (!snapshot) {
-    const message = `[drop-snapshot] Missing drag snapshot for item ${item.gid}. Drop prediction must run after dragStart captures snapshots.`;
+    const message = `[drop-snapshot] Missing drag snapshot for item ${item.id}. Drop prediction must run after dragStart captures snapshots.`;
     console.error(message);
     throw new Error(message);
   }
@@ -121,6 +130,112 @@ function isItemContainerObject(item: ItemObject) {
   );
 }
 
+function isDropAreaContainer(item: ItemObject) {
+  return (
+    isItemContainerObject(item) &&
+    !item.noDrop &&
+    "dropArea" in item &&
+    (item as any).dropArea === true
+  );
+}
+
+type WorldRect = { x: number; y: number; width: number; height: number };
+
+const dropAreaCollisionEngine = new CollisionEngine();
+
+function rectColliderForWorldRect(
+  owner: ItemObject,
+  rect: WorldRect,
+): RectCollider | null {
+  const scaleX = owner.worldTransform.scaleX;
+  const scaleY = owner.worldTransform.scaleY;
+  if (scaleX === 0 || scaleY === 0) return null;
+
+  const collider = new RectCollider(
+    owner.engine,
+    owner,
+    0,
+    0,
+    rect.width / Math.abs(scaleX),
+    rect.height / Math.abs(scaleY),
+  );
+  collider.worldPosition = [
+    scaleX < 0 ? rect.x + rect.width : rect.x,
+    scaleY < 0 ? rect.y + rect.height : rect.y,
+  ];
+  return collider;
+}
+
+function filterCandidatesByDropArea(
+  candidates: DropCandidate[],
+  item: ItemObject,
+  dragRect: WorldRect,
+) {
+  const dropAreaContainers = Array.from(
+    new Set(candidates.map((candidate) => candidate.container)),
+  ).filter(isDropAreaContainer);
+  if (dropAreaContainers.length === 0) return candidates;
+
+  const dragCollider = rectColliderForWorldRect(item, dragRect);
+  if (!dragCollider) return candidates;
+
+  const collidingContainers: ItemObject[] = [];
+  try {
+    for (const container of dropAreaContainers) {
+      const prop = requireDragSnapshot(container);
+      const containerCollider = rectColliderForWorldRect(container, prop);
+      const isColliding =
+        !!containerCollider &&
+        dropAreaCollisionEngine.isIntersecting(dragCollider, containerCollider);
+      containerCollider?.destroy();
+      const markerId = `drop-area-hitbox-${container.id}`;
+      const labelId = `drop-area-hitbox-label-${container.id}`;
+
+      container.clearDebugMarker(markerId);
+      container.clearDebugMarker(labelId);
+      container.addDebugRect(
+        prop.x,
+        prop.y,
+        prop.width,
+        prop.height,
+        isColliding ? "rgba(34, 197, 94, 0.35)" : "rgba(148, 163, 184, 0.18)",
+        true,
+        markerId,
+        false,
+        isColliding ? 3 : 1,
+        TAG_ZONES,
+      );
+      container.addDebugText(
+        prop.x + 6,
+        prop.y + 16,
+        isColliding ? "drop area hit" : "drop area",
+        isColliding ? "rgba(22, 101, 52, 0.9)" : "rgba(100, 116, 139, 0.6)",
+        true,
+        labelId,
+        TAG_ZONES,
+      );
+
+      if (isColliding) {
+        collidingContainers.push(container);
+      }
+    }
+  } finally {
+    dragCollider.destroy();
+  }
+
+  if (collidingContainers.length === 0) return candidates;
+
+  const deepestDepth = Math.max(
+    ...collidingContainers.map((container) => container.depth),
+  );
+  const allowedContainers = new Set(
+    collidingContainers.filter((container) => container.depth === deepestDepth),
+  );
+  return candidates.filter((candidate) =>
+    allowedContainers.has(candidate.container),
+  );
+}
+
 function createLayoutSnapshot(root: ItemObject): {
   root: LayoutNode<ItemObject>;
   byItem: Map<ItemObject, LayoutNode<ItemObject>>;
@@ -130,6 +245,7 @@ function createLayoutSnapshot(root: ItemObject): {
     const node: LayoutNode<ItemObject> = {
       value: item,
       direction: getDirection(item),
+      mainAxisAlign: getMainAxisAlign(item),
       locked: item.locked,
       isGhost: item.isGhost,
       box: requireDragSnapshot(item),
@@ -280,7 +396,7 @@ function drawSnapshotDebug(
     prop.height,
     "rgba(14, 165, 233, 0.45)",
     true,
-    `drop-snapshot-box-${container.gid}-${item.gid}`,
+    `drop-snapshot-box-${container.id}-${item.id}`,
     false,
     1,
     TAG_SNAPSHOT,
@@ -292,7 +408,7 @@ function drawSnapshotDebug(
     measuredPosition.y,
     "rgba(244, 63, 94, 0.75)",
     true,
-    `drop-snapshot-delta-${container.gid}-${item.gid}`,
+    `drop-snapshot-delta-${container.id}-${item.id}`,
     2,
     TAG_SNAPSHOT,
   );
@@ -302,7 +418,7 @@ function drawSnapshotDebug(
     `delta ${Math.round(dx)},${Math.round(dy)}`,
     "rgba(244, 63, 94, 0.8)",
     true,
-    `drop-snapshot-delta-label-${container.gid}-${item.gid}`,
+    `drop-snapshot-delta-label-${container.id}-${item.id}`,
     TAG_SNAPSHOT,
   );
 
@@ -313,7 +429,7 @@ function drawSnapshotDebug(
     prop.height,
     "rgba(180, 100, 255, 0.55)",
     true,
-    `drop-layout-box-${container.gid}-${item.gid}`,
+    `drop-layout-box-${container.id}-${item.id}`,
     false,
     2,
     TAG_LAYOUT,
@@ -324,7 +440,7 @@ function drawSnapshotDebug(
     `sim box ${Math.round(prop.width)}x${Math.round(prop.height)} m ${Math.round(prop.margin.left)},${Math.round(prop.margin.right)}`,
     "rgba(180, 100, 255, 0.85)",
     true,
-    `drop-layout-box-label-${container.gid}-${item.gid}`,
+    `drop-layout-box-label-${container.id}-${item.id}`,
     TAG_LAYOUT,
   );
 }
@@ -348,7 +464,7 @@ function drawContainerContentBox(
     size.height,
     "rgba(20, 184, 166, 0.45)",
     true,
-    `drop-snapshot-content-${container.gid}`,
+    `drop-snapshot-content-${container.id}`,
     false,
     2,
     TAG_SNAPSHOT,
@@ -381,7 +497,7 @@ function dumpSnapshotOnce(item: ItemObject, root: ItemObject) {
     const origin = contentBoxOrigin(prop);
     const indent = "  ".repeat(depth);
     console.log(
-      `${indent}${node.gid} contentOrigin=(${Math.round(origin.x)},${Math.round(origin.y)}) ` +
+      `${indent}${node.id} contentOrigin=(${Math.round(origin.x)},${Math.round(origin.y)}) ` +
         `padding=${JSON.stringify(prop.padding)} border=${JSON.stringify(prop.border)}`,
     );
     for (const child of node.dragSnapshotOrderedList) {
@@ -389,7 +505,7 @@ function dumpSnapshotOnce(item: ItemObject, root: ItemObject) {
     }
   };
 
-  grouper(`[drop-snapshot] root=${root.gid} drag=${item.gid}`);
+  grouper(`[drop-snapshot] root=${root.id} drag=${item.id}`);
   dumpNode(root);
   ender();
 }
@@ -433,7 +549,7 @@ function logCandidateSnapshot(args: {
   const indent = "  ".repeat(args.container.depth);
   const dirTag = args.isColumn ? "col" : "row";
   const header =
-    `${indent}▣ candidate  container=${args.container.gid}  idx=${args.insertIdx}` +
+    `${indent}▣ candidate  container=${args.container.id}  idx=${args.insertIdx}` +
     `  ghost=(${r(args.ghostCenterX)},${r(args.ghostCenterY)})  dist=${r(args.distance)}  prio=${args.priority}`;
 
   // Use console.groupCollapsed so the per-candidate noise can be folded away.
@@ -454,11 +570,11 @@ function logCandidateSnapshot(args: {
     `${indent}  drag=(${r(args.dragCenterX)},${r(args.dragCenterY)})  ghostSize=${r(args.ghostW)}×${r(args.ghostH)}`,
   );
   // console.log(
-  //   `${indent}  prev=${args.prevContainer?.gid ?? "·"}@${fmtCenter(args.prevCenter)}` +
-  //     `   next=${args.nextContainer?.gid ?? "·"}@${fmtCenter(args.nextCenter)}`,
+  //   `${indent}  prev=${args.prevContainer?.id ?? "·"}@${fmtCenter(args.prevCenter)}` +
+  //     `   next=${args.nextContainer?.id ?? "·"}@${fmtCenter(args.nextCenter)}`,
   // );
   console.log(
-    `${indent}  layout ${args.container.gid} [${dirTag}] start=(${r(args.startX)},${r(args.startY)}) w=${r(args.containerWidth)}`,
+    `${indent}  layout ${args.container.id} [${dirTag}] start=(${r(args.startX)},${r(args.startY)}) w=${r(args.containerWidth)}`,
   );
 
   // Render each item in the container's filtered list, with the ghost slot
@@ -494,12 +610,12 @@ function logCandidateSnapshot(args: {
       const dx = layout.simulatedPosition.x - layout.measuredPosition.x;
       const dy = layout.simulatedPosition.y - layout.measuredPosition.y;
       lines.push(
-        `${indent}   [${i}] ${tag} ${it.gid}  snapshotOffset=(${r(rel.x)},${r(rel.y)}) ` +
+        `${indent}   [${i}] ${tag} ${it.id}  snapshotOffset=(${r(rel.x)},${r(rel.y)}) ` +
           `sim=(${r(layout.simulatedPosition.x)},${r(layout.simulatedPosition.y)}) ` +
           `delta=(${r(dx)},${r(dy)})`,
       );
     } else {
-      lines.push(`${indent}   [${i}] ${tag} ${it.gid}  ${range}`);
+      lines.push(`${indent}   [${i}] ${tag} ${it.id}  ${range}`);
     }
   }
   for (const ln of lines) console.log(ln);
@@ -542,6 +658,7 @@ export function virtualDimensions(
   const draggedNode = snapshot.byItem.get(draggedItem) ?? {
     value: draggedItem,
     direction: getDirection(draggedItem),
+    mainAxisAlign: getMainAxisAlign(draggedItem),
     locked: draggedItem.locked,
     isGhost: draggedItem.isGhost,
     box: requireDragSnapshot(draggedItem),
@@ -585,6 +702,7 @@ export function virtualLayoutRecursive(
   const draggedNode = snapshot.byItem.get(draggedItem) ?? {
     value: draggedItem,
     direction: getDirection(draggedItem),
+    mainAxisAlign: getMainAxisAlign(draggedItem),
     locked: draggedItem.locked,
     isGhost: draggedItem.isGhost,
     box: requireDragSnapshot(draggedItem),
@@ -638,17 +756,17 @@ function virtualLayoutRecursiveFromNode(
 
   // Clear stale ghost candidate debug rects
   for (let j = 0; j < items.length; j++) {
-    container.clearDebugMarker(`vlayout-ghost-before-${container.gid}-${j}`);
-    container.clearDebugMarker(`vlayout-ghost-after-${container.gid}-${j}`);
+    container.clearDebugMarker(`vlayout-ghost-before-${container.id}-${j}`);
+    container.clearDebugMarker(`vlayout-ghost-after-${container.id}-${j}`);
     container.clearDebugMarker(
-      `vlayout-ghost-before-label-${container.gid}-${j}`,
+      `vlayout-ghost-before-label-${container.id}-${j}`,
     );
     container.clearDebugMarker(
-      `vlayout-ghost-after-label-${container.gid}-${j}`,
+      `vlayout-ghost-after-label-${container.id}-${j}`,
     );
   }
-  container.clearDebugMarker(`vlayout-ghost-empty-${container.gid}`);
-  container.clearDebugMarker(`vlayout-ghost-empty-label-${container.gid}`);
+  container.clearDebugMarker(`vlayout-ghost-empty-${container.id}`);
+  container.clearDebugMarker(`vlayout-ghost-empty-label-${container.id}`);
 
   const makeCandidate = (
     index: number,
@@ -721,7 +839,7 @@ function virtualLayoutRecursiveFromNode(
       dragGhostH,
       "rgba(250, 204, 21, 0.15)",
       true,
-      `vlayout-ghost-empty-${container.gid}`,
+      `vlayout-ghost-empty-${container.id}`,
       true,
       1,
       TAG_LAYOUT,
@@ -732,7 +850,7 @@ function virtualLayoutRecursiveFromNode(
       `ghost ${Math.round(dragGhostW)}x${Math.round(dragGhostH)}`,
       "rgba(161, 98, 7, 0.9)",
       true,
-      `vlayout-ghost-empty-label-${container.gid}`,
+      `vlayout-ghost-empty-label-${container.id}`,
       TAG_LAYOUT,
     );
   }
@@ -780,7 +898,7 @@ function virtualLayoutRecursiveFromNode(
         dragGhostH,
         "rgba(250, 204, 21, 0.15)",
         true,
-        `vlayout-ghost-before-${container.gid}-${j}`,
+        `vlayout-ghost-before-${container.id}-${j}`,
         true,
         1,
         TAG_LAYOUT,
@@ -791,7 +909,7 @@ function virtualLayoutRecursiveFromNode(
         `ghost ${Math.round(dragGhostW)}x${Math.round(dragGhostH)}`,
         "rgba(161, 98, 7, 0.9)",
         true,
-        `vlayout-ghost-before-label-${container.gid}-${j}`,
+        `vlayout-ghost-before-label-${container.id}-${j}`,
         TAG_LAYOUT,
       );
     }
@@ -824,7 +942,7 @@ function virtualLayoutRecursiveFromNode(
         simulatedPosition.y + prop.height,
         "rgba(180, 100, 255, 0.7)",
         true,
-        `vlayout-height-${item.gid}`,
+        `vlayout-height-${item.id}`,
         2,
         TAG_LAYOUT,
       );
@@ -834,7 +952,7 @@ function virtualLayoutRecursiveFromNode(
         `${Math.round(prop.height)}`,
         "rgba(180, 100, 255, 0.7)",
         true,
-        `vlayout-height-label-${item.gid}`,
+        `vlayout-height-label-${item.id}`,
         TAG_LAYOUT,
       );
     } else {
@@ -845,7 +963,7 @@ function virtualLayoutRecursiveFromNode(
         barY,
         "rgba(180, 100, 255, 0.7)",
         true,
-        `vlayout-height-${item.gid}`,
+        `vlayout-height-${item.id}`,
         2,
         TAG_LAYOUT,
       );
@@ -855,7 +973,7 @@ function virtualLayoutRecursiveFromNode(
         `${Math.round(prop.width)}`,
         "rgba(180, 100, 255, 0.7)",
         true,
-        `vlayout-height-label-${item.gid}`,
+        `vlayout-height-label-${item.id}`,
         TAG_LAYOUT,
       );
     }
@@ -893,7 +1011,7 @@ function virtualLayoutRecursiveFromNode(
         dragGhostH,
         "rgba(250, 204, 21, 0.15)",
         true,
-        `vlayout-ghost-after-${container.gid}-${j}`,
+        `vlayout-ghost-after-${container.id}-${j}`,
         true,
         1,
         TAG_LAYOUT,
@@ -904,7 +1022,7 @@ function virtualLayoutRecursiveFromNode(
         `ghost ${Math.round(dragGhostW)}x${Math.round(dragGhostH)}`,
         "rgba(161, 98, 7, 0.9)",
         true,
-        `vlayout-ghost-after-label-${container.gid}-${j}`,
+        `vlayout-ghost-after-label-${container.id}-${j}`,
         TAG_LAYOUT,
       );
     }
@@ -937,8 +1055,8 @@ export function determineDropTarget(
   const dragProp = requireDragSnapshot(item);
   const dragGhostW = dragProp.width;
   const dragGhostH = dragProp.height;
-  const dragCenterX = item.transform.x + dragProp.width / 2;
-  const dragCenterY = item.transform.y + dragProp.height / 2;
+  const dragCenterX = item.worldTransform.x + dragProp.width / 2;
+  const dragCenterY = item.worldTransform.y + dragProp.height / 2;
   const layoutOrigin = contentBoxOrigin(rootProp);
   dumpSnapshotOnce(item, root);
 
@@ -951,8 +1069,8 @@ export function determineDropTarget(
   if (LAYOUT_TRACE) {
     const r = (n: number) => Math.round(n);
     console.log(
-      `\n══════ determineDropTarget  drag=${item.gid}@(${r(dragCenterX)},${r(dragCenterY)})  ` +
-        `ghost=${r(dragGhostW)}×${r(dragGhostH)}  root=${root.gid}`,
+      `\n══════ determineDropTarget  drag=${item.id}@(${r(dragCenterX)},${r(dragCenterY)})  ` +
+        `ghost=${r(dragGhostW)}×${r(dragGhostH)}  root=${root.id}`,
     );
   }
 
@@ -967,8 +1085,17 @@ export function determineDropTarget(
     dragCenterX,
     dragCenterY,
   );
-  const candidates: DropCandidate[] = [];
-  candidates.push(...virtualCandidates);
+  const dragRect = {
+    x: item.worldTransform.x,
+    y: item.worldTransform.y,
+    width: dragGhostW,
+    height: dragGhostH,
+  };
+  const candidates = filterCandidatesByDropArea(
+    virtualCandidates,
+    item,
+    dragRect,
+  );
 
   // Clear any tie-break overlays from the previous frame so they don't ghost.
   // We allocate a generous slot range — in practice ties are rare, but multiple
@@ -990,7 +1117,7 @@ export function determineDropTarget(
     }
     if (
       Math.abs(c.distance - best.distance) <= 1 &&
-      c.container.gid != best.container.gid
+      c.container.id != best.container.id
     ) {
       best = chooseByContentBox(best, c, dragCenterX, dragCenterY);
     } else if (c.distance < best.distance) {
@@ -1005,7 +1132,7 @@ export function determineDropTarget(
     const r = (n: number) => Math.round(n);
     if (best) {
       console.log(
-        `══════ ✔ chosen  container=${best.container.gid}  idx=${best.index}` +
+        `══════ ✔ chosen  container=${best.container.id}  idx=${best.index}` +
           `  ghost=(${r(best.ghostCenterX)},${r(best.ghostCenterY)})  dist=${r(best.distance)}  prio=${best.priority}\n`,
       );
     } else {
@@ -1045,7 +1172,7 @@ export function determineDropTarget(
     root.addDebugText(
       c.ghostCenterX + 8,
       c.ghostCenterY + 4,
-      `${isBest ? ">> " : ""}[${c.container.gid}:${c.index}] d=${Math.round(c.distance)}`,
+      `${isBest ? ">> " : ""}[${c.container.id}:${c.index}] d=${Math.round(c.distance)}`,
       color,
       true,
       `drop-candidate-label-${i}`,
@@ -1130,9 +1257,9 @@ export function determineDropTarget(
 
   if (best) {
     item.addDebugText(
-      item.transform.x,
-      item.transform.y - 20,
-      `DROP: container=${best.container.gid} idx=${best.index} dist=${Math.round(best.distance)}`,
+      item.worldTransform.x,
+      item.worldTransform.y - 20,
+      `DROP: container=${best.container.id} idx=${best.index} dist=${Math.round(best.distance)}`,
       "rgba(250, 204, 21, 0.9)",
       true,
       `drop-result`,
@@ -1162,7 +1289,7 @@ export function debugDropTargetTree(node: ItemObject, draggedItem: ItemObject) {
 
   for (let j = 0; j < items.length; j++) {
     const item = items[j];
-    const prop = item.getDomProperty("READ_1");
+    const prop = item.dragSnapshot ?? item.currentDomProperty;
     if (!prop) continue;
 
     item.addDebugRect(
@@ -1172,7 +1299,7 @@ export function debugDropTargetTree(node: ItemObject, draggedItem: ItemObject) {
       prop.height,
       "rgba(60, 130, 246, 0.4)",
       true,
-      `drop-dom-${item.gid}`,
+      `drop-dom-${item.id}`,
       false,
       1,
       TAG_COLLISIONS,
@@ -1180,16 +1307,16 @@ export function debugDropTargetTree(node: ItemObject, draggedItem: ItemObject) {
     item.addDebugText(
       prop.x + 2,
       prop.y - 4,
-      `${item.gid}`,
+      `${item.id}`,
       "rgba(60, 130, 246, 0.7)",
       true,
-      `drop-dom-label-${item.gid}`,
+      `drop-dom-label-${item.id}`,
       TAG_COLLISIONS,
     );
 
-    draggedItem.clearDebugMarker(`drop-collision-line-${item.gid}`);
-    item.clearDebugMarker(`drop-colliding-${item.gid}`);
-    item.clearDebugMarker(`drop-colliding-label-${item.gid}`);
+    draggedItem.clearDebugMarker(`drop-collision-line-${item.id}`);
+    item.clearDebugMarker(`drop-colliding-${item.id}`);
+    item.clearDebugMarker(`drop-colliding-label-${item.id}`);
 
     if (item.children.length > 0) {
       debugDropTargetTree(item, draggedItem);

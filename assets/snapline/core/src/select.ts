@@ -1,5 +1,9 @@
 import { BaseObject, ElementObject } from "@snap-engine/core";
-import type { pointerDownProp, pointerMoveProp, pointerUpProp } from "@snap-engine/core";
+import type {
+  pointerDownProp,
+  pointerMoveProp,
+  pointerUpProp,
+} from "@snap-engine/core";
 import { RectCollider, Collider } from "@snap-engine/core/collision";
 import { NodeComponent } from "./node";
 
@@ -20,8 +24,7 @@ class RectSelectComponent extends ElementObject {
     this.event.global.pointerUp = this.onGlobalCursorUp;
 
     this._selectHitBox = new RectCollider(engine, this, 0, 0, 0, 0);
-    this._selectHitBox.transform.x = 0;
-    this._selectHitBox.transform.y = 0;
+    this._selectHitBox.localPosition = [0, 0];
     this._selectHitBox.event.collider.onCollide = this.onCollideNode;
 
     this.addCollider(this._selectHitBox);
@@ -54,7 +57,6 @@ class RectSelectComponent extends ElementObject {
 
     this.global.data.select = [];
     this.worldPosition = [prop.position.x, prop.position.y];
-    this._selectHitBox.recalculate();
     this._state = "dragging";
     this.style = {
       display: "block",
@@ -99,15 +101,14 @@ class RectSelectComponent extends ElementObject {
         height: `${boxHeight}px`,
       };
       this.worldPosition = [boxOriginX, boxOriginY];
-      this._selectHitBox.transform.x = this.transform.x - boxOriginX;
-      this._selectHitBox.transform.y = this.transform.y - boxOriginY;
-      this._selectHitBox.transform.width = boxWidth;
-      this._selectHitBox.transform.height = boxHeight;
+      this._selectHitBox.localPosition = [0, 0];
+      this._selectHitBox.width = boxWidth;
+      this._selectHitBox.height = boxHeight;
       this.requestTransform();
     }
   }
 
-  onGlobalCursorUp(prop: pointerUpProp): void {
+  onGlobalCursorUp(_prop: pointerUpProp): void {
     this.style = {
       display: "none",
     };
@@ -118,7 +119,7 @@ class RectSelectComponent extends ElementObject {
     this.requestTransform();
   }
 
-  onCollideNode(hitBox: Collider, node: Collider): void {}
+  onCollideNode(_hitBox: Collider, _node: Collider): void {}
 }
 
 export { RectSelectComponent };

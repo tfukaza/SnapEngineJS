@@ -7,5 +7,6 @@ export type {
   SnapSortDomInsertEvent,
   SnapSortDomRemoveEvent,
 } from "./container";
+export type { LayoutMainAxisAlign } from "./layout_engine";
 export { ItemObject } from "./item";
 export type { ItemId, ItemMetadata } from "./item";

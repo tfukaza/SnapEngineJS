@@ -42,7 +42,7 @@
 </script>
 
 
-{#each lineList as line (line.gid)}
+{#each lineList as line (line.id)}
     <LineSvelteComponent {line} />
 {/each}
 <div bind:this={nodeDOM} class={className} style="position: absolute;" transition:blur|global={{duration: 200}}>

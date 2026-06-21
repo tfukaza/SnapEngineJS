@@ -1,11 +1,12 @@
-import { BaseObject, ElementObject, frameStats } from "./object";
 import type { Engine } from "./engine";
+import { ElementObject } from "./object";
+import type { BaseObject, FrameStats } from "./object";
 
 export interface DebugRendererInterface {
   enable(engine: Engine): void;
   disable(): void;
   renderFrame(
-    stats: frameStats,
+    stats: FrameStats,
     engine: any,
     objectTable: Record<string, BaseObject>,
   ): void;
@@ -16,7 +17,7 @@ export class DebugRenderer implements DebugRendererInterface {
   debugWindow: HTMLCanvasElement | null = null;
   debugCtx: CanvasRenderingContext2D | null = null;
   #engine: Engine | null = null;
-  #subscriptionId = 'debugRenderer';
+  #subscriptionId = "debugRenderer";
   enabledTags: Set<string> | null = null; // null = show all, Set = only show these tags
 
   isTagEnabled(tag: string | undefined): boolean {
@@ -50,7 +51,7 @@ export class DebugRenderer implements DebugRendererInterface {
     this.debugCtx = this.debugWindow.getContext("2d");
 
     // Subscribe to container resize events
-    engine.subscribeEvent('containerResized', this.#subscriptionId, (props) => {
+    engine.subscribeEvent("containerResized", this.#subscriptionId, (props) => {
       this.updateSize(props.bounds.width, props.bounds.height);
     });
   }
@@ -61,10 +62,10 @@ export class DebugRenderer implements DebugRendererInterface {
       this.debugWindow = null;
       this.debugCtx = null;
     }
-    
+
     // Unsubscribe from resize events
     if (this.#engine) {
-      this.#engine.unsubscribeEvent('containerResized', this.#subscriptionId);
+      this.#engine.unsubscribeEvent("containerResized", this.#subscriptionId);
       this.#engine = null;
     }
   }
@@ -77,7 +78,7 @@ export class DebugRenderer implements DebugRendererInterface {
   }
 
   renderFrame(
-    _stats: frameStats,
+    _stats: FrameStats,
     engine: any,
     objectTable: Record<string, BaseObject>,
   ): void {
@@ -103,7 +104,7 @@ export class DebugRenderer implements DebugRendererInterface {
       return;
     }
     for (const marker of Object.values(engine.debugMarkerList) as Array<{
-      gid: string;
+      objectId: string;
       id: string;
       type: "point" | "rect" | "circle" | "text" | "line";
       persistent: boolean;
@@ -179,8 +180,14 @@ export class DebugRenderer implements DebugRendererInterface {
           this.debugCtx.beginPath();
           this.debugCtx.fillStyle = marker.color;
           this.debugCtx.moveTo(cameraX2, cameraY2);
-          this.debugCtx.lineTo(cameraX2 - size * Math.cos(angle - Math.PI / 6), cameraY2 - size * Math.sin(angle - Math.PI / 6));
-          this.debugCtx.lineTo(cameraX2 - size * Math.cos(angle + Math.PI / 6), cameraY2 - size * Math.sin(angle + Math.PI / 6));
+          this.debugCtx.lineTo(
+            cameraX2 - size * Math.cos(angle - Math.PI / 6),
+            cameraY2 - size * Math.sin(angle - Math.PI / 6),
+          );
+          this.debugCtx.lineTo(
+            cameraX2 - size * Math.cos(angle + Math.PI / 6),
+            cameraY2 - size * Math.sin(angle + Math.PI / 6),
+          );
           this.debugCtx.closePath();
           this.debugCtx.fill();
         }
@@ -189,8 +196,14 @@ export class DebugRenderer implements DebugRendererInterface {
           this.debugCtx.beginPath();
           this.debugCtx.fillStyle = marker.color;
           this.debugCtx.moveTo(cameraX, cameraY);
-          this.debugCtx.lineTo(cameraX - size * Math.cos(reverseAngle - Math.PI / 6), cameraY - size * Math.sin(reverseAngle - Math.PI / 6));
-          this.debugCtx.lineTo(cameraX - size * Math.cos(reverseAngle + Math.PI / 6), cameraY - size * Math.sin(reverseAngle + Math.PI / 6));
+          this.debugCtx.lineTo(
+            cameraX - size * Math.cos(reverseAngle - Math.PI / 6),
+            cameraY - size * Math.sin(reverseAngle - Math.PI / 6),
+          );
+          this.debugCtx.lineTo(
+            cameraX - size * Math.cos(reverseAngle + Math.PI / 6),
+            cameraY - size * Math.sin(reverseAngle + Math.PI / 6),
+          );
           this.debugCtx.closePath();
           this.debugCtx.fill();
         }
@@ -208,14 +221,14 @@ export class DebugRenderer implements DebugRendererInterface {
     if (this.debugCtx == null) {
       return;
     }
-    
+
     const [cameraX, cameraY] = engine.camera?.getCameraFromWorld(
       ...object.worldPosition,
     ) ?? [0, 0];
 
     // If object has a dom, draw a rectangle around the object's width and height
-    if (Object.prototype.hasOwnProperty.call(object, "_dom")) {
-      const elementObject = object as ElementObject;
+    if (object instanceof ElementObject) {
+      const elementObject = object;
 
       const colors = ["#FF0000A0", "#00FF00A0", "#0000FFA0"];
       const stages = ["READ_1", "READ_2", "READ_3"];
@@ -241,15 +254,19 @@ export class DebugRenderer implements DebugRendererInterface {
       }
 
       // Black rectangle represents the object's transform property
-      if (this.isTagEnabled("dom-read-1") || this.isTagEnabled("dom-read-2") || this.isTagEnabled("dom-read-3")) {
+      if (
+        this.isTagEnabled("dom-read-1") ||
+        this.isTagEnabled("dom-read-2") ||
+        this.isTagEnabled("dom-read-3")
+      ) {
         this.debugCtx.beginPath();
         this.debugCtx.strokeStyle = "black";
         this.debugCtx.lineWidth = 1;
         this.debugCtx.rect(
           cameraX,
           cameraY,
-          elementObject._dom.property.width,
-          elementObject._dom.property.height,
+          elementObject.currentDomProperty.width,
+          elementObject.currentDomProperty.height,
         );
         this.debugCtx.stroke();
       }
@@ -259,20 +276,24 @@ export class DebugRenderer implements DebugRendererInterface {
 
     const COLLIDER_BLUE = "rgba(0, 247, 255, 0.5)";
 
-    for (const collisionObject of object._colliderList) {
+    for (const collisionObject of object.colliderList) {
       this.debugCtx.beginPath();
       this.debugCtx.strokeStyle = COLLIDER_BLUE;
       this.debugCtx.lineWidth = 1;
       const [colliderCameraX, colliderCameraY] =
         engine.camera?.getCameraFromWorld(
-          object.transform.x + collisionObject.local.x,
-          object.transform.y + collisionObject.local.y,
+          collisionObject.type === "rect"
+            ? collisionObject.worldLeft
+            : collisionObject.worldPosition[0],
+          collisionObject.type === "rect"
+            ? collisionObject.worldTop
+            : collisionObject.worldPosition[1],
         ) ?? [0, 0];
       if (collisionObject.type == "circle") {
         this.debugCtx.arc(
           colliderCameraX,
           colliderCameraY,
-          (collisionObject as any).radius,
+          collisionObject.worldRadius,
           0,
           2 * Math.PI,
         );
@@ -281,8 +302,8 @@ export class DebugRenderer implements DebugRendererInterface {
         this.debugCtx.rect(
           colliderCameraX,
           colliderCameraY,
-          collisionObject.local.width,
-          collisionObject.local.height,
+          collisionObject.worldWidth,
+          collisionObject.worldHeight,
         );
         this.debugCtx.stroke();
       } else if (collisionObject.type == "point") {

@@ -1,0 +1,130 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>WAAPI progress easing repro</title>
+    <style>
+      body {
+        font-family:
+          ui-sans-serif,
+          system-ui,
+          -apple-system,
+          BlinkMacSystemFont,
+          "Segoe UI",
+          sans-serif;
+        margin: 24px;
+        color: #1f2937;
+      }
+
+      .target {
+        width: 120px;
+        height: 120px;
+        margin: 16px 0;
+        background: #2563eb;
+      }
+
+      table {
+        border-collapse: collapse;
+        margin-top: 16px;
+      }
+
+      th,
+      td {
+        border: 1px solid #d1d5db;
+        padding: 6px 8px;
+        text-align: right;
+      }
+
+      th:first-child,
+      td:first-child {
+        text-align: left;
+      }
+
+      .fail {
+        color: #b91c1c;
+        font-weight: 700;
+      }
+
+      .pass {
+        color: #047857;
+        font-weight: 700;
+      }
+    </style>
+  </head>
+  <body>
+    <h1>WAAPI per-keyframe easing progress repro</h1>
+    <p>
+      This checks whether <code>effect.getComputedTiming().progress</code>
+      reflects per-keyframe easing or only linear timeline progress.
+    </p>
+    <div id="target" class="target"></div>
+    <div id="summary"></div>
+    <table>
+      <thead>
+        <tr>
+          <th>time</th>
+          <th>reported progress</th>
+          <th>computed opacity</th>
+          <th>absolute delta</th>
+        </tr>
+      </thead>
+      <tbody id="results"></tbody>
+    </table>
+
+    <script>
+      const target = document.getElementById("target");
+      const results = document.getElementById("results");
+      const summary = document.getElementById("summary");
+      const duration = 1000;
+      const sampleTimes = [125, 250, 375, 500, 625, 750, 875];
+
+      const animation = new Animation(
+        new KeyframeEffect(
+          target,
+          [
+            { opacity: 0, offset: 0, easing: "cubic-bezier(0.42, 0, 1, 1)" },
+            { opacity: 1, offset: 1 },
+          ],
+          { duration, fill: "both" },
+        ),
+      );
+
+      animation.pause();
+
+      const samples = sampleTimes.map((time) => {
+        animation.currentTime = time;
+        const reportedProgress =
+          animation.effect.getComputedTiming().progress ?? 0;
+        const computedOpacity = Number(getComputedStyle(target).opacity);
+        const delta = Math.abs(reportedProgress - computedOpacity);
+        return { time, reportedProgress, computedOpacity, delta };
+      });
+
+      const maxDelta = Math.max(...samples.map((sample) => sample.delta));
+      const isStillLinear = maxDelta > 0.05;
+
+      for (const sample of samples) {
+        const row = document.createElement("tr");
+        row.innerHTML = `
+          <td>${sample.time}ms</td>
+          <td>${sample.reportedProgress.toFixed(4)}</td>
+          <td>${sample.computedOpacity.toFixed(4)}</td>
+          <td>${sample.delta.toFixed(4)}</td>
+        `;
+        results.appendChild(row);
+      }
+
+      summary.innerHTML = isStillLinear
+        ? `<p class="fail">Mismatch detected. Reported progress does not include per-keyframe easing.</p>`
+        : `<p class="pass">No meaningful mismatch detected.</p>`;
+
+      window.__waapiProgressRepro = {
+        maxDelta,
+        isStillLinear,
+        samples,
+        userAgent: navigator.userAgent,
+      };
+    </script>
+  </body>
+</html>

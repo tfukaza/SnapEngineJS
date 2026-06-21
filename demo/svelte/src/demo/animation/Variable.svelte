@@ -19,9 +19,10 @@
       {
         duration: 10000,
         easing: "ease-in-out",
+        persist: true,
         tick: (values: any) => {
           if (object.element) {
-            object.element.innerHTML = `<h1>${Math.round(values.$x)}</h1>`;
+            object.element.textContent = Math.round(values.$x).toString();
           }
         },
       },
@@ -44,7 +45,17 @@
 </script>
 
 <Exhibit {props} >
-  <div bind:this={object.element} style="top: 50%; left: 50%; position: absolute; transform: translate(-50%, -50%);"></div>
+  <div class="variable-value" bind:this={object.element} style="top: 50%; left: 50%; position: absolute; transform: translate(-50%, -50%);"></div>
 </Exhibit>
+
+<style lang="scss">
+  .variable-value {
+    color: black;
+    font-family: "Geist", sans-serif;
+    font-size: 72px;
+    font-weight: 300;
+    line-height: 1;
+  }
+</style>
   
   

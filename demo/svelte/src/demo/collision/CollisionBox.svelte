@@ -52,14 +52,14 @@
 
     // Collision events
     collider.event.collider.onBeginContact = (_, other) => {
-        const otherId = (other.parent as any).element?.querySelector('h1')?.innerText || other.parent.gid;
+        const otherId = (other.parent as any).element?.querySelector('h1')?.innerText || other.parent.id;
         addLog(`Begin: ${otherId}`);
     isColliding = true;
         onCollisionBegin?.();
     };
 
     collider.event.collider.onEndContact = (_, other) => {
-        const otherId = (other.parent as any).element?.querySelector('h1')?.innerText || other.parent.gid;
+        const otherId = (other.parent as any).element?.querySelector('h1')?.innerText || other.parent.id;
         addLog(`End: ${otherId}`);
     isColliding = false;
         onCollisionEnd?.();

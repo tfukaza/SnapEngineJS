@@ -81,17 +81,17 @@
           The most useful abstraction is the one that keeps a frame predictable.
         </blockquote>
 
-        <pre class="display code-display"><code>object.queueUpdate("READ_1", () => &#123;
+        <pre class="display code-display"><code>object.schedule(() => &#123;
   object.readDom(true, "READ_1");
-&#125;);
+&#125;, &#123; stage: "READ_1" &#125;);
 
-object.queueUpdate("WRITE_1", () => &#123;
+object.schedule(() => &#123;
   object.writeTransform();
-&#125;);</code></pre>
+&#125;, &#123; stage: "WRITE_1" &#125;);</code></pre>
 
         <h4>Implementation Note</h4>
         <p>
-          Inline code such as <code>queueUpdate()</code> should sit comfortably
+          Inline code such as <code>schedule()</code> should sit comfortably
           inside body copy without changing the rhythm of the line. Related API
           notes can point to <a href="#buttons">controls</a> or
           <a href="#colors">color tokens</a> without feeling louder than the

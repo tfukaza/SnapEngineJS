@@ -1,41 +1,154 @@
-type cssValue =
-  | string
-  | number
-  | string[]
-  | (number | null)[]
-  | null
-  | undefined;
-export type keyframeList = Record<string, cssValue>;
+export type KeyframeList = Record<string, PropertyIndexedKeyframes[string]>;
 
-let animationFragment: HTMLDivElement | null = null;
+const INITIAL_VARIABLE_CHANNEL_COUNT = 2;
+const VARIABLE_CHANNEL_GROWTH_FACTOR = 2;
+const VARIABLE_CHANNEL_PREFIX = "--snap-var-";
 
-/**
- * Gets or creates a hidden DOM element for animations that don't have a specific target.
- *
- * The Web Animations API requires a target element even for variable-only animations.
- * This function lazily creates a hidden div that serves as a dummy target.
- *
- * @returns The animation fragment element
- */
-function getAnimationFragment(): HTMLDivElement {
-  if (!animationFragment) {
-    animationFragment = document.createElement("div");
-    animationFragment.style.display = "none";
-    document.body.appendChild(animationFragment);
-  }
-  return animationFragment;
+const registeredCustomProperties = new Set<string>();
+const variableChannelPools = new WeakMap<Element, VariableChannelPool>();
+let sharedAnimationTarget: HTMLDivElement | null = null;
+
+interface VariableChannel {
+  id: number;
+  propertyName: string;
 }
 
-export interface keyframeProperty {
+interface VariableChannelPool {
+  channels: VariableChannel[];
+  freeChannels: VariableChannel[];
+}
+
+interface CssPropertyRegistry {
+  registerProperty?: (property: {
+    name: string;
+    syntax: string;
+    inherits: boolean;
+    initialValue: string;
+  }) => void;
+}
+
+function getSharedAnimationTarget(): HTMLDivElement {
+  if (!sharedAnimationTarget) {
+    sharedAnimationTarget = document.createElement("div");
+    sharedAnimationTarget.style.display = "none";
+    document.body.appendChild(sharedAnimationTarget);
+  }
+  return sharedAnimationTarget;
+}
+
+function registerNumericCustomProperty(name: string): void {
+  if (registeredCustomProperties.has(name)) {
+    return;
+  }
+
+  const css = globalThis.CSS as CssPropertyRegistry | undefined;
+  if (!css?.registerProperty) {
+    throw new Error(
+      "CSS.registerProperty is required to animate custom variables.",
+    );
+  }
+
+  try {
+    css.registerProperty({
+      name,
+      syntax: "<number>",
+      inherits: false,
+      initialValue: "0",
+    });
+  } catch (error) {
+    if ((error as { name?: string }).name !== "InvalidModificationError") {
+      throw new Error(`Failed to register animation variable ${name}.`);
+    }
+  }
+
+  registeredCustomProperties.add(name);
+}
+
+function getVariableChannelPool(target: Element): VariableChannelPool {
+  let pool = variableChannelPools.get(target);
+  if (!pool) {
+    pool = {
+      channels: [],
+      freeChannels: [],
+    };
+    variableChannelPools.set(target, pool);
+  }
+  return pool;
+}
+
+function createVariableChannel(pool: VariableChannelPool): VariableChannel {
+  const id = pool.channels.length;
+  const channel = {
+    id,
+    propertyName: `${VARIABLE_CHANNEL_PREFIX}${id}`,
+  };
+  registerNumericCustomProperty(channel.propertyName);
+  pool.channels.push(channel);
+  pool.freeChannels.unshift(channel);
+  return channel;
+}
+
+function growVariableChannelPool(
+  pool: VariableChannelPool,
+  requiredFreeCount: number,
+) {
+  const currentCapacity = pool.channels.length;
+  let nextCapacity =
+    currentCapacity === 0 ? INITIAL_VARIABLE_CHANNEL_COUNT : currentCapacity;
+
+  while (nextCapacity - currentCapacity < requiredFreeCount) {
+    nextCapacity *= VARIABLE_CHANNEL_GROWTH_FACTOR;
+  }
+
+  while (pool.channels.length < nextCapacity) {
+    createVariableChannel(pool);
+  }
+}
+
+function acquireVariableChannels(
+  target: Element,
+  count: number,
+): VariableChannel[] {
+  if (count === 0) {
+    return [];
+  }
+
+  const pool = getVariableChannelPool(target);
+
+  if (pool.freeChannels.length < count) {
+    growVariableChannelPool(pool, count - pool.freeChannels.length);
+  }
+
+  const channels: VariableChannel[] = [];
+  for (let i = 0; i < count; i++) {
+    const channel = pool.freeChannels.pop();
+    if (!channel) {
+      throw new Error("Failed to acquire animation variable channel.");
+    }
+    channels.push(channel);
+  }
+  return channels;
+}
+
+function releaseVariableChannels(target: Element, channels: VariableChannel[]) {
+  const pool = getVariableChannelPool(target);
+  for (const channel of channels) {
+    pool.freeChannels.push(channel);
+  }
+}
+
+export interface KeyframeProperty {
   offset?: (number | string)[];
   easing?: string | string[];
-  duration?: number;
+  duration?: number | number[];
   delay?: number;
   tick?: (value: Record<string, number>) => void;
   start?: () => void;
   finish?: () => void;
   persist?: boolean;
 }
+
+export interface keyframeProperty extends KeyframeProperty {}
 
 export interface AnimationInterface {
   play(): void;
@@ -46,6 +159,164 @@ export interface AnimationInterface {
   currentTime: number;
   progress: number;
   requestDelete: boolean;
+}
+
+interface NormalizedKeyframeProperty {
+  offset: number[];
+  easing: string[];
+  duration: number[];
+  totalDuration: number;
+  delay: number;
+  tick?: (value: Record<string, number>) => void;
+  start?: () => void;
+  finish?: () => void;
+  persist: boolean;
+  hasExplicitOffset: boolean;
+}
+
+interface KeyframeBuildResult {
+  cssKeyframe: PropertyIndexedKeyframes;
+  variableProperties: Record<string, string>;
+  variableChannels: VariableChannel[];
+  hasVariable: boolean;
+}
+
+const DEFAULT_KEYFRAME_PROPERTY = {
+  duration: 1000,
+  delay: 0,
+  easing: "linear",
+  persist: false,
+} as const;
+
+function getKeyframeCount(keyframe: KeyframeList): number {
+  let count = 0;
+  for (const value of Object.values(keyframe)) {
+    count = Math.max(count, Array.isArray(value) ? value.length : 1);
+  }
+  return count;
+}
+
+function createDefaultOffsets(keyframeCount: number): number[] {
+  if (keyframeCount <= 1) {
+    return [0];
+  }
+
+  const offsets: number[] = [];
+  for (let i = 0; i < keyframeCount; i++) {
+    offsets.push(i / (keyframeCount - 1));
+  }
+  return offsets;
+}
+
+function normalizeOffset(offset: number | string): number {
+  if (typeof offset === "number") {
+    return offset;
+  }
+
+  const value = Number.parseFloat(offset);
+  if (!Number.isFinite(value)) {
+    throw new Error(`Invalid animation offset: ${offset}`);
+  }
+  return offset.trim().endsWith("%") ? value / 100 : value;
+}
+
+function normalizeList<T>(value: T | T[]): T[] {
+  return Array.isArray(value) ? [...value] : [value];
+}
+
+function normalizeKeyframeProperty(
+  keyframe: KeyframeList,
+  property: KeyframeProperty,
+): NormalizedKeyframeProperty {
+  const hasExplicitOffset = property.offset != null;
+  const offset = hasExplicitOffset
+    ? property.offset!.map(normalizeOffset)
+    : createDefaultOffsets(getKeyframeCount(keyframe));
+  const easing = normalizeList(
+    property.easing ?? DEFAULT_KEYFRAME_PROPERTY.easing,
+  );
+  const duration = normalizeList(
+    property.duration ?? DEFAULT_KEYFRAME_PROPERTY.duration,
+  );
+  const totalDuration = duration.reduce((sum, value) => sum + value, 0);
+  const desiredEasingLength = Math.max(1, offset.length - 1);
+
+  if (easing.length < desiredEasingLength) {
+    const lastEasing =
+      easing[easing.length - 1] ?? DEFAULT_KEYFRAME_PROPERTY.easing;
+    while (easing.length < desiredEasingLength) {
+      easing.push(lastEasing);
+    }
+  }
+
+  return {
+    offset,
+    easing,
+    duration,
+    totalDuration,
+    delay: property.delay ?? DEFAULT_KEYFRAME_PROPERTY.delay,
+    tick: property.tick,
+    start: property.start,
+    finish: property.finish,
+    persist: property.persist ?? DEFAULT_KEYFRAME_PROPERTY.persist,
+    hasExplicitOffset,
+  };
+}
+
+function normalizeVariableValues(
+  value: PropertyIndexedKeyframes[string],
+  length: number,
+): number[] {
+  const values = Array.isArray(value) ? value : [value];
+  const numbers = values.map((entry) => Number(entry ?? 0));
+  const last = numbers[numbers.length - 1] ?? 0;
+  while (numbers.length < length) {
+    numbers.push(last);
+  }
+  return numbers;
+}
+
+function createKeyframeBuildResult(
+  target: Element,
+  keyframe: KeyframeList,
+  keyframeLength: number,
+): KeyframeBuildResult {
+  const cssKeyframe: KeyframeList = {};
+  const variables: Record<string, number[]> = {};
+  const variableProperties: Record<string, string> = {};
+  const variableEntries = Object.entries(keyframe).filter(([key]) =>
+    key.startsWith("$"),
+  );
+  const variableChannels = acquireVariableChannels(
+    target,
+    variableEntries.length,
+  );
+  let variableIndex = 0;
+
+  try {
+    for (const [key, value] of Object.entries(keyframe)) {
+      if (!key.startsWith("$")) {
+        cssKeyframe[key] = value;
+        continue;
+      }
+
+      const channel = variableChannels[variableIndex];
+      variableIndex++;
+      variables[key] = normalizeVariableValues(value, keyframeLength);
+      variableProperties[key] = channel.propertyName;
+      cssKeyframe[channel.propertyName] = variables[key].map(String);
+    }
+  } catch (error) {
+    releaseVariableChannels(target, variableChannels);
+    throw error;
+  }
+
+  return {
+    cssKeyframe: cssKeyframe as PropertyIndexedKeyframes,
+    variableProperties,
+    variableChannels,
+    hasVariable: Object.keys(variables).length > 0,
+  };
 }
 
 /**
@@ -59,287 +330,158 @@ export interface AnimationInterface {
  * - Custom variable animations (e.g., $value, $progress)
  * - Per-keyframe easing functions
  * - Callbacks on each frame and completion
- *
- * @example
- * ```typescript
- * // Animate CSS properties
- * const anim = new AnimationObject(element,
- *   { x: [0, 100], opacity: [1, 0] },
- *   { duration: 1000, easing: 'ease-in-out' }
- * );
- *
- * // Animate custom variables
- * const anim = new AnimationObject(null,
- *   { $value: [0, 100] },
- *   {
- *     duration: 1000,
- *     tick: (vars) => console.log(vars.$value)
- *   }
- * );
- * ```
  */
 class AnimationObject implements AnimationInterface {
-  target: Element;
-  keyframe: keyframeList;
-  property: keyframeProperty;
-
-  #variables: Record<string, number[]>;
-  #animation: Animation | null;
-  #varAnimation: Animation[] | null;
-  #offset: number[];
-  #easing: string[];
-  #duration: number[];
-  #delay: number;
+  #target: Element;
+  #keyframe: KeyframeList;
+  #property: NormalizedKeyframeProperty;
+  #variableProperties: Record<string, string>;
+  #variableChannels: VariableChannel[];
+  #animation: Animation;
   #hasVariable: boolean;
-  // #deleteOnFinish: boolean;
   requestDelete: boolean;
 
   constructor(
     target: Element | null,
-    keyframe: keyframeList,
-    property: keyframeProperty,
+    keyframe: KeyframeList,
+    property: KeyframeProperty = {},
   ) {
-    this.target = target ?? getAnimationFragment();
-    this.keyframe = keyframe;
-    this.property = property;
-  const shouldPersist = this.property.persist ?? false;
-  this.property.persist = shouldPersist;
+    this.#target = target ?? getSharedAnimationTarget();
+    this.#keyframe = keyframe;
+    this.#property = normalizeKeyframeProperty(keyframe, property);
 
-    this.#animation = null;
-    // this.#deleteOnFinish = true;
-    if (!this.property.duration) {
-      this.property.duration = 1000;
-    }
-    if (!this.property.delay) {
-      this.property.delay = 0;
-    }
-    let numKeys = 0;
-    for (const [_, value] of Object.entries(this.keyframe)) {
-      const len = Array.isArray(value) ? value.length : 1;
-      numKeys = Math.max(numKeys, len);
-    }
-    if (!this.property.offset) {
-      this.#offset = [];
-      if (numKeys <= 1) {
-        this.#offset.push(0);
-      } else {
-        for (let i = 0; i < numKeys; i++) {
-          this.#offset.push(i / (numKeys - 1));
-        }
-      }
-    } else {
-      this.#offset = this.property.offset as number[];
-    }
-    if (!this.property.easing) {
-      this.#easing = ["linear"];
-    } else {
-      if (Array.isArray(this.property.easing)) {
-        this.#easing = this.property.easing;
-      } else {
-        this.#easing = [this.property.easing];
-      }
-    }
-    const desiredEasingLength = Math.max(1, this.#offset.length - 1);
-    if (this.#easing.length < desiredEasingLength) {
-      const lastEasing = this.#easing[this.#easing.length - 1] ?? "linear";
-      while (this.#easing.length < desiredEasingLength) {
-        this.#easing.push(lastEasing);
-      }
-    }
-    if (!this.property.duration) {
-      this.#duration = [this.property.duration];
-    } else {
-      if (Array.isArray(this.property.duration)) {
-        this.#duration = this.property.duration;
-      } else {
-        this.#duration = [this.property.duration];
-      }
-    }
-    if (!this.property.delay) {
-      this.#delay = 0;
-    } else {
-      this.#delay = this.property.delay;
-    }
-
-    this.#variables = {};
-    this.#varAnimation = [];
-
-    this.#hasVariable =
-      Object.keys(this.keyframe).filter((key) => {
-        return key.startsWith("$");
-      }).length > 0;
-
-    // Remove keys that start with $, and create a new keyframe
-    let cssKeyframe: PropertyIndexedKeyframes = {};
-    for (const [key, value] of Object.entries(this.keyframe)) {
-      if (!key.startsWith("$")) {
-        cssKeyframe[key] = value;
-      } else {
-        this.#variables[key] = value as number[];
-      }
-    }
-
-    if (this.#hasVariable && Object.keys(cssKeyframe).length == 0) {
-      cssKeyframe = {};
-    }
-
-    if (this.property.offset) {
-      // TODO: Convert string offset to number
-      cssKeyframe.offset = this.property.offset as number[];
-    }
-
-    const animationProperty: KeyframeEffectOptions = {
-      delay: this.#delay,
-      fill: "both",
-    };
-
-    if (this.#duration.length > 1) {
-      cssKeyframe.duration = this.#duration;
-    } else {
-      animationProperty.duration = this.#duration[0];
-    }
-
-    if (this.#easing.length > 1) {
-      cssKeyframe.easing = this.#easing;
-    } else {
-      animationProperty.easing = this.#easing[0];
-    }
-
-    this.#animation = new Animation(
-      new KeyframeEffect(this.target, cssKeyframe, animationProperty),
+    const keyframeBuild = createKeyframeBuildResult(
+      this.#target,
+      this.#keyframe,
+      this.#property.offset.length,
     );
+    const cssKeyframe = keyframeBuild.cssKeyframe;
+    this.#variableProperties = keyframeBuild.variableProperties;
+    this.#variableChannels = keyframeBuild.variableChannels;
+    this.#hasVariable = keyframeBuild.hasVariable;
+
+    try {
+      if (this.#property.hasExplicitOffset) {
+        cssKeyframe.offset = this.#property.offset;
+      }
+
+      const animationProperty: KeyframeEffectOptions = {
+        delay: this.#property.delay,
+        fill: "both",
+      };
+
+      if (this.#property.duration.length > 1) {
+        cssKeyframe.duration = this.#property.duration;
+      } else {
+        animationProperty.duration = this.#property.duration[0];
+      }
+
+      if (this.#property.easing.length > 1) {
+        cssKeyframe.easing = this.#property.easing;
+      } else {
+        animationProperty.easing = this.#property.easing[0];
+      }
+
+      this.#animation = new Animation(
+        new KeyframeEffect(this.#target, cssKeyframe, animationProperty),
+      );
+    } catch (error) {
+      this.#releaseVariableChannels();
+      throw error;
+    }
     this.requestDelete = false;
     this.#animation.onfinish = () => {
-      this.property.finish?.();
-      this.finish();
-      if (shouldPersist) {
-        this.#animation?.pause();
+      this.#property.finish?.();
+      this.#commitStyles();
+      if (this.#property.persist) {
+        this.#animation.pause();
       } else {
-        this.#animation?.cancel();
+        this.#animation.cancel();
+        this.#releaseVariableChannels();
         this.requestDelete = true;
       }
     };
-
-    // As of April 2025, there seems to be a bug in Chrome where
-    // getComputedTiming().progress returns the linear time interpolation
-    // instead of the actual animation progress calculated from the easing function,
-    // if the easing function is specified per key rather than globally for all keyframes.
-    // To work around this, we create individual animations for each keyframe interval.
-    this.#varAnimation = [];
-    if (this.#hasVariable && this.#easing.length > 1) {
-      for (let i = 0; i < this.#offset.length - 1; i++) {
-        const intervalKeys: Record<string, number[]> = {};
-        for (const [key, value] of Object.entries(this.#variables)) {
-          intervalKeys[key] = value.slice(i, i + 1) as number[];
-        }
-        const intervalDuration =
-          (this.#offset[i + 1] - this.#offset[i]) * this.property.duration!;
-        const intervalDelay =
-          this.#offset[i] * this.property.duration! + this.property.delay!;
-        const intervalEasing = this.#easing[i];
-        const animation = new Animation(
-          new KeyframeEffect(this.target, intervalKeys, {
-            duration: intervalDuration,
-            delay: intervalDelay,
-            easing: intervalEasing,
-            fill: "both",
-          }),
-        );
-        animation.onfinish = () => {
-          animation.cancel();
-        };
-        animation.persist();
-        this.#varAnimation.push(animation);
-      }
-    }
   }
 
   pause() {
-    this.#animation!.pause();
-    for (let i = 0; i < this.#varAnimation!.length; i++) {
-      this.#varAnimation![i].pause();
-    }
+    this.#animation.pause();
   }
 
   play() {
-    this.#animation!.play();
-    this.property.start?.();
-    for (let i = 0; i < this.#varAnimation!.length; i++) {
-      this.#varAnimation![i].play();
-    }
+    this.#animation.play();
+    this.#property.start?.();
   }
 
   cancel() {
-    this.#animation!.cancel();
-    for (let i = 0; i < this.#varAnimation!.length; i++) {
-      this.#varAnimation![i].cancel();
-    }
+    this.#animation.cancel();
+    this.#releaseVariableChannels();
+    this.requestDelete = true;
   }
 
   reverse() {
-    this.#animation!.reverse();
-    for (let i = 0; i < this.#varAnimation!.length; i++) {
-      this.#varAnimation![i].reverse();
-    }
+    this.#animation.reverse();
   }
 
   calculateFrame(_: number): boolean {
-    const alpha = this.#animation!.effect!.getComputedTiming().progress;
+    const alpha = this.#animation.effect!.getComputedTiming().progress;
     if (alpha == null) {
       return false;
     }
-    const alphaElapsedTime =
-      this.property.duration! * alpha + this.property.delay!;
     if (this.#hasVariable) {
-      let currentKey = 0;
-      for (let i = 0; i < this.#offset.length - 1; i++) {
-        if (this.#offset[i] <= alpha && alpha < this.#offset[i + 1]) {
-          currentKey = i;
-          break;
-        }
-      }
-      if (alpha >= 1.0) {
-        currentKey = this.#offset.length - 2;
-      }
-      let localAlpha = alpha;
-      if (this.#easing.length > 1) {
-        const currentVarAnimation = this.#varAnimation![currentKey];
-        currentVarAnimation.currentTime = alphaElapsedTime;
-        localAlpha =
-          currentVarAnimation.effect!.getComputedTiming().progress ?? 0;
-      }
-      const varValues: Record<string, number> = {};
-      for (const [key, value] of Object.entries(this.#variables)) {
-        const varFrom = value[currentKey];
-        const varTo = value[currentKey + 1];
-        const varValue = varFrom + (varTo - varFrom) * localAlpha;
-        varValues[key] = varValue;
-      }
-      this.property.tick?.(varValues);
+      this.#property.tick?.(this.#calculateVariableValues(alpha));
     } else {
-      this.property.tick?.({});
+      this.#property.tick?.({});
     }
     return false;
   }
 
-  finish() {
+  #calculateVariableValues(_: number): Record<string, number> {
+    // This design triggers a getComputedStyle call
+    // for every frame for every variable, but according to Chrome DevTools benchmark,
+    // on a low end mobile device it only had ~9ms overhead per frame.
+    // For most practical purposes this approach is acceptable,
+    // arguably even preferable since we can take advantage of browser
+    // animation APIs.
+    const style = getComputedStyle(this.#target);
+    const values: Record<string, number> = {};
+    for (const [key, propertyName] of Object.entries(
+      this.#variableProperties,
+    )) {
+      values[key] = Number(style.getPropertyValue(propertyName));
+    }
+    return values;
+  }
+
+  #commitStyles() {
     try {
-      this.#animation?.commitStyles();
+      this.#animation.commitStyles();
     } catch {
       // Ignore error
     }
   }
 
-  set currentTime(time: number) {
-    this.#animation!.currentTime = time;
-    for (let i = 0; i < this.#varAnimation!.length; i++) {
-      this.#varAnimation![i].currentTime = time;
+  #releaseVariableChannels() {
+    if (this.#variableChannels.length > 0) {
+      releaseVariableChannels(this.#target, this.#variableChannels);
+      this.#variableChannels = [];
     }
+  }
+
+  get currentTime(): number {
+    return Number(this.#animation.currentTime ?? 0);
+  }
+
+  set currentTime(time: number) {
+    this.#animation.currentTime = time;
+  }
+
+  get progress(): number {
+    return this.#animation.effect!.getComputedTiming().progress ?? 0;
   }
 
   set progress(progress: number) {
     this.currentTime =
-      (this.property.duration! + this.property.delay!) * progress;
+      (this.#property.totalDuration + this.#property.delay) * progress;
   }
 }
 
@@ -348,75 +490,71 @@ class AnimationObject implements AnimationInterface {
  *
  * Allows grouping multiple AnimationObject instances to control them together.
  * All animations in the sequence share the same playback state.
- *
- * @example
- * ```typescript
- * const sequence = new SequenceObject();
- * sequence.add(new AnimationObject(elem1, { x: [0, 100] }, { duration: 1000 }));
- * sequence.add(new AnimationObject(elem2, { y: [0, 100] }, { duration: 1000 }));
- * sequence.play();
- * ```
  */
 class SequenceObject implements AnimationInterface {
-  animations: AnimationInterface[];
-  startTime: number;
-  endTime: number;
-  expired: boolean;
+  #animations: AnimationInterface[];
+
   requestDelete: boolean;
 
   constructor() {
-    this.animations = [];
-    this.startTime = -1;
-    this.endTime = -1;
-    this.expired = false;
+    this.#animations = [];
     this.requestDelete = false;
   }
 
   add(animation: AnimationInterface) {
-    this.animations.push(animation);
+    this.#animations.push(animation);
   }
 
   play() {
-    for (let i = 0; i < this.animations.length; i++) {
-      this.animations[i].play();
+    for (const animation of this.#animations) {
+      animation.play();
     }
   }
 
   pause() {
-    for (let i = 0; i < this.animations.length; i++) {
-      this.animations[i].pause();
+    for (const animation of this.#animations) {
+      animation.pause();
     }
   }
 
   cancel() {
-    for (let i = 0; i < this.animations.length; i++) {
-      this.animations[i].cancel();
+    for (const animation of this.#animations) {
+      animation.cancel();
     }
+    this.requestDelete = true;
   }
 
   reverse() {
-    for (let i = 0; i < this.animations.length; i++) {
-      this.animations[i].reverse();
+    for (const animation of this.#animations) {
+      animation.reverse();
     }
   }
 
   calculateFrame(currentTime: number): boolean {
     let result = false;
-    for (let i = 0; i < this.animations.length; i++) {
-      result = this.animations[i].calculateFrame(currentTime) || result;
+    for (const animation of this.#animations) {
+      result = animation.calculateFrame(currentTime) || result;
     }
     return result;
   }
 
+  get currentTime(): number {
+    return this.#animations[0]?.currentTime ?? 0;
+  }
+
   set currentTime(time: number) {
-    for (let i = 0; i < this.animations.length; i++) {
-      this.animations[i].currentTime = time;
+    for (const animation of this.#animations) {
+      animation.currentTime = time;
     }
   }
 
+  get progress(): number {
+    return this.#animations[0]?.progress ?? 0;
+  }
+
   set progress(progress: number) {
-    for (let i = 0; i < this.animations.length; i++) {
-      this.animations[i].progress = progress;
+    for (const animation of this.#animations) {
+      animation.progress = progress;
     }
   }
 }

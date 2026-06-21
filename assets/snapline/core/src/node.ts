@@ -38,8 +38,8 @@ class NodeComponent extends ElementObject {
 
     this._connectors = {};
     this._components = {};
-    this._dragStartX = this.transform.x;
-    this._dragStartY = this.transform.y;
+    this._dragStartX = this.worldTransform.x;
+    this._dragStartY = this.worldTransform.y;
     this._mouseDownX = 0;
     this._mouseDownY = 0;
     this._prop = {};
@@ -59,23 +59,31 @@ class NodeComponent extends ElementObject {
     this._hasMoved = false;
 
     this.event.dom.onResize = () => {
-      this.queueUpdate("READ_1", () => {
-        this.readDom(false, "READ_1");
-        for (const connector of Object.values(this._connectors)) {
-          connector.readDom(false, "READ_1");
-          connector.calculateLocalFromDom("READ_1");
-        }
-      });
+      this.schedule(
+        () => {
+          const property = this.readDom(false, "READ_1");
+          this._hitBox.width = property.width;
+          this._hitBox.height = property.height;
+          for (const connector of Object.values(this._connectors)) {
+            connector.readDom(false, "READ_1");
+            connector.calculateLocalFromDom("READ_1");
+          }
+        },
+        { stage: "READ_1" },
+      );
       for (const line of [
         ...this.getAllOutgoingLines(),
         ...this.getAllIncomingLines(),
       ]) {
-        line.queueUpdate("WRITE_1", () => {
-          line.moveLineToConnectorTransform(); // Move lines to the saved position of connectors
-          line.setLineEndAtConnector();
-          line.writeDom();
-          line.writeTransform();
-        });
+        line.schedule(
+          () => {
+            line.moveLineToConnectorTransform(); // Move lines to the saved position of connectors
+            line.setLineEndAtConnector();
+            line.writeDom();
+            line.writeTransform();
+          },
+          { stage: "WRITE_1" },
+        );
       }
     };
 
@@ -83,9 +91,6 @@ class NodeComponent extends ElementObject {
       willChange: "transform",
       position: "absolute",
       transformOrigin: "top left",
-    };
-    this.event.dom.onAssignDom = () => {
-      this._hitBox.element = this.element!;
     };
 
     // Initialize global select list if needed
@@ -95,8 +100,8 @@ class NodeComponent extends ElementObject {
   }
 
   setStartPositions() {
-    this._dragStartX = this.transform.x;
-    this._dragStartY = this.transform.y;
+    this._dragStartX = this.worldTransform.x;
+    this._dragStartY = this.worldTransform.y;
   }
 
   setSelected(selected: boolean) {
@@ -111,7 +116,7 @@ class NodeComponent extends ElementObject {
         (className) => className !== "selected",
       );
       this.global.data.select = this.global.data.select.filter(
-        (node: NodeComponent) => node.gid !== this.gid,
+        (node: NodeComponent) => node.id !== this.id,
       );
     }
     this.requestWrite();
@@ -119,7 +124,7 @@ class NodeComponent extends ElementObject {
 
   _filterDeletedLines(svgLines: LineComponent[]) {
     for (let i = 0; i < svgLines.length; i++) {
-      if (svgLines[i]._requestDelete) {
+      if (svgLines[i].isDeleteRequested) {
         svgLines.splice(i, 1);
         i--;
       }
@@ -134,7 +139,7 @@ class NodeComponent extends ElementObject {
 
   updateNodeLineList(): void {
     if (this._lineListCallback) {
-      // console.log("updateNodeLineList", this.gid);
+      // console.log("updateNodeLineList", this.id);
       this._lineListCallback(this.getAllOutgoingLines());
     }
   }
@@ -219,7 +224,7 @@ class NodeComponent extends ElementObject {
 
   getConnector(name: string): ConnectorComponent | null {
     if (!(name in this._connectors)) {
-      console.error(`Connector ${name} does not exist in node ${this.gid}`);
+      console.error(`Connector ${name} does not exist in node ${this.id}`);
       return null;
     }
     return this._connectors[name];
@@ -259,7 +264,7 @@ class NodeComponent extends ElementObject {
       return;
     }
     const peers = this._connectors[name].outgoingLines
-      .filter((line) => line.target && !line._requestDelete)
+      .filter((line) => line.target && !line.isDeleteRequested)
       .map((line) => line.target);
     if (!peers) {
       return;

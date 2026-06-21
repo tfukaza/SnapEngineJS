@@ -264,12 +264,15 @@
   function handleSliderChange(event: Event) {
     const slider = event.target as HTMLInputElement;
     const value = parseInt(slider.value);
-    menuCarousel.queueUpdate("WRITE_2", () => {
-      slider.style.setProperty(
-        "--specular-angle",
-        `${f(value/3)+50}deg`
-      );
-    });
+    menuCarousel.schedule(
+      () => {
+        slider.style.setProperty(
+          "--specular-angle",
+          `${f(value/3)+50}deg`
+        );
+      },
+      { stage: "WRITE_2" },
+    );
   
 
     let currentIndex = Math.floor(value / (101 / menuItems.length));

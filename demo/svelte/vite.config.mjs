@@ -10,16 +10,28 @@ export default defineConfig(({ command, mode }) => {
     resolve: {
       alias: {
         "@": path.resolve(__dirname, "src"),
-        // Core engine (built to demo/svelte/src/snapengine/)
-        "@snap-engine/core/animation": path.resolve(__dirname, "src/snapengine/animation.mjs"),
-        "@snap-engine/core/collision": path.resolve(__dirname, "src/snapengine/collision.mjs"),
-        "@snap-engine/core/debug": path.resolve(__dirname, "src/snapengine/debug.mjs"),
-        "@snap-engine/core": path.resolve(__dirname, "src/snapengine/snapengine.mjs"),
+        // Core engine source
+        "@snap-engine/core/animation": path.resolve(root, "src/animation.ts"),
+        "@snap-engine/core/collision": path.resolve(root, "src/collision.ts"),
+        "@snap-engine/core/debug": path.resolve(root, "src/debug.ts"),
+        "@snap-engine/core": path.resolve(root, "src/index.ts"),
         // Asset packages (raw source)
-  "@snap-engine/asset-base-svelte": path.resolve(root, "assets/asset-base/svelte/src/index.ts"),
-  "@snap-engine/asset-base": path.resolve(root, "assets/asset-base/core/src/index.ts"),
-  "@snap-engine/snapsort-svelte": path.resolve(root, "assets/snapsort/svelte/src/index.ts"),
-  "@snap-engine/snapsort": path.resolve(root, "assets/snapsort/core/src/index.ts"),
+        "@snap-engine/asset-base-svelte": path.resolve(
+          root,
+          "assets/asset-base/svelte/src/index.ts",
+        ),
+        "@snap-engine/asset-base": path.resolve(
+          root,
+          "assets/asset-base/core/src/index.ts",
+        ),
+        "@snap-engine/snapsort-svelte": path.resolve(
+          root,
+          "assets/snapsort/svelte/src/index.ts",
+        ),
+        "@snap-engine/snapsort": path.resolve(
+          root,
+          "assets/snapsort/core/src/index.ts",
+        ),
         "@snap-engine/snapline-svelte": path.resolve(root, "assets/snapline/svelte/src/index.ts"),
         "@snap-engine/snapline": path.resolve(root, "assets/snapline/core/src/index.ts"),
       },

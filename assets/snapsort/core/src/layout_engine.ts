@@ -1,6 +1,7 @@
 import type { DomProperty } from "@snap-engine/core";
 
 export type LayoutDirection = "column" | "row";
+export type LayoutMainAxisAlign = "start" | "center";
 type AxisName = "x" | "y";
 type SizeName = "width" | "height";
 
@@ -23,6 +24,7 @@ interface FlowMetrics {
 export interface LayoutNode<T> {
   value: T;
   direction: LayoutDirection;
+  mainAxisAlign: LayoutMainAxisAlign;
   locked: boolean;
   isGhost: boolean;
   box: DomProperty;
@@ -49,6 +51,12 @@ export interface FlowPositionResult<T> {
 type FlowEntry<T> =
   | { kind: "item"; item: LayoutNode<T>; width: number; height: number }
   | { kind: "ghost"; width: number; height: number };
+
+interface FlowLine<T> {
+  entries: FlowEntry<T>[];
+  mainSize: number;
+  crossSize: number;
+}
 
 function trailingMainMargin<T>(
   entry: FlowEntry<T>,
@@ -251,13 +259,17 @@ export function flowLayoutPositions<T>(
   const itemPositions = new Map<LayoutNode<T>, { x: number; y: number }>();
   let ghostPosition: { x: number; y: number } | null = null;
   const origin = { x: startX, y: startY };
-  const lineMainStart = origin[axes.main] + metrics.mainStart;
   const lineCrossStart = origin[axes.cross] + metrics.crossStart;
-  const maxMain = origin[axes.main] + contentSize[axes.mainSize];
   const canWrap = axes.direction === "row" || metrics.lineCount > 1;
-  let cursorMain = lineMainStart;
-  let cursorCross = lineCrossStart;
-  let lineCrossSize = 0;
+  const lines: FlowLine<T>[] = [];
+  let currentLine: FlowLine<T> = { entries: [], mainSize: 0, crossSize: 0 };
+
+  const pushCurrentLine = () => {
+    if (currentLine.entries.length > 0) {
+      lines.push(currentLine);
+      currentLine = { entries: [], mainSize: 0, crossSize: 0 };
+    }
+  };
 
   for (const entry of entries) {
     const entryMainSize = entry[axes.mainSize];
@@ -269,30 +281,56 @@ export function flowLayoutPositions<T>(
     );
     if (
       canWrap &&
-      cursorMain > lineMainStart + 0.5 &&
-      cursorMain + entryMainSize + entryTrailingMainMargin > maxMain + 0.5
+      currentLine.entries.length > 0 &&
+      metrics.mainStart +
+        currentLine.mainSize +
+        metrics.mainGap +
+        entryMainSize +
+        entryTrailingMainMargin >
+        contentSize[axes.mainSize] + 0.5
     ) {
-      cursorMain = lineMainStart;
-      cursorCross += lineCrossSize + metrics.crossGap;
-      lineCrossSize = 0;
+      pushCurrentLine();
     }
 
-    let position = pointFromAxes(axes, cursorMain, cursorCross);
-    if (entry.kind === "item" && entry.item.locked) {
-      const rel = childRelativeOffset(container.box, entry.item.box);
-      position = { x: startX + rel.x, y: startY + rel.y };
-      cursorMain = position[axes.main];
-      cursorCross = position[axes.cross];
+    currentLine.mainSize +=
+      currentLine.entries.length === 0
+        ? entryMainSize
+        : metrics.mainGap + entryMainSize;
+    currentLine.crossSize = Math.max(currentLine.crossSize, entryCrossSize);
+    currentLine.entries.push(entry);
+  }
+  pushCurrentLine();
+
+  let cursorCross = lineCrossStart;
+  for (const line of lines) {
+    const lineMainStart =
+      axes.direction === "row" && container.mainAxisAlign === "center"
+        ? origin[axes.main] +
+          Math.max(0, (contentSize[axes.mainSize] - line.mainSize) / 2)
+        : origin[axes.main] + metrics.mainStart;
+    let cursorMain = lineMainStart;
+
+    for (const entry of line.entries) {
+      const entryMainSize = entry[axes.mainSize];
+
+      let position = pointFromAxes(axes, cursorMain, cursorCross);
+      if (entry.kind === "item" && entry.item.locked) {
+        const rel = childRelativeOffset(container.box, entry.item.box);
+        position = { x: startX + rel.x, y: startY + rel.y };
+        cursorMain = position[axes.main];
+        cursorCross = position[axes.cross];
+      }
+
+      if (entry.kind === "ghost") {
+        ghostPosition = position;
+      } else {
+        itemPositions.set(entry.item, position);
+      }
+
+      cursorMain += entryMainSize + metrics.mainGap;
     }
 
-    if (entry.kind === "ghost") {
-      ghostPosition = position;
-    } else {
-      itemPositions.set(entry.item, position);
-    }
-
-    cursorMain += entryMainSize + metrics.mainGap;
-    lineCrossSize = Math.max(lineCrossSize, entryCrossSize);
+    cursorCross += line.crossSize + metrics.crossGap;
   }
 
   return { itemPositions, ghostPosition };
