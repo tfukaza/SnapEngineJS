@@ -77,7 +77,6 @@ jobs:
 
           echo "package_dir=$package_dir" >> "$GITHUB_OUTPUT"
 
-      - run: npm ci
       - run: npm publish "./${{ steps.package.outputs.package_dir }}" --access public --provenance
         env:
           NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
