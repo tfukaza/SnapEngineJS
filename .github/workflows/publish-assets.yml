@@ -22,8 +22,7 @@ jobs:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
         with:
-          node-version: '20'
-          cache: 'npm'
+          node-version: '24'
           registry-url: 'https://registry.npmjs.org'
 
       - name: Resolve package from tag
@@ -78,5 +77,3 @@ jobs:
           echo "package_dir=$package_dir" >> "$GITHUB_OUTPUT"
 
       - run: npm publish "./${{ steps.package.outputs.package_dir }}" --access public --provenance
-        env:
-          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
