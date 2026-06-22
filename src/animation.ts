@@ -1,3 +1,5 @@
+import type { Engine } from "./engine";
+
 export type KeyframeList = Record<string, PropertyIndexedKeyframes[string]>;
 
 const INITIAL_VARIABLE_CHANNEL_COUNT = 2;
@@ -27,10 +29,23 @@ interface CssPropertyRegistry {
   }) => void;
 }
 
-function getSharedAnimationTarget(): HTMLDivElement {
+function styleSharedAnimationTarget(target: HTMLElement) {
+  target.style.position = "absolute";
+  target.style.width = "0";
+  target.style.height = "0";
+  target.style.overflow = "hidden";
+  target.style.opacity = "0";
+  target.style.pointerEvents = "none";
+}
+
+function getSharedAnimationTarget(engine?: Engine): HTMLElement {
+  if (engine?.containerElement) {
+    return engine.containerElement;
+  }
+
   if (!sharedAnimationTarget) {
     sharedAnimationTarget = document.createElement("div");
-    sharedAnimationTarget.style.display = "none";
+    styleSharedAnimationTarget(sharedAnimationTarget);
     document.body.appendChild(sharedAnimationTarget);
   }
   return sharedAnimationTarget;
@@ -344,9 +359,16 @@ class AnimationObject implements AnimationInterface {
   constructor(
     target: Element | null,
     keyframe: KeyframeList,
+    property?: KeyframeProperty,
+    engine?: Engine,
+  );
+  constructor(
+    target: Element | null,
+    keyframe: KeyframeList,
     property: KeyframeProperty = {},
+    engine?: Engine,
   ) {
-    this.#target = target ?? getSharedAnimationTarget();
+    this.#target = target ?? getSharedAnimationTarget(engine);
     this.#keyframe = keyframe;
     this.#property = normalizeKeyframeProperty(keyframe, property);
 

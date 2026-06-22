@@ -26,6 +26,7 @@
           }
         },
       },
+      engine,
     );
     object.addAnimation(anim);
     anim.play();
