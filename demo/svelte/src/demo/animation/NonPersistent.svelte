@@ -35,6 +35,7 @@
           object.element.dataset.state = "done";
         },
       },
+      engine,
     );
     object.addAnimation(animation);
     animation.play();

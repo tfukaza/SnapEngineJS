@@ -37,6 +37,7 @@
           object.element.textContent = `${Math.round(values.$x)}, ${Math.round(values.$y)}`;
         },
       },
+      engine,
     );
     object.addAnimation(anim);
     anim.play();

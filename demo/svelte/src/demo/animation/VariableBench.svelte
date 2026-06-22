@@ -180,7 +180,7 @@
         tick: (values) => {
           checksum = (values.$v0 ?? 0) + (values[lastKey] ?? 0);
         },
-      });
+      }, engine);
       animation = new TimedAnimation(rawAnimation, recordSample);
       object.addAnimation(animation as any);
       setupMs = performance.now() - setupStart;

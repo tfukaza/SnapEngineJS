@@ -31,6 +31,7 @@
           xObject.element.textContent = `x ${Math.round(values.$xFast)}`;
         },
       },
+      engine,
     );
 
     const yAnimation = new AnimationObject(
@@ -51,6 +52,7 @@
           yObject.element.textContent = `y ${Math.round(values.$ySlow)}`;
         },
       },
+      engine,
     );
 
     const opacityAnimation = new AnimationObject(
@@ -74,6 +76,7 @@
           opacityObject.element.textContent = `${Math.round(values.$sizePulse)}`;
         },
       },
+      engine,
     );
 
     animations.push(xAnimation, yAnimation, opacityAnimation);
