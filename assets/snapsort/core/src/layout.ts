@@ -18,6 +18,7 @@ interface FlowMetrics {
   crossStart: number;
   mainGap: number;
   crossGap: number;
+  lineCrossSize: number;
   lineCount: number;
 }
 
@@ -26,16 +27,25 @@ export interface LayoutNode<T> {
   direction: LayoutDirection;
   mainAxisAlign: LayoutMainAxisAlign;
   locked: boolean;
-  isGhost: boolean;
   box: DomProperty;
   children: LayoutNode<T>[];
 }
 
-export interface VirtualGhost<T> {
-  container: LayoutNode<T>;
-  index: number;
+export interface LayoutFilter<T> {
+  excludeNodes?: Set<LayoutNode<T>>;
+  excludeValues?: Set<T>;
+}
+
+export interface VirtualLayoutEntry {
   width: number;
   height: number;
+  margin: DomProperty["margin"];
+}
+
+export interface VirtualInsertion<T> {
+  container: LayoutNode<T>;
+  index: number;
+  entry: VirtualLayoutEntry;
 }
 
 export interface VirtualDimensions {
@@ -45,12 +55,16 @@ export interface VirtualDimensions {
 
 export interface FlowPositionResult<T> {
   itemPositions: Map<LayoutNode<T>, { x: number; y: number }>;
-  ghostPosition: { x: number; y: number } | null;
+  virtualPositions: Map<VirtualInsertion<T>, { x: number; y: number }>;
+  virtualRects: Map<
+    VirtualInsertion<T>,
+    { x: number; y: number; width: number; height: number }
+  >;
 }
 
 type FlowEntry<T> =
   | { kind: "item"; item: LayoutNode<T>; width: number; height: number }
-  | { kind: "ghost"; width: number; height: number };
+  | { kind: "virtual"; insertion: VirtualInsertion<T>; width: number; height: number };
 
 interface FlowLine<T> {
   entries: FlowEntry<T>[];
@@ -60,11 +74,11 @@ interface FlowLine<T> {
 
 function trailingMainMargin<T>(
   entry: FlowEntry<T>,
-  draggedItem: LayoutNode<T>,
   axes: FlowAxes,
 ): number {
-  const box = entry.kind === "item" ? entry.item.box : draggedItem.box;
-  return axes.main === "x" ? box.margin.right : box.margin.bottom;
+  const margin =
+    entry.kind === "item" ? entry.item.box.margin : entry.insertion.entry.margin;
+  return axes.main === "x" ? margin.right : margin.bottom;
 }
 
 export function flowAxesForDirection(direction: LayoutDirection): FlowAxes {
@@ -139,11 +153,11 @@ export function childRelativeOffset(
 
 export function layoutItems<T>(
   container: LayoutNode<T>,
-  draggedItem: LayoutNode<T>,
+  filter: LayoutFilter<T> = {},
 ): LayoutNode<T>[] {
   return container.children.filter(
     (item) =>
-      item !== draggedItem && item.value !== draggedItem.value && !item.isGhost,
+      !filter.excludeNodes?.has(item) && !filter.excludeValues?.has(item.value),
   );
 }
 
@@ -160,13 +174,14 @@ export function inferFlowLayoutMetrics<T>(
   container: LayoutNode<T>,
   axes: FlowAxes,
 ): FlowMetrics {
-  const ordered = container.children.filter((item) => !item.isGhost);
+  const ordered = container.children;
   if (ordered.length === 0) {
     return {
       mainStart: 0,
       crossStart: 0,
       mainGap: 0,
       crossGap: 0,
+      lineCrossSize: 0,
       lineCount: 0,
     };
   }
@@ -220,25 +235,29 @@ export function inferFlowLayoutMetrics<T>(
     crossStart: firstOffset[axes.cross],
     mainGap: median(mainGaps),
     crossGap: median(crossGaps),
+    lineCrossSize: median(lines.map((line) => line.crossSize)),
     lineCount: lines.length,
   };
 }
 
 export function flowLayoutPositions<T>(
   container: LayoutNode<T>,
-  draggedItem: LayoutNode<T>,
   startX: number,
   startY: number,
-  ghost?: VirtualGhost<T>,
+  options: {
+    filter?: LayoutFilter<T>;
+    insertions?: VirtualInsertion<T>[];
+  } = {},
 ): FlowPositionResult<T> {
   const axes = flowAxesForDirection(container.direction);
   const contentSize = contentBoxSize(container.box);
-  const items = layoutItems(container, draggedItem);
+  const filter = options.filter ?? {};
+  const items = layoutItems(container, filter);
   const metrics = inferFlowLayoutMetrics(container, axes);
   const entries: FlowEntry<T>[] = items.map((item) => {
     const dimensions =
       item.children.length > 0
-        ? virtualDimensions(item, draggedItem, ghost)
+        ? virtualDimensions(item, options)
         : item.box;
     return {
       kind: "item",
@@ -248,16 +267,24 @@ export function flowLayoutPositions<T>(
     };
   });
 
-  if (ghost?.container === container) {
-    entries.splice(Math.max(0, Math.min(ghost.index, entries.length)), 0, {
-      kind: "ghost",
-      width: ghost.width,
-      height: ghost.height,
-    });
+  const insertions = options.insertions ?? [];
+  for (const insertion of insertions) {
+    if (insertion.container === container) {
+      entries.splice(Math.max(0, Math.min(insertion.index, entries.length)), 0, {
+        kind: "virtual",
+        insertion,
+        width: insertion.entry.width,
+        height: insertion.entry.height,
+      });
+    }
   }
 
   const itemPositions = new Map<LayoutNode<T>, { x: number; y: number }>();
-  let ghostPosition: { x: number; y: number } | null = null;
+  const virtualPositions = new Map<VirtualInsertion<T>, { x: number; y: number }>();
+  const virtualRects = new Map<
+    VirtualInsertion<T>,
+    { x: number; y: number; width: number; height: number }
+  >();
   const origin = { x: startX, y: startY };
   const lineCrossStart = origin[axes.cross] + metrics.crossStart;
   const canWrap = axes.direction === "row" || metrics.lineCount > 1;
@@ -274,11 +301,7 @@ export function flowLayoutPositions<T>(
   for (const entry of entries) {
     const entryMainSize = entry[axes.mainSize];
     const entryCrossSize = entry[axes.crossSize];
-    const entryTrailingMainMargin = trailingMainMargin(
-      entry,
-      draggedItem,
-      axes,
-    );
+    const entryTrailingMainMargin = trailingMainMargin(entry, axes);
     if (
       canWrap &&
       currentLine.entries.length > 0 &&
@@ -321,8 +344,13 @@ export function flowLayoutPositions<T>(
         cursorCross = position[axes.cross];
       }
 
-      if (entry.kind === "ghost") {
-        ghostPosition = position;
+      if (entry.kind === "virtual") {
+        virtualPositions.set(entry.insertion, position);
+        virtualRects.set(entry.insertion, {
+          ...position,
+          width: entry.width,
+          height: entry.height,
+        });
       } else {
         itemPositions.set(entry.item, position);
       }
@@ -333,22 +361,24 @@ export function flowLayoutPositions<T>(
     cursorCross += line.crossSize + metrics.crossGap;
   }
 
-  return { itemPositions, ghostPosition };
+  return { itemPositions, virtualPositions, virtualRects };
 }
 
 export function virtualDimensions<T>(
   container: LayoutNode<T>,
-  draggedItem: LayoutNode<T>,
-  ghost?: VirtualGhost<T>,
+  options: {
+    filter?: LayoutFilter<T>;
+    insertions?: VirtualInsertion<T>[];
+  } = {},
 ): VirtualDimensions {
   const axes = flowAxesForDirection(container.direction);
-  const items = layoutItems(container, draggedItem);
+  const filter = options.filter ?? {};
+  const items = layoutItems(container, filter);
   const flowPositions = flowLayoutPositions(
     container,
-    draggedItem,
     0,
     0,
-    ghost,
+    options,
   );
   let maxX = 0;
   let maxY = 0;
@@ -356,7 +386,7 @@ export function virtualDimensions<T>(
   for (const child of items) {
     const dimensions =
       child.children.length > 0
-        ? virtualDimensions(child, draggedItem, ghost)
+        ? virtualDimensions(child, options)
         : child.box;
     const rel = childRelativeOffset(container.box, child.box);
     const measured = { x: rel.x, y: rel.y };
@@ -365,9 +395,11 @@ export function virtualDimensions<T>(
     maxY = Math.max(maxY, simulated.y + dimensions.height);
   }
 
-  if (ghost?.container === container && flowPositions.ghostPosition) {
-    maxX = Math.max(maxX, flowPositions.ghostPosition.x + ghost.width);
-    maxY = Math.max(maxY, flowPositions.ghostPosition.y + ghost.height);
+  for (const [insertion, rect] of flowPositions.virtualRects) {
+    if (insertion.container === container) {
+      maxX = Math.max(maxX, rect.x + rect.width);
+      maxY = Math.max(maxY, rect.y + rect.height);
+    }
   }
 
   const snapshotSize = {
@@ -389,7 +421,10 @@ export function virtualDimensions<T>(
       container.box.border.bottom,
   };
 
-  if (items.length === 0 && ghost?.container !== container) {
+  const hasLocalInsertion = (options.insertions ?? []).some(
+    (insertion) => insertion.container === container,
+  );
+  if (items.length === 0 && !hasLocalInsertion) {
     return snapshotSize;
   }
 

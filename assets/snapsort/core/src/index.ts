@@ -1,12 +1,22 @@
-export { ItemContainer } from "./container";
+export {
+  ContainerBase,
+  ContainerEuclidean,
+  ContainerProgressive,
+  ContainerEuclidean as Container,
+} from "./container";
 export type {
-  ItemContainerConfig,
+  ContainerConfig,
   AnimationConfig,
   ContainerAnimations,
-  ItemContainerCallbacks,
+  ContainerCallbacks,
   SnapSortDomInsertEvent,
   SnapSortDomRemoveEvent,
 } from "./container";
-export type { LayoutMainAxisAlign } from "./layout_engine";
-export { ItemObject } from "./item";
+export type { LayoutMainAxisAlign } from "./layout";
+export {
+  ItemProgressive,
+  ItemBase,
+  ItemEuclidean,
+  ItemEuclidean as Item,
+} from "./item";
 export type { ItemId, ItemMetadata } from "./item";

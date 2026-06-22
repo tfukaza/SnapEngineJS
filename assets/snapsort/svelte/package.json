@@ -1,6 +1,6 @@
 {
   "name": "@snap-engine/snapsort-svelte",
-  "version": "0.2.0",
+  "version": "0.3.0",
   "repository": {
     "type": "git",
     "url": "https://github.com/tfukaza/SnapEngineJS",
@@ -13,8 +13,12 @@
     ".": {
       "svelte": "./src/index.ts"
     },
-    "./ItemContainer.svelte": "./src/ItemContainer.svelte",
-    "./Item.svelte": "./src/Item.svelte"
+    "./Container.svelte": "./src/ContainerEuclidean.svelte",
+    "./Item.svelte": "./src/ItemEuclidean.svelte",
+    "./ContainerEuclidean.svelte": "./src/ContainerEuclidean.svelte",
+    "./ItemEuclidean.svelte": "./src/ItemEuclidean.svelte",
+    "./ContainerProgressive.svelte": "./src/ContainerProgressive.svelte",
+    "./ItemProgressive.svelte": "./src/ItemProgressive.svelte"
   },
   "keywords": [
     "drag-and-drop",
@@ -25,7 +29,7 @@
   "author": "Tomoki Fukazawa",
   "license": "MIT",
   "dependencies": {
-    "@snap-engine/snapsort": "^0.2.0"
+    "@snap-engine/snapsort": "^0.3.0"
   },
   "files": [
     "src",

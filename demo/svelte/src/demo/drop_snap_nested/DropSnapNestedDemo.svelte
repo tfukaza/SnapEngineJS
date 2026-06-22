@@ -1,6 +1,6 @@
 <script lang="ts">
   import { Engine } from "@snap-engine/asset-base-svelte";
-  import { Item, ItemContainer as Container } from "@snap-engine/snapsort-svelte";
+  import { Container, Item } from "@snap-engine/snapsort-svelte";
   import type { Engine as EngineClass } from "@snap-engine/core";
 
   let engineInstance: EngineClass | null = $state(null);
@@ -71,7 +71,7 @@
     <div class="engine-area">
       <Engine id="snapsort-combined-demo-canvas" debug={debugMode} bind:engine={engineInstance}>
         <div class="demo-grid">
-          <article class="demo-cell">
+          <article class="demo-cell wide horizontal-row-demo">
             <h2>Vertical Column</h2>
             <Container config={{ direction: "column", groupID: "vertical-group" }}>
               <Item className="demo-item"><p>Item 1</p></Item>
@@ -83,31 +83,9 @@
 
           <article class="demo-cell">
             <h2>Horizontal Row</h2>
-            <Container config={{ direction: "row", groupID: "horizontal-group" }}>
-              <Item className="demo-item"><p>Item 1</p></Item>
-              <Item className="demo-item"><p>Item 2</p></Item>
-              <Item className="demo-item"><p>Item 3</p></Item>
-              <Item className="demo-item"><p>Item 4</p></Item>
-            </Container>
-          </article>
-
-          <article class="demo-cell wide">
-            <h2>Wrapping Row</h2>
             <Container config={{ direction: "row", groupID: "wrap-row" }} locked={true}>
               {#each Array.from({ length: 12 }, (_, index) => index + 1) as n}
-                <Item className="demo-item row-item"><p>W{n}</p></Item>
-              {/each}
-            </Container>
-          </article>
-
-          <article class="demo-cell wide">
-            <h2>Centered Row</h2>
-            <Container
-              config={{ direction: "row", mainAxisAlign: "center", groupID: "centered-row" }}
-              locked={true}
-            >
-              {#each ["Alpha", "Beta", "Gamma", "Delta", "Epsilon"] as label}
-                <Item className="demo-item row-item"><p>{label}</p></Item>
+                <Item className="demo-item row-item"><p>Item {n}</p></Item>
               {/each}
             </Container>
           </article>
@@ -121,24 +99,16 @@
             </Container>
           </article>
 
-          <article class="demo-cell">
+          <article class="demo-cell wide size-demo">
             <h2>Different Sizes</h2>
             <Container config={{ direction: "row", groupID: "sizes-group" }}>
-              <Item className="demo-item"><p style="width: 60px;">Small</p></Item>
-              <Item className="demo-item"><p style="width: 100px;">Medium</p></Item>
-              <Item className="demo-item"><p style="width: 140px;">Large</p></Item>
-              <Item className="demo-item"><p style="width: 60px;">Tall</p></Item>
-              <Item className="demo-item"><p style="width: 30px;">Short</p></Item>
-            </Container>
-          </article>
-
-          <article class="demo-cell">
-            <h2>Flat List</h2>
-            <Container config={{ direction: "column", groupID: "flat-group" }} locked={true}>
-              <Item className="demo-item"><p>Item A</p></Item>
-              <Item className="demo-item"><p>Item B</p></Item>
-              <Item className="demo-item"><p>Item C</p></Item>
-              <Item className="demo-item"><p>Item D</p></Item>
+              <Item className="demo-item size-item"><p style="width: 72px; min-height: 48px;">Small</p></Item>
+              <Item className="demo-item size-item"><p style="width: 128px; min-height: 72px;">Medium</p></Item>
+              <Item className="demo-item size-item"><p style="width: 220px; min-height: 96px;">Wide</p></Item>
+              <Item className="demo-item size-item"><p style="width: 92px; min-height: 156px;">Tall</p></Item>
+              <Item className="demo-item size-item"><p style="width: 168px; min-height: 120px;">Large</p></Item>
+              <Item className="demo-item size-item"><p style="width: 56px; min-height: 64px;">Narrow</p></Item>
+              <Item className="demo-item size-item"><p style="width: 260px; min-height: 72px;">Extra Wide</p></Item>
             </Container>
           </article>
 
@@ -153,24 +123,6 @@
               </Container>
               <Container config={{ direction: "column", name: "multi-area-2" }} locked={true}>
                 <h3>Area 2</h3>
-                <Item className="demo-item"><p>Item X</p></Item>
-                <Item className="demo-item"><p>Item Y</p></Item>
-                <Item className="demo-item"><p>Item Z</p></Item>
-              </Container>
-            </Container>
-          </article>
-
-          <article class="demo-cell wide">
-            <h2>Multiple Drop Areas Row</h2>
-            <Container config={{ direction: "column", name: "multi-row-root" }} locked={true}>
-              <h3>Area 1</h3>
-              <Container config={{ direction: "row", name: "multi-row-area-1" }} locked={true}>
-                <Item className="demo-item"><p>Item A</p></Item>
-                <Item className="demo-item"><p>Item B</p></Item>
-                <Item className="demo-item"><p>Item C</p></Item>
-              </Container>
-              <h3>Area 2</h3>
-              <Container config={{ direction: "row", name: "multi-row-area-2" }} locked={true}>
                 <Item className="demo-item"><p>Item X</p></Item>
                 <Item className="demo-item"><p>Item Y</p></Item>
                 <Item className="demo-item"><p>Item Z</p></Item>
@@ -344,6 +296,14 @@
     grid-column: span 2;
   }
 
+  .demo-cell.size-demo {
+    min-height: 360px;
+  }
+
+  .horizontal-row-demo :global(.snapsort-container) {
+    max-width: 300px;
+  }
+
   h2 {
     margin: 0 0 var(--size-16);
     font-family: "Geist", sans-serif;
@@ -391,6 +351,19 @@
     padding: var(--size-8) var(--size-12);
     font-size: 1rem;
     user-select: none;
+  }
+
+  .size-demo :global(.snapsort-container) {
+    align-items: flex-start;
+    min-height: 240px;
+  }
+
+  :global(.demo-item.size-item p) {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    box-sizing: border-box;
+    text-align: center;
   }
 
   :global(.demo-item.row-item) {

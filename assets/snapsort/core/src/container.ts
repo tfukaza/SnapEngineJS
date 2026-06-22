@@ -1,7 +1,11 @@
 import { BaseObject } from "@snap-engine/core";
-import { ItemObject } from "./item";
-import type { ItemMetadata } from "./item";
-import type { LayoutMainAxisAlign } from "./layout_engine";
+import { ItemBase, ItemEuclidean, ItemProgressive, type ItemMetadata } from "./item";
+import {
+  determineDropTarget,
+  determineProgressiveDropTarget,
+  type DropCandidate,
+} from "./algorithm";
+import type { LayoutMainAxisAlign } from "./layout";
 
 export interface AnimationConfig {
   timing_function?: string;
@@ -15,28 +19,28 @@ export interface ContainerAnimations {
 }
 
 export interface SnapSortDomRemoveEvent {
-  item: ItemObject;
+  item: ItemBase;
   itemMetadata: ItemMetadata;
-  container: ItemContainer;
+  container: ContainerBase;
   containerMetadata: Record<string, unknown>;
 }
 
 export interface SnapSortDomInsertEvent {
-  item: ItemObject;
+  item: ItemBase;
   itemMetadata: ItemMetadata;
-  container: ItemContainer;
+  container: ContainerBase;
   containerMetadata: Record<string, unknown>;
   index: number;
   beforeElement: HTMLElement | null;
 }
 
-export interface ItemContainerCallbacks {
+export interface ContainerCallbacks {
   onDomRemove?: (event: SnapSortDomRemoveEvent) => void;
   onDomInsert?: (event: SnapSortDomInsertEvent) => void;
   afterDomMutation?: () => void | Promise<void>;
 }
 
-export interface ItemContainerConfig {
+export interface ContainerConfig {
   groupID?: string;
   direction?: "column" | "row";
   mainAxisAlign?: LayoutMainAxisAlign;
@@ -45,18 +49,18 @@ export interface ItemContainerConfig {
   disableFlip?: boolean;
   noDrop?: boolean;
   dropArea?: boolean;
-  callbacks?: ItemContainerCallbacks;
+  callbacks?: ContainerCallbacks;
 }
 
-export class ItemContainer extends ItemObject {
-  #itemList: ItemObject[] = [];
-  #config: ItemContainerConfig;
+export class ContainerBase extends ItemBase {
+  #itemList: ItemBase[] = [];
+  #config: ContainerConfig;
   #depth: number = 0;
 
   constructor(
     engine: any,
     parent: BaseObject | null,
-    config?: ItemContainerConfig,
+    config?: ContainerConfig,
   ) {
     super(engine, parent);
     this.locked = true;
@@ -156,12 +160,12 @@ export class ItemContainer extends ItemObject {
     return this.#depth;
   }
 
-  // addItem(item: ItemObject) {
+  // addItem(item: ItemBase) {
   //   this.#itemList.push(item);
   //   item.setContainer(this);
   // }
 
-  // insertItemAt(item: ItemObject, index: number) {
+  // insertItemAt(item: ItemBase, index: number) {
   //   if (index >= this.#itemList.length) {
   //     this.#itemList.push(item);
   //   } else {
@@ -170,12 +174,12 @@ export class ItemContainer extends ItemObject {
   //   item.setContainer(this);
   // }
 
-  setAllDepth(depth: number, root: ItemContainer | null = null) {
+  setAllDepth(depth: number, root: ContainerBase | null = null) {
     this.#depth = depth;
     const effectiveRoot = depth === 0 ? this : root;
     this.setRootContainer(effectiveRoot);
     for (const item of this.#itemList) {
-      if (item instanceof ItemContainer) {
+      if (item instanceof ContainerBase) {
         item.setAllDepth(depth + 1, effectiveRoot);
       } else {
         item.setRootContainer(effectiveRoot);
@@ -187,8 +191,42 @@ export class ItemContainer extends ItemObject {
     if (this.global.data["dragAndDropContainers"]) {
       this.global.data["dragAndDropContainers"] = this.global.data[
         "dragAndDropContainers"
-      ].filter((c: ItemContainer) => c !== this);
+      ].filter((c: ContainerBase) => c !== this);
     }
     super.destroy();
+  }
+}
+
+export class ContainerEuclidean extends ContainerBase {
+  protected get dragDropEnabled(): boolean {
+    return true;
+  }
+
+  protected createGhostItem(original: ItemBase): ItemBase {
+    return this.createDefaultGhostItem(ItemEuclidean, original);
+  }
+
+  protected resolveDropTarget(
+    item: ItemBase,
+    root: ItemBase,
+  ): DropCandidate | null {
+    return determineDropTarget(item, root);
+  }
+}
+
+export class ContainerProgressive extends ContainerBase {
+  protected get dragDropEnabled(): boolean {
+    return true;
+  }
+
+  protected createGhostItem(original: ItemBase): ItemBase {
+    return this.createDefaultGhostItem(ItemProgressive, original);
+  }
+
+  protected resolveDropTarget(
+    item: ItemBase,
+    root: ItemBase,
+  ): DropCandidate | null {
+    return determineProgressiveDropTarget(item, root);
   }
 }

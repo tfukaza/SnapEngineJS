@@ -25,6 +25,7 @@ async function writeJson(path: string, value: unknown) {
 
 async function gotoDemo(page: Page) {
   await page.goto("/?demo=snapsort_duolingo", { waitUntil: "networkidle" });
+  await page.locator(".game-demo").scrollIntoViewIfNeeded();
   await expect(page.locator(".answer-box")).toBeVisible();
   await expect(page.locator(".tile-bank")).toBeVisible();
 }
@@ -298,6 +299,7 @@ test.describe("SnapSort Kiokun sentence builder demo", () => {
     await bank.getByRole("button", { name: "私" }).click();
     await bank.getByRole("button", { name: "は" }).click();
     await expect(answer.locator(".tile")).toHaveText(["私", "は"]);
+    await page.waitForTimeout(260);
 
     const source = tileIn(answer, "私");
     const samples = await dragTileToContainer(page, source, bank, {
@@ -345,7 +347,7 @@ test.describe("SnapSort Kiokun sentence builder demo", () => {
       "を",
       "飲みます",
     ]);
-    await page.getByRole("button", { name: "Check" }).click();
+    await page.getByRole("button", { name: "Check", exact: true }).click();
     await expect(page.locator(".result.correct")).toBeVisible();
 
     await expectCleanConsole(

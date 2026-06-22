@@ -5,7 +5,8 @@ import {
   contentBoxOrigin,
   flowLayoutPositions,
   type LayoutNode,
-} from "../../assets/snapsort/core/src/layout_engine";
+} from "../../assets/snapsort/core/src/layout";
+import { determineProgressiveDropTarget } from "../../assets/snapsort/core/src/algorithm";
 
 type Rect = { x: number; y: number; width: number; height: number };
 type Box = Rect & {
@@ -62,6 +63,29 @@ type DomTraceEntry = {
   parent?: string;
   before?: string | null;
   time: number;
+};
+
+type MockSnapSortItem = {
+  id: string;
+  direction: "row" | "column";
+  mainAxisAlign: "start";
+  locked: boolean;
+  isGhost: boolean;
+  noDrop: boolean;
+  dragSnapshot: Box;
+  currentDomProperty: Box;
+  dragSnapshotOrderedList: MockSnapSortItem[];
+  itemOrderedList: MockSnapSortItem[];
+  children: MockSnapSortItem[];
+  worldTransform: { x: number; y: number; scaleX: number; scaleY: number };
+  depth: number;
+  name?: string;
+  configuration?: Record<string, unknown>;
+  numberOfItems?: number;
+  addDebugRect: () => void;
+  addDebugCircle: () => void;
+  addDebugText: () => void;
+  clearDebugMarker: () => void;
 };
 
 async function installSnapsortTrace(page: Page) {
@@ -211,19 +235,157 @@ function layoutBox(
   };
 }
 
+function mockSnapSortItem(
+  id: string,
+  rect: Rect,
+  children: MockSnapSortItem[] = [],
+  direction: "row" | "column" = "column",
+): MockSnapSortItem {
+  const box = layoutBox(rect);
+  const item: MockSnapSortItem = {
+    id,
+    direction,
+    mainAxisAlign: "start",
+    locked: false,
+    isGhost: false,
+    noDrop: false,
+    dragSnapshot: box,
+    currentDomProperty: box,
+    dragSnapshotOrderedList: children,
+    itemOrderedList: children,
+    children,
+    worldTransform: { x: rect.x, y: rect.y, scaleX: 1, scaleY: 1 },
+    depth: 0,
+    addDebugRect: () => {},
+    addDebugCircle: () => {},
+    addDebugText: () => {},
+    clearDebugMarker: () => {},
+  };
+  for (const child of children) {
+    child.depth = item.depth + 1;
+  }
+  return item;
+}
+
+function mockSnapSortContainer(
+  id: string,
+  rect: Rect,
+  children: MockSnapSortItem[],
+  direction: "row" | "column",
+): MockSnapSortItem {
+  return {
+    ...mockSnapSortItem(id, rect, children, direction),
+    configuration: {},
+    name: id,
+    numberOfItems: children.length,
+  };
+}
+
+function virtualInsertionPosition<T>(
+  container: LayoutNode<T>,
+  dragged: LayoutNode<T>,
+  startX: number,
+  startY: number,
+  index: number,
+  width: number,
+  height: number,
+) {
+  const insertion = {
+    container,
+    index,
+    entry: {
+      width,
+      height,
+      margin: dragged.box.margin,
+    },
+  };
+  return (
+    flowLayoutPositions(container, startX, startY, {
+      filter: { excludeNodes: new Set([dragged]) },
+      insertions: [insertion],
+    }).virtualPositions.get(insertion) ?? null
+  );
+}
+
+test("progressive placement selects the ghost slot under the dragged center", () => {
+  const dragged = mockSnapSortItem("dragged", {
+    x: 0,
+    y: 0,
+    width: 50,
+    height: 40,
+  });
+  const columnItems = [
+    mockSnapSortItem("a", { x: 0, y: 0, width: 80, height: 40 }),
+    mockSnapSortItem("b", { x: 0, y: 48, width: 80, height: 40 }),
+    mockSnapSortItem("c", { x: 0, y: 96, width: 80, height: 40 }),
+  ];
+  const column = mockSnapSortContainer(
+    "column",
+    { x: 0, y: 0, width: 140, height: 180 },
+    columnItems,
+    "column",
+  );
+  dragged.worldTransform = { x: 15, y: 48, scaleX: 1, scaleY: 1 };
+
+  expect(
+    determineProgressiveDropTarget(dragged as any, column as any),
+  ).toMatchObject({ container: column, index: 1 });
+
+  const rowItems = [
+    mockSnapSortItem("a", { x: 0, y: 0, width: 60, height: 40 }),
+    mockSnapSortItem("b", { x: 68, y: 0, width: 60, height: 40 }),
+    mockSnapSortItem("c", { x: 136, y: 0, width: 60, height: 40 }),
+  ];
+  const row = mockSnapSortContainer(
+    "row",
+    { x: 0, y: 0, width: 240, height: 80 },
+    rowItems,
+    "row",
+  );
+  dragged.worldTransform = { x: 73, y: 0, scaleX: 1, scaleY: 1 };
+
+  expect(determineProgressiveDropTarget(dragged as any, row as any)).toMatchObject(
+    { container: row, index: 1 },
+  );
+});
+
+test("progressive placement uses the cross-axis line in wrapped rows", () => {
+  const dragged = mockSnapSortItem("dragged", {
+    x: 0,
+    y: 0,
+    width: 70,
+    height: 40,
+  });
+  const rowItems = [
+    dragged,
+    mockSnapSortItem("a", { x: 80, y: 0, width: 70, height: 40 }),
+    mockSnapSortItem("b", { x: 0, y: 48, width: 70, height: 40 }),
+    mockSnapSortItem("c", { x: 80, y: 48, width: 70, height: 40 }),
+  ];
+  const row = mockSnapSortContainer(
+    "wrapped-row",
+    { x: 0, y: 0, width: 160, height: 96 },
+    rowItems,
+    "row",
+  );
+  dragged.worldTransform = { x: 4, y: 48, scaleX: 1, scaleY: 1 };
+
+  expect(
+    determineProgressiveDropTarget(dragged as any, row as any),
+  ).toMatchObject({ container: row, index: 2 });
+});
+
 test("wraps a horizontal ghost when its trailing margin exceeds the content width", () => {
   const container: LayoutNode<string> = {
     value: "container",
     direction: "row",
     locked: false,
-    isGhost: false,
     box: layoutBox({ x: 0, y: 0, width: 313, height: 120 }),
     children: [
       {
         value: "item-1",
         direction: "column",
         locked: false,
-        isGhost: false,
         box: layoutBox(
           { x: 4, y: 0, width: 100, height: 40 },
           { left: 4, right: 4 },
@@ -234,7 +396,6 @@ test("wraps a horizontal ghost when its trailing margin exceeds the content widt
         value: "item-2",
         direction: "column",
         locked: false,
-        isGhost: false,
         box: layoutBox(
           { x: 112, y: 0, width: 100, height: 40 },
           { left: 4, right: 4 },
@@ -247,7 +408,6 @@ test("wraps a horizontal ghost when its trailing margin exceeds the content widt
     value: "dragged",
     direction: "column",
     locked: false,
-    isGhost: false,
     box: layoutBox(
       { x: 0, y: 0, width: 90, height: 40 },
       { left: 4, right: 4 },
@@ -255,14 +415,174 @@ test("wraps a horizontal ghost when its trailing margin exceeds the content widt
     children: [],
   };
 
-  const simulated = flowLayoutPositions(container, dragged, 0, 0, {
+  const simulated = virtualInsertionPosition(
     container,
-    index: 2,
-    width: dragged.box.width,
-    height: dragged.box.height,
-  }).ghostPosition;
+    dragged,
+    0,
+    0,
+    2,
+    dragged.box.width,
+    dragged.box.height,
+  );
 
   expect(simulated).toEqual({ x: 4, y: 40 });
+});
+
+test("places append ghost on the short second row in a wrapped row layout", () => {
+  const container: LayoutNode<string> = {
+    value: "answer",
+    direction: "row",
+    mainAxisAlign: "start",
+    locked: false,
+    box: layoutBox(
+      { x: 0, y: 0, width: 1096, height: 244 },
+      {},
+      { top: 12, right: 12, bottom: 12, left: 12 },
+      { top: 2, right: 2, bottom: 2, left: 2 },
+    ),
+    children: [
+      ["彼", 104, 92, 14, 14],
+      ["すぐ", 136, 92, 122, 14],
+      ["経歴", 136, 92, 262, 14],
+      ["に", 104, 92, 402, 14],
+      ["少年", 136, 92, 510, 14],
+      ["会社", 136, 92, 650, 14],
+      ["問い合わせ", 240, 92, 14, 110],
+      ["しまっ", 168, 92, 258, 110],
+    ].map(([value, width, height, x, y]) => ({
+      value: value as string,
+      direction: "column" as const,
+      mainAxisAlign: "start" as const,
+      locked: false,
+      box: layoutBox({
+        x: x as number,
+        y: y as number,
+        width: width as number,
+        height: height as number,
+      }),
+      children: [],
+    })),
+  };
+  const dragged: LayoutNode<string> = {
+    value: "を",
+    direction: "column",
+    mainAxisAlign: "start",
+    locked: false,
+    box: layoutBox({ x: 0, y: 0, width: 104, height: 92 }),
+    children: [],
+  };
+  const origin = contentBoxOrigin(container.box);
+  const appendGhost = virtualInsertionPosition(
+    container,
+    dragged,
+    origin.x,
+    origin.y,
+    container.children.length,
+    dragged.box.width,
+    dragged.box.height,
+  );
+
+  expect(appendGhost).toBeTruthy();
+  expect(
+    appendGhost!.y,
+    "append slot should remain on the second visual row",
+  ).toBeGreaterThan(container.children[0].box.y);
+  expect(appendGhost!.y).toBe(container.children[6].box.y);
+});
+
+test("reproduces same-container row drag where final ghost centers collapse", () => {
+  const container: LayoutNode<string> = {
+    value: "answer",
+    direction: "row",
+    mainAxisAlign: "start",
+    locked: false,
+    box: layoutBox({ x: 0, y: 0, width: 488, height: 128 }, {}, {
+      top: 14,
+      right: 14,
+      bottom: 14,
+      left: 14,
+    }),
+    children: [
+      ["彼", 53.6, 47.8, 14, 14],
+      ["の", 53.6, 47.8, 71.6, 14],
+      ["経歴", 71.2, 47.8, 129.2, 14],
+      ["を", 53.6, 47.8, 204.4, 14],
+      ["会社", 71.2, 47.8, 262, 14],
+      ["に", 53.6, 47.8, 337.2, 14],
+      ["問い合わせ", 124, 47.8, 14, 65.8],
+      ["た", 53.6, 47.8, 142, 65.8],
+    ].map(([value, width, height, x, y]) => ({
+      value: value as string,
+      direction: "column" as const,
+      mainAxisAlign: "start" as const,
+      locked: false,
+      box: layoutBox({
+        x: x as number,
+        y: y as number,
+        width: width as number,
+        height: height as number,
+      }),
+      children: [],
+    })),
+  };
+  const dragged = container.children[6];
+  const origin = contentBoxOrigin(container.box);
+  const beforeLower = virtualInsertionPosition(
+    container,
+    dragged,
+    origin.x,
+    origin.y,
+    6,
+    dragged.box.width,
+    dragged.box.height,
+  );
+  const afterLower = virtualInsertionPosition(
+    container,
+    dragged,
+    origin.x,
+    origin.y,
+    7,
+    dragged.box.width,
+    dragged.box.height,
+  );
+
+  expect(beforeLower).toEqual(afterLower);
+
+  const dragCenter = { x: 235.6, y: 89.7 };
+  const collapsedLowerGhostCenter = {
+    x: afterLower!.x + dragged.box.width / 2,
+    y: afterLower!.y + dragged.box.height / 2,
+  };
+  const topRowCandidateCenter = {
+    x: container.children[3].box.x + dragged.box.width / 2,
+    y: container.children[3].box.y + dragged.box.height / 2,
+  };
+  const frozenBoundaryAfterLastLowerRowItem = {
+    x: container.children[7].box.x + container.children[7].box.width,
+    y: container.children[7].box.y + dragged.box.height / 2,
+  };
+
+  const collapsedGhostDistance = Math.hypot(
+    collapsedLowerGhostCenter.x - dragCenter.x,
+    collapsedLowerGhostCenter.y - dragCenter.y,
+  );
+  const topRowDistance = Math.hypot(
+    topRowCandidateCenter.x - dragCenter.x,
+    topRowCandidateCenter.y - dragCenter.y,
+  );
+  const frozenBoundaryDistance = Math.hypot(
+    frozenBoundaryAfterLastLowerRowItem.x - dragCenter.x,
+    frozenBoundaryAfterLastLowerRowItem.y - dragCenter.y,
+  );
+
+  expect(
+    topRowDistance,
+    "current final-ghost-center scoring can prefer a top-row slot",
+  ).toBeLessThan(collapsedGhostDistance);
+  expect(
+    frozenBoundaryDistance,
+    "the lower-row visual insertion boundary is still the closer target",
+  ).toBeLessThan(topRowDistance);
 });
 
 function horizontalDoubleRowLayoutCases(): LayoutCase[] {
@@ -311,13 +631,11 @@ function layoutNodeFromBrowserCase(
     value: "container",
     direction: "row",
     locked: false,
-    isGhost: false,
     box: browserCase.container,
     children: browserCase.items.map((item) => ({
       value: item.id,
       direction: "column",
       locked: false,
-      isGhost: false,
       box: item.box,
       children: [],
     })),
@@ -946,18 +1264,15 @@ test.describe("Snapsort drag-start snapshot layout", () => {
 
       const origin = contentBoxOrigin(measuredCase.container);
       for (const actual of measuredCase.actualGhosts) {
-        const simulated = flowLayoutPositions(
+        const simulated = virtualInsertionPosition(
           root,
           dragged!,
           origin.x,
           origin.y,
-          {
-            container: root,
-            index: actual.index,
-            width: measuredCase.ghost.width,
-            height: measuredCase.ghost.height,
-          },
-        ).ghostPosition;
+          actual.index,
+          measuredCase.ghost.width,
+          measuredCase.ghost.height,
+        );
         expect(
           simulated,
           `simulated ghost should exist for ${measuredCase.name}[${actual.index}]`,
@@ -1092,20 +1407,21 @@ test.describe("Snapsort drag-start snapshot layout", () => {
     });
 
     const list = await componentArrayList(page);
+    const kanbanPanel = page.locator(".kanban-panel");
     await expect(page.locator(".demo-header p")).toHaveText(
-      "6 array-backed cards",
+      "6 Euclidean cards plus Progressive sentence demos",
     );
 
-    await page.getByRole("button", { name: "Add Item" }).click();
+    await kanbanPanel.getByRole("button", { name: "Add Item" }).click();
     await expect(page.locator(".demo-header p")).toHaveText(
-      "7 array-backed cards",
+      "7 Euclidean cards plus Progressive sentence demos",
     );
     await expect(list.locator(".task-card")).toHaveCount(5);
 
     const deleteButton = page.getByRole("button", { name: "Delete Task 7" });
     await deleteButton.click();
     await expect(page.locator(".demo-header p")).toHaveText(
-      "6 array-backed cards",
+      "6 Euclidean cards plus Progressive sentence demos",
     );
     await expect(list.locator(".task-card")).toHaveCount(4);
 
@@ -1139,9 +1455,9 @@ test.describe("Snapsort drag-start snapshot layout", () => {
       "Audit log",
     ]);
 
-    await page.getByRole("button", { name: "Reset" }).click();
+    await kanbanPanel.getByRole("button", { name: "Reset" }).click();
     await expect(page.locator(".demo-header p")).toHaveText(
-      "6 array-backed cards",
+      "6 Euclidean cards plus Progressive sentence demos",
     );
 
     const item = await itemByTextIn(list, "Profile fields");
@@ -1172,7 +1488,7 @@ test.describe("Snapsort drag-start snapshot layout", () => {
     ).toHaveCount(1);
 
     await expect(page.locator(".demo-header p")).toHaveText(
-      "6 array-backed cards",
+      "6 Euclidean cards plus Progressive sentence demos",
     );
     await expect(list.locator(".task-card .task-main strong")).toHaveText([
       "Invite flow",

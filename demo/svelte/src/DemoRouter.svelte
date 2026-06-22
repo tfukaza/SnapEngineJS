@@ -5,13 +5,13 @@
   import NodeUiPage from "./demo/node_ui_demo/NodeUIDemo.svelte";
   import DropSnapNestedPage from "./demo/drop_snap_nested/DropSnapNestedDemo.svelte";
   import SnapSortComponentsPage from "./demo/snapsort_components/SnapSortComponentsDemo.svelte";
-  import SnapSortDuolingoPage from "./demo/snapsort_duolingo/SnapSortDuolingoDemo.svelte";
   import CollisionPage from "./demo/collision/CollisionDemo.svelte";
   import CameraControlPage from "./demo/camera_control/CameraControlDemo.svelte";
 
   type DemoRoute = {
     label: string;
     path: string;
+    legacyPaths?: string[];
     legacyDemoValues: string[];
     usesDevNav?: boolean;
     supportsDebug?: boolean;
@@ -33,9 +33,10 @@
       legacyDemoValues: ["variable_bench"],
     },
     {
-      label: "Drag Input",
-      path: "/input-drag",
-      legacyDemoValues: ["drag"],
+      label: "Input Control",
+      path: "/input-control",
+      legacyPaths: ["/input-drag"],
+      legacyDemoValues: ["input_control", "drag"],
       supportsDebug: true,
     },
     {
@@ -44,27 +45,24 @@
       legacyDemoValues: ["camera_control"],
     },
     {
-      label: "Node UI",
-      path: "/node-ui",
-      legacyDemoValues: ["node_ui"],
+      label: "SnapLine",
+      path: "/snapline",
+      legacyPaths: ["/node-ui"],
+      legacyDemoValues: ["snapline", "node_ui"],
     },
     {
-      label: "Drop Snap Nested",
-      path: "/drop-snap-nested",
-      legacyDemoValues: ["drop_snap_nested", "drag_drop", "nested_items"],
+      label: "SnapSort",
+      path: "/snapsort",
+      legacyPaths: ["/drop-snap-nested"],
+      legacyDemoValues: ["snapsort", "drop_snap_nested", "drag_drop", "nested_items"],
       supportsDebug: true,
       usesDevNav: true,
     },
     {
       label: "SnapSort Components",
       path: "/snapsort-components",
-      legacyDemoValues: ["snapsort_components"],
-      usesDevNav: true,
-    },
-    {
-      label: "SnapSort Duolingo",
-      path: "/snapsort-duolingo",
-      legacyDemoValues: ["snapsort_duolingo"],
+      legacyPaths: ["/snapsort-duolingo"],
+      legacyDemoValues: ["snapsort_components", "snapsort_duolingo"],
       usesDevNav: true,
     },
     {
@@ -85,7 +83,11 @@
 
   function findRouteByPath(path: string): DemoRoute | undefined {
     const normalizedPath = normalizePath(path);
-    return demoRoutes.find((route) => route.path === normalizedPath);
+    return demoRoutes.find(
+      (route) =>
+        route.path === normalizedPath ||
+        route.legacyPaths?.includes(normalizedPath),
+    );
   }
 
   function findRouteByLegacyDemo(value: string | null): DemoRoute | undefined {
@@ -151,8 +153,10 @@
   }
 
   $effect(() => {
-    selectedRoute = findRouteByPath(selectedPath) ?? defaultRoute;
-    navigateToSelectedPath(selectedRoute);
+    const route = findRouteByPath(selectedPath) ?? defaultRoute;
+    selectedRoute = route;
+    document.title = route.label;
+    navigateToSelectedPath(route);
   });
 
   $effect(() => {
@@ -213,18 +217,16 @@
       <AnimationGalleryPage />
     {:else if selectedPath === "/animation-variable-bench"}
       <AnimationVariableBenchPage />
-    {:else if selectedPath === "/input-drag"}
+    {:else if selectedPath === "/input-control"}
       <DragInputPage bind:this={dragInputPageRef} />
     {:else if selectedPath === "/camera-control"}
       <CameraControlPage />
-    {:else if selectedPath === "/node-ui"}
+    {:else if selectedPath === "/snapline"}
       <NodeUiPage />
-    {:else if selectedPath === "/drop-snap-nested"}
+    {:else if selectedPath === "/snapsort"}
       <DropSnapNestedPage bind:this={dropSnapNestedPageRef} />
     {:else if selectedPath === "/snapsort-components"}
       <SnapSortComponentsPage />
-    {:else if selectedPath === "/snapsort-duolingo"}
-      <SnapSortDuolingoPage />
     {:else if selectedPath === "/collision"}
       <CollisionPage />
     {/if}

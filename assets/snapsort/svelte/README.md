@@ -2,6 +2,10 @@
 
 Svelte components for SnapEngine drag-and-drop interactions.
 
+`Container` and `Item` are aliases for the Euclidean
+components. The explicit component pairs are available as Euclidean and
+Progressive variants.
+
 ## Install
 
 ```bash
@@ -10,13 +14,22 @@ npm install @snap-engine/snapsort-svelte @snap-engine/snapsort
 
 ## Includes
 
-- `ItemContainer`
+- `ContainerEuclidean`
+- `ItemEuclidean`
+- `ContainerProgressive`
+- `ItemProgressive`
+- `Container`
 - `Item`
 
 ## Usage
 
 ```svelte
 <script>
-  import { ItemContainer, Item } from "@snap-engine/snapsort-svelte";
+  import {
+    Container,
+    Item,
+    ContainerProgressive,
+    ItemProgressive,
+  } from "@snap-engine/snapsort-svelte";
 </script>
 ```

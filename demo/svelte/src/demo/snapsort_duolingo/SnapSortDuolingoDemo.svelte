@@ -1,9 +1,12 @@
 <script lang="ts">
   import { tick } from "svelte";
   import { Engine } from "@snap-engine/asset-base-svelte";
-  import { Item, ItemContainer as Container } from "@snap-engine/snapsort-svelte";
+  import {
+    ContainerProgressive,
+    ItemProgressive,
+  } from "@snap-engine/snapsort-svelte";
   import type {
-    ItemContainer as SnapSortItemContainer,
+    ContainerBase as SortContainer,
     SnapSortDomInsertEvent,
     SnapSortDomRemoveEvent,
   } from "@snap-engine/snapsort";
@@ -22,6 +25,8 @@
     tiles: string[];
   };
 
+  let { embedded = false }: { embedded?: boolean } = $props();
+
   const exercise: Exercise = {
     english: "I drink water every morning.",
     target: "私は毎朝水を飲みます",
@@ -33,8 +38,8 @@
     timing_function: "cubic-bezier(0.2, 0, 0, 1)",
   };
 
-  let answerContainer: SnapSortItemContainer | undefined = $state();
-  let bankContainer: SnapSortItemContainer | undefined = $state();
+  let answerContainer: SortContainer | undefined = $state();
+  let bankContainer: SortContainer | undefined = $state();
   let answerTiles: TileData[] = $state([]);
   let bankTiles: TileData[] = $state(toTileData(exercise.tiles));
   let result: { correct: boolean; expected: string } | null = $state(null);
@@ -168,7 +173,7 @@
   }
 </script>
 
-<div class="game-demo">
+<div class="game-demo" class:embedded>
   <main>
     <section class="prompt">
       <p class="label">Translate this sentence:</p>
@@ -177,13 +182,13 @@
 
     <div class="snapsort-engine" data-lang="ja">
       <Engine id="sentence-builder-snapsort-demo">
-        <Container
+        <ContainerProgressive
           className="sentence-builder-root"
           config={{ direction: "column", name: "sentence-builder-root", noDrop: true }}
           locked={true}
           metadata={{ purpose: "sentence-builder" }}
         >
-          <Container
+          <ContainerProgressive
             className="answer-area answer-box"
             bind:container={answerContainer}
             config={{
@@ -206,7 +211,7 @@
             metadata={{ zone: "answer" }}
           >
             {#each answerTiles as tile (tile.id)}
-              <Item className="tile-wrapper" metadata={{ itemId: tile.id }}>
+              <ItemProgressive className="tile-wrapper" metadata={{ itemId: tile.id }}>
                 <button
                   type="button"
                   class="tile selected"
@@ -220,14 +225,14 @@
                 >
                   {tile.text}
                 </button>
-              </Item>
+              </ItemProgressive>
             {/each}
             {#if answerTiles.length === 0}
               <span class="placeholder">Drag tiles here or click to add</span>
             {/if}
-          </Container>
+          </ContainerProgressive>
 
-          <Container
+          <ContainerProgressive
             className="tile-bank-container tile-bank"
             bind:container={bankContainer}
             config={{
@@ -251,7 +256,7 @@
             metadata={{ zone: "bank" }}
           >
             {#each bankTiles as tile (tile.id)}
-              <Item className="tile-wrapper" metadata={{ itemId: tile.id }}>
+              <ItemProgressive className="tile-wrapper" metadata={{ itemId: tile.id }}>
                 <button
                   type="button"
                   class="tile"
@@ -265,10 +270,10 @@
                 >
                   {tile.text}
                 </button>
-              </Item>
+              </ItemProgressive>
             {/each}
-          </Container>
-        </Container>
+          </ContainerProgressive>
+        </ContainerProgressive>
       </Engine>
     </div>
 
@@ -338,6 +343,19 @@
     margin: 0 auto;
     padding: 1rem;
     box-sizing: border-box;
+  }
+
+  .game-demo.embedded {
+    min-height: auto;
+    overflow: visible;
+    padding: 0;
+    background: transparent;
+  }
+
+  .game-demo.embedded main {
+    max-width: 720px;
+    margin: 0;
+    padding: 0;
   }
 
   .prompt {

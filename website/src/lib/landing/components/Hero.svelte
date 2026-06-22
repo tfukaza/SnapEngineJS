@@ -1,7 +1,7 @@
 <script lang="ts">
   import { onMount } from "svelte";
   import { Engine } from "@snap-engine/asset-base-svelte";
-  import { Item, ItemContainer as Container } from "@snap-engine/snapsort-svelte";
+  import { Container, Item } from "@snap-engine/snapsort-svelte";
   import * as Tone from "tone";
   import HeroToneJoystick from "./hero/HeroToneJoystick.svelte";
 
