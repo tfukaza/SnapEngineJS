@@ -12,8 +12,8 @@ export default function LineReact({ line }: LineProps) {
   );
   const [, setDx] = useState(0);
   const [, setDy] = useState(0);
-  const [, setX0] = useState(line.transform.x);
-  const [, setY0] = useState(line.transform.y);
+  const [, setX0] = useState(line.worldTransform.x);
+  const [, setY0] = useState(line.worldTransform.y);
   const [x1, setX1] = useState(0);
   const [y1, setY1] = useState(0);
   const [x2, setX2] = useState(0);
@@ -23,15 +23,15 @@ export default function LineReact({ line }: LineProps) {
 
   const renderLine = () => {
     const thisLine: LineComponent = line;
-    const newX0 = thisLine.transform.x;
-    const newY0 = thisLine.transform.y;
+    const newX0 = thisLine.worldTransform.x;
+    const newY0 = thisLine.worldTransform.y;
     setX0(newX0);
     setY0(newY0);
     setStyle(
       `position: absolute; overflow: visible; pointer-events: none; will-change: transform; transform: translate3d(${newX0}px, ${newY0}px, 0);`,
     );
-    const newDx = thisLine.endWorldX - thisLine.transform.x;
-    const newDy = thisLine.endWorldY - thisLine.transform.y;
+    const newDx = thisLine.endWorldX - thisLine.worldTransform.x;
+    const newDy = thisLine.endWorldY - thisLine.worldTransform.y;
     setDx(newDx);
     setDy(newDy);
     setX1(Math.abs(newDx / 2));

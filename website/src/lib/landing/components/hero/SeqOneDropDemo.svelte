@@ -1,7 +1,7 @@
 <script lang="ts">
   import { Engine } from "@snap-engine/asset-base-svelte";
-  import { Item, ItemContainer as Container } from "@snap-engine/snapsort-svelte";
-  import type { ItemContainer } from "@snap-engine/snapsort";
+  import { Container, Item } from "@snap-engine/snapsort-svelte";
+  import type { ContainerBase } from "@snap-engine/snapsort";
   import type { Engine as EngineType } from "@snap-engine/core";
   import { debugState } from "$lib/landing/debugState.svelte";
 
@@ -14,7 +14,7 @@
   interface Props {
     tokens?: SeqToken[];
     initialTopTokens?: SeqToken[];
-    topContainer?: ItemContainer;
+    topContainer?: ContainerBase;
     engine?: EngineType | null;
   }
 

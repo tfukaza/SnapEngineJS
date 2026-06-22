@@ -27,33 +27,33 @@
     // // Create 4 wall objects around the boundary
     // // Top wall
     // const topWall = new BaseObject(engine, null);
-    // topWall.transform.x = boundaryLeft;
-    // topWall.transform.y = boundaryTop - WALL_THICKNESS;
-    // const topCollider = new RectCollider(engine.global, topWall, 0, 0, BOUNDARY_WIDTH, WALL_THICKNESS);
+    // topWall.worldTransform.x = boundaryLeft;
+    // topWall.worldTransform.y = boundaryTop - WALL_THICKNESS;
+    // const topCollider = new RectCollider(engine, topWall, 0, 0, BOUNDARY_WIDTH, WALL_THICKNESS);
     // topWall.addCollider(topCollider);
     // boundaryObjects.push(topWall);
 
     // // Bottom wall
     // const bottomWall = new BaseObject(engine, null);
-    // bottomWall.transform.x = boundaryLeft;
-    // bottomWall.transform.y = boundaryTop + BOUNDARY_HEIGHT;
-    // const bottomCollider = new RectCollider(engine.global, bottomWall, 0, 0, BOUNDARY_WIDTH, WALL_THICKNESS);
+    // bottomWall.worldTransform.x = boundaryLeft;
+    // bottomWall.worldTransform.y = boundaryTop + BOUNDARY_HEIGHT;
+    // const bottomCollider = new RectCollider(engine, bottomWall, 0, 0, BOUNDARY_WIDTH, WALL_THICKNESS);
     // bottomWall.addCollider(bottomCollider);
     // boundaryObjects.push(bottomWall);
 
     // // Left wall
     // const leftWall = new BaseObject(engine, null);
-    // leftWall.transform.x = boundaryLeft - WALL_THICKNESS;
-    // leftWall.transform.y = boundaryTop - WALL_THICKNESS;
-    // const leftCollider = new RectCollider(engine.global, leftWall, 0, 0, WALL_THICKNESS, BOUNDARY_HEIGHT + 2 * WALL_THICKNESS);
+    // leftWall.worldTransform.x = boundaryLeft - WALL_THICKNESS;
+    // leftWall.worldTransform.y = boundaryTop - WALL_THICKNESS;
+    // const leftCollider = new RectCollider(engine, leftWall, 0, 0, WALL_THICKNESS, BOUNDARY_HEIGHT + 2 * WALL_THICKNESS);
     // leftWall.addCollider(leftCollider);
     // boundaryObjects.push(leftWall);
 
     // // Right wall
     // const rightWall = new BaseObject(engine, null);
-    // rightWall.transform.x = boundaryLeft + BOUNDARY_WIDTH;
-    // rightWall.transform.y = boundaryTop - WALL_THICKNESS;
-    // const rightCollider = new RectCollider(engine.global, rightWall, 0, 0, WALL_THICKNESS, BOUNDARY_HEIGHT + 2 * WALL_THICKNESS);
+    // rightWall.worldTransform.x = boundaryLeft + BOUNDARY_WIDTH;
+    // rightWall.worldTransform.y = boundaryTop - WALL_THICKNESS;
+    // const rightCollider = new RectCollider(engine, rightWall, 0, 0, WALL_THICKNESS, BOUNDARY_HEIGHT + 2 * WALL_THICKNESS);
     // rightWall.addCollider(rightCollider);
     // boundaryObjects.push(rightWall);
   });

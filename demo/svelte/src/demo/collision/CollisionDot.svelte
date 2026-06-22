@@ -33,26 +33,26 @@
     // Create box object for dragging.
     boxObject = new ElementObject(engine, null);
     boxObject.element = boxElement;
-    boxObject.transform.x = initialX;
-    boxObject.transform.y = initialY;
+    boxObject.worldTransform.x = initialX;
+    boxObject.worldTransform.y = initialY;
 
     // Create dot object (with collider)
     dotObject = new BaseObject(engine, null);
-    dotObject.transform.x = initialX + dotX;
-    dotObject.transform.y = initialY + dotY;
+    dotObject.worldTransform.x = initialX + dotX;
+    dotObject.worldTransform.y = initialY + dotY;
 
     // Add point collider at dot position
-    collider = new PointCollider(engine.global, dotObject, 0, 0);
+    collider = new PointCollider(engine, dotObject, 0, 0);
     dotObject.addCollider(collider);
 
     // Collision events
     collider.event.collider.onBeginContact = (_, other) => {
-        const otherId = (other.parent as any).element?.querySelector('h2, h1')?.innerText || other.parent.gid;
+        const otherId = (other.parent as any).element?.querySelector('h2, h1')?.innerText || other.parent.id;
         addLog(`Hit: ${otherId}`);
     };
 
     collider.event.collider.onEndContact = (_, other) => {
-        const otherId = (other.parent as any).element?.querySelector('h2, h1')?.innerText || other.parent.gid;
+        const otherId = (other.parent as any).element?.querySelector('h2, h1')?.innerText || other.parent.id;
         addLog(`Left: ${otherId}`);
     };
 
@@ -62,12 +62,12 @@
     };
 
     boxObject.event.input.drag = (prop: dragProp) => {
-        boxObject.transform.x = prop.position.x - 75;
-        boxObject.transform.y = prop.position.y - 37.5;
+        boxObject.worldTransform.x = prop.position.x - 75;
+        boxObject.worldTransform.y = prop.position.y - 37.5;
         
         // Update dot position
-        dotObject.transform.x = boxObject.transform.x + dotX;
-        dotObject.transform.y = boxObject.transform.y + dotY;
+        dotObject.worldTransform.x = boxObject.worldTransform.x + dotX;
+        dotObject.worldTransform.y = boxObject.worldTransform.y + dotY;
     };
 
     boxObject.event.input.dragEnd = (_: dragEndProp) => {

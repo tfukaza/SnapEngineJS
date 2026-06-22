@@ -23,20 +23,22 @@
     {
       duration: 4000,
       easing: ["ease-in-out", "ease-in-out", "ease-in-out", "ease-in-out"],
+      persist: true,
     },
   );
 
   let sequence_2 = new AnimationObject(object.element, {
     backgroundColor: [
-      "red",
-      "blue",
-      "red",
+      "white",
+      "white",
+      "white",
     ],
   },
   {
       duration: 4000,
       offset: [0.45, 0.5, 0.55],
       easing: "linear",
+      persist: true,
     },
   );
     const sequence = new SequenceObject();
@@ -67,8 +69,10 @@
     .circle {
       width: 32px;
       height: 32px;
-      border-radius: 50%;
-      background-color: rgb(255, 94, 0);
+      border: 1px solid black;
+      border-radius: 0;
+      background-color: white;
+      box-sizing: border-box;
     }
   
   </style>

@@ -1,2 +1,7 @@
-export { default as ItemContainer } from "./ItemContainer.svelte";
-export { default as Item } from "./Item.svelte";
+export { default as ContainerEuclidean } from "./ContainerEuclidean.svelte";
+export { default as ItemEuclidean } from "./ItemEuclidean.svelte";
+export { default as ContainerProgressive } from "./ContainerProgressive.svelte";
+export { default as ItemProgressive } from "./ItemProgressive.svelte";
+
+export { default as Container } from "./ContainerEuclidean.svelte";
+export { default as Item } from "./ItemEuclidean.svelte";

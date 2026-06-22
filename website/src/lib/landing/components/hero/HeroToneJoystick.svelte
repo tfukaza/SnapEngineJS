@@ -80,8 +80,7 @@
   }
 
   function queueKnobPosition() {
-    knobObject?.queueUpdate(
-      "WRITE_2",
+    knobObject?.schedule(
       () => {
         if (!knobObject) return;
 
@@ -89,13 +88,12 @@
         knobObject.worldPosition = [left, top];
         knobObject.writeTransform();
       },
-      "hero-tone-joystick-position",
+      { stage: "WRITE_2", queueId: "hero-tone-joystick-position" },
     );
   }
 
   function readBounds(callback?: () => void) {
-    knobObject?.queueUpdate(
-      "READ_1",
+    knobObject?.schedule(
       () => {
         if (!surfaceElement || !knobElement) return;
 
@@ -107,7 +105,7 @@
         knobHeight = knobRect.height;
         callback?.();
       },
-      "hero-tone-joystick-read",
+      { stage: "READ_1", queueId: "hero-tone-joystick-read" },
     );
   }
 

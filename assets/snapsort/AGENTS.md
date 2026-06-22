@@ -1,19 +1,19 @@
 # SnapSort - Drag and Drop System
 
-## Purpose
-
-Drag-and-drop list reordering system with support for multiple containers and flexible layouts.
-
-## Packages
-
 ### @snap-engine/snapsort
 **Location:** `core/src/`
 **Language:** TypeScript
 **Dependencies:** `@snap-engine/core`
 
 **Exports:**
-- `ItemContainer` - Container for draggable items
-- `ItemObject` - Individual draggable item
+- `ContainerBase` - Shared container behavior
+- `ContainerEuclidean` - Container using SnapSort Euclidean
+- `ContainerProgressive` - Container using Progressive Placement
+- `Container` - Alias for `ContainerEuclidean`
+- `ItemBase` - Shared base class for SnapSort item mechanics
+- `ItemEuclidean` - Individual draggable item using SnapSort Euclidean
+- `ItemProgressive` - Individual draggable item using Progressive Placement
+- `Item` - Alias for `ItemEuclidean`
 
 ### @snap-engine/snapsort-svelte
 **Location:** `svelte/src/`
@@ -21,8 +21,10 @@ Drag-and-drop list reordering system with support for multiple containers and fl
 **Dependencies:** `@snap-engine/snapsort`, `@snap-engine/core`
 
 **Exports:**
-- `ItemContainer.svelte` - Container component
-- `Item.svelte` - Item component
+- `ContainerEuclidean.svelte` - Container component for SnapSort Euclidean
+- `ItemEuclidean.svelte` - Item component using SnapSort Euclidean
+- `ContainerProgressive.svelte` - Container component for Progressive Placement
+- `ItemProgressive.svelte` - Item component using Progressive Placement
 
 ## File Structure
 
@@ -33,22 +35,32 @@ snapsort/
 │   ├── tsconfig.json
 │   └── src/
 │       ├── index.ts
-│       ├── container.ts        # ItemContainer class
-│       └── item.ts             # ItemObject class
+│       ├── container.ts        # ContainerBase, ContainerEuclidean, ContainerProgressive
+│       └── item.ts             # ItemBase, ItemEuclidean, ItemProgressive
 └── svelte/
     ├── package.json
     ├── tsconfig.json
     └── src/
         ├── index.ts
-        ├── ItemContainer.svelte
-        └── Item.svelte
+        ├── ContainerEuclidean.svelte
+        ├── ItemEuclidean.svelte
+        ├── ContainerProgressive.svelte
+        └── ItemProgressive.svelte
 ```
 
 ## Core Classes
 
-### ItemContainer
-**Extends:** `BaseObject`
-**Purpose:** Manages collection of draggable items with automatic positioning
+### ContainerBase
+**Extends:** `ItemBase`
+**Purpose:** Shared container mechanics and configuration
+
+### ContainerEuclidean
+**Extends:** `ContainerBase`
+**Purpose:** Manages draggable items using SnapSort Euclidean
+
+### ContainerProgressive
+**Extends:** `ContainerBase`
+**Purpose:** Manages draggable items using Progressive Placement
 
 **Configuration:**
 - `direction: "row" | "column"` - Layout direction
@@ -60,9 +72,13 @@ snapsort/
 - Smooth reordering animations
 - Cross-container drops within group
 
-### ItemObject
+### ItemBase
 **Extends:** `ElementObject`
-**Purpose:** Individual draggable item
+**Purpose:** Shared drag/drop mechanics and container movement helpers
+
+### ItemEuclidean
+**Extends:** `ItemBase`
+**Purpose:** Individual draggable item using SnapSort Euclidean
 
 **Features:**
 - Drag and drop
@@ -72,8 +88,8 @@ snapsort/
 
 ## Svelte Components
 
-### ItemContainer.svelte
-**Purpose:** Container for draggable items
+### ContainerEuclidean.svelte
+**Purpose:** Container for draggable Euclidean items
 
 **Props:**
 - `config: { direction, groupID, gap? }` - Container configuration
@@ -81,8 +97,25 @@ snapsort/
 **Slots:**
 - Default: Item components
 
-### Item.svelte
-**Purpose:** Individual draggable item
+### ItemEuclidean.svelte
+**Purpose:** Individual draggable item using SnapSort Euclidean
+
+**Props:** None
+
+**Slots:**
+- Default: Item content
+
+### ContainerProgressive.svelte
+**Purpose:** Container for draggable Progressive Placement items
+
+**Props:**
+- `config: { direction, groupID, gap? }` - Container configuration
+
+**Slots:**
+- Default: Item components
+
+### ItemProgressive.svelte
+**Purpose:** Individual draggable item using Progressive Placement
 
 **Props:** None
 

@@ -2,6 +2,9 @@
 
 Core TypeScript logic for SnapEngine drag-and-drop interactions.
 
+SnapSort includes Euclidean and Progressive Placement container/item
+implementations.
+
 ## Install
 
 ```bash
@@ -10,11 +13,26 @@ npm install @snap-engine/snapsort @snap-engine/core
 
 ## Includes
 
-- `ItemContainer`
-- `ItemObject`
+- `ContainerBase`
+- `ContainerEuclidean`
+- `ContainerProgressive`
+- `Container`
+- `ItemBase`
+- `ItemEuclidean`
+- `ItemProgressive`
+- `Item`
 
 ## Usage
 
 ```ts
-import { ItemContainer, ItemObject } from "@snap-engine/snapsort";
+import {
+  Container,
+  ContainerEuclidean,
+  ContainerProgressive,
+  ItemProgressive,
+  ItemBase,
+  ContainerBase,
+  Item,
+  ItemEuclidean,
+} from "@snap-engine/snapsort";
 ```

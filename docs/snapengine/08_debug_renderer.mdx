@@ -6,7 +6,7 @@ sectionTitle: SnapEngine
 sectionOrder: 1
 ---
 
-The Debug Renderer provides a visual overlay that displays object bounding boxes, collision shapes, coordinate grids, and custom debug markers. 
+The Debug Renderer provides a visual overlay that displays object bounding boxes, collision shapes, coordinate grids, and custom debug markers.
 It's useful during development for understanding object positions, debugging collisions, and visualizing the coordinate systems.
 
 ## Basic Usage
@@ -111,7 +111,7 @@ class DebugRenderer {
   enable(engine: Engine): void;
   disable(): void;
   updateSize(width: number, height: number): void;
-  renderFrame(stats: frameStats, engine: Engine, objectTable: Record<string, BaseObject>): void;
+  renderFrame(stats: FrameStats, engine: Engine, objectTable: Record<string, BaseObject>): void;
 }
 ```
 

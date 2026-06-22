@@ -1,12 +1,15 @@
 <script lang="ts">
   import { Engine } from "@snap-engine/asset-base-svelte";
   import { tick } from "svelte";
+  import SnapSortDuolingoDemo from "../snapsort_duolingo/SnapSortDuolingoDemo.svelte";
   import {
-    Item,
-    ItemContainer as Container,
+    ContainerEuclidean,
+    ContainerProgressive,
+    ItemEuclidean,
+    ItemProgressive,
   } from "@snap-engine/snapsort-svelte";
   import type {
-    ItemContainer as SnapSortItemContainer,
+    ContainerBase as SortContainer,
     SnapSortDomInsertEvent,
     SnapSortDomRemoveEvent,
   } from "@snap-engine/snapsort";
@@ -21,7 +24,19 @@
     id: string;
     title: string;
     items: DemoItem[];
-    container?: SnapSortItemContainer;
+    container?: SortContainer;
+  };
+
+  type ProgressiveTile = {
+    id: string;
+    text: string;
+  };
+
+  type ProgressiveExample = {
+    id: string;
+    prompt: string;
+    answerTiles: ProgressiveTile[];
+    bankTiles: ProgressiveTile[];
   };
 
   const initialColumns: DemoColumn[] = [
@@ -52,6 +67,53 @@
     duration: 180,
     timing_function: "cubic-bezier(0.2, 0, 0, 1)",
   };
+
+  const progressiveExamples: ProgressiveExample[] = [
+    {
+      id: "morning-brief",
+      prompt: "Build the sentence: The product designer rewrote the onboarding checklist.",
+      answerTiles: [
+        { id: "morning-brief-answer-the", text: "The" },
+        { id: "morning-brief-answer-product-designer", text: "product designer" },
+        { id: "morning-brief-answer-rewrote", text: "rewrote" },
+      ],
+      bankTiles: [
+        { id: "morning-brief-bank-checklist", text: "the onboarding checklist" },
+        { id: "morning-brief-bank-quietly", text: "quietly" },
+        { id: "morning-brief-bank-before-lunch", text: "before lunch" },
+      ],
+    },
+    {
+      id: "support-reply",
+      prompt: "Build the sentence: After the update, Maya carefully tested every keyboard shortcut.",
+      answerTiles: [
+        { id: "support-reply-answer-after", text: "After" },
+        { id: "support-reply-answer-update", text: "the update," },
+        { id: "support-reply-answer-maya", text: "Maya" },
+        { id: "support-reply-answer-carefully-tested", text: "carefully tested" },
+      ],
+      bankTiles: [
+        { id: "support-reply-bank-every", text: "every" },
+        { id: "support-reply-bank-keyboard-shortcut", text: "keyboard shortcut" },
+        { id: "support-reply-bank-again", text: "again" },
+        { id: "support-reply-bank-on-a-small-laptop", text: "on a small laptop" },
+      ],
+    },
+    {
+      id: "wide-tiles",
+      prompt: "Build the sentence: The analytics panel should stay readable on narrow screens.",
+      answerTiles: [
+        { id: "wide-tiles-answer-the-analytics-panel", text: "The analytics panel" },
+        { id: "wide-tiles-answer-should", text: "should" },
+      ],
+      bankTiles: [
+        { id: "wide-tiles-bank-stay-readable", text: "stay readable" },
+        { id: "wide-tiles-bank-on", text: "on" },
+        { id: "wide-tiles-bank-narrow-screens", text: "narrow screens" },
+        { id: "wide-tiles-bank-without-overflowing", text: "without overflowing" },
+      ],
+    },
+  ];
 
   let nextItemNumber = $state(7);
   let columns = $state<DemoColumn[]>(structuredClone(initialColumns));
@@ -232,87 +294,197 @@
   <header class="demo-header">
     <div>
       <h1>SnapSort Components</h1>
-      <p>{itemCount} array-backed cards</p>
-    </div>
-    <div class="toolbar">
-      <button onclick={addItem}>Add Item</button>
-      <button onclick={resetItems}>Reset</button>
+      <p>{itemCount} Euclidean cards plus Progressive sentence demos</p>
     </div>
   </header>
 
-  <div class="engine-area">
-    <Engine id="snapsort-components-demo-canvas">
-      <div class="board-frame">
-        <Container
-          className="board"
+  <section class="algorithm-panel kanban-panel">
+    <div class="section-heading">
+      <h2>Euclidean drag and drop</h2>
+      <p>Array-backed board with column and item reordering.</p>
+    </div>
+
+    <div class="kanban-demo-shell">
+      <div class="toolbar">
+        <button onclick={addItem}>Add Item</button>
+        <button onclick={resetItems}>Reset</button>
+      </div>
+
+      <div class="engine-area">
+        <Engine id="snapsort-components-demo-canvas">
+          <div class="board-frame">
+            <ContainerEuclidean
+              className="board"
+              config={{
+                direction: "row",
+                name: "component-kanban-root",
+                noDrop: true,
+              }}
+              locked={true}
+              metadata={{ boardId: "component-kanban" }}
+            >
+              {#each columns as column (column.id)}
+                <ContainerEuclidean
+                  className={column.id === "backlog" ? "list-panel array-list" : "list-panel"}
+                  bind:container={column.container}
+                  config={{
+                    direction: "column",
+                    name: `component-${column.id}`,
+                    animation: {
+                      reorder: snapSortCubicAnimation,
+                      drop: snapSortCubicAnimation,
+                      clickMove: snapSortCubicAnimation,
+                    },
+                    callbacks: {
+                      onDomInsert: handleSnapSortDomInsert,
+                      onDomRemove: handleSnapSortDomRemove,
+                      afterDomMutation: tick,
+                    },
+                  }}
+                  locked={true}
+                  metadata={{ columnId: column.id }}
+                >
+                  <div class="list-header">
+                    <h2>{column.title}</h2>
+                    <span>{column.items.length}</span>
+                  </div>
+
+                  {#each column.items as item (item.id)}
+                    <ItemEuclidean className="task-card" metadata={{ itemId: item.id }}>
+                      <div class="task-content">
+                        <div class="task-main">
+                          <strong>{item.label}</strong>
+                          <span>{item.detail}</span>
+                        </div>
+                        <div class="card-actions">
+                          <button
+                            class="icon-button"
+                            aria-label={`Delete ${item.label}`}
+                            use:controlButton={() => deleteItem(item.id)}
+                          ><span class="material-symbols-outlined" aria-hidden="true">delete</span></button>
+                          <button
+                            class="icon-button"
+                            aria-label={`Move ${item.label} left`}
+                            disabled={columns.findIndex((candidate) => candidate.id === column.id) === 0}
+                            use:controlButton={() => moveItemAcrossColumns(item.id, -1)}
+                          ><span class="material-symbols-outlined" aria-hidden="true">arrow_left_alt</span></button>
+                          <button
+                            class="icon-button"
+                            aria-label={`Move ${item.label} right`}
+                            disabled={columns.findIndex((candidate) => candidate.id === column.id) === columns.length - 1}
+                            use:controlButton={() => moveItemAcrossColumns(item.id, 1)}
+                          ><span class="material-symbols-outlined" aria-hidden="true">arrow_right_alt</span></button>
+                        </div>
+                      </div>
+                    </ItemEuclidean>
+                  {/each}
+                </ContainerEuclidean>
+              {/each}
+            </ContainerEuclidean>
+          </div>
+        </Engine>
+      </div>
+    </div>
+  </section>
+
+  <div class="advanced-demo-grid">
+    <section class="algorithm-panel">
+      <div class="section-heading">
+        <h2>Progressive drag and drop</h2>
+        <p>Sentence-builder layouts using varied tile widths and wrapping rows.</p>
+      </div>
+
+      <Engine id="snapsort-progressive-components-demo-canvas">
+        <ContainerProgressive
+          className="progressive-root"
           config={{
-            direction: "row",
-            name: "component-kanban-root",
+            direction: "column",
+            name: "progressive-components-root",
             noDrop: true,
           }}
           locked={true}
-          metadata={{ boardId: "component-kanban" }}
+          metadata={{ boardId: "progressive-components" }}
         >
-          {#each columns as column (column.id)}
-            <Container
-              className={column.id === "backlog" ? "list-panel array-list" : "list-panel"}
-              bind:container={column.container}
+          {#each progressiveExamples as example (example.id)}
+            <ContainerProgressive
+              className="progressive-example"
               config={{
                 direction: "column",
-                name: `component-${column.id}`,
-                animation: {
-                  reorder: snapSortCubicAnimation,
-                  drop: snapSortCubicAnimation,
-                  clickMove: snapSortCubicAnimation,
-                },
-                callbacks: {
-                  onDomInsert: handleSnapSortDomInsert,
-                  onDomRemove: handleSnapSortDomRemove,
-                  afterDomMutation: tick,
-                },
+                name: `progressive-example-${example.id}`,
+                noDrop: true,
               }}
               locked={true}
-              metadata={{ columnId: column.id }}
+              metadata={{ exampleId: example.id }}
             >
-            <div class="list-header">
-              <h2>{column.title}</h2>
-              <span>{column.items.length}</span>
-            </div>
+              <div class="progressive-prompt">
+                <span>{example.prompt}</span>
+              </div>
 
-              {#each column.items as item (item.id)}
-                <Item className="task-card" metadata={{ itemId: item.id }}>
-                  <div class="task-content">
-                    <div class="task-main">
-                      <strong>{item.label}</strong>
-                      <span>{item.detail}</span>
-                    </div>
-                    <div class="card-actions">
-                      <button
-                        class="icon-button"
-                        aria-label={`Delete ${item.label}`}
-                        use:controlButton={() => deleteItem(item.id)}
-                      ><span class="material-symbols-outlined" aria-hidden="true">delete</span></button>
-                      <button
-                        class="icon-button"
-                        aria-label={`Move ${item.label} left`}
-                        disabled={columns.findIndex((candidate) => candidate.id === column.id) === 0}
-                        use:controlButton={() => moveItemAcrossColumns(item.id, -1)}
-                      ><span class="material-symbols-outlined" aria-hidden="true">arrow_left_alt</span></button>
-                      <button
-                        class="icon-button"
-                        aria-label={`Move ${item.label} right`}
-                        disabled={columns.findIndex((candidate) => candidate.id === column.id) === columns.length - 1}
-                        use:controlButton={() => moveItemAcrossColumns(item.id, 1)}
-                      ><span class="material-symbols-outlined" aria-hidden="true">arrow_right_alt</span></button>
-                    </div>
-                  </div>
-                </Item>
-              {/each}
-            </Container>
+              <ContainerProgressive
+                className="sentence-answer-line"
+                config={{
+                  direction: "row",
+                  name: `progressive-answer-${example.id}`,
+                  groupID: `progressive-${example.id}`,
+                  dropArea: true,
+                  gap: 8,
+                  animation: {
+                    reorder: snapSortCubicAnimation,
+                    drop: snapSortCubicAnimation,
+                  },
+                }}
+                locked={true}
+                metadata={{ zone: "answer", exampleId: example.id }}
+              >
+                {#each example.answerTiles as tile (tile.id)}
+                  <ItemProgressive
+                    className="sentence-tile-wrapper"
+                    metadata={{ itemId: tile.id }}
+                  >
+                    <button type="button" class="sentence-tile">{tile.text}</button>
+                  </ItemProgressive>
+                {/each}
+              </ContainerProgressive>
+
+              <ContainerProgressive
+                className="sentence-bank-line"
+                config={{
+                  direction: "row",
+                  name: `progressive-bank-${example.id}`,
+                  groupID: `progressive-${example.id}`,
+                  dropArea: true,
+                  gap: 8,
+                  animation: {
+                    reorder: snapSortCubicAnimation,
+                    drop: snapSortCubicAnimation,
+                  },
+                }}
+                locked={true}
+                metadata={{ zone: "bank", exampleId: example.id }}
+              >
+                {#each example.bankTiles as tile (tile.id)}
+                  <ItemProgressive
+                    className="sentence-tile-wrapper"
+                    metadata={{ itemId: tile.id }}
+                  >
+                    <button type="button" class="sentence-tile muted">{tile.text}</button>
+                  </ItemProgressive>
+                {/each}
+              </ContainerProgressive>
+            </ContainerProgressive>
           {/each}
-        </Container>
+        </ContainerProgressive>
+      </Engine>
+    </section>
+
+    <section class="algorithm-panel">
+      <div class="section-heading">
+        <h2>Progressive sentence builder</h2>
+        <p>Interactive Duolingo-style component demo with click moves and validation.</p>
       </div>
-    </Engine>
+
+      <SnapSortDuolingoDemo embedded={true} />
+    </section>
   </div>
 </div>
 
@@ -360,7 +532,49 @@
   .toolbar {
     display: flex;
     flex-wrap: wrap;
+    justify-content: flex-end;
     gap: var(--size-8);
+  }
+
+  .algorithm-panel {
+    display: flex;
+    flex-direction: column;
+    gap: var(--size-16);
+    min-width: 0;
+  }
+
+  .kanban-panel {
+    width: 100%;
+  }
+
+  .kanban-demo-shell {
+    width: min(1080px, 100%);
+    display: flex;
+    flex-direction: column;
+    gap: var(--size-12);
+  }
+
+  .advanced-demo-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(min(460px, 100%), 1fr));
+    gap: var(--size-24);
+    align-items: start;
+  }
+
+  .section-heading {
+    display: flex;
+    justify-content: space-between;
+    align-items: flex-end;
+    gap: var(--size-16);
+    border-bottom: 1px solid #000;
+    padding-bottom: var(--size-8);
+  }
+
+  .section-heading p {
+    margin: 0;
+    color: #555;
+    font-size: 14px;
+    text-align: right;
   }
 
   button {
@@ -435,6 +649,84 @@
     min-height: 420px;
   }
 
+  :global(.progressive-root) {
+    width: 100%;
+    gap: var(--size-16);
+    pointer-events: auto;
+  }
+
+  :global(.progressive-example) {
+    width: 100%;
+    border: 2px solid #000;
+    padding: var(--size-12);
+    background: #fff;
+    box-sizing: border-box;
+    gap: var(--size-12);
+    pointer-events: auto;
+  }
+
+  .progressive-prompt {
+    width: 100%;
+    border-bottom: 1px solid #000;
+    padding-bottom: var(--size-8);
+    box-sizing: border-box;
+  }
+
+  .progressive-prompt span {
+    display: block;
+    font-size: 14px;
+    line-height: 1.35;
+  }
+
+  :global(.sentence-answer-line),
+  :global(.sentence-bank-line) {
+    width: min(520px, 100%);
+    min-height: 62px;
+    border: 1px dashed #777;
+    padding: var(--size-8);
+    background: #fafafa;
+    box-sizing: border-box;
+    gap: var(--size-8);
+    align-items: flex-start;
+    align-content: flex-start;
+    pointer-events: auto;
+  }
+
+  :global(.sentence-bank-line) {
+    width: min(640px, 100%);
+    background: #f2f2f2;
+  }
+
+  :global(.sentence-tile-wrapper) {
+    padding: 0;
+    align-items: stretch;
+    justify-content: flex-start;
+    cursor: grab;
+  }
+
+  :global(.sentence-tile-wrapper:active) {
+    cursor: grabbing;
+  }
+
+  .sentence-tile {
+    border: 2px solid #000;
+    background: #fff;
+    color: #000;
+    min-height: 36px;
+    max-width: 240px;
+    padding: 0 var(--size-12);
+    box-sizing: border-box;
+    font-size: 15px;
+    line-height: 1.2;
+    white-space: normal;
+    overflow-wrap: anywhere;
+    box-shadow: 0 2px 0 #000;
+  }
+
+  .sentence-tile.muted {
+    background: #eeeeee;
+  }
+
   :global(.list-panel) {
     min-width: 260px;
     flex: 1 1 0;
@@ -449,7 +741,7 @@
 
   .board-frame {
     display: flex;
-    width: min(1080px, 100%);
+    width: 100%;
     min-height: 420px;
     pointer-events: auto;
   }
@@ -541,6 +833,15 @@
     .demo-header {
       flex-direction: column;
       align-items: flex-start;
+    }
+
+    .section-heading {
+      flex-direction: column;
+      align-items: flex-start;
+    }
+
+    .section-heading p {
+      text-align: left;
     }
 
     h1 {

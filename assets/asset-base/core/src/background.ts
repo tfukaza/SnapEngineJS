@@ -7,7 +7,7 @@ class Background extends ElementObject {
   constructor(engine: any, parent: BaseObject | null) {
     super(engine, parent);
     this.event.global.pointerMove = this.moveBackground;
-    this._dom.style = {
+    this.style = {
       position: "absolute",
       top: "0",
       left: "0",
@@ -25,7 +25,7 @@ class Background extends ElementObject {
       Math.floor(x! / this._tileSize) * this._tileSize - width / 2,
       Math.floor(y! / this._tileSize) * this._tileSize - height / 2,
     ];
-    this._dom.style = {
+    this.style = {
       width: `${width}px`,
       height: `${height}px`,
     };

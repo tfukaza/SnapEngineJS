@@ -48,13 +48,16 @@
     // Assign element (this triggers requestRead which would overwrite transform)
     object.element = element;
     // Queue transform write AFTER read completes to apply initial position
-    object.queueUpdate("WRITE_1", () => {
-      if (!object) return;
-      object.transform.x = thisInitialX;
-      object.transform.y = thisInitialY;
-      // console.log("Initial position set:", thisInitialX, thisInitialY);
-      object.writeTransform();
-    });
+    object.schedule(
+      () => {
+        if (!object) return;
+        object.worldTransform.x = thisInitialX;
+        object.worldTransform.y = thisInitialY;
+        // console.log("Initial position set:", thisInitialX, thisInitialY);
+        object.writeTransform();
+      },
+      { stage: "WRITE_1" },
+    );
 
     // Drag event handlers
     object.event.input.dragStart = (prop: dragStartProp) => {
@@ -63,8 +66,8 @@
       object.global.data.allowCameraControl = false;
 
       isDragging = true;
-      dragStartX = object.transform.x;
-      dragStartY = object.transform.y;
+      dragStartX = object.worldTransform.x;
+      dragStartY = object.worldTransform.y;
       mouseDownX = prop.start.x;
       mouseDownY = prop.start.y;
 

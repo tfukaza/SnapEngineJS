@@ -15,7 +15,7 @@ export default function BackgroundReact() {
       return;
     }
 
-    backgroundRef.current = new Background(engine.global, null);
+    backgroundRef.current = new Background(engine, null);
 
     if (backgroundElement.current) {
       backgroundRef.current.element = backgroundElement.current;

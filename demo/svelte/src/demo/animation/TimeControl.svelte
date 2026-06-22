@@ -30,25 +30,27 @@
     {
       duration: 4000,
       easing: ["ease-in-out", "ease-in-out", "ease-in-out", "ease-in-out"],
-      tick: (value) => {
-        if (object.element) {
-          object.element.innerHTML = `${Math.round(value.$number)}`;
+        persist: true,
+        tick: (value) => {
+          if (object.element) {
+            object.element.textContent = Math.round(value.$number).toString();
+          }
         }
-      }
     },
   );
 
   let sequence_2 = new AnimationObject(object.element, {
     backgroundColor: [
-      "red",
-      "blue",
-      "red",
+      "white",
+      "white",
+      "white",
     ],
   },
   {
       duration: 4000,
       offset: [0.45, 0.5, 0.55],
       easing: "linear",
+      persist: true,
     },
   );
     const sequence = new SequenceObject();
@@ -85,8 +87,17 @@
     .circle {
       width: 32px;
       height: 32px;
-      border-radius: 50%;
-      background-color: rgb(255, 94, 0);
+      border: 1px solid black;
+      border-radius: 0;
+      background-color: white;
+      box-sizing: border-box;
+      color: black;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-family: "Geist", sans-serif;
+      font-size: 13px;
+      font-weight: 300;
     }
 
     input {

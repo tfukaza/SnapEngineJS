@@ -210,15 +210,14 @@
       const characterObject = descriptionCharacterObjects.get(character);
       const baseClassList =
         descriptionCharacterClassLists.get(character) ?? ["collision-description-character"];
-      characterObject?.queueUpdate(
-        "WRITE_2",
+      characterObject?.schedule(
         () => {
           setObjectActiveClass(characterObject, baseClassList, isActive);
           character.style.transform = isActive
             ? `translate(${displacementX.toFixed(2)}px, ${displacementY.toFixed(2)}px)`
             : "";
         },
-        "description-character-displacement",
+        { stage: "WRITE_2", queueId: "description-character-displacement" },
       );
     }
   }
@@ -301,8 +300,7 @@
     }
 
     function setDotDisplacement(x: number, y: number) {
-      object?.queueUpdate(
-        "WRITE_2",
+      object?.schedule(
         () => {
           const isActive = Math.hypot(x, y) > ACTIVE_DISPLACEMENT_EPSILON;
           setObjectActiveClass(object, baseClassList, isActive);
@@ -312,7 +310,7 @@
             node.style.transform = "";
           }
         },
-        "dot-displacement",
+        { stage: "WRITE_2", queueId: "dot-displacement" },
       );
     }
 

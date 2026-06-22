@@ -12,23 +12,23 @@
 
   interface input {
     value: number;
-    uuid: string;
+    id: string;
     connector: Connector | null;
     input: HTMLInputElement | null;
     editable: boolean;
   }
-  let uuid: number = 2;
+  let nextInputId: number = 2;
   let inputValues = $state<Record<string, input>>({
-    "0": { value: 0, uuid: "0", connector: null, input: null, editable: true },
-    "1": { value: 0, uuid: "1", connector: null, input: null, editable: true },
+    "0": { value: 0, id: "0", connector: null, input: null, editable: true },
+    "1": { value: 0, id: "1", connector: null, input: null, editable: true },
   });
   let operation = $state("+");
   let node: any = $state(null);
 
-  function assignCallback(uuid: string) {
+  function assignCallback(id: string) {
     nodeObject?.addSetPropCallback((value: number) => {
-      calculate(uuid, value);
-    }, `input-${uuid}`);
+      calculate(id, value);
+    }, `input-${id}`);
   }
 
   onMount(() => {
@@ -41,12 +41,12 @@
     setUpCallback("1");
   });
 
-  function calculate(uuid: string, value: number) {
-    inputValues[uuid].value = value;
+  function calculate(id: string, value: number) {
+    inputValues[id].value = value;
     let firstKey = Object.keys(inputValues)[0];
     let result = Number(inputValues[firstKey].value);
     for (const entry of Object.values(inputValues)) {
-      const key = entry.uuid;
+      const key = entry.id;
       if (key == firstKey) {
         continue;
       }
@@ -85,16 +85,16 @@
   }
 
   function addInput() {
-    let id: string = (uuid++).toString();
-    inputValues[id] = { value: 0, uuid: id, connector: null, input: null, editable: true };
+    let id: string = (nextInputId++).toString();
+    inputValues[id] = { value: 0, id, connector: null, input: null, editable: true };
     assignCallback(id);
     tick().then(() => {
       setUpCallback(id);
     });
   }
 
-  function removeInput(uuid: string) {
-    delete inputValues[uuid];
+  function removeInput(id: string) {
+    delete inputValues[id];
     const firstKey = Object.keys(inputValues)[0];
     calculate(firstKey, inputValues[firstKey].value);
   }
@@ -141,10 +141,10 @@
     <Connector name="output" maxConnectors={0} allowDragOut={true} />
   </div>
   <hr>
-  {#each Object.values(inputValues) as input (input.uuid)}
+  {#each Object.values(inputValues) as input (input.id)}
     <div class="row-container">
       <Connector
-        name={`input-${input.uuid}`}
+        name={`input-${input.id}`}
         maxConnectors={1}
         allowDragOut={false}
         bind:this={input.connector}
@@ -154,11 +154,11 @@
           type="number"
           bind:this={input.input}
           disabled={!input.editable}
-          oninput={(e) => calculate(input.uuid, (e.target as any).value)}
+          oninput={(e) => calculate(input.id, (e.target as any).value)}
         />
         <button
           onclick={() => {
-            removeInput(input.uuid);
+            removeInput(input.id);
           }}>-</button
         >
       </div>

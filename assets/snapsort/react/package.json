@@ -1,6 +1,11 @@
 {
   "name": "@snap-engine/snapsort-react",
   "version": "0.1.0",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/tfukaza/SnapEngineJS",
+    "directory": "assets/snapsort/react"
+  },
   "description": "React components for drag-and-drop system",
   "type": "module",
   "keywords": [

@@ -185,8 +185,8 @@ Utility functions for DOM operations and transforms.
 **Usage:**
 
 ```typescript
-object.queueUpdate("READ_1", callback);
-object.queueUpdate("WRITE_2", callback);
+object.schedule(callback, { stage: "READ_1" });
+object.schedule(callback, { stage: "WRITE_2" });
 ```
 
 ## Build Configuration

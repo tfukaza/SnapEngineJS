@@ -1,5 +1,11 @@
 import { Engine } from "./engine";
-import { ElementObject, BaseObject, ReactiveTransform } from "./object";
+import {
+  CoreObject,
+  ElementObject,
+  BaseObject,
+  ObjectTransform,
+  TransformView,
+} from "./object";
 import type { DomProperty } from "./object";
 import { GlobalManager } from "./global";
 import { InputControl, mouseButtonBitmap } from "./input";
@@ -22,9 +28,11 @@ import { Camera } from "./camera";
 
 export {
   Engine,
+  CoreObject,
   BaseObject,
   ElementObject,
-  ReactiveTransform,
+  ObjectTransform,
+  TransformView,
   GlobalManager,
   Camera,
   InputControl,

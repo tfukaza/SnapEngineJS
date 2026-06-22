@@ -33,35 +33,35 @@ Below is a summary of the render pipeline stages:
 
 ## Queuing DOM Updates
 
-The primary way to interact with the render API in SnapEngine is through the `queueUpdate` method available on any `BaseObject` (or its subclasses like `ElementObject`).
+The primary way to interact with the render API in SnapEngine is through the `schedule` method available on any `BaseObject` (or its subclasses like `ElementObject`).
 ```typescript
-object.queueUpdate(stage, callback, queueID?)
+object.schedule(callback, { stage, queueId? })
 ```
 - **stage**: One of `"READ_1"`, `"WRITE_1"`, `"READ_2"`, `"WRITE_2"`, `"READ_3"`, `"WRITE_3"`.
 - **callback**: The function to execute.
-- **queueID**: (Optional) A unique ID. 
+- **queueId**: (Optional) A unique ID.
 
 <br/>
 
-If you don't supply a `queueID`, a unique one will be automatically generated. 
-Conversely, if you provide a `queueID`, any pending update with the same ID will be replaced by the new one.
+If you don't supply a `queueId`, a unique one will be automatically generated.
+Conversely, if you provide a `queueId`, any pending update with the same ID will be replaced by the new one.
 This is useful for debouncing frequent updates (e.g., from `mousemove` events) so that only the latest update runs per frame.
 
 **Example:**
 ```typescript
 object.width = 0;
 // Read current state
-object.queueUpdate("READ_1", () => {
+object.schedule(() => {
     // `this` is automatically bound to the object in the callback
     this.width = object.element.offsetWidth;
-});
+}, { stage: "READ_1" });
 // Schedule the write based on the read
-object.queueUpdate("WRITE_1", () => {
+object.schedule(() => {
     this.element.style.width = (this.width + 10) + 'px';
-});
+}, { stage: "WRITE_1" });
 ```
 
-All `queueUpdate` calls return a `queueEntry` object, which contains information about the queued update.
+All `schedule` calls return a `FrameTask` object, which contains information about the queued update.
 
 ## DOM Property Operations
 
@@ -87,9 +87,9 @@ These will be applied to the DOM element when you call `writeDom()`.
 object.style = { backgroundColor: 'red', padding: '10px' };
 object.classes = ['active', 'highlighted'];
 
-object.queueUpdate("WRITE_1", () => {
+object.schedule(() => {
     object.writeDom();  // Applies all pending changes
-});
+}, { stage: "WRITE_1" });
 ```
 
 A common scenario is updating just the location and size of an object based on its `transform` properties.
@@ -100,9 +100,9 @@ for updating the DOM element's transform properties.
 ```typescript
 object.worldPosition = [100, 200];
 
-object.queueUpdate("WRITE_1", () => {
+object.schedule(() => {
     object.writeTransform();  // Only updates transform, no layout thrashing
-});
+}, { stage: "WRITE_1" });
 ```
 
 When you set an object's `worldPosition`, internally it gets saved to its transform properties. 
@@ -134,45 +134,45 @@ depending on which stage it is called in. You can then retrieve the cached prope
 
 ```typescript
 // ElementObject has built-in caching
-object.queueUpdate("READ_1", () => {
+object.schedule(() => {
     this.readDom(); // Reads DOM and caches to READ_1 slot
     const props = object.getDomProperty("READ_1");
     console.log(props.screenX, props.screenY, props.width, props.height);
-});
+}, { stage: "READ_1" });
 ```
 
 If for whatever reason you need to copy cached properties between stages, you can use `copyDomProperty(fromStage, toStage)`:
 ```typescript
-object.queueUpdate("READ_2", () => {
+object.schedule(() => {
     object.readDom(); // Reads DOM and caches to READ_2 slot
     object.copyDomProperty("READ_2", "READ_3"); // Copy to READ_3 slot
-});
+}, { stage: "READ_2" });
 ```
 
 Note that `readDom()` and `getDomProperty()` manages the location of the elements in screen space instead of world space.
 We will cover the difference later in the Camera documentation. 
 <br/>
 
-If you want to convert the screen space position to world space and save it to the object's `transform` properties, you can use `syncFromDom(stage)`:
+If you want to convert the screen space position to world space and save it to the object's `transform` properties, you can use `saveDomProperety(stage)`:
 ```typescript
-object.queueUpdate("READ_1", () => {
+object.schedule(() => {
     object.readDom(); // Reads DOM and caches to READ_1 slot
-    object.syncFromDom("READ_1"); // Converts screen position to world position and saves to transform properties
-});
+    object.saveDomProperety("READ_1"); // Converts screen position to world position and saves to transform properties
+}, { stage: "READ_1" });
 ```
 
-`readDom()` can also take an optional boolean parameter `subtractAppliedTransform` (default: `false`).
+`readDom()` can also take an optional boolean parameter `unapplyTransform` (default: `false`).
 When set to `true`, the method will factor in the object's current transform properties when reading the DOM element's position.
 In other words, it will read the DOM element's position as if any current transform properties have not been applied yet.
 This may be useful in situations where you want to get the "real" position of the element on screen, e.g. getting the original position of a
 loading spinner that is being animated using CSS transforms.
 
 ```typescript
-object.queueUpdate("READ_1", () => {
+object.schedule(() => {
     object.readDom(true); // Reads DOM accounting for current transform properties
     const props = object.getDomProperty("READ_1");
     console.log(props.screenX, props.screenY, props.width, props.height);
-});
+}, { stage: "READ_1" });
 ```
 
 ## Best Practices
@@ -182,14 +182,14 @@ Non DOM update code should ideally be executed elsewhere, such as in input handl
 
 ## Convenience Methods
 
-`requestRead(subtractAppliedTransform?, syncToWorldPosition?, stage?, recursive?)` essentially combines
-`readDom(subtractAppliedTransform)`, `syncFromDom()` and `queueUpdate()` into a single method call.
+`requestRead(unapplyTransform?, syncToWorldPosition?, stage?, recursive?)` essentially combines
+`readDom(unapplyTransform)`, `saveDomProperety()` and `schedule()` into a single method call.
 ```typescript
 let queueEntry = object.requestRead(true, true, "READ_1");
 ```
 
 Likewise, `requestWrite(mutate?, writeCallback?, stage?)` combines
-`queueUpdate()` and `writeDom()` into a single method call.
+`schedule()` and `writeDom()` into a single method call.
 ```typescript
 let queueEntry = object.requestWrite(true, null, "WRITE_1");
 ```

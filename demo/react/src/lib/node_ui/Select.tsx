@@ -13,7 +13,7 @@ export default function SelectReact() {
       return;
     }
 
-    selectRef.current = new RectSelectComponent(engine.global, null);
+    selectRef.current = new RectSelectComponent(engine, null);
 
     if (selectDOM.current) {
       selectRef.current.element = selectDOM.current;

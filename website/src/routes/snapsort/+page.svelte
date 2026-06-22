@@ -2,7 +2,7 @@
   import { onMount } from "svelte";
   import { Engine } from "@snap-engine/asset-base-svelte";
   import type { Engine as SnapEngine } from "@snap-engine/core";
-  import { Item, ItemContainer as Container } from "@snap-engine/snapsort-svelte";
+  import { Container, Item } from "@snap-engine/snapsort-svelte";
 
   type TitleLinePosition = {
     id: string;
