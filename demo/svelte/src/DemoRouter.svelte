@@ -6,6 +6,7 @@
   import DropSnapNestedPage from "./demo/drop_snap_nested/DropSnapNestedDemo.svelte";
   import SnapSortComponentsPage from "./demo/snapsort_components/SnapSortComponentsDemo.svelte";
   import CollisionPage from "./demo/collision/CollisionDemo.svelte";
+  import CollisionStressPage from "./demo/collision/CollisionStressDemo.svelte";
   import CameraControlPage from "./demo/camera_control/CameraControlDemo.svelte";
 
   type DemoRoute = {
@@ -69,6 +70,11 @@
       label: "Collision",
       path: "/collision",
       legacyDemoValues: ["collision"],
+    },
+    {
+      label: "Collision Stress",
+      path: "/collision-stress",
+      legacyDemoValues: ["collision_stress"],
     },
   ];
 
@@ -229,6 +235,8 @@
       <SnapSortComponentsPage />
     {:else if selectedPath === "/collision"}
       <CollisionPage />
+    {:else if selectedPath === "/collision-stress"}
+      <CollisionStressPage />
     {/if}
   </div>
 </div>
