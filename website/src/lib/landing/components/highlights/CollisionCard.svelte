@@ -278,7 +278,7 @@
     }
 
     function getFallbackDirection(targetCenter: { x: number; y: number }, target: Collider) {
-      const previousCenter = previousTargetCenters.get(target.uuid);
+      const previousCenter = previousTargetCenters.get(target.id);
       const motionX = previousCenter ? targetCenter.x - previousCenter.x : 0;
       const motionY = previousCenter ? targetCenter.y - previousCenter.y : 0;
       const motionDistance = Math.hypot(motionX, motionY);
@@ -380,7 +380,7 @@
         const cappedDisplacement = Math.min(displacement, DOT_DISPLACEMENT_MAX);
         displacementX += direction.x * cappedDisplacement;
         displacementY += direction.y * cappedDisplacement;
-        previousTargetCenters.set(target.uuid, targetCenter);
+        previousTargetCenters.set(target.id, targetCenter);
       }
 
       const displacementLength = Math.hypot(displacementX, displacementY);
@@ -395,7 +395,7 @@
 
     function detach() {
       if (collider) {
-        engine?.collisionEngine?.removeObject(collider.uuid);
+        engine?.collisionEngine?.removeObject(collider.id);
       }
       object?.destroy();
       activeTargetCollisions.clear();
@@ -412,6 +412,7 @@
       object = new ElementObject(currentEngine, null);
       object.element = node;
       object.classList = baseClassList;
+      object.requestRead(false, true, "READ_1", false, "collision-dot-read");
       const radius = node.getBoundingClientRect().width / 2;
       collider = new CircleCollider(currentEngine, object, radius, radius, radius);
       object.addCollider(collider);
@@ -441,7 +442,7 @@
         }
 
         activeTargetCollisions.delete(other);
-        previousTargetCenters.delete(other.uuid);
+        previousTargetCenters.delete(other.id);
         updateDotState();
       };
     }
@@ -493,6 +494,7 @@
       object = new ElementObject(currentEngine, null);
       object.transformMode = "relative";
       object.element = node;
+      object.requestRead(false, true, "READ_1", false, "collision-target-read");
 
       collider =
         params.shape === "circle"
@@ -510,7 +512,7 @@
           return;
         }
 
-        activeTargetContacts.add(other.uuid);
+        activeTargetContacts.add(other.id);
         node.style.color = TARGET_COMBINED_COLOR;
       };
       collider.event.collider.onEndContact = (_, other) => {
@@ -518,7 +520,7 @@
           return;
         }
 
-        activeTargetContacts.delete(other.uuid);
+        activeTargetContacts.delete(other.id);
         if (activeTargetContacts.size === 0) {
           node.style.color = "";
         }
@@ -564,7 +566,7 @@
       },
       destroy() {
         if (collider) {
-          engine?.collisionEngine?.removeObject(collider.uuid);
+          engine?.collisionEngine?.removeObject(collider.id);
         }
         object?.destroy();
         collider = null;
