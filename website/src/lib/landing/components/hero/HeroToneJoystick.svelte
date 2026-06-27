@@ -21,8 +21,6 @@
   let isDragging = $state(false);
   let dragStartX = 0;
   let dragStartY = 0;
-  let pointerStartX = 0;
-  let pointerStartY = 0;
   let surfaceWidth = 0;
   let surfaceHeight = 0;
   let knobWidth = 0;
@@ -128,10 +126,8 @@
 
       knobObject.global.data.allowCameraControl = false;
       isDragging = true;
-      dragStartX = knobObject.transform.x;
-      dragStartY = knobObject.transform.y;
-      pointerStartX = prop.start.x;
-      pointerStartY = prop.start.y;
+      dragStartX = knobObject.worldTransform.x;
+      dragStartY = knobObject.worldTransform.y;
       readBounds();
     };
 
@@ -139,8 +135,8 @@
       if (!knobObject) return;
 
       const { left, top } = constrainedPosition(
-        dragStartX + prop.position.x - pointerStartX,
-        dragStartY + prop.position.y - pointerStartY,
+        dragStartX + prop.delta.x,
+        dragStartY + prop.delta.y,
       );
 
       knobObject.worldTransform = { x: left, y: top };

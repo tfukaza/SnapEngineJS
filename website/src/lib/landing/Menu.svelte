@@ -182,10 +182,12 @@
           tick: (value: Record<string, number>) => {
             this.currentZ = value["$alpha"];
             this.style.boxShadow = slotShadowLerp(this.currentZ);
-            this.transform.scaleX = 1 - (this.currentZ * 4) / 100;
-            this.transform.scaleY = 1 - (this.currentZ * 4) / 100;
-            this.transform.x = 0; // preRead seems to be setting transform to non-zero values, so we need to set it to zero
-            this.transform.y = 0;
+            this.worldTransform = {
+              x: 0,
+              y: 0,
+              scaleX: 1 - (this.currentZ * 4) / 100,
+              scaleY: 1 - (this.currentZ * 4) / 100,
+            };
             this.queueTransformWrite("WRITE_2");
           },
           finish: () => {
@@ -209,10 +211,12 @@
       const setAlpha = (alpha: number) => {
         this.currentZ = alpha;
         this.style.boxShadow = slotShadowLerp(this.currentZ);
-        this.transform.scaleX = 1 - (this.currentZ * 4) / 100;
-        this.transform.scaleY = 1 - (this.currentZ * 4) / 100;
-        this.transform.x = 0;
-        this.transform.y = 0;
+        this.worldTransform = {
+          x: 0,
+          y: 0,
+          scaleX: 1 - (this.currentZ * 4) / 100,
+          scaleY: 1 - (this.currentZ * 4) / 100,
+        };
         this.queueTransformWrite("WRITE_2");
       };
       const anim = new AnimationObject(

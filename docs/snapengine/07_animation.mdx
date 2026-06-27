@@ -120,7 +120,7 @@ const animation = new AnimationObject(null,
       console.log(`Scale: ${vars.$scale}`);
       
       // Use values to update anything
-      myObject.transform.x = vars.$progress * 5;
+      myObject.worldTransform = { x: vars.$progress * 5 };
       myObject.schedule(() => myObject.writeTransform(), {
         stage: "WRITE_1",
         queueId: `${myObject.id}-transform`

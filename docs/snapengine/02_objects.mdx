@@ -42,9 +42,6 @@ const childObj = new BaseObject(engine, parentObj);
 Every object has built-in transform properties that specify its position in world coordinates.
 ```typescript
 // Set the world position of the object:
-obj.transform.x = 100;
-obj.transform.y = 200;
-// Or update multiple transform fields at once:
 obj.worldTransform = { x: 100, y: 200 };
 ```
 > [!NOTE]
@@ -61,7 +58,7 @@ SnapEngine automatically keeps world and local positions in sync. When you set a
 ```typescript
 // Setting world position automatically updates local position
 obj.worldTransform = { x: 150, y: 250 };
-console.log(obj.transform.x, obj.transform.y); // Local transform, computed based on parent
+console.log(obj.localTransform.x, obj.localTransform.y); // Local transform, computed based on parent
 
 // Setting local position automatically updates world position
 obj.localTransform = { x: 50, y: 50 };
@@ -77,7 +74,7 @@ child.localTransform = { x: 50, y: 50 };
 
 parent.worldTransform = { x: 100, y: 100 };
 console.log(child.worldTransform.x, child.worldTransform.y); // 150, 150 - automatically updated
-console.log(child.transform.x, child.transform.y); // 50, 50 - preserved
+console.log(child.localTransform.x, child.localTransform.y); // 50, 50 - preserved
 ```
 
 If an object has no parent, its local and world positions are identical.

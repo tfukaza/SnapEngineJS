@@ -20,11 +20,11 @@
 
   function renderLine() {
     const thisLine: LineComponent = line;
-    x0 = thisLine.transform.x;
-    y0 = thisLine.transform.y;
+    x0 = thisLine.worldTransform.x;
+    y0 = thisLine.worldTransform.y;
     style = `position: absolute; overflow: visible; pointer-events: none; will-change: transform; transform: translate3d(${x0}px, ${y0}px, 0);`;
-    dx = thisLine.endWorldX - thisLine.transform.x;
-    dy = thisLine.endWorldY - thisLine.transform.y;
+    dx = thisLine.endWorldX - thisLine.worldTransform.x;
+    dy = thisLine.endWorldY - thisLine.worldTransform.y;
   }
 
   let lineDOM: HTMLElement | null = null;

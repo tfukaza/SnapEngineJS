@@ -113,8 +113,8 @@
     const object = nodeObjects[nodeId];
     if (!object || !nodes) return;
 
-    const rawX = object.transform.x;
-    const rawY = object.transform.y;
+    const rawX = object.worldTransform.x;
+    const rawY = object.worldTransform.y;
     const clampedX = clamp(rawX, NODE_RADIUS, BASE_WIDTH - NODE_RADIUS);
     const clampedY = clamp(rawY, NODE_RADIUS, BASE_HEIGHT - NODE_RADIUS);
 

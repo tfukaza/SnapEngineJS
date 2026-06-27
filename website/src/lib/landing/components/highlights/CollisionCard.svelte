@@ -475,8 +475,6 @@
     let isDragging = false;
     let dragStartX = 0;
     let dragStartY = 0;
-    let pointerStartX = 0;
-    let pointerStartY = 0;
     const activeTargetContacts = new Set<symbol>();
 
     function moveTo(x: number, y: number) {
@@ -541,10 +539,8 @@
 
         object.global.data.allowCameraControl = false;
         isDragging = true;
-        dragStartX = object.transform.x;
-        dragStartY = object.transform.y;
-        pointerStartX = prop.start.x;
-        pointerStartY = prop.start.y;
+        dragStartX = object.worldTransform.x;
+        dragStartY = object.worldTransform.y;
       };
 
       object.event.input.drag = (prop) => {
@@ -552,10 +548,7 @@
           return;
         }
 
-        moveTo(
-          dragStartX + prop.position.x - pointerStartX,
-          dragStartY + prop.position.y - pointerStartY,
-        );
+        moveTo(dragStartX + prop.delta.x, dragStartY + prop.delta.y);
       };
 
       object.event.input.dragEnd = () => {
