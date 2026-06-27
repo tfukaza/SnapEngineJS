@@ -163,6 +163,29 @@ npm run dev:react     # React demo
 npm test
 ```
 
+## Release Workflow
+
+Publishing is triggered by pushing version tags, not by pushing `main`.
+
+**Core engine tag:**
+```bash
+git tag core-v{version}
+git push origin core-v{version}
+```
+
+**Asset package tags:**
+```bash
+git tag asset-base-v{version}
+git tag asset-base-svelte-v{version}
+git tag snapsort-v{version}
+git tag snapsort-svelte-v{version}
+git tag snapline-v{version}
+git tag snapline-svelte-v{version}
+git push origin asset-base-v{version} asset-base-svelte-v{version} snapsort-v{version} snapsort-svelte-v{version} snapline-v{version} snapline-svelte-v{version}
+```
+
+Tag versions must match each package's `package.json` version. The publish workflows live in `.github/workflows/publish.yml` and `.github/workflows/publish-assets.yml`.
+
 ## Build System
 
 - **Core engine:** Built with Vite → `dist/`
