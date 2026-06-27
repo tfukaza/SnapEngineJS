@@ -139,12 +139,12 @@
         const wordGap = 120;
 
         emojiNodes.forEach((item, index) => {
-            item.node.worldPosition = [leftX, topY + index * emojiGap];
+            item.node.worldTransform = { x: leftX, y: topY + index * emojiGap };
             item.node.writeTransform();
         });
 
         wordNodes.forEach((item, index) => {
-            item.node.worldPosition = [rightX, topY + index * wordGap + 30];
+            item.node.worldTransform = { x: rightX, y: topY + index * wordGap + 30 };
             item.node.writeTransform();
         });
     }

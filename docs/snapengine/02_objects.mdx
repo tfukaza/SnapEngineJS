@@ -44,8 +44,8 @@ Every object has built-in transform properties that specify its position in worl
 // Set the world position of the object:
 obj.transform.x = 100;
 obj.transform.y = 200;
-// Or you can set using the shorthand:
-obj.worldPosition = [100, 200];
+// Or update multiple transform fields at once:
+obj.worldTransform = { x: 100, y: 200 };
 ```
 > [!NOTE]
 > Properties for scaling and rotation are currently being considered, but may not be implemented in the final release.
@@ -60,12 +60,12 @@ SnapEngine automatically keeps world and local positions in sync. When you set a
 
 ```typescript
 // Setting world position automatically updates local position
-obj.worldPosition = [150, 250];
-console.log(obj.localPosition); // Automatically computed based on parent
+obj.worldTransform = { x: 150, y: 250 };
+console.log(obj.transform.x, obj.transform.y); // Local transform, computed based on parent
 
 // Setting local position automatically updates world position
-obj.localPosition = [50, 50];
-console.log(obj.worldPosition); // Automatically computed: parent.world + local
+obj.localTransform = { x: 50, y: 50 };
+console.log(obj.worldTransform.x, obj.worldTransform.y); // Computed from parent.world + local
 ```
 
 When a parent moves, all children's world positions cascade automatically while preserving their local offsets:
@@ -73,19 +73,22 @@ When a parent moves, all children's world positions cascade automatically while 
 ```typescript
 const parent = new BaseObject(engine);
 const child = new BaseObject(engine, parent);
-child.localPosition = [50, 50];
+child.localTransform = { x: 50, y: 50 };
 
-parent.worldPosition = [100, 100];
-console.log(child.worldPosition); // [150, 150] - automatically updated
-console.log(child.localPosition); // [50, 50] - preserved
+parent.worldTransform = { x: 100, y: 100 };
+console.log(child.worldTransform.x, child.worldTransform.y); // 150, 150 - automatically updated
+console.log(child.transform.x, child.transform.y); // 50, 50 - preserved
 ```
 
 If an object has no parent, its local and world positions are identical.
 
-For `ElementObject` instances that need to read their position from the DOM, use `calculateLocalFromDom()` to compute local offsets based on DOM-reported positions:
+For `ElementObject` instances that need to read their position from the DOM, use `readDom()` and `saveDomProperety()` in a read stage:
 
 ```typescript
-elemObj.calculateLocalFromDom("READ_1"); // Sets local based on DOM positions, auto-syncs world
+elemObj.schedule(() => {
+  elemObj.readDom();
+  elemObj.saveDomProperety("READ_1");
+}, { stage: "READ_1" });
 ```
 
 On the note of being different than typical game engines, **the transform properties of objects are not automatically applied to the actual DOM element of the object** - this must be done explicitly. We will cover how to do this in the ["Render Queues" section](./03_rendering).

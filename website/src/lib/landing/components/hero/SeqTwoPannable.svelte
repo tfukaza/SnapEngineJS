@@ -119,8 +119,11 @@
     const clampedY = clamp(rawY, NODE_RADIUS, BASE_HEIGHT - NODE_RADIUS);
 
     if (clampedX !== rawX || clampedY !== rawY) {
-      object.worldPosition = [clampedX, clampedY];
-      object.requestTransform();
+      object.worldTransform = { x: clampedX, y: clampedY };
+      object.schedule(() => object.writeTransform(), {
+        stage: "WRITE_1",
+        queueId: `${object.id}-transform`,
+      });
     }
 
     nodes = nodes.map((node) =>

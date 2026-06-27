@@ -72,7 +72,7 @@ In fact in most cases, you must assume that the DOM state is out of sync with wh
 <br/>
 
 For this reason, objects in SnapEngine maintain two separate concepts of properties:
-the `transform` properties (like `worldPosition`, `localPosition`, etc.) 
+the `transform` properties (like `worldTransform` and `localTransform`) 
 which are what the engine thinks the object's properties is, and the `dom` properties,
 which reflects the actual state of the DOM element. Again, these two states are usually not in sync, 
 and you must be aware of when to read from or write to the DOM at all times.
@@ -98,14 +98,14 @@ and often is the preferred way to move elements around the screen - so much so t
 for updating the DOM element's transform properties.
 
 ```typescript
-object.worldPosition = [100, 200];
+object.worldTransform = { x: 100, y: 200 };
 
 object.schedule(() => {
     object.writeTransform();  // Only updates transform, no layout thrashing
 }, { stage: "WRITE_1" });
 ```
 
-When you set an object's `worldPosition`, internally it gets saved to its transform properties. 
+When you set an object's `worldTransform`, internally it resolves the local transform needed for the current parent relationship. 
 Once again, this is not the same as the DOM element's position, which is only reflected to the screen when you call `writeTransform()`.
 
 Applying the transform also comes in four modes - `direct`, `relative`, `offset` and `none`. 
@@ -161,7 +161,7 @@ object.schedule(() => {
 }, { stage: "READ_1" });
 ```
 
-`readDom()` can also take an optional boolean parameter `unapplyTransform` (default: `false`).
+`readDom()` can also take an optional config object with `unapplyTransform` (default: `false`).
 When set to `true`, the method will factor in the object's current transform properties when reading the DOM element's position.
 In other words, it will read the DOM element's position as if any current transform properties have not been applied yet.
 This may be useful in situations where you want to get the "real" position of the element on screen, e.g. getting the original position of a
@@ -169,7 +169,7 @@ loading spinner that is being animated using CSS transforms.
 
 ```typescript
 object.schedule(() => {
-    object.readDom(true); // Reads DOM accounting for current transform properties
+    object.readDom({ unapplyTransform: true }); // Reads DOM accounting for current transform properties
     const props = object.getDomProperty("READ_1");
     console.log(props.screenX, props.screenY, props.width, props.height);
 }, { stage: "READ_1" });
@@ -179,17 +179,3 @@ object.schedule(() => {
 Developers are encouraged to avoid bloating render callbacks with 
 code that does not mutate the DOM. Otherwise, they will block the rendering pipeline and may induce latency into the UI.
 Non DOM update code should ideally be executed elsewhere, such as in input handling code
-
-## Convenience Methods
-
-`requestRead(unapplyTransform?, syncToWorldPosition?, stage?, recursive?)` essentially combines
-`readDom(unapplyTransform)`, `saveDomProperety()` and `schedule()` into a single method call.
-```typescript
-let queueEntry = object.requestRead(true, true, "READ_1");
-```
-
-Likewise, `requestWrite(mutate?, writeCallback?, stage?)` combines
-`schedule()` and `writeDom()` into a single method call.
-```typescript
-let queueEntry = object.requestWrite(true, null, "WRITE_1");
-```

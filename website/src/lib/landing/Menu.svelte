@@ -46,6 +46,13 @@
       this.initialX = 0;
     }
 
+    queueRead() {
+      this.schedule(() => this.readDom({ unapplyTransform: true }), {
+        stage: "READ_1",
+        queueId: `${this.id}-read`,
+      });
+    }
+
     lowerAllPanels(targetIndex: number) {
       this.itemList.forEach((item) => {
         item.lowerPanel(targetIndex);
@@ -80,9 +87,9 @@
               },
               tick: (_: Record<string, number>) => {
                 for (const item of this.itemList) {
-                  item.requestRead(true);
+                  item.queueRead();
                 }
-                this.requestRead(true);
+                this.queueRead();
               },
             }
           );
@@ -119,9 +126,9 @@
           },
           tick: (_: Record<string, number>) => {
             for (const item of this.itemList) {
-              item.requestRead(true);
+              item.queueRead();
             }
-            this.requestRead(true);
+            this.queueRead();
           },
         }
       );
@@ -147,6 +154,20 @@
       this.transformMode = "direct";
     }
 
+    queueRead() {
+      this.schedule(() => this.readDom({ unapplyTransform: true }), {
+        stage: "READ_1",
+        queueId: `${this.id}-read`,
+      });
+    }
+
+    queueTransformWrite(stage: "WRITE_1" | "WRITE_2" | "WRITE_3" = "WRITE_1") {
+      this.schedule(() => this.writeTransform(), {
+        stage,
+        queueId: `${this.id}-transform`,
+      });
+    }
+
     lowerPanel(targetIndex: number, delay: number = 0) {
       const anim = new AnimationObject(
         this.element,
@@ -165,7 +186,7 @@
             this.transform.scaleY = 1 - (this.currentZ * 4) / 100;
             this.transform.x = 0; // preRead seems to be setting transform to non-zero values, so we need to set it to zero
             this.transform.y = 0;
-            this.requestTransform("WRITE_2");
+            this.queueTransformWrite("WRITE_2");
           },
           finish: () => {
             if (targetIndex != -1 && targetIndex == this.index) {
@@ -192,7 +213,7 @@
         this.transform.scaleY = 1 - (this.currentZ * 4) / 100;
         this.transform.x = 0;
         this.transform.y = 0;
-        this.requestTransform("WRITE_2");
+        this.queueTransformWrite("WRITE_2");
       };
       const anim = new AnimationObject(
         this.element,
@@ -253,7 +274,7 @@
     menuItems.forEach((item) => {
       item.object.container = menuCarousel;
       menuCarousel.itemList.push(item.object);
-      item.object.requestRead(true);
+      item.object.queueRead();
     });
   });
 

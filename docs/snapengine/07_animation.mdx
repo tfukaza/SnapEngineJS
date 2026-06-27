@@ -121,7 +121,10 @@ const animation = new AnimationObject(null,
       
       // Use values to update anything
       myObject.transform.x = vars.$progress * 5;
-      myObject.requestTransform();
+      myObject.schedule(() => myObject.writeTransform(), {
+        stage: "WRITE_1",
+        queueId: `${myObject.id}-transform`
+      });
     }
   }
 );

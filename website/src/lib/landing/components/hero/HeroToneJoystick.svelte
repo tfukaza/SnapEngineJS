@@ -85,7 +85,7 @@
         if (!knobObject) return;
 
         const { left, top } = positionFromValue();
-        knobObject.worldPosition = [left, top];
+        knobObject.worldTransform = { x: left, y: top };
         knobObject.writeTransform();
       },
       { stage: "WRITE_2", queueId: "hero-tone-joystick-position" },
@@ -143,8 +143,11 @@
         dragStartY + prop.position.y - pointerStartY,
       );
 
-      knobObject.worldPosition = [left, top];
-      knobObject.requestTransform("WRITE_2");
+      knobObject.worldTransform = { x: left, y: top };
+      knobObject.schedule(() => knobObject?.writeTransform(), {
+        stage: "WRITE_2",
+        queueId: `${knobObject.id}-transform`,
+      });
       updateValueFromPosition(left, top);
     };
 

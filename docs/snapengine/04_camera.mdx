@@ -35,7 +35,7 @@ The coordinate systems managed by the engine are:
 
 ```typescript
 // Get world position (consistent regardless of camera)
-const [worldX, worldY] = object.worldPosition;
+const { x: worldX, y: worldY } = object.worldTransform;
 
 // Get camera-relative position
 const [camX, camY] = object.cameraPosition;
@@ -44,7 +44,7 @@ const [camX, camY] = object.cameraPosition;
 const [screenX, screenY] = object.screenPosition;
 
 // Set position using any coordinate system
-object.worldPosition = [100, 200];
+object.worldTransform = { x: 100, y: 200 };
 object.cameraPosition = [50, 100];  // Automatically converts to world
 object.screenPosition = [300, 400]; // Automatically converts to world
 ```

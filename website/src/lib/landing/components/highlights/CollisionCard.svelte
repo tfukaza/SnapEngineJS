@@ -412,7 +412,10 @@
       object = new ElementObject(currentEngine, null);
       object.element = node;
       object.classList = baseClassList;
-      object.requestRead(false, true, "READ_1", false, "collision-dot-read");
+      object.schedule(() => {
+        object?.readDom({ unapplyTransform: false });
+        object?.saveDomProperety("READ_1");
+      }, { stage: "READ_1", queueId: "collision-dot-read" });
       const radius = node.getBoundingClientRect().width / 2;
       collider = new CircleCollider(currentEngine, object, radius, radius, radius);
       object.addCollider(collider);
@@ -481,8 +484,11 @@
         return;
       }
 
-      object.worldPosition = [x, y];
-      object.requestTransform();
+      object.worldTransform = { x, y };
+      object.schedule(() => object?.writeTransform(), {
+        stage: "WRITE_1",
+        queueId: `${object.id}-transform`,
+      });
       scheduleDescriptionDisplacementUpdate();
     }
 
@@ -494,7 +500,10 @@
       object = new ElementObject(currentEngine, null);
       object.transformMode = "relative";
       object.element = node;
-      object.requestRead(false, true, "READ_1", false, "collision-target-read");
+      object.schedule(() => {
+        object?.readDom({ unapplyTransform: false });
+        object?.saveDomProperety("READ_1");
+      }, { stage: "READ_1", queueId: "collision-target-read" });
 
       collider =
         params.shape === "circle"
