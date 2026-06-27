@@ -1,6 +1,6 @@
 {
   "name": "@snap-engine/snapsort",
-  "version": "0.3.1",
+  "version": "0.4.0",
   "repository": {
     "type": "git",
     "url": "https://github.com/tfukaza/SnapEngineJS",
@@ -16,8 +16,8 @@
     "./item": "./src/item.ts"
   },
   "dependencies": {
-    "@snap-engine/core": "^0.3.0",
-    "@snap-engine/asset-base": "^0.3.1"
+    "@snap-engine/core": "^0.4.0",
+    "@snap-engine/asset-base": "^0.4.0"
   },
   "files": [
     "src",

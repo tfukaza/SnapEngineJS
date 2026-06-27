@@ -162,10 +162,10 @@ function rectColliderForWorldRect(
     rect.width / Math.abs(scaleX),
     rect.height / Math.abs(scaleY),
   );
-  collider.worldPosition = [
-    scaleX < 0 ? rect.x + rect.width : rect.x,
-    scaleY < 0 ? rect.y + rect.height : rect.y,
-  ];
+  collider.worldTransform = {
+    x: scaleX < 0 ? rect.x + rect.width : rect.x,
+    y: scaleY < 0 ? rect.y + rect.height : rect.y,
+  };
   return collider;
 }
 

@@ -27,32 +27,28 @@
     // // Create 4 wall objects around the boundary
     // // Top wall
     // const topWall = new BaseObject(engine, null);
-    // topWall.worldTransform.x = boundaryLeft;
-    // topWall.worldTransform.y = boundaryTop - WALL_THICKNESS;
+    // topWall.worldTransform = { x: boundaryLeft, y: boundaryTop - WALL_THICKNESS };
     // const topCollider = new RectCollider(engine, topWall, 0, 0, BOUNDARY_WIDTH, WALL_THICKNESS);
     // topWall.addCollider(topCollider);
     // boundaryObjects.push(topWall);
 
     // // Bottom wall
     // const bottomWall = new BaseObject(engine, null);
-    // bottomWall.worldTransform.x = boundaryLeft;
-    // bottomWall.worldTransform.y = boundaryTop + BOUNDARY_HEIGHT;
+    // bottomWall.worldTransform = { x: boundaryLeft, y: boundaryTop + BOUNDARY_HEIGHT };
     // const bottomCollider = new RectCollider(engine, bottomWall, 0, 0, BOUNDARY_WIDTH, WALL_THICKNESS);
     // bottomWall.addCollider(bottomCollider);
     // boundaryObjects.push(bottomWall);
 
     // // Left wall
     // const leftWall = new BaseObject(engine, null);
-    // leftWall.worldTransform.x = boundaryLeft - WALL_THICKNESS;
-    // leftWall.worldTransform.y = boundaryTop - WALL_THICKNESS;
+    // leftWall.worldTransform = { x: boundaryLeft - WALL_THICKNESS, y: boundaryTop - WALL_THICKNESS };
     // const leftCollider = new RectCollider(engine, leftWall, 0, 0, WALL_THICKNESS, BOUNDARY_HEIGHT + 2 * WALL_THICKNESS);
     // leftWall.addCollider(leftCollider);
     // boundaryObjects.push(leftWall);
 
     // // Right wall
     // const rightWall = new BaseObject(engine, null);
-    // rightWall.worldTransform.x = boundaryLeft + BOUNDARY_WIDTH;
-    // rightWall.worldTransform.y = boundaryTop - WALL_THICKNESS;
+    // rightWall.worldTransform = { x: boundaryLeft + BOUNDARY_WIDTH, y: boundaryTop - WALL_THICKNESS };
     // const rightCollider = new RectCollider(engine, rightWall, 0, 0, WALL_THICKNESS, BOUNDARY_HEIGHT + 2 * WALL_THICKNESS);
     // rightWall.addCollider(rightCollider);
     // boundaryObjects.push(rightWall);

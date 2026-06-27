@@ -45,14 +45,13 @@
       transformOrigin: "top left",
     };
 
-    // Assign element (this triggers requestRead which would overwrite transform)
+    // Assign element before queueing the initial transform write.
     object.element = element;
     // Queue transform write AFTER read completes to apply initial position
     object.schedule(
       () => {
         if (!object) return;
-        object.worldTransform.x = thisInitialX;
-        object.worldTransform.y = thisInitialY;
+        object.worldTransform = { x: thisInitialX, y: thisInitialY };
         // console.log("Initial position set:", thisInitialX, thisInitialY);
         object.writeTransform();
       },
@@ -81,8 +80,11 @@
       const dx = prop.position.x - mouseDownX;
       const dy = prop.position.y - mouseDownY;
       
-      object.worldPosition = [dragStartX + dx, dragStartY + dy];
-      object.requestTransform();
+      object.worldTransform = { x: dragStartX + dx, y: dragStartY + dy };
+      object.schedule(() => object?.writeTransform(), {
+        stage: "WRITE_2",
+        queueId: `${object.id}-transform`,
+      });
       
       if (onDrag) {
         onDrag();

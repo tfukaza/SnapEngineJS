@@ -89,8 +89,8 @@ class ConnectorComponent extends ElementObject {
           const prop = this.getDomProperty("READ_1");
           const centerX = prop.width / 2;
           const centerY = prop.height / 2;
-          this.#hitCircle.localPosition = [centerX, centerY];
-          this.#mouseHitBox.localPosition = [centerX, centerY];
+          this.#hitCircle.localTransform = { x: centerX, y: centerY };
+          this.#mouseHitBox.localTransform = { x: centerX, y: centerY };
         },
         { stage: "READ_1" },
       );
@@ -190,7 +190,10 @@ class ConnectorComponent extends ElementObject {
   updateAllLines() {
     for (const line of [...this.#outgoingLines, ...this.#incomingLines]) {
       line.moveLineToConnectorTransform();
-      line.requestTransform("WRITE_2");
+      line.schedule(() => line.writeTransform(), {
+        stage: "WRITE_2",
+        queueId: `${line.id}-transform`,
+      });
     }
   }
 
@@ -272,7 +275,8 @@ class ConnectorComponent extends ElementObject {
       .sort((a, b) => {
         const centerA = a.center;
         const centerB = b.center;
-        const [mouseX, mouseY] = this.#mouseHitBox.worldPosition;
+        const mouseWorld = this.#mouseHitBox.worldTransform;
+        const [mouseX, mouseY] = [mouseWorld.x, mouseWorld.y];
         let da = Math.sqrt(
           Math.pow(centerA.x - mouseX, 2) + Math.pow(centerA.y - mouseY, 2),
         );
@@ -297,7 +301,10 @@ class ConnectorComponent extends ElementObject {
       console.error(`Error: Outgoing lines is empty`);
       return;
     }
-    this.#mouseHitBox.worldPosition = [prop.position.x, prop.position.y];
+    this.#mouseHitBox.worldTransform = {
+      x: prop.position.x,
+      y: prop.position.y,
+    };
 
     let line = this.#outgoingLines[0];
 
@@ -306,7 +313,10 @@ class ConnectorComponent extends ElementObject {
       if (result) {
         line.setLineEnd(result[0], result[1]);
         line.setLineStartAtConnector();
-        line.requestTransform("WRITE_2");
+        line.schedule(() => line.writeTransform(), {
+          stage: "WRITE_2",
+          queueId: `${line.id}-transform`,
+        });
         return;
       }
     }
@@ -373,7 +383,7 @@ class ConnectorComponent extends ElementObject {
     this.#targetConnector = null;
     this.#mouseHitBox.event.collider.onBeginContact = null;
     this.#mouseHitBox.event.collider.onEndContact = null;
-    this.#mouseHitBox.localPosition = [0, 0];
+    this.#mouseHitBox.localTransform = { x: 0, y: 0 };
   }
 
   startPickUpLine(line: LineComponent, prop: pointerDownProp) {

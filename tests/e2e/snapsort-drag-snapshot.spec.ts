@@ -428,6 +428,63 @@ test("wraps a horizontal ghost when its trailing margin exceeds the content widt
   expect(simulated).toEqual({ x: 4, y: 40 });
 });
 
+test("wraps fractional horizontal overflow at browser flex precision", () => {
+  const container: LayoutNode<string> = {
+    value: "container",
+    direction: "row",
+    mainAxisAlign: "start",
+    locked: false,
+    box: layoutBox({ x: 0, y: 0, width: 317.2, height: 120 }),
+    children: [
+      {
+        value: "item-1",
+        direction: "column",
+        mainAxisAlign: "start",
+        locked: false,
+        box: layoutBox(
+          { x: 4, y: 0, width: 100, height: 40 },
+          { left: 4, right: 4 },
+        ),
+        children: [],
+      },
+      {
+        value: "item-2",
+        direction: "column",
+        mainAxisAlign: "start",
+        locked: false,
+        box: layoutBox(
+          { x: 112, y: 0, width: 100, height: 40 },
+          { left: 4, right: 4 },
+        ),
+        children: [],
+      },
+    ],
+  };
+  const dragged: LayoutNode<string> = {
+    value: "dragged",
+    direction: "column",
+    mainAxisAlign: "start",
+    locked: false,
+    box: layoutBox(
+      { x: 0, y: 0, width: 93.5, height: 40 },
+      { left: 4, right: 4 },
+    ),
+    children: [],
+  };
+
+  const simulated = virtualInsertionPosition(
+    container,
+    dragged,
+    0,
+    0,
+    2,
+    dragged.box.width,
+    dragged.box.height,
+  );
+
+  expect(simulated).toEqual({ x: 4, y: 40 });
+});
+
 test("places append ghost on the short second row in a wrapped row layout", () => {
   const container: LayoutNode<string> = {
     value: "answer",

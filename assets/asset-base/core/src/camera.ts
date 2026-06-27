@@ -60,7 +60,10 @@ class CameraControl extends ElementObject {
       width: "0px",
       height: "0px",
     };
-    this.requestTransform("WRITE_2");
+    this.schedule(() => this.writeTransform(), {
+      stage: "WRITE_2",
+      queueId: `${this.id}-transform`,
+    });
   }
 
   set element(_element: HTMLElement) {
@@ -79,7 +82,10 @@ class CameraControl extends ElementObject {
     // this.engine.camera?.updateCameraProperty();
     this.engine.camera?.updateCamera();
     this.style.transform = this.engine.camera?.canvasStyle as string;
-    this.requestTransform("WRITE_2");
+    this.schedule(() => this.writeTransform(), {
+      stage: "WRITE_2",
+      queueId: `${this.id}-transform`,
+    });
   }
 
   // Camera Methods
@@ -117,7 +123,10 @@ class CameraControl extends ElementObject {
 
     camera.handleScroll(deltaZoom, targetX, targetY);
     this.style.transform = camera.canvasStyle as string;
-    this.requestTransform("WRITE_2");
+    this.schedule(() => this.writeTransform(), {
+      stage: "WRITE_2",
+      queueId: `${this.id}-transform`,
+    });
   }
 
   // Event Handlers
@@ -161,7 +170,10 @@ class CameraControl extends ElementObject {
     const dy = prop.position.screenY - this.#mouseDownY;
     this.engine.camera?.handlePanDrag(dx, dy);
     this.style.transform = this.engine.camera?.canvasStyle as string;
-    this.requestTransform("WRITE_2");
+    this.schedule(() => this.writeTransform(), {
+      stage: "WRITE_2",
+      queueId: `${this.id}-transform`,
+    });
   }
 
   onCursorUp(prop: pointerUpProp) {
@@ -175,7 +187,10 @@ class CameraControl extends ElementObject {
     this.#panPointerId = null;
     this.engine.camera?.handlePanEnd();
     this.style.transform = this.engine.camera?.canvasStyle as string;
-    this.requestTransform("WRITE_2");
+    this.schedule(() => this.writeTransform(), {
+      stage: "WRITE_2",
+      queueId: `${this.id}-transform`,
+    });
   }
 
   onZoom(prop: mouseWheelProp) {
@@ -256,7 +271,10 @@ class CameraControl extends ElementObject {
     });
 
     this.style.transform = camera.canvasStyle as string;
-    this.requestTransform("WRITE_2");
+    this.schedule(() => this.writeTransform(), {
+      stage: "WRITE_2",
+      queueId: `${this.id}-transform`,
+    });
   }
 
   onPinchEnd() {

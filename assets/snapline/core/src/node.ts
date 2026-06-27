@@ -61,12 +61,11 @@ class NodeComponent extends ElementObject {
     this.event.dom.onResize = () => {
       this.schedule(
         () => {
-          const property = this.readDom(false, "READ_1");
+          const property = this.readDom({ unapplyTransform: false }, "READ_1");
           this._hitBox.width = property.width;
           this._hitBox.height = property.height;
           for (const connector of Object.values(this._connectors)) {
-            connector.readDom(false, "READ_1");
-            connector.calculateLocalFromDom("READ_1");
+            connector.readDom({ unapplyTransform: false }, "READ_1");
           }
         },
         { stage: "READ_1" },
@@ -119,7 +118,10 @@ class NodeComponent extends ElementObject {
         (node: NodeComponent) => node.id !== this.id,
       );
     }
-    this.requestWrite();
+    this.schedule(() => this.writeDom(), {
+      stage: "WRITE_1",
+      queueId: "WRITE_1",
+    });
   }
 
   _filterDeletedLines(svgLines: LineComponent[]) {
@@ -188,9 +190,15 @@ class NodeComponent extends ElementObject {
     const dx = prop.position.x - this._mouseDownX;
     const dy = prop.position.y - this._mouseDownY;
 
-    this.worldPosition = [this._dragStartX + dx, this._dragStartY + dy];
+    this.worldTransform = {
+      x: this._dragStartX + dx,
+      y: this._dragStartY + dy,
+    };
     this.updateNodeLines();
-    this.requestTransform("WRITE_2");
+    this.schedule(() => this.writeTransform(), {
+      stage: "WRITE_2",
+      queueId: `${this.id}-transform`,
+    });
   }
 
   onDragEnd(prop: dragEndProp) {
@@ -207,7 +215,10 @@ class NodeComponent extends ElementObject {
       prop.end.x - this._mouseDownX,
       prop.end.y - this._mouseDownY,
     ];
-    this.worldPosition = [this._dragStartX + dx, this._dragStartY + dy];
+    this.worldTransform = {
+      x: this._dragStartX + dx,
+      y: this._dragStartY + dy,
+    };
     // this.calculateLocalTransform();
     this.updateNodeLines();
   }

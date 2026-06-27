@@ -21,15 +21,18 @@ class Background extends ElementObject {
     let y = this.engine.camera?.cameraPositionY;
     let width = this.engine.camera?.cameraWidth! * 5;
     let height = this.engine.camera?.cameraHeight! * 5;
-    this.worldPosition = [
-      Math.floor(x! / this._tileSize) * this._tileSize - width / 2,
-      Math.floor(y! / this._tileSize) * this._tileSize - height / 2,
-    ];
+    this.worldTransform = {
+      x: Math.floor(x! / this._tileSize) * this._tileSize - width / 2,
+      y: Math.floor(y! / this._tileSize) * this._tileSize - height / 2,
+    };
     this.style = {
       width: `${width}px`,
       height: `${height}px`,
     };
-    this.requestWrite();
+    this.schedule(() => this.writeDom(), {
+      stage: "WRITE_1",
+      queueId: "WRITE_1",
+    });
   }
 }
 

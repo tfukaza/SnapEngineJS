@@ -70,7 +70,7 @@
   function moveTarget(x: number, y: number) {
     targetX = Math.max(TARGET_RADIUS, Math.min(FIELD_WIDTH - TARGET_RADIUS, x));
     targetY = Math.max(TARGET_RADIUS, Math.min(FIELD_HEIGHT - TARGET_RADIUS, y));
-    targetObject!.worldPosition = [targetX, targetY];
+    targetObject!.worldTransform = { x: targetX, y: targetY };
   }
 
   function pointerPosition(event: PointerEvent) {
@@ -124,13 +124,13 @@
 
     initializedEngine = currentEngine;
     targetObject = new BaseObject(currentEngine);
-    targetObject.worldPosition = [targetX, targetY];
+    targetObject.worldTransform = { x: targetX, y: targetY };
     targetCollider = new CircleCollider(currentEngine, targetObject, 0, 0, TARGET_RADIUS);
     targetObject.addCollider(targetCollider);
 
     for (const dot of dots) {
       const dotObject = new BaseObject(currentEngine);
-      dotObject.worldPosition = [dot.x, dot.y];
+      dotObject.worldTransform = { x: dot.x, y: dot.y };
       const collider = new CircleCollider(currentEngine, dotObject, 0, 0, dot.radius);
       dotObject.addCollider(collider);
       dotObjects.push(dotObject);

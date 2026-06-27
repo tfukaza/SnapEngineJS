@@ -4,6 +4,7 @@ export type LayoutDirection = "column" | "row";
 export type LayoutMainAxisAlign = "start" | "center";
 type AxisName = "x" | "y";
 type SizeName = "width" | "height";
+const LAYOUT_EPSILON = 1e-6;
 
 export interface FlowAxes {
   direction: LayoutDirection;
@@ -310,7 +311,7 @@ export function flowLayoutPositions<T>(
         metrics.mainGap +
         entryMainSize +
         entryTrailingMainMargin >
-        contentSize[axes.mainSize] + 0.5
+        contentSize[axes.mainSize] + LAYOUT_EPSILON
     ) {
       pushCurrentLine();
     }

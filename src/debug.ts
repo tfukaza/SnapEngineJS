@@ -222,8 +222,10 @@ export class DebugRenderer implements DebugRendererInterface {
       return;
     }
 
+    const objectWorld = object.worldTransform;
     const [cameraX, cameraY] = engine.camera?.getCameraFromWorld(
-      ...object.worldPosition,
+      objectWorld.x,
+      objectWorld.y,
     ) ?? [0, 0];
 
     // If object has a dom, draw a rectangle around the object's width and height
@@ -280,14 +282,15 @@ export class DebugRenderer implements DebugRendererInterface {
       this.debugCtx.beginPath();
       this.debugCtx.strokeStyle = COLLIDER_BLUE;
       this.debugCtx.lineWidth = 1;
+      const collisionWorld = collisionObject.worldTransform;
       const [colliderCameraX, colliderCameraY] =
         engine.camera?.getCameraFromWorld(
           collisionObject.type === "rect"
             ? collisionObject.worldLeft
-            : collisionObject.worldPosition[0],
+            : collisionWorld.x,
           collisionObject.type === "rect"
             ? collisionObject.worldTop
-            : collisionObject.worldPosition[1],
+            : collisionWorld.y,
         ) ?? [0, 0];
       if (collisionObject.type == "circle") {
         this.debugCtx.arc(

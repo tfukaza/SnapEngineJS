@@ -24,7 +24,7 @@ class RectSelectComponent extends ElementObject {
     this.event.global.pointerUp = this.onGlobalCursorUp;
 
     this._selectHitBox = new RectCollider(engine, this, 0, 0, 0, 0);
-    this._selectHitBox.localPosition = [0, 0];
+    this._selectHitBox.localTransform = { x: 0, y: 0 };
     this._selectHitBox.event.collider.onCollide = this.onCollideNode;
 
     this.addCollider(this._selectHitBox);
@@ -40,7 +40,10 @@ class RectSelectComponent extends ElementObject {
       top: "0px",
       pointerEvents: "none",
     };
-    this.requestWrite();
+    this.schedule(() => this.writeDom(), {
+      stage: "WRITE_1",
+      queueId: "WRITE_1",
+    });
   }
 
   onGlobalCursorDown(prop: pointerDownProp): void {
@@ -56,7 +59,7 @@ class RectSelectComponent extends ElementObject {
     }
 
     this.global.data.select = [];
-    this.worldPosition = [prop.position.x, prop.position.y];
+    this.worldTransform = { x: prop.position.x, y: prop.position.y };
     this._state = "dragging";
     this.style = {
       display: "block",
@@ -100,11 +103,14 @@ class RectSelectComponent extends ElementObject {
         width: `${boxWidth}px`,
         height: `${boxHeight}px`,
       };
-      this.worldPosition = [boxOriginX, boxOriginY];
-      this._selectHitBox.localPosition = [0, 0];
+      this.worldTransform = { x: boxOriginX, y: boxOriginY };
+      this._selectHitBox.localTransform = { x: 0, y: 0 };
       this._selectHitBox.width = boxWidth;
       this._selectHitBox.height = boxHeight;
-      this.requestTransform();
+      this.schedule(() => this.writeTransform(), {
+        stage: "WRITE_2",
+        queueId: `${this.id}-transform`,
+      });
     }
   }
 
@@ -116,7 +122,10 @@ class RectSelectComponent extends ElementObject {
 
     this._selectHitBox.event.collider.onBeginContact = null;
     this._selectHitBox.event.collider.onEndContact = null;
-    this.requestTransform();
+    this.schedule(() => this.writeTransform(), {
+      stage: "WRITE_2",
+      queueId: `${this.id}-transform`,
+    });
   }
 
   onCollideNode(_hitBox: Collider, _node: Collider): void {}

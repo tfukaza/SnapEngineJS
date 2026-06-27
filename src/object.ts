@@ -34,6 +34,8 @@ export interface TransformProperty {
   scaleY: number;
 }
 
+type ReadonlyTransformProperty = Readonly<TransformProperty>;
+
 export interface DomProperty extends TransformProperty {
   height: number;
   width: number;
@@ -160,13 +162,24 @@ export class TransformView implements TransformProperty {
   }
 }
 
+let transformEpoch = 0;
+
 export class ObjectTransform {
   #owner: CoreObject;
-  #localX: number = 0;
-  #localY: number = 0;
-  #localScaleX: number = 1;
-  #localScaleY: number = 1;
-
+  #parentTransform: ObjectTransform | null = null;
+  #local: TransformProperty = {
+    x: 0,
+    y: 0,
+    scaleX: 1,
+    scaleY: 1,
+  };
+  #cachedWorld: TransformProperty = {
+    x: 0,
+    y: 0,
+    scaleX: 1,
+    scaleY: 1,
+  };
+  #cachedWorldEpoch: number = -1;
   world: TransformView;
   local: TransformView;
 
@@ -178,96 +191,90 @@ export class ObjectTransform {
 
   get(space: TransformSpace, property: keyof TransformProperty): number {
     if (space === "local") {
-      return this.#getLocal(property);
+      return this.#local[property];
     }
-    return this.#getWorld(property);
+    return this.#getCachedWorld()[property];
   }
 
   set(space: TransformSpace, property: keyof TransformProperty, value: number) {
+    const transform = {
+      ...(space === "local" ? this.#local : this.#getCachedWorld()),
+      [property]: value,
+    };
     if (space === "local") {
-      this.#setLocal(property, value);
+      this.setLocal(transform);
+      this.#owner.notifyTransformChange();
     } else {
-      this.#setWorld(property, value);
+      this.setWorld(transform);
     }
-    this.#owner.notifyTransformChange();
   }
 
-  getWorld(): TransformProperty {
-    return {
-      x: this.#getWorld("x"),
-      y: this.#getWorld("y"),
-      scaleX: this.#getWorld("scaleX"),
-      scaleY: this.#getWorld("scaleY"),
-    };
+  getWorld(): ReadonlyTransformProperty {
+    return this.#getCachedWorld();
   }
+
+  // #getWorld(property: keyof TransformProperty): number {
+  //   return this.#getCachedWorld()[property];
+  // }
 
   setWorld(transform: TransformProperty) {
-    const local = this.#worldToLocal(transform);
-    this.#localX = local.x;
-    this.#localY = local.y;
-    this.#localScaleX = local.scaleX;
-    this.#localScaleY = local.scaleY;
+    this.#local = this.#worldToLocal(transform);
+    this.#markLocalChange();
     this.#owner.notifyTransformChange();
   }
 
-  #getLocal(property: keyof TransformProperty): number {
-    if (property === "x") return this.#localX;
-    if (property === "y") return this.#localY;
-    if (property === "scaleX") return this.#localScaleX;
-    return this.#localScaleY;
+  // #setWorld(property: keyof TransformProperty, value: number) {
+  //   const world = this.#getCachedWorld();
+  //   // Safe to modify the cache since it will be invalidated anyways
+  //   world[property] = value;
+  //   const local = this.#worldToLocal(world);
+  //   this.#localX = local.x;
+  //   this.#localY = local.y;
+  //   this.#localScaleX = local.scaleX;
+  //   this.#localScaleY = local.scaleY;
+  //   this.#markLocalChange();
+  // }
+
+  getLocal(): TransformProperty {
+    return this.#local;
   }
 
-  #getWorld(property: keyof TransformProperty): number {
-    const parent = this.#owner.transformParent;
-    if (!parent) {
-      return this.#getLocal(property);
-    }
-
-    if (property === "x") {
-      return (
-        parent.worldTransform.x + this.#localX * parent.worldTransform.scaleX
-      );
-    }
-    if (property === "y") {
-      return (
-        parent.worldTransform.y + this.#localY * parent.worldTransform.scaleY
-      );
-    }
-    if (property === "scaleX") {
-      return parent.worldTransform.scaleX * this.#localScaleX;
-    }
-    return parent.worldTransform.scaleY * this.#localScaleY;
+  setLocal(transform: TransformProperty) {
+    this.#local = transform;
+    this.#markLocalChange();
   }
 
-  #setLocal(property: keyof TransformProperty, value: number) {
-    if (property === "x") {
-      this.#localX = value;
-    } else if (property === "y") {
-      this.#localY = value;
-    } else if (property === "scaleX") {
-      this.#localScaleX = value;
+  #getCachedWorld(): TransformProperty {
+    if (this.#cachedWorldEpoch === transformEpoch) {
+      return this.#cachedWorld;
+    }
+
+    const parentWorld = this.#parentTransform
+      ? this.#parentTransform.#getCachedWorld()
+      : null;
+    if (parentWorld) {
+      this.#cachedWorld.x = parentWorld.x + this.#local.x * parentWorld.scaleX;
+      this.#cachedWorld.y = parentWorld.y + this.#local.y * parentWorld.scaleY;
+      this.#cachedWorld.scaleX = parentWorld.scaleX * this.#local.scaleX;
+      this.#cachedWorld.scaleY = parentWorld.scaleY * this.#local.scaleY;
     } else {
-      this.#localScaleY = value;
+      this.#cachedWorld.x = this.#local.x;
+      this.#cachedWorld.y = this.#local.y;
+      this.#cachedWorld.scaleX = this.#local.scaleX;
+      this.#cachedWorld.scaleY = this.#local.scaleY;
     }
-  }
-
-  #setWorld(property: keyof TransformProperty, value: number) {
-    const world = this.getWorld();
-    world[property] = value;
-    const local = this.#worldToLocal(world);
-    this.#localX = local.x;
-    this.#localY = local.y;
-    this.#localScaleX = local.scaleX;
-    this.#localScaleY = local.scaleY;
+    this.#cachedWorldEpoch = transformEpoch;
+    return this.#cachedWorld;
   }
 
   #worldToLocal(transform: TransformProperty): TransformProperty {
-    const parent = this.#owner.transformParent;
-    if (!parent) {
+    const parentTransform = this.#parentTransform
+      ? this.#parentTransform.#getCachedWorld()
+      : null;
+    if (!parentTransform) {
       return { ...transform };
     }
 
-    const parentTransform = parent.worldTransform;
     if (parentTransform.scaleX === 0 || parentTransform.scaleY === 0) {
       throw new Error("Cannot set world transform under a zero-scale parent.");
     }
@@ -278,6 +285,15 @@ export class ObjectTransform {
       scaleX: transform.scaleX / parentTransform.scaleX,
       scaleY: transform.scaleY / parentTransform.scaleY,
     };
+  }
+
+  #markLocalChange() {
+    transformEpoch++;
+  }
+
+  setParentTransform(parent: CoreObject | null) {
+    this.#parentTransform = parent ? parent.transform ?? null : null;
+    this.#markLocalChange();
   }
 }
 
@@ -295,8 +311,8 @@ export class CoreObject {
   #transformParent: CoreObject | null = null;
   #transformChildren: CoreObject[] = [];
 
-  worldTransform: TransformView;
-  localTransform: TransformView;
+  // worldTransform: TransformView;
+  // localTransform: TransformView;
 
   constructor(engine: Engine) {
     const global = engine.global;
@@ -306,8 +322,8 @@ export class CoreObject {
     this.#engine = engine;
     this.#global = global;
     this.#transform = new ObjectTransform(this);
-    this.worldTransform = this.#transform.world;
-    this.localTransform = this.#transform.local;
+    // this.worldTransform = this.#transform.world;
+    // this.localTransform = this.#transform.local;
   }
 
   get global(): GlobalManager {
@@ -334,42 +350,57 @@ export class CoreObject {
     return this.#transformChildren;
   }
 
-  get transform(): TransformView {
-    return this.worldTransform;
+  get transform(): ObjectTransform {
+    return this.#transform;
   }
 
-  get worldPosition(): [number, number] {
-    return [this.worldTransform.x, this.worldTransform.y];
+  get worldTransform(): TransformProperty {
+    return this.#transform.getWorld();
   }
 
-  set worldPosition(position: [number, number]) {
+  set worldTransform(transform: {
+    x?: number;
+    y?: number;
+    scaleX?: number;
+    scaleY?: number;
+  }) {
     this.#transform.setWorld({
-      x: position[0],
-      y: position[1],
-      scaleX: this.worldTransform.scaleX,
-      scaleY: this.worldTransform.scaleY,
+      x: transform.x ?? this.worldTransform.x,
+      y: transform.y ?? this.worldTransform.y,
+      scaleX: transform.scaleX ?? this.worldTransform.scaleX,
+      scaleY: transform.scaleY ?? this.worldTransform.scaleY,
     });
   }
 
-  get localPosition(): [number, number] {
-    return [this.localTransform.x, this.localTransform.y];
+  get localTransform(): TransformProperty {
+    return this.#transform.getLocal();
   }
 
-  set localPosition(position: [number, number]) {
-    this.localTransform.x = position[0];
-    this.localTransform.y = position[1];
+  set localTransform(transform: {
+    x?: number;
+    y?: number;
+    scaleX?: number;
+    scaleY?: number;
+  }) {
+    this.#transform.setLocal({
+      x: transform.x ?? this.localTransform.x,
+      y: transform.y ?? this.localTransform.y,
+      scaleX: transform.scaleX ?? this.localTransform.scaleX,
+      scaleY: transform.scaleY ?? this.localTransform.scaleY,
+    });
   }
 
+  // TODO: Factor in camera scaling
   get cameraPosition(): [number, number] {
-    return (
-      this.engine.camera?.getCameraFromWorld(...this.worldPosition) ?? [0, 0]
-    );
+    const world = this.worldTransform;
+    return this.engine.camera?.getCameraFromWorld(world.x, world.y) ?? [0, 0];
   }
 
   set cameraPosition(position: [number, number]) {
-    this.worldPosition = this.engine?.camera?.getWorldFromCamera(
-      ...position,
-    ) ?? [0, 0];
+    const world = this.engine?.camera?.getWorldFromCamera(...position) ?? [
+      0, 0,
+    ];
+    this.worldTransform = { x: world[0], y: world[1] };
   }
 
   get screenPosition(): [number, number] {
@@ -386,15 +417,16 @@ export class CoreObject {
 
   notifyTransformChange() {
     this.onTransformChange();
-    for (const child of this.#transformChildren) {
-      child.notifyTransformChange();
-    }
   }
 
   protected onTransformChange() {}
 
   protected getWorldTransform(): TransformProperty {
     return this.#transform.getWorld();
+  }
+
+  protected getTransformEpoch(): number {
+    return transformEpoch;
   }
 
   protected setWorldTransform(transform: TransformProperty) {
@@ -413,6 +445,7 @@ export class CoreObject {
     const worldTransform = preserveWorld ? this.#transform.getWorld() : null;
     this.#detachTransformParent(false);
     this.#transformParent = parent;
+    this.#transform.setParentTransform(parent);
     if (parent) {
       parent.#transformChildren.push(this);
     }
@@ -439,6 +472,7 @@ export class CoreObject {
       (child) => child !== this,
     );
     this.#transformParent = null;
+    this.#transform.setParentTransform(null);
 
     if (worldTransform) {
       this.#transform.setWorld(worldTransform);
@@ -465,6 +499,8 @@ export class CoreObject {
     }
   }
 }
+
+// const objectTransformByOwner = new WeakMap<CoreObject, ObjectTransform>();
 
 export class FrameTask {
   id: string;
@@ -640,19 +676,6 @@ export class BaseObject extends CoreObject {
 
   /**
    * Queues an update callback to be executed during a specific stage of the render pipeline.
-   *
-   * The SnapLine render pipeline has 6 stages:
-   * - READ_1
-   * - WRITE_1
-   * - READ_2
-   * - WRITE_2
-   * - READ_3
-   * - WRITE_3
-   *
-   * Read stages are for reading DOM properties (which may trigger reflows),
-   * while write stages are for applying changes to the DOM.
-   * Batching reads and writes prevents layout thrashing and improves performance.
-   *
    * @param callback - Optional callback function to execute during the stage
    * @param config - Render stage and optional queue identifier
    * @returns The queue entry object
@@ -671,40 +694,6 @@ export class BaseObject extends CoreObject {
     }
     queue.get(this.id)!.set(request.id, request);
     return request;
-  }
-
-  queueUpdate(
-    stage: FrameStages = "READ_1",
-    callback: null | FrameTaskCallback = null,
-    queueId: string | null = null,
-  ): FrameTask {
-    return this.schedule(callback, {
-      stage,
-      queueId: queueId ?? undefined,
-    });
-  }
-
-  requestWrite(
-    mutate: boolean = true,
-    writeCallback: null | FrameTaskCallback = null,
-    stage: FrameWriteStages = "WRITE_1",
-  ): FrameTask {
-    return this.schedule(
-      async () => {
-        if (mutate) {
-          this.writeDom();
-        }
-        await writeCallback?.();
-      },
-      { stage, queueId: stage },
-    );
-  }
-
-  requestTransform(stage: FrameWriteStages = "WRITE_2"): FrameTask {
-    return this.schedule(() => this.writeTransform(), {
-      stage,
-      queueId: `${this.id}-transform`,
-    });
   }
 
   requestDestroy(): FrameTask {
@@ -1170,54 +1159,17 @@ export class ElementObject extends BaseObject {
    * Currently only saves the x and y properties.
    * This function assumes that the element position has already been read from the DOM.
    */
-  saveDomProperety(stage: FrameReadStages): void {
-    const property = this.getDomProperty(stage);
-    this.worldPosition = [property.x, property.y];
-  }
-
-  saveDomProperty(stage: FrameReadStages): void {
-    this.saveDomProperety(stage);
-  }
-
-  syncFromDom(stage: FrameReadStages | null = null): void {
-    let currentStage = stage ?? this.global.currentStage;
-    currentStage = currentStage == "IDLE" ? "READ_2" : currentStage;
-    this.saveDomProperety(currentStage as FrameReadStages);
-  }
-
-  calculateLocalFromDom(stage: FrameReadStages | null = null): void {
+  saveDomProperety(stage: FrameReadStages | null = null): void {
     let currentStage = stage ?? this.global.currentStage;
     currentStage = currentStage == "IDLE" ? "READ_2" : currentStage;
     const property = this.getDomProperty(currentStage as FrameReadStages);
-
-    if (!this.parent) {
-      this.localPosition = [property.x, property.y];
-      return;
-    }
-
-    if (this.parent instanceof ElementObject) {
-      const parentProperty = this.parent.getDomProperty(
-        currentStage as FrameReadStages,
-      );
-      this.localPosition = [
-        property.x - parentProperty.x,
-        property.y - parentProperty.y,
-      ];
-      return;
-    }
-
-    this.localPosition = [
-      property.x - this.parent.worldTransform.x,
-      property.y - this.parent.worldTransform.y,
-    ];
+    this.worldTransform = { x: property.x, y: property.y };
   }
 
   readDom(
-    config: { unapplyTransform?: boolean } | boolean = {},
+    config: { unapplyTransform?: boolean } = {},
     stage: FrameReadStages | null = null,
   ): DomProperty {
-    const readConfig =
-      typeof config === "boolean" ? { unapplyTransform: config } : config;
     const currentStage = stage ?? this.global.currentStage;
 
     if (!["READ_1", "READ_2", "READ_3", "IDLE"].includes(currentStage)) {
@@ -1243,7 +1195,7 @@ export class ElementObject extends BaseObject {
       scaleY: 1,
     };
 
-    if (transform && transform != "none" && readConfig.unapplyTransform) {
+    if (transform && transform != "none" && config.unapplyTransform) {
       transformApplied = parseTransformString(transform);
     }
 
@@ -1291,34 +1243,32 @@ export class ElementObject extends BaseObject {
     }
   }
 
-  requestRead(
-    unapplyTransform: boolean = false,
-    saveWorldPosition: boolean = true,
-    stage: FrameReadStages = "READ_1",
-    recursive: boolean = false,
-    queueId: string | null = null,
-  ): FrameTask {
-    return this.schedule(
-      () => {
-        if (recursive) {
-          this.readDomRecursive({ unapplyTransform, saveWorldPosition });
-          return;
-        }
-
-        this.readDom({ unapplyTransform });
-        if (saveWorldPosition) {
-          this.saveDomProperety(stage);
-        }
-      },
-      { stage, queueId: queueId ?? stage },
-    );
-  }
-
   requestFLIP(writeCallback: () => void, transformCallback: () => void): void {
-    this.requestRead(false, true, "READ_1");
-    this.requestWrite(true, writeCallback, "WRITE_1");
-    this.requestRead(false, true, "READ_2");
-    this.requestWrite(false, transformCallback, "WRITE_2");
+    this.schedule(
+      () => {
+        this.readDom({ unapplyTransform: false });
+        this.saveDomProperety("READ_1");
+      },
+      { stage: "READ_1", queueId: "READ_1" },
+    );
+    this.schedule(
+      async () => {
+        this.writeDom();
+        await writeCallback();
+      },
+      { stage: "WRITE_1", queueId: "WRITE_1" },
+    );
+    this.schedule(
+      () => {
+        this.readDom({ unapplyTransform: false });
+        this.saveDomProperety("READ_2");
+      },
+      { stage: "READ_2", queueId: "READ_2" },
+    );
+    this.schedule(async () => await transformCallback(), {
+      stage: "WRITE_2",
+      queueId: "WRITE_2",
+    });
   }
 
   writeDom() {

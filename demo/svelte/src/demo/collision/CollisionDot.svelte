@@ -33,13 +33,11 @@
     // Create box object for dragging.
     boxObject = new ElementObject(engine, null);
     boxObject.element = boxElement;
-    boxObject.worldTransform.x = initialX;
-    boxObject.worldTransform.y = initialY;
+    boxObject.worldTransform = { x: initialX, y: initialY };
 
     // Create dot object (with collider)
     dotObject = new BaseObject(engine, null);
-    dotObject.worldTransform.x = initialX + dotX;
-    dotObject.worldTransform.y = initialY + dotY;
+    dotObject.worldTransform = { x: initialX + dotX, y: initialY + dotY };
 
     // Add point collider at dot position
     collider = new PointCollider(engine, dotObject, 0, 0);
@@ -62,12 +60,16 @@
     };
 
     boxObject.event.input.drag = (prop: dragProp) => {
-        boxObject.worldTransform.x = prop.position.x - 75;
-        boxObject.worldTransform.y = prop.position.y - 37.5;
+        boxObject.worldTransform = {
+          x: prop.position.x - 75,
+          y: prop.position.y - 37.5,
+        };
         
         // Update dot position
-        dotObject.worldTransform.x = boxObject.worldTransform.x + dotX;
-        dotObject.worldTransform.y = boxObject.worldTransform.y + dotY;
+        dotObject.worldTransform = {
+          x: boxObject.worldTransform.x + dotX,
+          y: boxObject.worldTransform.y + dotY,
+        };
     };
 
     boxObject.event.input.dragEnd = (_: dragEndProp) => {

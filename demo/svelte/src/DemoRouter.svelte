@@ -8,6 +8,7 @@
   import CollisionPage from "./demo/collision/CollisionDemo.svelte";
   import CollisionStressPage from "./demo/collision/CollisionStressDemo.svelte";
   import CameraControlPage from "./demo/camera_control/CameraControlDemo.svelte";
+  import TransformCacheBenchPage from "./demo/transform_cache/TransformCacheBench.svelte";
 
   type DemoRoute = {
     label: string;
@@ -75,6 +76,11 @@
       label: "Collision Stress",
       path: "/collision-stress",
       legacyDemoValues: ["collision_stress"],
+    },
+    {
+      label: "Transform Cache Bench",
+      path: "/transform-cache-bench",
+      legacyDemoValues: ["transform_cache_bench"],
     },
   ];
 
@@ -237,6 +243,8 @@
       <CollisionPage />
     {:else if selectedPath === "/collision-stress"}
       <CollisionStressPage />
+    {:else if selectedPath === "/transform-cache-bench"}
+      <TransformCacheBenchPage />
     {/if}
   </div>
 </div>

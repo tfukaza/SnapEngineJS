@@ -37,52 +37,55 @@ function createEngine() {
   } as any;
 }
 
+class TransformCounterObject extends BaseObject {
+  transformChangeCount = 0;
+
+  protected onTransformChange() {
+    this.transformChangeCount++;
+  }
+}
+
+function positionOf(transform: { x: number; y: number }) {
+  return [transform.x, transform.y];
+}
+
 test.describe("BaseObject transforms", () => {
   test("keeps CoreObject root world and local transforms in sync", () => {
     const engine = createEngine();
     const object = new CoreObject(engine);
 
-    object.worldPosition = [12, 24];
-    object.worldTransform.scaleX = 2;
-    object.worldTransform.scaleY = 3;
+    object.worldTransform = { x: 12, y: 24, scaleX: 2, scaleY: 3 };
 
-    expect(object.localPosition).toEqual([12, 24]);
+    expect(positionOf(object.localTransform)).toEqual([12, 24]);
     expect(object.localTransform.scaleX).toBe(2);
     expect(object.localTransform.scaleY).toBe(3);
-    expect(object.transform).toBe(object.worldTransform);
+    expect(object.transform.getWorld()).toBe(object.worldTransform);
   });
 
   test("keeps root world and local transforms in sync", () => {
     const engine = createEngine();
     const object = new BaseObject(engine);
 
-    object.worldTransform.x = 10;
-    object.worldTransform.y = 20;
-    object.worldTransform.scaleX = 2;
-    object.worldTransform.scaleY = 3;
+    object.worldTransform = { x: 10, y: 20, scaleX: 2, scaleY: 3 };
 
     expect(object.localTransform.x).toBe(10);
     expect(object.localTransform.y).toBe(20);
     expect(object.localTransform.scaleX).toBe(2);
     expect(object.localTransform.scaleY).toBe(3);
 
-    object.localPosition = [30, 40];
-    expect(object.worldPosition).toEqual([30, 40]);
+    object.localTransform = { x: 30, y: 40 };
+    expect(positionOf(object.worldTransform)).toEqual([30, 40]);
   });
 
   test("composes child transforms through parent position and scale", () => {
     const engine = createEngine();
     const parent = new BaseObject(engine);
-    parent.worldPosition = [100, 200];
-    parent.worldTransform.scaleX = 2;
-    parent.worldTransform.scaleY = 4;
+    parent.worldTransform = { x: 100, y: 200, scaleX: 2, scaleY: 4 };
 
     const child = new BaseObject(engine, parent);
-    child.localPosition = [10, 20];
-    child.localTransform.scaleX = 3;
-    child.localTransform.scaleY = 5;
+    child.localTransform = { x: 10, y: 20, scaleX: 3, scaleY: 5 };
 
-    expect(child.worldPosition).toEqual([120, 280]);
+    expect(positionOf(child.worldTransform)).toEqual([120, 280]);
     expect(child.worldTransform.scaleX).toBe(6);
     expect(child.worldTransform.scaleY).toBe(20);
   });
@@ -90,16 +93,12 @@ test.describe("BaseObject transforms", () => {
   test("sets child local transform through world transform writes", () => {
     const engine = createEngine();
     const parent = new BaseObject(engine);
-    parent.worldPosition = [100, 200];
-    parent.worldTransform.scaleX = 2;
-    parent.worldTransform.scaleY = 4;
+    parent.worldTransform = { x: 100, y: 200, scaleX: 2, scaleY: 4 };
 
     const child = new BaseObject(engine, parent);
-    child.worldPosition = [140, 260];
-    child.worldTransform.scaleX = 10;
-    child.worldTransform.scaleY = 12;
+    child.worldTransform = { x: 140, y: 260, scaleX: 10, scaleY: 12 };
 
-    expect(child.localPosition).toEqual([20, 15]);
+    expect(positionOf(child.localTransform)).toEqual([20, 15]);
     expect(child.localTransform.scaleX).toBe(5);
     expect(child.localTransform.scaleY).toBe(3);
   });
@@ -107,21 +106,15 @@ test.describe("BaseObject transforms", () => {
   test("preserves world transform on reparent", () => {
     const engine = createEngine();
     const parentA = new BaseObject(engine);
-    parentA.worldPosition = [100, 100];
-    parentA.worldTransform.scaleX = 2;
-    parentA.worldTransform.scaleY = 2;
+    parentA.worldTransform = { x: 100, y: 100, scaleX: 2, scaleY: 2 };
 
     const parentB = new BaseObject(engine);
-    parentB.worldPosition = [-10, 20];
-    parentB.worldTransform.scaleX = 5;
-    parentB.worldTransform.scaleY = 10;
+    parentB.worldTransform = { x: -10, y: 20, scaleX: 5, scaleY: 10 };
 
     const child = new BaseObject(engine, parentA);
-    child.localPosition = [10, 20];
-    child.localTransform.scaleX = 3;
-    child.localTransform.scaleY = 4;
+    child.localTransform = { x: 10, y: 20, scaleX: 3, scaleY: 4 };
 
-    const worldBefore = [...child.worldPosition];
+    const worldBefore = positionOf(child.worldTransform);
     const scaleBefore = [
       child.worldTransform.scaleX,
       child.worldTransform.scaleY,
@@ -129,7 +122,7 @@ test.describe("BaseObject transforms", () => {
 
     parentB.appendChild(child);
 
-    expect(child.worldPosition).toEqual(worldBefore);
+    expect(positionOf(child.worldTransform)).toEqual(worldBefore);
     expect(child.worldTransform.scaleX).toBe(scaleBefore[0]);
     expect(child.worldTransform.scaleY).toBe(scaleBefore[1]);
     expect(parentA.children).not.toContain(child);
@@ -153,13 +146,46 @@ test.describe("BaseObject transforms", () => {
   test("throws when world writes require a zero-scale inverse", () => {
     const engine = createEngine();
     const parent = new BaseObject(engine);
-    parent.worldTransform.scaleX = 0;
+    parent.worldTransform = { scaleX: 0 };
 
     const child = new BaseObject(engine, parent);
 
     expect(() => {
-      child.worldTransform.x = 10;
+      child.worldTransform = { x: 10 };
     }).toThrow("Cannot set world transform under a zero-scale parent.");
+  });
+
+  test("updates descendant world transforms lazily when an ancestor moves", () => {
+    const engine = createEngine();
+    const grandparent = new BaseObject(engine);
+    const parent = new BaseObject(engine, grandparent);
+    const child = new BaseObject(engine, parent);
+
+    grandparent.worldTransform = { x: 10, y: 20, scaleX: 2, scaleY: 3 };
+    parent.localTransform = { x: 5, y: 7, scaleX: 4, scaleY: 5 };
+    child.localTransform = { x: 11, y: 13 };
+
+    expect(positionOf(child.worldTransform)).toEqual([108, 236]);
+
+    grandparent.worldTransform = { x: 100, y: 200 };
+
+    expect(positionOf(parent.worldTransform)).toEqual([110, 221]);
+    expect(positionOf(child.worldTransform)).toEqual([198, 416]);
+  });
+
+  test("does not recursively notify transform children on parent changes", () => {
+    const engine = createEngine();
+    const parent = new TransformCounterObject(engine);
+    const child = new TransformCounterObject(engine, parent);
+
+    parent.transformChangeCount = 0;
+    child.transformChangeCount = 0;
+
+    parent.worldTransform = { x: 10, y: 20 };
+
+    expect(parent.transformChangeCount).toBe(1);
+    expect(child.transformChangeCount).toBe(0);
+    expect(positionOf(child.worldTransform)).toEqual([10, 20]);
   });
 });
 
@@ -167,62 +193,54 @@ test.describe("Collider transforms", () => {
   test("uses the shared transform graph without entering public children", () => {
     const engine = createEngine();
     const parent = new BaseObject(engine);
-    parent.worldPosition = [100, 200];
-    parent.worldTransform.scaleX = 2;
-    parent.worldTransform.scaleY = 3;
+    parent.worldTransform = { x: 100, y: 200, scaleX: 2, scaleY: 3 };
 
     const collider = new RectCollider(engine, parent, 10, 20, 30, 40);
     parent.addCollider(collider);
 
     expect(parent.children).toEqual([]);
     expect(parent.transformChildren).toContain(collider);
-    expect(collider.worldPosition).toEqual([120, 260]);
+    expect(positionOf(collider.worldTransform)).toEqual([120, 260]);
     expect(collider.worldWidth).toBe(60);
     expect(collider.worldHeight).toBe(120);
 
-    parent.worldPosition = [150, 250];
+    parent.worldTransform = { x: 150, y: 250 };
 
-    expect(collider.worldPosition).toEqual([170, 310]);
+    expect(positionOf(collider.worldTransform)).toEqual([170, 310]);
   });
 
   test("keeps local collider mutations and world position writes compatible", () => {
     const engine = createEngine();
     const parent = new BaseObject(engine);
-    parent.worldPosition = [100, 200];
-    parent.worldTransform.scaleX = 2;
-    parent.worldTransform.scaleY = 4;
+    parent.worldTransform = { x: 100, y: 200, scaleX: 2, scaleY: 4 };
 
     const collider = new RectCollider(engine, parent, 10, 20, 30, 40);
 
-    collider.localPosition = [15, 25];
+    collider.localTransform = { x: 15, y: 25 };
 
-    expect(collider.localPosition).toEqual([15, 25]);
-    expect(collider.worldPosition).toEqual([130, 300]);
+    expect(positionOf(collider.localTransform)).toEqual([15, 25]);
+    expect(positionOf(collider.worldTransform)).toEqual([130, 300]);
 
-    collider.worldPosition = [160, 360];
+    collider.worldTransform = { x: 160, y: 360 };
 
-    expect(collider.localPosition).toEqual([30, 40]);
+    expect(positionOf(collider.localTransform)).toEqual([30, 40]);
   });
 
   test("reparenting colliders preserves local offsets", () => {
     const engine = createEngine();
     const parentA = new BaseObject(engine);
-    parentA.worldPosition = [100, 100];
-    parentA.worldTransform.scaleX = 2;
-    parentA.worldTransform.scaleY = 2;
+    parentA.worldTransform = { x: 100, y: 100, scaleX: 2, scaleY: 2 };
 
     const parentB = new BaseObject(engine);
-    parentB.worldPosition = [-10, 20];
-    parentB.worldTransform.scaleX = 5;
-    parentB.worldTransform.scaleY = 10;
+    parentB.worldTransform = { x: -10, y: 20, scaleX: 5, scaleY: 10 };
 
     const collider = new RectCollider(engine, parentA, 10, 20, 30, 40);
 
     collider.parent = parentB;
 
     expect(collider.parent).toBe(parentB);
-    expect(collider.localPosition).toEqual([10, 20]);
-    expect(collider.worldPosition).toEqual([40, 220]);
+    expect(positionOf(collider.localTransform)).toEqual([10, 20]);
+    expect(positionOf(collider.worldTransform)).toEqual([40, 220]);
     expect(parentA.transformChildren).not.toContain(collider);
     expect(parentB.transformChildren).toContain(collider);
   });
@@ -234,9 +252,9 @@ test.describe("Collider transforms", () => {
     const circleParent = new BaseObject(engine);
     const pointParent = new BaseObject(engine);
 
-    rectParent.worldPosition = [10, 10];
-    circleParent.worldPosition = [40, 40];
-    pointParent.worldPosition = [20, 20];
+    rectParent.worldTransform = { x: 10, y: 10 };
+    circleParent.worldTransform = { x: 40, y: 40 };
+    pointParent.worldTransform = { x: 20, y: 20 };
 
     const rect = new RectCollider(engine, rectParent, 0, 0, 40, 40);
     const circle = new CircleCollider(engine, circleParent, 0, 0, 15);
@@ -273,12 +291,56 @@ test.describe("Collider transforms", () => {
 
     collisionEngine.detectCollisions();
     collisionEngine.detectCollisions();
-    rectB.worldPosition = [100, 100];
+    rectB.worldTransform = { x: 100, y: 100 };
     collisionEngine.detectCollisions();
 
     expect(beginCount).toBe(1);
     expect(collideCount).toBe(2);
     expect(endCount).toBe(1);
     expect(rectA.collisionCount).toBe(0);
+  });
+
+  test("updates collider bounds after parent and local transform changes", () => {
+    const engine = createEngine();
+    const parent = new BaseObject(engine);
+    const collider = new RectCollider(engine, parent, 10, 20, 30, 40);
+
+    parent.worldTransform = { x: 100, y: 200, scaleX: 2, scaleY: 3 };
+
+    expect(collider.worldLeft).toBe(120);
+    expect(collider.worldRight).toBe(180);
+    expect(collider.worldTop).toBe(260);
+    expect(collider.worldBottom).toBe(380);
+
+    parent.worldTransform = { x: 150, y: 250 };
+    collider.localTransform = { x: 20, y: 30 };
+    collider.width = 50;
+    collider.height = 60;
+
+    expect(collider.worldLeft).toBe(190);
+    expect(collider.worldRight).toBe(290);
+    expect(collider.worldTop).toBe(340);
+    expect(collider.worldBottom).toBe(520);
+  });
+
+  test("updates circle radius bounds after radius and parent scale changes", () => {
+    const engine = createEngine();
+    const parent = new BaseObject(engine);
+    const collider = new CircleCollider(engine, parent, 10, 20, 15);
+
+    parent.worldTransform = { x: 100, y: 200, scaleX: 2, scaleY: 3 };
+
+    expect(positionOf(collider.worldTransform)).toEqual([120, 260]);
+    expect(collider.worldRadius).toBe(45);
+    expect(collider.worldLeft).toBe(75);
+    expect(collider.worldRight).toBe(165);
+
+    collider.radius = 10;
+    parent.worldTransform = { scaleY: 4 };
+
+    expect(positionOf(collider.worldTransform)).toEqual([120, 280]);
+    expect(collider.worldRadius).toBe(40);
+    expect(collider.worldTop).toBe(240);
+    expect(collider.worldBottom).toBe(320);
   });
 });

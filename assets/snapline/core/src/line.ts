@@ -33,7 +33,7 @@ class LineComponent extends ElementObject {
   }
 
   setLineStart(startPositionX: number, startPositionY: number) {
-    this.worldPosition = [startPositionX, startPositionY];
+    this.worldTransform = { x: startPositionX, y: startPositionY };
   }
 
   setLineEnd(endWorldX: number, endWorldY: number) {

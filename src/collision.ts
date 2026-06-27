@@ -7,6 +7,22 @@ import type { Engine } from "./engine";
 
 type ColliderType = "rect" | "circle" | "point";
 
+interface ColliderWorldBounds {
+  x: number;
+  y: number;
+  scaleX: number;
+  scaleY: number;
+  width: number;
+  height: number;
+  radius: number;
+  left: number;
+  right: number;
+  top: number;
+  bottom: number;
+  centerX: number;
+  centerY: number;
+}
+
 interface CollisionEvent {
   onCollide: null | ((thisObject: Collider, otherObject: Collider) => void);
   onBeginContact:
@@ -95,6 +111,24 @@ class Collider extends CoreObject {
   #width: number;
   #height: number;
   #event: EventCallback;
+  #shapeVersion: number = 0;
+  #cachedBoundsShapeVersion: number = -1;
+  #cachedBoundsTransformEpoch: number = -1;
+  #cachedBounds: ColliderWorldBounds = {
+    x: 0,
+    y: 0,
+    scaleX: 1,
+    scaleY: 1,
+    width: 0,
+    height: 0,
+    radius: 0,
+    left: 0,
+    right: 0,
+    top: 0,
+    bottom: 0,
+    centerX: 0,
+    centerY: 0,
+  };
 
   type: ColliderType;
 
@@ -111,7 +145,7 @@ class Collider extends CoreObject {
     this.#id = Symbol();
     this.#width = 0;
     this.#height = 0;
-    this.localPosition = [localX, localY];
+    this.localTransform = { x: localX, y: localY };
     this.setTransformParent(parent, false);
     this.#event = new EventCallback(this.parent);
   }
@@ -139,6 +173,7 @@ class Collider extends CoreObject {
 
   set width(width: number) {
     this.#width = width;
+    this.#markShapeChange();
   }
 
   get height(): number {
@@ -147,6 +182,60 @@ class Collider extends CoreObject {
 
   set height(height: number) {
     this.#height = height;
+    this.#markShapeChange();
+  }
+
+  getWorldBoundsSnapshot(): ColliderWorldBounds {
+    if (
+      this.#cachedBoundsShapeVersion === this.#shapeVersion &&
+      this.#cachedBoundsTransformEpoch === this.getTransformEpoch()
+    ) {
+      return this.#cachedBounds;
+    }
+
+    const transform = this.getWorldTransform();
+    const width = this.#width * Math.abs(transform.scaleX);
+    const height = this.#height * Math.abs(transform.scaleY);
+    const radius =
+      this.localRadius *
+      Math.max(Math.abs(transform.scaleX), Math.abs(transform.scaleY));
+    const rightEdge = transform.x + this.#width * transform.scaleX;
+    const bottomEdge = transform.y + this.#height * transform.scaleY;
+    const left =
+      this.type === "circle"
+        ? transform.x - radius
+        : Math.min(transform.x, rightEdge);
+    const right =
+      this.type === "circle"
+        ? transform.x + radius
+        : Math.max(transform.x, rightEdge);
+    const top =
+      this.type === "circle"
+        ? transform.y - radius
+        : Math.min(transform.y, bottomEdge);
+    const bottom =
+      this.type === "circle"
+        ? transform.y + radius
+        : Math.max(transform.y, bottomEdge);
+
+    this.#cachedBounds = {
+      x: transform.x,
+      y: transform.y,
+      scaleX: transform.scaleX,
+      scaleY: transform.scaleY,
+      width,
+      height,
+      radius,
+      left,
+      right,
+      top,
+      bottom,
+      centerX: this.type === "rect" ? left + width / 2 : transform.x,
+      centerY: this.type === "rect" ? top + height / 2 : transform.y,
+    };
+    this.#cachedBoundsShapeVersion = this.#shapeVersion;
+    this.#cachedBoundsTransformEpoch = this.getTransformEpoch();
+    return this.#cachedBounds;
   }
 
   /**
@@ -166,35 +255,31 @@ class Collider extends CoreObject {
   }
 
   get worldWidth(): number {
-    return this.#width * Math.abs(this.worldTransform.scaleX);
+    return this.getWorldBoundsSnapshot().width;
   }
 
   get worldHeight(): number {
-    return this.#height * Math.abs(this.worldTransform.scaleY);
+    return this.getWorldBoundsSnapshot().height;
   }
 
   get worldRadius(): number {
-    return 0;
+    return this.getWorldBoundsSnapshot().radius;
   }
 
   get worldLeft(): number {
-    const x = this.worldPosition[0];
-    return Math.min(x, x + this.#width * this.worldTransform.scaleX);
+    return this.getWorldBoundsSnapshot().left;
   }
 
   get worldRight(): number {
-    const x = this.worldPosition[0];
-    return Math.max(x, x + this.#width * this.worldTransform.scaleX);
+    return this.getWorldBoundsSnapshot().right;
   }
 
   get worldTop(): number {
-    const y = this.worldPosition[1];
-    return Math.min(y, y + this.#height * this.worldTransform.scaleY);
+    return this.getWorldBoundsSnapshot().top;
   }
 
   get worldBottom(): number {
-    const y = this.worldPosition[1];
-    return Math.max(y, y + this.#height * this.worldTransform.scaleY);
+    return this.getWorldBoundsSnapshot().bottom;
   }
 
   /**
@@ -210,6 +295,18 @@ class Collider extends CoreObject {
     this.detachTransformParent(false);
     currentCollisionMap.delete(this);
     iterationCollisionMap.delete(this);
+  }
+
+  protected get localRadius(): number {
+    return 0;
+  }
+
+  protected markShapeChange() {
+    this.#markShapeChange();
+  }
+
+  #markShapeChange() {
+    this.#shapeVersion++;
   }
 }
 
@@ -241,7 +338,8 @@ class RectCollider extends Collider {
  * with the specified radius.
  */
 class CircleCollider extends Collider {
-  radius: number;
+  #radius: number = 0;
+
   constructor(
     engine: Engine,
     parent: BaseObject,
@@ -253,14 +351,17 @@ class CircleCollider extends Collider {
     this.radius = radius;
   }
 
-  get worldRadius(): number {
-    return (
-      this.radius *
-      Math.max(
-        Math.abs(this.worldTransform.scaleX),
-        Math.abs(this.worldTransform.scaleY),
-      )
-    );
+  get radius(): number {
+    return this.#radius;
+  }
+
+  set radius(radius: number) {
+    this.#radius = radius;
+    this.markShapeChange();
+  }
+
+  protected get localRadius(): number {
+    return this.#radius;
   }
 }
 
@@ -312,20 +413,15 @@ class CollisionEngine {
 
     this.#objectTable.set(object.id, object);
     this.#objectList.push(object);
+    const bounds = object.getWorldBoundsSnapshot();
     this.#sortedXCoordinates.push({
       collider: object,
-      x:
-        object.type === "circle"
-          ? object.worldPosition[0] - object.worldRadius
-          : object.worldLeft,
+      x: bounds.left,
       left: true,
     });
     this.#sortedXCoordinates.push({
       collider: object,
-      x:
-        object.type === "circle"
-          ? object.worldPosition[0] + object.worldRadius
-          : object.worldRight,
+      x: bounds.right,
       left: false,
     });
   }
@@ -349,25 +445,8 @@ class CollisionEngine {
 
   #updateXCoordinates() {
     for (const entry of this.#sortedXCoordinates) {
-      if (entry.left) {
-        if (entry.collider.type === "circle") {
-          entry.x =
-            entry.collider.worldPosition[0] - entry.collider.worldRadius;
-        } else if (entry.collider.type === "rect") {
-          entry.x = entry.collider.worldLeft;
-        } else if (entry.collider.type === "point") {
-          entry.x = entry.collider.worldPosition[0];
-        }
-      } else {
-        if (entry.collider.type === "circle") {
-          entry.x =
-            entry.collider.worldPosition[0] + entry.collider.worldRadius;
-        } else if (entry.collider.type === "rect") {
-          entry.x = entry.collider.worldRight;
-        } else if (entry.collider.type === "point") {
-          entry.x = entry.collider.worldPosition[0];
-        }
-      }
+      const bounds = entry.collider.getWorldBoundsSnapshot();
+      entry.x = entry.left ? bounds.left : bounds.right;
     }
   }
 
@@ -378,15 +457,11 @@ class CollisionEngine {
   }
 
   #colliderCenterX(c: Collider): number {
-    if (c.type === "rect") return c.worldLeft + c.worldWidth / 2;
-    const [wx] = c.worldPosition;
-    return wx; // circle and point are already centered
+    return c.getWorldBoundsSnapshot().centerX;
   }
 
   #colliderCenterY(c: Collider): number {
-    if (c.type === "rect") return c.worldTop + c.worldHeight / 2;
-    const [, wy] = c.worldPosition;
-    return wy;
+    return c.getWorldBoundsSnapshot().centerY;
   }
 
   detectCollisions() {
@@ -487,70 +562,79 @@ class CollisionEngine {
   }
 
   #isRectIntersecting(a: Collider, b: Collider) {
+    const boundsA = a.getWorldBoundsSnapshot();
+    const boundsB = b.getWorldBoundsSnapshot();
     return (
       a.id !== b.id &&
-      a.worldLeft < b.worldRight &&
-      a.worldRight > b.worldLeft &&
-      a.worldTop < b.worldBottom &&
-      a.worldBottom > b.worldTop
+      boundsA.left < boundsB.right &&
+      boundsA.right > boundsB.left &&
+      boundsA.top < boundsB.bottom &&
+      boundsA.bottom > boundsB.top
     );
   }
 
   #isRectCircleIntersecting(rect: RectCollider, circle: CircleCollider) {
-    let rectX = circle.worldPosition[0];
-    let rectY = circle.worldPosition[1];
-    if (circle.worldPosition[0] < rect.worldLeft) {
-      rectX = rect.worldLeft;
-    } else if (circle.worldPosition[0] > rect.worldRight) {
-      rectX = rect.worldRight;
+    const rectBounds = rect.getWorldBoundsSnapshot();
+    const circleBounds = circle.getWorldBoundsSnapshot();
+    let rectX = circleBounds.x;
+    let rectY = circleBounds.y;
+    if (circleBounds.x < rectBounds.left) {
+      rectX = rectBounds.left;
+    } else if (circleBounds.x > rectBounds.right) {
+      rectX = rectBounds.right;
     }
 
-    if (circle.worldPosition[1] < rect.worldTop) {
-      rectY = rect.worldTop;
-    } else if (circle.worldPosition[1] > rect.worldBottom) {
-      rectY = rect.worldBottom;
+    if (circleBounds.y < rectBounds.top) {
+      rectY = rectBounds.top;
+    } else if (circleBounds.y > rectBounds.bottom) {
+      rectY = rectBounds.bottom;
     }
 
-    const distanceX = circle.worldPosition[0] - rectX;
-    const distanceY = circle.worldPosition[1] - rectY;
+    const distanceX = circleBounds.x - rectX;
+    const distanceY = circleBounds.y - rectY;
     const distance = Math.sqrt(distanceX * distanceX + distanceY * distanceY);
-    return distance <= circle.worldRadius;
+    return distance <= circleBounds.radius;
   }
 
   #isRectPointIntersecting(rect: RectCollider, point: PointCollider) {
+    const rectBounds = rect.getWorldBoundsSnapshot();
+    const pointBounds = point.getWorldBoundsSnapshot();
     return (
-      point.worldPosition[0] >= rect.worldLeft &&
-      point.worldPosition[0] <= rect.worldRight &&
-      point.worldPosition[1] >= rect.worldTop &&
-      point.worldPosition[1] <= rect.worldBottom
+      pointBounds.x >= rectBounds.left &&
+      pointBounds.x <= rectBounds.right &&
+      pointBounds.y >= rectBounds.top &&
+      pointBounds.y <= rectBounds.bottom
     );
   }
 
   #isCirclePointIntersecting(circle: CircleCollider, point: PointCollider) {
-    const distanceX = circle.worldPosition[0] - point.worldPosition[0];
-    const distanceY = circle.worldPosition[1] - point.worldPosition[1];
+    const circleBounds = circle.getWorldBoundsSnapshot();
+    const pointBounds = point.getWorldBoundsSnapshot();
+    const distanceX = circleBounds.x - pointBounds.x;
+    const distanceY = circleBounds.y - pointBounds.y;
     const distance = Math.sqrt(distanceX * distanceX + distanceY * distanceY);
-    return distance <= circle.worldRadius;
+    return distance <= circleBounds.radius;
   }
 
   #isCircleIntersecting(circleA: CircleCollider, circleB: CircleCollider) {
     if (circleA.id === circleB.id) {
       return false;
     }
-    const distanceX = circleA.worldPosition[0] - circleB.worldPosition[0];
-    const distanceY = circleA.worldPosition[1] - circleB.worldPosition[1];
+    const boundsA = circleA.getWorldBoundsSnapshot();
+    const boundsB = circleB.getWorldBoundsSnapshot();
+    const distanceX = boundsA.x - boundsB.x;
+    const distanceY = boundsA.y - boundsB.y;
     const distance = Math.sqrt(distanceX * distanceX + distanceY * distanceY);
-    return distance <= circleA.worldRadius + circleB.worldRadius;
+    return distance <= boundsA.radius + boundsB.radius;
   }
 
   #isPointPointIntersecting(pointA: PointCollider, pointB: PointCollider) {
     if (pointA.id === pointB.id) {
       return false;
     }
-    return (
-      pointA.worldPosition[0] === pointB.worldPosition[0] &&
-      pointA.worldPosition[1] === pointB.worldPosition[1]
-    );
+    const boundsA = pointA.getWorldBoundsSnapshot();
+    const boundsB = pointB.getWorldBoundsSnapshot();
+    return boundsA.x === boundsB.x && boundsA.y === boundsB.y;
   }
 }
 

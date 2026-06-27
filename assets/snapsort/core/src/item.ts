@@ -396,7 +396,7 @@ export class ItemBase extends ElementObject {
     this.readDom({ unapplyTransform: config.unapplyTransform });
     if (config.saveWorldPosition ?? true) {
       const prop = this.currentDomProperty;
-      this.worldPosition = [prop.x, prop.y];
+      this.worldTransform = { x: prop.x, y: prop.y };
     }
     for (const child of this.children) {
       if (child instanceof ItemBase) {
@@ -499,6 +499,14 @@ export class ItemBase extends ElementObject {
     if (config.animation === null) return null;
     if (config.disableFlip) return null;
     return config.animation?.reorder ?? null;
+  }
+
+  #dropAnimationConfig(container: ContainerBase | null): AnimationConfig | null {
+    if (!container) return null;
+    const config = container.configuration;
+    if (config.animation === null) return null;
+    if (config.disableFlip) return null;
+    return config.animation?.drop ?? null;
   }
 
   /**
@@ -686,6 +694,50 @@ export class ItemBase extends ElementObject {
       );
       animation.play();
     }
+  }
+
+  #playDropAnimation(
+    first: DomProperty | null,
+    last: DomProperty | null,
+    animationConfig: AnimationConfig | null,
+  ) {
+    if (!this.element || !first || !last || !animationConfig) return;
+
+    const dx = first.screenX - last.screenX;
+    const dy = first.screenY - last.screenY;
+    if (
+      Math.abs(dx) < MIN_FLIP_DISTANCE &&
+      Math.abs(dy) < MIN_FLIP_DISTANCE
+    ) {
+      return;
+    }
+
+    this.cancelAnimations();
+    const duration = animationConfig.duration ?? 160;
+    const easing = animationConfig.timing_function ?? "ease-out";
+    const targetElement = this.element;
+    const transformAt = (t: number) =>
+      `translate3d(${dx * (1 - t)}px, ${dy * (1 - t)}px, 0px)`;
+    const animation = new AnimationObject(
+      null,
+      {
+        $t: [0, 1],
+      },
+      {
+        duration,
+        easing,
+        tick: (vars) => {
+          targetElement.style.transform = transformAt(vars.$t);
+        },
+        finish: () => {
+          targetElement.style.transform = "";
+        },
+      },
+    );
+
+    targetElement.style.transform = transformAt(0);
+    this.addAnimation(animation);
+    animation.play();
   }
 
   /**
@@ -1319,8 +1371,10 @@ export class ItemBase extends ElementObject {
         };
         this.#applyDragPositionContext();
         this.transformMode = "origin";
-        this.worldTransform.x = prop.start.x - this.#dragOffsetX;
-        this.worldTransform.y = prop.start.y - this.#dragOffsetY;
+        this.worldTransform = {
+          x: prop.start.x - this.#dragOffsetX,
+          y: prop.start.y - this.#dragOffsetY,
+        };
         this.#moveDraggedElementToContainer(
           currentContainer as unknown as ContainerBase,
         );
@@ -1334,8 +1388,10 @@ export class ItemBase extends ElementObject {
     this.schedule(
       () => {
         // Move the item according to mouse position
-        this.worldTransform.x = prop.position.x - this.#dragOffsetX;
-        this.worldTransform.y = prop.position.y - this.#dragOffsetY;
+        this.worldTransform = {
+          x: prop.position.x - this.#dragOffsetX,
+          y: prop.position.y - this.#dragOffsetY,
+        };
         this.writeTransform();
 
         this.updateDropTarget(this);
@@ -1351,6 +1407,20 @@ export class ItemBase extends ElementObject {
 
   dragEnd(_: dragEndProp) {
     const root = (this.#rootContainer as unknown as ItemBase) ?? this;
+    let dropFirst: DomProperty | null = null;
+    let dropLast: DomProperty | null = null;
+    let dropAnimationConfig: AnimationConfig | null = null;
+
+    this.schedule(
+      () => {
+        if (!this.element) return;
+        dropFirst = cloneDomProperty(
+          this.readDom({ unapplyTransform: false }, "READ_1"),
+        );
+      },
+      { stage: "READ_1", queueId: `drag-end-read-first-${this.id}` },
+    );
+
     this.schedule(
       async () => {
         // Get ghost's current position — this is where the item should land
@@ -1398,6 +1468,7 @@ export class ItemBase extends ElementObject {
         if (ghostPos?.container) {
           const destinationContainer =
             ghostPos.container as unknown as ContainerBase;
+          dropAnimationConfig = this.#dropAnimationConfig(destinationContainer);
           this.insertItemAt(destinationContainer, this, ghostPos.index);
           await this.#afterDomMutation(destinationContainer);
           DEBUG_LOGS &&
@@ -1411,6 +1482,23 @@ export class ItemBase extends ElementObject {
         resetDropSnapshotDebugDump(this);
       },
       { stage: "WRITE_1", queueId: `drag-end-${this.id}` },
+    );
+
+    this.schedule(
+      () => {
+        if (!this.element) return;
+        dropLast = cloneDomProperty(
+          this.readDom({ unapplyTransform: false }, "READ_2"),
+        );
+      },
+      { stage: "READ_2", queueId: `drag-end-read-last-${this.id}` },
+    );
+
+    this.schedule(
+      () => {
+        this.#playDropAnimation(dropFirst, dropLast, dropAnimationConfig);
+      },
+      { stage: "WRITE_2", queueId: `drag-end-play-${this.id}` },
     );
   }
 

@@ -39,14 +39,12 @@
     // Create point 1 object with element for dragging
     point1Object = new ElementObject(engine, null);
     point1Object.element = point1Element;
-    point1Object.worldTransform.x = x1;
-    point1Object.worldTransform.y = y1;
+    point1Object.worldTransform = { x: x1, y: y1 };
 
     // Create point 2 object with element for dragging
     point2Object = new ElementObject(engine, null);
     point2Object.element = point2Element;
-    point2Object.worldTransform.x = x2;
-    point2Object.worldTransform.y = y2;
+    point2Object.worldTransform = { x: x2, y: y2 };
 
     // Add point colliders
     collider1 = new PointCollider(engine, point1Object, 8, 8);
@@ -85,8 +83,7 @@
     point1Object.event.input.drag = (prop: dragProp) => {
         x1 = prop.position.x;
         y1 = prop.position.y;
-        point1Object.worldTransform.x = x1;
-        point1Object.worldTransform.y = y1;
+        point1Object.worldTransform = { x: x1, y: y1 };
     };
 
     point1Object.event.input.dragEnd = (_: dragEndProp) => {
@@ -101,8 +98,7 @@
     point2Object.event.input.drag = (prop: dragProp) => {
         x2 = prop.position.x;
         y2 = prop.position.y;
-        point2Object.worldTransform.x = x2;
-        point2Object.worldTransform.y = y2;
+        point2Object.worldTransform = { x: x2, y: y2 };
     };
 
     point2Object.event.input.dragEnd = (_: dragEndProp) => {
