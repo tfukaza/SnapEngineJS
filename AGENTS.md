@@ -181,8 +181,11 @@ git tag snapsort-v{version}
 git tag snapsort-svelte-v{version}
 git tag snapline-v{version}
 git tag snapline-svelte-v{version}
-git push origin asset-base-v{version} asset-base-svelte-v{version} snapsort-v{version} snapsort-svelte-v{version} snapline-v{version} snapline-svelte-v{version}
+git push origin asset-base-v{version} asset-base-svelte-v{version} snapsort-v{version}
+git push origin snapsort-svelte-v{version} snapline-v{version} snapline-svelte-v{version}
 ```
+
+Push no more than three tags in a single `git push`; GitHub does not create push events when more than three tags are pushed at once.
 
 Tag versions must match each package's `package.json` version. The publish workflows live in `.github/workflows/publish.yml` and `.github/workflows/publish-assets.yml`.
 
