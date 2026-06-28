@@ -1,0 +1,105 @@
+---
+title: Input System
+description: Unified pointer events, gestures, and coordinate transformation.
+order: 6
+project: snapengine
+projectTitle: SnapEngine
+section: reference
+sectionTitle: Reference
+sectionOrder: 2
+---
+
+## Object-Level Events
+
+```ts
+import { ElementObject } from "@snap-engine/core";
+
+const object = new ElementObject(engine);
+object.element = myElement;
+
+object.event.input.pointerDown = (props) => {
+  console.log(props.position.x, props.position.y);
+};
+
+object.event.input.pointerMove = (props) => {
+  console.log(props.position.cameraX, props.position.cameraY);
+};
+
+object.event.input.pointerUp = (props) => {
+  console.log(props.position.screenX, props.position.screenY);
+};
+
+object.event.input.mouseWheel = (props) => {
+  console.log(props.delta);
+};
+```
+
+## Global Events
+
+```ts
+object.event.global.pointerMove = (props) => {
+  console.log(props.position.x, props.position.y);
+};
+
+object.event.global.mouseWheel = (props) => {
+  console.log(props.delta);
+};
+```
+
+## Drag Gestures
+
+```ts
+object.event.input.dragStart = (props) => {
+  console.log(props.start.x, props.start.y);
+};
+
+object.event.input.drag = (props) => {
+  console.log(props.position.x, props.position.y);
+  console.log(props.delta.x, props.delta.y);
+};
+
+object.event.input.dragEnd = (props) => {
+  console.log(props.end.x, props.end.y);
+};
+```
+
+## Pinch Gestures
+
+```ts
+object.event.input.pinchStart = (props) => {
+  console.log(props.start.distance);
+  console.log(props.start.pointerList);
+};
+
+object.event.input.pinch = (props) => {
+  const scale = props.distance / props.start.distance;
+  console.log(scale);
+};
+
+object.event.input.pinchEnd = (props) => {
+  console.log(props.end.pointerList);
+};
+```
+
+## Event Position
+
+| Property | Description |
+|----------|-------------|
+| `screenX`, `screenY` | Browser viewport coordinates. |
+| `cameraX`, `cameraY` | Coordinates relative to the engine container. |
+| `x`, `y` | World coordinates after camera conversion. |
+
+## Event Names
+
+| Event | Scope |
+|-------|-------|
+| `pointerDown` | Object and global |
+| `pointerMove` | Object and global |
+| `pointerUp` | Object and global |
+| `mouseWheel` | Object and global |
+| `dragStart` | Object and global |
+| `drag` | Object and global |
+| `dragEnd` | Object and global |
+| `pinchStart` | Object and global |
+| `pinch` | Object and global |
+| `pinchEnd` | Object and global |

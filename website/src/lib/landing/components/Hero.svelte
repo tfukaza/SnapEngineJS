@@ -254,8 +254,16 @@
   <div class="hero-layout">
     <div class="hero-text">
       <h1>
-        Interactivity<br />Engine<span class="hero-title-icon material-symbols-outlined" aria-hidden="true">manufacturing</span><br />for the<br />Web<span class="hero-title-icon material-symbols-outlined" aria-hidden="true">web</span>
+        Interactivity<br />Engine<br />for the Web
       </h1>
+      <p>
+        SnapEngine provides a framework agnostic foundation for making
+        any interactive UI elements, from simple TODO lists to
+        complex node UIs.
+      </p>
+      <!-- <div class="button">
+          See Docs
+      </div> -->
     </div>
     <div class="hero-card card">
       <Engine id="hero-synth-pads">
@@ -317,7 +325,7 @@
   @use "../landing.scss";
 
   #landing {
-    height: 60vh;
+    height: 70vh;
     position: relative;
     border-radius: var(--size-12);
     background-color: var(--color-background-tint);
@@ -336,10 +344,19 @@
     align-items: stretch;
     padding: 50px;
     box-sizing: border-box;
+
+    @container landing (max-width: 900px) {
+      grid-template-columns: 100%;
+      grid-template-rows: min-content 1fr;
+      gap: var(--size-32);
+      padding: var(--size-48) 0;
+
+    }
   }
 
   .hero-text {
     display: flex;
+    flex-direction: column;
     align-items: flex-start;
     justify-content: flex-start;
     text-align: left;
@@ -347,29 +364,27 @@
     padding-left: var(--size-24);
 
     h1 {
-      line-height: 0.9;
+      line-height: 1.0;
       margin: 0;
-      font-size: 100px;
+      font-size: 90px;
+      margin-bottom: 20px;
     }
 
-    .hero-title-icon {
-      display: inline-block;
-      width: 0.9em;
-      height: 0.9em;
-      margin-left: 0.1em;
-      font-family: "Material Symbols Outlined";
-      font-size: 0.82em;
-      font-style: normal;
-      font-weight: 500;
-      line-height: 1;
-      color: #44484f;
-      vertical-align: -0.08em;
-      font-variation-settings:
-        "FILL" 0,
-        "wght" 500,
-        "GRAD" 0,
-        "opsz" 48;
+    p {
+        font-size: 1.1rem;
     }
+
+    @container landing (max-width: 900px) {
+        padding: 0px 10%;
+        justify-content: center;
+        align-items: center;
+        text-align: center;
+
+        p {
+            font-size: 1.0rem;
+        }
+    }
+
   }
 
   .hero-card {
@@ -692,14 +707,6 @@
       gap: var(--size-32);
       padding: var(--size-48) 0;
       align-items: start;
-    }
-
-    .hero-text {
-      width: 100%;
-      justify-content: center;
-      align-items: center;
-      text-align: center;
-      padding: 0;
     }
 
     .hero-text h1 {

@@ -1,0 +1,47 @@
+---
+title: Drag and Drop Strategies
+description: A quick introduction to SnapSort's placement strategies.
+order: 1
+project: snapsort
+projectTitle: SnapSort
+section: introduction
+sectionTitle: Introduction
+sectionOrder: 1
+---
+
+SnapSort treats drag and drop as a set of placement strategies. A strategy decides how the dragged item leaves normal layout, how the preview ghost is placed, and which container/index wins when the user drops.
+
+## Euclidean
+
+Euclidean placement is the default strategy. During a drag, SnapSort creates a full-size ghost and evaluates valid insertion positions. The position whose final ghost center is closest to the dragged item wins.
+
+Use Euclidean placement for general reorderable UI:
+
+- kanban columns
+- vertical lists
+- horizontal button rows
+- nested containers with predictable item sizes
+
+Euclidean placement is simple and direct, and the visible ghost usually matches the result the user expects. In wrapped rows with very different item widths, final layout reflow can make the closest ghost center differ from the insertion boundary the user is aiming at.
+
+## Progressive
+
+Progressive placement is designed for ordered, variable-size items. Instead of choosing the closest final ghost center, it treats the layout as a progression of placement regions and chooses the region occupied by the dragged item's center.
+
+Use Progressive placement when users think in reading order:
+
+- sentence builders
+- word or token banks
+- wrapped rows with highly variable item widths
+- answer areas where left-to-right, then top-to-bottom order matters
+
+Progressive placement is a better fit when the user's intent is "insert here in the sequence" rather than "move toward the nearest final box."
+
+## Choosing a Strategy
+
+| Strategy | Best for | Class names |
+|----------|----------|-------------|
+| Euclidean | General list and board reordering. | `Container`, `Item`, `ContainerEuclidean`, `ItemEuclidean` |
+| Progressive | Ordered token layouts and wrapped sentence builders. | `ContainerProgressive`, `ItemProgressive` |
+
+Both strategies can be used in the same application. Keep a single drag tree on one strategy so the container and item behavior stay predictable.

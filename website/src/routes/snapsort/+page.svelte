@@ -230,7 +230,7 @@
   }
 
   function goToDocs() {
-    window.location.href = "/docs";
+    window.location.href = "/docs/snapsort/introduction";
   }
 
   function checkSentence() {
@@ -312,7 +312,7 @@
           </Container>
         </div>
         <div class="hero-copy">
-          <p>SnapSort any element</p>
+          <p>Drag and drop any element</p>
           <button class="primary" type="button" onclick={goToDocs}>See docs</button>
         </div>
       </div>

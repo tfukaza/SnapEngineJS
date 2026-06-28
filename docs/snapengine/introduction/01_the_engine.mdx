@@ -1,0 +1,58 @@
+---
+title: Engine and Objects
+order: 1
+project: snapengine
+projectTitle: SnapEngine
+section: introduction
+sectionTitle: Introduction
+sectionOrder: 1
+---
+
+A web page or an app can contain one or more instances of an _Engine_.
+An engine is defined as a single DOM element with SnapEngine's `Engine` instance 
+attached to it. Once an engine is created, it operates
+in isolation from other engine instances. Therefore when we say something 
+happens globally, we usually mean that it happens for a 
+specific engine instance and its DOM element.
+
+This distinction becomes important when you are building complex UI that
+requires multiple elements that interact with one another. For example, 
+a kanban board should contain all the cards, columns, and drag targets in a single
+engine. Meanwhile, separate engines may be useful if you 
+want to intentionally silo UI elements, like TODO lists for different users.
+
+Another important property of an engine is that each maintains its own 
+_coordinate space_. Separate from the browser coordinates you may be familiar with,
+SnapEngine provides the concept of _world coordinates_ where the top left of the
+engine's associated DOM element is considered to be coordinate `0, 0`, with both axis 
+increasing to the bottom right, regardless of where the engine is located on the page.
+
+## Objects
+SnapEngine has two main types of objects: `BaseObject` and `ElementObject`. 
+BaseObjects are invisible objects that do not directly interact with 
+the page. They are often used to manage internal state for other objects.
+The camera object, which we will see later, is a good example of this.
+We never see the camera itself, because its main job is to control the 
+position and scaling of other objects. 
+
+Despite being invisible, BaseObjects carry many key features that define how
+SnapEngine works. Every object maintains `worldTransform` properties, which is
+a compact way to describe its position and size. These transforms use world
+coordinates, so when an object is at `0, 0`, it is not at the top left of the
+screen. It is at the top left of the engine.
+
+Objects also maintain parent and child relationships. When an object is a child
+of another object, it can specify its position and scale relative to its parent.
+That relative position is its _local coordinates_. If you have prior experience
+in game development, these concepts should feel familiar.
+
+ElementObjects build on BaseObjects by assigning DOM elements to objects and
+providing helpers to read and write DOM properties. This is where the game
+development analogy becomes less direct: DOM reads and writes have overhead, so
+SnapEngine is careful about when and how it accesses the DOM. In simple terms,
+setting an ElementObject's position does not immediately mean its DOM element
+has moved; that work is coordinated through the engine's _frame queue_,
+which we will cover next.
+
+> [!NOTE]
+> For setup examples and API details, see [The Engine reference](/docs/snapengine/reference/engine) and [Objects reference](/docs/snapengine/reference/objects).

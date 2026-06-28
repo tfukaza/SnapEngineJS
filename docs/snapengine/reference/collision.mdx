@@ -1,0 +1,105 @@
+---
+title: Collision
+description: Efficient collision detection with multiple shape types and event callbacks.
+order: 7
+project: snapengine
+projectTitle: SnapEngine
+section: reference
+sectionTitle: Reference
+sectionOrder: 2
+---
+
+## Imports
+
+```ts
+import { ElementObject } from "@snap-engine/core";
+import {
+  CollisionEngine,
+  RectCollider,
+  CircleCollider,
+  PointCollider,
+} from "@snap-engine/core/collision";
+```
+
+## Setup
+
+```ts
+const engine = new Engine();
+engine.setCollisionEngine(new CollisionEngine());
+```
+
+## Basic Usage
+
+```ts
+const player = new ElementObject(engine);
+player.element = document.getElementById("player");
+
+const obstacle = new ElementObject(engine);
+obstacle.element = document.getElementById("obstacle");
+
+const playerCollider = new CircleCollider(engine, player, 0, 0, 25);
+player.addCollider(playerCollider);
+
+const obstacleCollider = new RectCollider(engine, obstacle, 0, 0, 100, 50);
+obstacle.addCollider(obstacleCollider);
+
+playerCollider.event.collider.onBeginContact = (self, other) => {
+  console.log("Collision started", self, other);
+};
+
+playerCollider.event.collider.onEndContact = (self, other) => {
+  console.log("Collision ended", self, other);
+};
+```
+
+## Collider Constructors
+
+```ts
+const rect = new RectCollider(engine, object, -50, -25, 100, 50);
+object.addCollider(rect);
+
+const circle = new CircleCollider(engine, object, 0, 0, 30);
+object.addCollider(circle);
+
+const point = new PointCollider(engine, object, 0, 0);
+object.addCollider(point);
+```
+
+## Collision Events
+
+```ts
+collider.event.collider.onBeginContact = (self, other) => {
+  console.log("started", other.parent);
+};
+
+collider.event.collider.onCollide = (self, other) => {
+  console.log("still colliding");
+};
+
+collider.event.collider.onEndContact = (self, other) => {
+  console.log("ended");
+};
+```
+
+| Event | Description |
+|-------|-------------|
+| `onBeginContact` | Called once when two colliders first touch. |
+| `onCollide` | Called every frame while two colliders overlap. |
+| `onEndContact` | Called once when two colliders stop touching. |
+
+## Public API
+
+| API | Description |
+|-----|-------------|
+| `new CollisionEngine()` | Creates a collision manager. |
+| `collisionEngine.addObject(collider)` | Registers a collider. Usually called through `object.addCollider()`. |
+| `collisionEngine.removeObject(id)` | Removes a collider by symbol id. |
+| `collisionEngine.detectCollisions()` | Runs collision detection. |
+| `collisionEngine.isIntersecting(a, b)` | Checks two colliders directly. |
+| `new RectCollider(engine, parent, localX, localY, width, height)` | Creates a rectangular collider. |
+| `new CircleCollider(engine, parent, localX, localY, radius)` | Creates a circular collider. |
+| `new PointCollider(engine, parent, localX, localY)` | Creates a point collider. |
+| `collider.getWorldBoundsSnapshot()` | Returns current world bounds. |
+| `collider.isCollidingWith(other)` | Checks whether two colliders are currently touching. |
+| `collider.currentCollisions` | Current collision set. |
+| `collider.destroy()` | Removes the collider from its parent and collision engine. |

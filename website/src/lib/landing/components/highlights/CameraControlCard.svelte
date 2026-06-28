@@ -4,9 +4,69 @@
   import type { CameraControl as CameraControlApi } from "@snap-engine/asset-base";
   import { debugState } from "$lib/landing/debugState.svelte";
 
-  const plusCells = Array.from({ length: 180 }, (_, index) => index);
   const ZOOM_STEP = 0.12;
-  let cameraControl: CameraControlApi | null = null;
+  const topoColumns = 148;
+  const topoRows = 86;
+  const topoFillCharacters = [" ", ".", ",", "`"] as const;
+  const topoRowsText = Array.from({ length: topoRows }, (_, row) =>
+    Array.from({ length: topoColumns }, (_, column) => topoCharacter(column, row)).join(""),
+  );
+  let cameraControl = $state<CameraControlApi | null>(null);
+  let cameraInitialized = $state(false);
+
+  function terrainHeight(x: number, y: number) {
+    const ridge =
+      Math.sin(x * 0.16 + y * 0.08) * 0.42 +
+      Math.sin(x * 0.055 - y * 0.19 + 1.7) * 0.31 +
+      Math.cos(Math.hypot(x - 34, y + 18) * 0.18) * 0.38 +
+      Math.sin(Math.hypot(x + 72, y - 46) * 0.15 + 1.1) * 0.24;
+
+    return ridge;
+  }
+
+  function isInsideMap(column: number, row: number) {
+    const normalizedX = (column - topoColumns / 2) / (topoColumns * 0.48);
+    const normalizedY = (row - topoRows / 2) / (topoRows * 0.48);
+    return normalizedX * normalizedX + normalizedY * normalizedY <= 1;
+  }
+
+  function isInsideCenterClearing(column: number, row: number) {
+    const normalizedX = (column - topoColumns / 2) / (topoColumns * 0.18);
+    const normalizedY = (row - topoRows / 2) / (topoRows * 0.16);
+    return normalizedX * normalizedX + normalizedY * normalizedY < 1;
+  }
+
+  function topoCharacter(column: number, row: number) {
+    if (!isInsideMap(column, row) || isInsideCenterClearing(column, row)) return " ";
+
+    const worldColumn = column - topoColumns / 2;
+    const worldRow = row - topoRows / 2;
+    const height = terrainHeight(worldColumn, worldRow);
+    const contour = Math.abs(height * 5.4 - Math.round(height * 5.4));
+    const fineContour = Math.abs(height * 10.8 - Math.round(height * 10.8));
+    const dither = Math.sin(worldColumn * 12.9898 + worldRow * 78.233) * 43758.5453;
+    const fillIndex = Math.abs(Math.floor(dither)) % topoFillCharacters.length;
+
+    if (contour < 0.055) return "#";
+    if (contour < 0.095) return "=";
+    if (fineContour < 0.04) return "-";
+    if (height > 0.62) return "+";
+    if (height < -0.72) return ":";
+    return topoFillCharacters[fillIndex];
+  }
+
+  function initializeCamera() {
+    if (!cameraControl || cameraInitialized) {
+      return;
+    }
+    if (!cameraControl.camera) {
+      requestAnimationFrame(initializeCamera);
+      return;
+    }
+
+    cameraInitialized = true;
+    cameraControl.setCameraPosition(0, 0);
+  }
 
   function zoom(delta: number) {
     cameraControl?.zoomBy(delta);
@@ -28,9 +88,11 @@
     event.stopPropagation();
   }
 
-  onMount(() => {
-    cameraControl?.setCameraPosition(0, 0);
+  $effect(() => {
+    initializeCamera();
   });
+
+  onMount(initializeCamera);
 </script>
 
 <article class="camera-control-card theme-secondary-7">
@@ -38,15 +100,15 @@
     <Engine id="camera-control-highlight" debug={debugState.enabled}>
       <CameraControlComponent bind:cameraControl>
         <div class="camera-scene">
-          <div class="camera-plus-grid" aria-hidden="true">
-            {#each plusCells as cell (cell)}
-              <span>+</span>
+          <div class="camera-topo-map" aria-hidden="true">
+            {#each topoRowsText as row}
+              <span>{row}</span>
             {/each}
           </div>
 
           <div class="camera-card-heading">
             <h3>Camera<br />Control</h3>
-            <p>Zoom and pan any DOM element.</p>
+            <p>Zoom and pan any DOM element.<br> Gesture support on mobile devices.</p>
           </div>
         </div>
       </CameraControlComponent>
@@ -69,19 +131,24 @@
 <style lang="scss">
   .camera-control-card {
     --card-padding: var(--size-48);
+    --card-top-padding: var(--card-padding);
     position: relative;
     display: flex;
     flex-direction: column;
     gap: var(--size-32);
-    height: 100%;
+    min-height: 520px;
+    height: auto;
     box-sizing: border-box;
     background: var(--color-background-tint);
     border-radius: var(--ui-radius);
     overflow: hidden;
     isolation: isolate;
+    overscroll-behavior: contain;
+    touch-action: none;
 
     @media (max-width: 720px) {
       --card-padding: var(--size-24);
+      --card-top-padding: var(--highlight-card-mobile-top-padding);
       grid-column: span 2;
     }
   }
@@ -91,6 +158,10 @@
     inset: 0;
     z-index: 0;
     cursor: grab;
+    overscroll-behavior: contain;
+    touch-action: none;
+    user-select: none;
+    -webkit-user-select: none;
 
     &:active {
       cursor: grabbing;
@@ -101,6 +172,10 @@
     width: 100%;
     height: 100%;
     background: transparent;
+    overscroll-behavior: contain;
+    touch-action: inherit;
+    user-select: inherit;
+    -webkit-user-select: inherit;
   }
 
   .camera-viewport :global(#snap-camera-control) {
@@ -110,6 +185,11 @@
     width: 100% !important;
     height: 100% !important;
     background: transparent;
+    overscroll-behavior: contain;
+    touch-action: inherit;
+    transform-origin: 0 0;
+    user-select: inherit;
+    -webkit-user-select: inherit;
   }
 
   .camera-scene {
@@ -118,29 +198,35 @@
     height: 100%;
     display: grid;
     place-items: center;
-    overflow: hidden;
+    overflow: visible;
   }
 
-  .camera-plus-grid {
+  .camera-topo-map {
     position: absolute;
-    inset: 10px;
+    top: 50%;
+    left: 50%;
     z-index: 0;
-    display: grid;
-    grid-template-columns: repeat(auto-fill, minmax(36px, 1fr));
-    grid-auto-rows: 36px;
-    overflow: hidden;
-    pointer-events: none;
-    color: rgba(0, 0, 0, 0.08);
-    font-family: "Bitcount Grid Single", monospace;
-    font-size: 10px;
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+    color: rgba(0, 0, 0, 0.105);
+    font-family: "Geist Mono", "Courier New", monospace;
+    font-size: 39px;
     font-weight: 300;
-    line-height: 1;
-    place-items: center;
+    letter-spacing: 0;
+    line-height: 0.92;
+    margin: 0;
+    transform: translate(-50%, -50%);
+    pointer-events: none;
     user-select: none;
+    white-space: pre;
   }
 
-  .camera-plus-grid span {
+  .camera-topo-map span {
+    display: block;
     color: inherit;
+    font: inherit;
+    line-height: inherit;
     margin: 0;
   }
 
@@ -151,14 +237,14 @@
     flex-direction: column;
     align-items: center;
     gap: var(--size-12);
-    padding: var(--card-padding);
+    padding: var(--card-top-padding) var(--card-padding) var(--card-padding);
     box-sizing: border-box;
     text-align: center;
 
     h3 {
       margin: 0;
       font-family: "Geist Pixel Circle", "Doto", sans-serif;
-      font-size: 58px;
+      font-size: var(--highlight-card-heading-size);
       line-height: 0.88;
     }
 

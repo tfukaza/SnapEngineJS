@@ -6,10 +6,10 @@
 
 <section id="assets" class="assets-showcase landing-section-gap">
     <div class="assets-header">
-      <h2 class="eyebrow landing-section-heading">Composable assets</h2>
+      <h2 class="eyebrow landing-section-heading">Composable Assets</h2>
       <p class="subhead">
         Start with reusable patterns built on SnapEngine, then shape them into
-        the exact interface your product needs.
+        the exact interface your UI needs.
       </p>
     </div>
 
@@ -19,7 +19,11 @@
           <div class="asset-card-header">
             <h3>SnapSort</h3>
           </div>
-          <p>Sortable lists, nested drop zones, and direct drag feedback.</p>
+          <p>Drag and drop any element</p>
+          <div class="framework-list" aria-label="Supported frameworks">
+            <span class="chip framework-chip">Vanilla JS</span>
+            <span class="chip framework-chip">Svelte</span>
+          </div>
         </div>
 
         <div class="asset-preview">
@@ -31,7 +35,7 @@
           <div class="asset-card-header">
             <h3>SnapZap</h3>
           </div>
-          <p>Zoom and pan any DOM element without taking over the rest of the page.</p>
+          <p>Zoom and pan made simple</p>
         </div>
         <div class="asset-preview pending-preview" aria-hidden="true">
           <div class="pending-plus-grid">
@@ -48,7 +52,7 @@
           <div class="asset-card-header">
             <h3>SnapLine</h3>
           </div>
-          <p>Node-based UI primitives for graph editors and visual tools.</p>
+          <p>Node-based UI</p>
         </div>
         <div class="asset-preview pending-preview" aria-hidden="true">
           <div class="pending-plus-grid">
@@ -85,7 +89,7 @@
     line-height: 1.7;
     text-align: center;
   }
- 
+
   .assets-showcase {
     --assets-content-gap: clamp(2rem, 4vw, 3rem);
     margin-bottom: clamp(3rem, 6vw, 6rem);
@@ -93,7 +97,7 @@
 
   .assets-grid {
     display: grid;
-    grid-template-columns: 1fr;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
     gap: 1.5rem;
     text-align: left;
     margin-top: var(--assets-content-gap);
@@ -101,13 +105,13 @@
 
   .asset-card {
     display: flex;
-    align-items: center;
-    gap: clamp(1.5rem, 4vw, 3rem);
+    flex-direction: column;
+    align-items: stretch;
+    gap: var(--size-24);
     padding: clamp(1.5rem, 3vw, 2.5rem);
     transition: transform 0.2s ease;
     text-decoration: none;
     color: inherit;
-    font-family: "Geist", sans-serif;
     background: var(--color-background-tint);
     border: 1px solid rgba(0, 0, 0, 0.12);
     border-radius: var(--ui-radius);
@@ -125,7 +129,6 @@
     p {
       margin: 0;
       color: #5d6266;
-      font-family: "Geist", sans-serif;
       font-size: clamp(0.95rem, 1.1vw, 1.05rem);
       font-weight: 400;
       line-height: 1.6;
@@ -143,17 +146,13 @@
   }
 
   :global(.drop-snap-card) {
-    --demo-window-height: 320px;
-    --demo-stack-height: 392px;
     position: relative;
-    height: var(--demo-window-height);
     overflow: hidden;
   }
-  
+
   .asset-copy {
     position: relative;
     z-index: 1;
-    flex: 0 1 42%;
     min-width: 0;
   }
 
@@ -165,9 +164,21 @@
     margin-bottom: var(--size-16);
   }
 
+  .framework-list {
+    display: flex;
+    flex-wrap: wrap;
+    gap: var(--size-8);
+    margin-top: var(--size-16);
+  }
+
+  .framework-chip {
+    background: #f0f2f2;
+    color: #3f4548;
+  }
+
   .asset-preview {
     position: relative;
-    flex: 1 1 58%;
+    flex: 1 1 auto;
     min-width: 0;
     min-height: 180px;
   }
@@ -215,15 +226,14 @@
   }
 
   @media (max-width: 900px) {
+    .assets-grid {
+      grid-template-columns: 1fr;
+    }
+
     .asset-card {
       flex-direction: column;
       align-items: stretch;
       min-height: 0;
-    }
-
-    :global(.drop-snap-card) {
-      height: auto;
-      overflow: hidden;
     }
 
     .asset-copy,

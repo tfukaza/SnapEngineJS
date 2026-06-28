@@ -1,0 +1,114 @@
+---
+title: The Engine
+order: 2
+project: snapengine
+projectTitle: SnapEngine
+section: reference
+sectionTitle: Reference
+sectionOrder: 2
+---
+
+## Import
+
+```ts
+import { Engine } from "@snap-engine/core";
+```
+
+## Basic Setup
+
+```ts
+import { Engine } from "@snap-engine/core";
+
+const container = document.getElementById("engine-container");
+const engine = new Engine();
+
+if (container) {
+  engine.element = container;
+}
+```
+
+The `element` setter calls `assignDom()` internally.
+
+```ts
+engine.assignDom(container);
+```
+
+## Svelte Setup
+
+```svelte
+<script lang="ts">
+  import { Engine } from "@snap-engine/core";
+
+  const engine = new Engine();
+</script>
+
+<div bind:this={engine.element} class="engine-container"></div>
+```
+
+## React Setup
+
+```tsx
+import { useEffect, useRef } from "react";
+import { Engine } from "@snap-engine/core";
+
+export function EngineComponent() {
+  const containerRef = useRef<HTMLDivElement>(null);
+  const engineRef = useRef<Engine | null>(null);
+
+  useEffect(() => {
+    engineRef.current = new Engine();
+
+    if (containerRef.current) {
+      engineRef.current.element = containerRef.current;
+    }
+
+    return () => engineRef.current?.destroy();
+  }, []);
+
+  return <div ref={containerRef} className="engine-container" />;
+}
+```
+
+## Engine Events
+
+```ts
+engine.subscribeEvent("containerResized", "layout", ({ bounds }) => {
+  console.log(bounds.width, bounds.height);
+});
+
+engine.unsubscribeEvent("containerResized", "layout");
+```
+
+| Event | Description |
+|-------|-------------|
+| `containerAssigned` | Fired after the container element is assigned. |
+| `containerResized` | Fired when the container or document body is resized. |
+| `containerMoved` | Fired when scrolling changes the container's viewport position. |
+
+## Feature Hooks
+
+```ts
+import { CollisionEngine } from "@snap-engine/core/collision";
+import { DebugRenderer } from "@snap-engine/core/debug";
+
+engine.enableAnimationEngine();
+engine.setCollisionEngine(new CollisionEngine());
+engine.setDebugRenderer(new DebugRenderer());
+engine.disableDebug();
+```
+
+## Public API
+
+| API | Description |
+|-----|-------------|
+| `new Engine(config?)` | Creates an engine instance. |
+| `engine.element = element` | Assigns the engine container. |
+| `engine.assignDom(element)` | Assigns the engine container explicitly. |
+| `engine.destroy()` | Cleans up input, debug, resize observation, and global registration. |
+| `engine.getObject(id)` | Returns a registered object by id. |
+| `engine.subscribeEvent(event, id, callback)` | Adds an engine event callback. |
+| `engine.unsubscribeEvent(event, id)` | Removes an engine event callback. |
+| `engine.enableAnimationEngine()` | Enables animation processing in the frame loop. |
+| `engine.setCollisionEngine(collisionEngine)` | Installs a collision engine. |
+| `engine.setDebugRenderer(renderer)` | Enables a debug renderer. |
+| `engine.disableDebug()` | Disables and removes the debug renderer. |

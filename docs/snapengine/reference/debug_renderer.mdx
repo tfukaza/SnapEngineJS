@@ -1,0 +1,100 @@
+---
+title: Debug Renderer
+description: Visual debugging overlay for SnapEngine development.
+order: 9
+project: snapengine
+projectTitle: SnapEngine
+section: reference
+sectionTitle: Reference
+sectionOrder: 2
+---
+
+## Imports
+
+```ts
+import { DebugRenderer } from "@snap-engine/core/debug";
+```
+
+## Basic Usage
+
+```ts
+import { Engine } from "@snap-engine/core";
+import { DebugRenderer } from "@snap-engine/core/debug";
+
+const engine = new Engine();
+const container = document.getElementById("container");
+
+if (container) {
+  engine.element = container;
+  engine.setDebugRenderer(new DebugRenderer());
+}
+
+engine.disableDebug();
+```
+
+## Object Debug Markers
+
+```ts
+object.addDebugPoint(100, 200, "red", true, "point", "markers");
+object.addDebugRect(50, 50, 100, 80, "green", true, "rect", true, 1, "markers");
+object.addDebugCircle(200, 150, 30, "blue", true, "circle", "markers");
+object.addDebugText(100, 50, "Debug Label", "white", true, "text", "markers");
+object.addDebugLine(0, 0, 100, 100, "orange", false, "line", 2, "markers");
+```
+
+```ts
+object.clearDebugMarker("point");
+object.clearAllDebugMarkers();
+```
+
+## Engine Marker List
+
+```ts
+engine.debugMarkerList.myPoint = {
+  objectId: "manual",
+  type: "point",
+  id: "myPoint",
+  persistent: true,
+  color: "#ff0000",
+  x: 100,
+  y: 200,
+};
+```
+
+## Marker Fields
+
+| Field | Description |
+|-------|-------------|
+| `objectId` | Object or marker owner id. |
+| `type` | Marker shape: point, rect, circle, text, or line. |
+| `id` | Unique marker id. |
+| `persistent` | Whether the marker persists across frames. |
+| `color` | CSS color string. |
+| `tag` | Optional marker tag for filtering. |
+| `x`, `y` | Primary world position. |
+| `x2`, `y2` | Secondary line endpoint. |
+| `width`, `height` | Rect dimensions. |
+| `radius` | Circle radius. |
+| `text` | Text marker label. |
+| `filled` | Whether a rect is filled. |
+| `lineWidth` | Line stroke width. |
+| `arrowEnd`, `arrowStart` | Whether a line has arrowheads. |
+
+## DebugRenderer API
+
+```ts
+const renderer = new DebugRenderer();
+
+renderer.enable(engine);
+renderer.updateSize(800, 600);
+renderer.disable();
+```
+
+| API | Description |
+|-----|-------------|
+| `new DebugRenderer()` | Creates a debug renderer. |
+| `renderer.enable(engine)` | Attaches the debug overlay to the engine container. |
+| `renderer.disable()` | Removes the debug overlay. |
+| `renderer.updateSize(width, height)` | Resizes the debug canvas. |
+| `renderer.enabledTags` | Null for all markers, or a set of tags to show. |
+| `renderer.renderFrame(stats, engine, objectTable)` | Internal frame render hook. |

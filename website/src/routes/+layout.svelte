@@ -1,5 +1,5 @@
 <script lang="ts">
-  import "../../../demo/app.scss";
+  import "../../../css/snapdesign.scss";
   import "$lib/fonts.css";
   let { children } = $props();
 </script>
@@ -33,11 +33,10 @@
 <nav class="nav-bar">
   <div class="nav-left">
     <a href="/" class="wordmark">SnapEngine</a>
-    <span class="chip chip-warning alpha-badge">v0.1.0-alpha</span>
   </div>
   <div class="nav-right">
     <!-- <a href="#assets" class="nav-link">Assets</a> -->
-    <a href="/docs/snapengine" class="nav-link">Docs</a>
+    <a href="/docs/snapengine/introduction" class="nav-link">Docs</a>
     <a href="/about" class="nav-link">About</a>
     <a href="https://github.com/tfukaza/SnapLineJS" class="nav-link github-link" target="_blank" rel="noopener noreferrer">
       <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
@@ -60,7 +59,7 @@
         <div class="footer-column">
           <h4>Project</h4>
           <a href="/about">About</a>
-          <a href="/docs/snapengine">Docs</a>
+          <a href="/docs/snapengine/introduction">Docs</a>
           <a href="https://github.com/tfukaza/SnapLineJS" target="_blank" rel="noopener noreferrer">GitHub</a>
         </div>
         <div class="footer-column">
@@ -103,10 +102,6 @@
       font-size: 20px;
       font-family: 'Geist Pixel Circle', 'Doto', sans-serif;
     }
-  }
-
-  .alpha-badge {
-    flex: 0 0 auto;
   }
 
   .wordmark {

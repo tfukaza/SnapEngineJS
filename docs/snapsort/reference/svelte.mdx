@@ -1,0 +1,337 @@
+---
+title: Svelte API
+description: Components, props, and state patterns for @snap-engine/snapsort-svelte.
+order: 1
+project: snapsort
+projectTitle: SnapSort
+section: reference
+sectionTitle: Reference
+sectionOrder: 2
+---
+
+The Svelte package wraps SnapSort's core objects in Svelte 5 components. Use this page when your UI is rendered by Svelte and SnapSort should provide drag, drop, ordering, and animation behavior.
+
+## Install
+
+```bash
+npm install @snap-engine/core @snap-engine/asset-base-svelte @snap-engine/snapsort @snap-engine/snapsort-svelte
+```
+
+## Import
+
+```svelte
+<script lang="ts">
+  import { Engine } from "@snap-engine/asset-base-svelte";
+  import {
+    Container,
+    Item,
+    ContainerEuclidean,
+    ItemEuclidean,
+    ContainerProgressive,
+    ItemProgressive,
+  } from "@snap-engine/snapsort-svelte";
+</script>
+```
+
+`Container` and `Item` are aliases for the Euclidean components.
+
+Import core types only when you need typed callbacks or access to a bindable container object:
+
+```ts
+import type {
+  ContainerBase,
+  ContainerConfig,
+  ItemMetadata,
+  SnapSortDomInsertEvent,
+  SnapSortDomRemoveEvent,
+} from "@snap-engine/snapsort";
+```
+
+## How The Binding Works
+
+Wrap SnapSort components in an `Engine`. The engine provides the input, scheduler, layout reads, writes, and animation context.
+
+Each container component creates a SnapSort container object and provides it through Svelte context. Each item component creates a SnapSort item object and registers it with the nearest container.
+
+Use Svelte keyed `{#each}` blocks and pass the same stable ID to `metadata.itemId`. SnapSort uses that ID to keep engine-owned item objects aligned with Svelte-owned DOM and array state.
+
+```svelte
+<script lang="ts">
+  import { Engine } from "@snap-engine/asset-base-svelte";
+  import { Container, Item } from "@snap-engine/snapsort-svelte";
+
+  const tasks = [
+    { id: "design", label: "Design" },
+    { id: "build", label: "Build" },
+    { id: "ship", label: "Ship" },
+  ];
+</script>
+
+<Engine id="tasks">
+  <Container config={{ direction: "column", groupID: "tasks" }}>
+    {#each tasks as task (task.id)}
+      <Item metadata={{ itemId: task.id }}>
+        <button type="button">{task.label}</button>
+      </Item>
+    {/each}
+  </Container>
+</Engine>
+```
+
+## Component Pairs
+
+Use matching container and item components inside one drag tree.
+
+| Component | Alias | Strategy | Best for |
+|-----------|-------|----------|----------|
+| `Container` + `Item` | Yes | Euclidean | Lists, boards, and general reordering. |
+| `ContainerEuclidean` + `ItemEuclidean` | No | Euclidean | Explicit Euclidean usage. |
+| `ContainerProgressive` + `ItemProgressive` | No | Progressive | Sentence builders, token banks, and wrapped variable-width rows. |
+
+```svelte
+<ContainerEuclidean config={{ direction: "column", groupID: "tasks" }}>
+  <ItemEuclidean metadata={{ itemId: "task-1" }}>Task 1</ItemEuclidean>
+</ContainerEuclidean>
+
+<ContainerProgressive config={{ direction: "row", groupID: "sentence" }}>
+  <ItemProgressive metadata={{ itemId: "word-1" }}>hello</ItemProgressive>
+</ContainerProgressive>
+```
+
+The Svelte components wrap these core objects:
+
+| Svelte component | Core object |
+|------------------|-------------|
+| `Container`, `ContainerEuclidean` | `ContainerEuclidean` |
+| `ContainerProgressive` | `ContainerProgressive` |
+| `Item`, `ItemEuclidean` | `ItemEuclidean` |
+| `ItemProgressive` | `ItemProgressive` |
+
+`ContainerBase` and `ItemBase` are the shared base classes behind those objects. In Svelte apps, you usually only touch `ContainerBase` as the type for a `bind:container` variable.
+
+## State Backed Lists
+
+When Svelte owns the rendered list, give each item a stable `metadata.itemId` and use container callbacks to update array state when SnapSort requests a DOM move.
+
+```svelte
+<script lang="ts">
+  import { tick } from "svelte";
+  import { Engine } from "@snap-engine/asset-base-svelte";
+  import { Container, Item } from "@snap-engine/snapsort-svelte";
+  import type {
+    SnapSortDomInsertEvent,
+    SnapSortDomRemoveEvent,
+  } from "@snap-engine/snapsort";
+
+  type Task = { id: string; label: string };
+  type Column = { id: string; label: string; tasks: Task[] };
+
+  let columns = $state<Column[]>([
+    {
+      id: "todo",
+      label: "To Do",
+      tasks: [
+        { id: "task-1", label: "Sketch layout" },
+        { id: "task-2", label: "Wire behavior" },
+      ],
+    },
+    {
+      id: "done",
+      label: "Done",
+      tasks: [{ id: "task-3", label: "Create branch" }],
+    },
+  ]);
+
+  function moveTask(taskId: string, columnId: string, index: number) {
+    let movedTask: Task | null = null;
+
+    const withoutTask = columns.map((column) => {
+      const sourceIndex = column.tasks.findIndex((task) => task.id === taskId);
+      if (sourceIndex === -1) return column;
+
+      const nextTasks = column.tasks.slice();
+      [movedTask] = nextTasks.splice(sourceIndex, 1);
+      return { ...column, tasks: nextTasks };
+    });
+
+    if (!movedTask) return;
+
+    columns = withoutTask.map((column) => {
+      if (column.id !== columnId) return column;
+
+      const nextTasks = column.tasks.slice();
+      nextTasks.splice(Math.max(0, Math.min(index, nextTasks.length)), 0, movedTask);
+      return { ...column, tasks: nextTasks };
+    });
+  }
+
+  function handleDomInsert(event: SnapSortDomInsertEvent) {
+    const itemId = event.itemMetadata.itemId;
+    const columnId = event.containerMetadata.columnId;
+
+    if (typeof itemId !== "string" || typeof columnId !== "string") return;
+    moveTask(itemId, columnId, event.index);
+  }
+
+  function handleDomRemove(event: SnapSortDomRemoveEvent) {
+    const itemId = event.itemMetadata.itemId;
+    if (typeof itemId !== "string") return;
+
+    columns = columns.map((column) => ({
+      ...column,
+      tasks: column.tasks.filter((task) => task.id !== itemId),
+    }));
+  }
+</script>
+
+<Engine id="task-board">
+  <Container config={{ direction: "row", name: "board-root", noDrop: true }} locked={true}>
+    {#each columns as column (column.id)}
+      <Container
+        metadata={{ columnId: column.id }}
+        config={{
+          direction: "column",
+          groupID: "tasks",
+          callbacks: {
+            onDomInsert: handleDomInsert,
+            onDomRemove: handleDomRemove,
+            afterDomMutation: tick,
+          },
+        }}
+        locked={true}
+      >
+        <h2>{column.label}</h2>
+
+        {#each column.tasks as task (task.id)}
+          <Item metadata={{ itemId: task.id }}>
+            <article>{task.label}</article>
+          </Item>
+        {/each}
+      </Container>
+    {/each}
+  </Container>
+</Engine>
+```
+
+`afterDomMutation: tick` tells SnapSort to wait until Svelte has flushed the keyed DOM update before reading final geometry for FLIP and drop animations.
+
+## Imperative Moves
+
+Use `bind:container` when buttons, keyboard handlers, or other non-drag controls need to ask SnapSort to move an item. Call `moveItem(itemId, targetContainer, index)` with the same ID used in `metadata.itemId`.
+
+```svelte
+<script lang="ts">
+  import { Engine } from "@snap-engine/asset-base-svelte";
+  import { Container, Item } from "@snap-engine/snapsort-svelte";
+  import type { ContainerBase } from "@snap-engine/snapsort";
+
+  let source: ContainerBase | undefined = $state();
+  let target: ContainerBase | undefined = $state();
+
+  function moveToTarget(id: string) {
+    if (!source || !target) return;
+    source.moveItem(id, target, target.numberOfItems);
+  }
+</script>
+
+<Engine id="click-move">
+  <Container bind:container={source} config={{ direction: "column", groupID: "cards" }}>
+    <Item metadata={{ itemId: "card-1" }}>
+      <button type="button" onclick={() => moveToTarget("card-1")}>
+        Move card
+      </button>
+    </Item>
+  </Container>
+
+  <Container bind:container={target} config={{ direction: "column", groupID: "cards" }} />
+</Engine>
+```
+
+When your list is backed by Svelte state, use the same callbacks pattern from the previous section so imperative moves and drag moves update the rendered arrays the same way.
+
+### Bindable Container API
+
+`bind:container` exposes the created container object. These are the most useful APIs for Svelte code:
+
+| API | Description |
+|-----|-------------|
+| `container.moveItem(id, targetContainer, index)` | Moves an item by `metadata.itemId` into another container or index. |
+| `container.removeItem(id)` | Removes an item by `metadata.itemId` or internal object ID. |
+| `container.numberOfItems` | Returns the current number of tracked child items. |
+| `container.groupID` | Returns the configured group ID. |
+| `container.direction` | Gets or sets `"column"` or `"row"`. |
+| `container.dropArea` | Gets or sets explicit drop-area behavior. |
+
+## Container Components
+
+| Component | Core object | Strategy |
+|-----------|-------------|----------|
+| `Container` | `ContainerEuclidean` | Euclidean |
+| `ContainerEuclidean` | `ContainerEuclidean` | Euclidean |
+| `ContainerProgressive` | `ContainerProgressive` | Progressive |
+
+### Props
+
+```ts
+type ContainerProps = {
+  config: ContainerConfig;
+  children: Snippet;
+  container?: ContainerEuclidean | ContainerProgressive;
+  locked?: boolean;
+  className?: string;
+  metadata?: Record<string, unknown>;
+};
+```
+
+| Prop | Default | Description |
+|------|---------|-------------|
+| `config` | Required | SnapSort container configuration. |
+| `children` | Required | Item and nested container content. |
+| `container` | Bindable | Receives the created core container object. |
+| `locked` | `true` | Keeps the container itself from being dragged when nested. Set to `false` for draggable nested containers. |
+| `className` | `""` | Extra class string applied to the rendered element. |
+| `metadata` | `{}` | Metadata assigned to the container object and exposed in callback events. |
+
+Container components render a `div` with `snapsort-container` and a strategy-specific class.
+
+### Config
+
+| Option | Default | Description |
+|--------|---------|-------------|
+| `direction` | `"column"` | Main layout direction: `"column"` or `"row"`. |
+| `groupID` | `"default-group"` | Containers with the same group can exchange items. |
+| `mainAxisAlign` | `"start"` | Main-axis alignment for virtual placement. Supports `"start"` and `"center"`. |
+| `name` | Generated | Human-readable container name. |
+| `animation` | Default 100ms animations | Reorder, drop, and click-move animation settings. Set to `null` to disable configured animations. |
+| `disableFlip` | `false` | Disables FLIP movement animation. |
+| `noDrop` | `false` | Prevents the container from being a drop target. Useful for root layout containers. |
+| `dropArea` | `false` | Treats the container as an explicit drop area for collision filtering. |
+| `callbacks` | `undefined` | Hooks for framework-owned DOM and array updates. |
+
+## Item Components
+
+| Component | Core object | Strategy |
+|-----------|-------------|----------|
+| `Item` | `ItemEuclidean` | Euclidean |
+| `ItemEuclidean` | `ItemEuclidean` | Euclidean |
+| `ItemProgressive` | `ItemProgressive` | Progressive |
+
+### Props
+
+```ts
+type ItemProps = {
+  children: Snippet;
+  style?: string;
+  className?: string;
+  metadata?: ItemMetadata;
+};
+```
+
+| Prop | Default | Description |
+|------|---------|-------------|
+| `children` | Required | Rendered item content. |
+| `style` | `""` | Inline style string applied to the rendered element. |
+| `className` | `""` | Extra class string applied to the rendered element. |
+| `metadata` | `{}` | Metadata assigned to the item object. Use `metadata.itemId` for stable keyed state. |
+
+Item components render a `div` with `snapsort-item`, a strategy-specific class, and `data-snapsort-item-key` when `metadata.itemId` is present.

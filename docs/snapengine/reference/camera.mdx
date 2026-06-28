@@ -1,0 +1,135 @@
+---
+title: Camera
+order: 5
+project: snapengine
+projectTitle: SnapEngine
+section: reference
+sectionTitle: Reference
+sectionOrder: 2
+---
+
+## Imports
+
+```ts
+import { Camera } from "@snap-engine/core";
+import { CameraControl } from "@snap-engine/asset-base";
+```
+
+## Coordinate Conversion
+
+```ts
+const { x, y } = object.worldTransform;
+
+const [cameraX, cameraY] = object.cameraPosition;
+const [screenX, screenY] = object.screenPosition;
+
+object.worldTransform = { x: 100, y: 200 };
+object.cameraPosition = [50, 100];
+object.screenPosition = [300, 400];
+```
+
+## Camera API
+
+The engine creates a stationary camera when a container is assigned. You can also assign a Camera instance directly.
+
+```ts
+import { Engine, Camera } from "@snap-engine/core";
+
+const engine = new Engine();
+const camera = new Camera(engine);
+
+engine.camera = camera;
+camera.containerDom = engine.containerElement;
+```
+
+```ts
+camera.setCameraPosition(0, 0);
+camera.setCameraCenterPosition(100, 100);
+
+const center = camera.getCameraCenterPosition();
+const zoom = camera.zoom;
+
+canvasElement.style.transform = camera.canvasStyle;
+```
+
+## Coordinate Methods
+
+```ts
+const [cameraX, cameraY] = camera.getCameraFromWorld(100, 200);
+const [worldX, worldY] = camera.getWorldFromCamera(cameraX, cameraY);
+const [screenX, screenY] = camera.getScreenFromCamera(cameraX, cameraY);
+const [containerX, containerY] = camera.getCameraFromScreen(screenX, screenY);
+```
+
+```ts
+const [cameraWidth, cameraHeight] = camera.getCameraDeltaFromWorldDelta(10, 10);
+const [worldDeltaX, worldDeltaY] = camera.getWorldDeltaFromCameraDelta(50, 30);
+```
+
+## CameraControl Setup
+
+```html
+<div id="container" style="overflow: hidden; position: relative;">
+  <div id="camera-wrapper">
+    <div class="object">Object 1</div>
+    <div class="object">Object 2</div>
+  </div>
+</div>
+```
+
+```ts
+import { Engine } from "@snap-engine/core";
+import { CameraControl } from "@snap-engine/asset-base";
+
+const engine = new Engine();
+const container = document.getElementById("container");
+const wrapper = document.getElementById("camera-wrapper");
+
+if (container && wrapper) {
+  engine.element = container;
+
+  const cameraControl = new CameraControl(engine, {
+    zoomLock: false,
+    panLock: false,
+  });
+
+  cameraControl.element = wrapper;
+  cameraControl.setCameraCenterPosition(0, 0);
+}
+```
+
+## CameraControl Methods
+
+```ts
+cameraControl.setCameraPosition(0, 0);
+cameraControl.setCameraCenterPosition(100, 100);
+
+const center = cameraControl.getCameraCenterPosition();
+
+cameraControl.zoomBy(0.1);
+cameraControl.zoomBy(-0.1);
+cameraControl.zoomBy(0.1, 200, 150);
+```
+
+## Public API
+
+| API | Description |
+|-----|-------------|
+| `new Camera(engine, config?)` | Creates a camera for an engine. |
+| `camera.containerDom = element` | Assigns the camera container. |
+| `camera.cameraWidth` | Current container width. |
+| `camera.cameraHeight` | Current container height. |
+| `camera.cameraPositionX` | Current world X position. |
+| `camera.cameraPositionY` | Current world Y position. |
+| `camera.zoom` | Current zoom value. |
+| `camera.canvasStyle` | CSS transform string for the camera wrapper. |
+| `camera.setCameraPosition(x, y)` | Sets the top-left world position. |
+| `camera.setCameraCenterPosition(x, y)` | Centers the camera on a world point. |
+| `camera.getCameraCenterPosition()` | Returns the current world center. |
+| `camera.handleScroll(deltaZoom, cameraX, cameraY)` | Applies zoom around a camera-space point. |
+| `camera.handlePan(deltaX, deltaY)` | Applies direct pan movement. |
+| `camera.handlePanStart()` | Starts tracked pan movement. |
+| `camera.handlePanDrag(deltaX, deltaY)` | Updates tracked pan movement. |
+| `camera.handlePanEnd()` | Ends tracked pan movement. |
+| `new CameraControl(engine, config?)` | Creates interactive pan/zoom controls. |
+| `cameraControl.zoomBy(deltaZoom, originX?, originY?)` | Programmatically changes zoom. |

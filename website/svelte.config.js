@@ -122,7 +122,6 @@ const config = {
       "@snap-engine/snapline": "../assets/snapline/core/src/index.ts",
       "@snapline": "../src",
       "@svelte-demo": "../demo/svelte/src",
-      "@demo-root": "../demo",
       "@docs": "../docs",
       "@components": "./src/lib/components",
       "@snap-engine/asset-base-svelte":

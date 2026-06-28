@@ -1,0 +1,4 @@
+.highlight-card-list {
+  --highlight-card-heading-size: 3rem;
+  --highlight-card-mobile-top-padding: var(--size-48);
+}

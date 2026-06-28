@@ -1,0 +1,59 @@
+---
+title: Getting Started
+description: Install SnapSort and understand the pieces of a sortable surface.
+order: 0
+project: snapsort
+projectTitle: SnapSort
+section: introduction
+sectionTitle: Introduction
+sectionOrder: 1
+---
+
+SnapSort is a drag-and-drop sorting asset for SnapEngine. It provides sortable regions and draggable items for reorderable lists, token banks, kanban-style columns, and nested drop zones.
+
+SnapSort is built around two concepts:
+
+- `Container` objects define where items can be arranged.
+- `Item` objects define the draggable elements inside those containers.
+
+Containers can be arranged as rows or columns, can accept drops only from matching groups, and can be nested when a draggable item also needs to act as a drop zone.
+
+## Installation
+
+```bash
+npm install @snap-engine/core @snap-engine/snapsort
+```
+
+`@snap-engine/snapsort` contains the framework-agnostic SnapEngine objects and types. Add the binding package for the framework you are using. Binding-specific usage is covered in the reference section.
+
+## Build A Sortable Surface
+
+A SnapSort surface has three parts:
+
+- An engine that owns input, layout reads, writes, and animations.
+- One or more containers that define where items can be placed.
+- Items inside those containers, each representing one draggable piece of UI.
+
+Each container has a direction and a group. Direction controls the layout flow. Group controls which containers can exchange items.
+
+`Container` and `Item` are aliases for the default Euclidean strategy. Use the Progressive variants for ordered token layouts where wrapped reading order matters.
+
+## Groups
+
+Containers with the same `groupID` can exchange items. Containers with different groups are isolated from one another.
+
+Use one group for each independent drag-and-drop area. For example, a sentence builder might use one group for all answer and word-bank containers in a single exercise, while a kanban board might use a separate group for each board.
+
+## Direction
+
+Set `direction` to control the main flow:
+
+| Value | Behavior |
+|-------|----------|
+| `"column"` | Stack items vertically. |
+| `"row"` | Arrange items horizontally and wrap when the container wraps. |
+
+## Sections
+
+- [Drag and Drop Strategies](/docs/snapsort/introduction/01_drag_drop_strategies)
+- [Svelte API](/docs/snapsort/reference/svelte)
