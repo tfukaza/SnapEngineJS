@@ -8,6 +8,16 @@
   },
   "description": "React components for node graph UI",
   "type": "module",
+  "main": "./src/index.ts",
+  "types": "./src/index.ts",
+  "exports": {
+    ".": "./src/index.ts",
+    "./Engine": "./src/Engine.tsx",
+    "./Node": "./src/Node.tsx",
+    "./Connector": "./src/Connector.tsx",
+    "./Line": "./src/Line.tsx",
+    "./Select": "./src/Select.tsx"
+  },
   "keywords": [
     "node-graph",
     "react",
@@ -17,7 +27,15 @@
   "author": "Tomoki Fukazawa",
   "license": "MIT",
   "dependencies": {
-    "@snap-engine/snapline": "^0.1.0"
+    "@snap-engine/core": "^0.4.0",
+    "@snap-engine/snapline": "^0.2.0"
+  },
+  "files": [
+    "src",
+    "README.md"
+  ],
+  "publishConfig": {
+    "access": "public"
   },
   "peerDependencies": {
     "react": "^18.0.0"

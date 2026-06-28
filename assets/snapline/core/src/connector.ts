@@ -41,6 +41,8 @@ class ConnectorComponent extends ElementObject {
   #mouseHitBox: PointCollider;
 
   #targetConnector: ConnectorComponent | null = null;
+  #localCenter: { x: number; y: number };
+  #hasMeasuredCenter = false;
 
   #connectorCallback: ConnectorCallback | null = null;
 
@@ -79,18 +81,14 @@ class ConnectorComponent extends ElementObject {
     this.addCollider(this.#mouseHitBox);
 
     this.#targetConnector = null;
+    this.#localCenter = { x: 0, y: 0 };
     this.transformMode = "none";
 
     // Center colliders on the connector element once DOM is assigned
     this.event.dom.onAssignDom = () => {
       this.schedule(
         () => {
-          this.readDom();
-          const prop = this.getDomProperty("READ_1");
-          const centerX = prop.width / 2;
-          const centerY = prop.height / 2;
-          this.#hitCircle.localTransform = { x: centerX, y: centerY };
-          this.#mouseHitBox.localTransform = { x: centerX, y: centerY };
+          this.measureLocalCenter("READ_1");
         },
         { stage: "READ_1" },
       );
@@ -142,10 +140,71 @@ class ConnectorComponent extends ElementObject {
   }
 
   get center(): { x: number; y: number } {
-    const prop = this.getDomProperty("READ_1");
+    if (this.#hasMeasuredCenter && this.parent) {
+      const parentTransform = this.parent.worldTransform;
+      return {
+        x: parentTransform.x + this.#localCenter.x * parentTransform.scaleX,
+        y: parentTransform.y + this.#localCenter.y * parentTransform.scaleY,
+      };
+    }
+
+    return this.measureDomCenter();
+  }
+
+  measureDomCenter(): { x: number; y: number } {
+    if (!this.element) {
+      const prop = this.getDomProperty("READ_1");
+      return {
+        x: prop.x + prop.width / 2,
+        y: prop.y + prop.height / 2,
+      };
+    }
+
+    const rect = this.element.getBoundingClientRect();
+    const screenX = rect.left + rect.width / 2;
+    const screenY = rect.top + rect.height / 2;
+    if (this.engine?.camera) {
+      const [cameraX, cameraY] = this.engine.camera.getCameraFromScreen(
+        screenX,
+        screenY,
+      );
+      const [worldX, worldY] = this.engine.camera.getWorldFromCamera(
+        cameraX,
+        cameraY,
+      );
+      return { x: worldX, y: worldY };
+    }
+
     return {
-      x: this.worldTransform.x + prop.width / 2,
-      y: this.worldTransform.y + prop.height / 2,
+      x: screenX,
+      y: screenY,
+    };
+  }
+
+  measureLocalCenter(stage: "READ_1" | "READ_2" | "READ_3" | null = null) {
+    if (!this.element || !this.parent) {
+      return;
+    }
+
+    const prop = this.readDom({ unapplyTransform: false }, stage);
+    const parentTransform = this.parent.worldTransform;
+    const scaleX = parentTransform.scaleX === 0 ? 1 : parentTransform.scaleX;
+    const scaleY = parentTransform.scaleY === 0 ? 1 : parentTransform.scaleY;
+    const localLeft = (prop.x - parentTransform.x) / scaleX;
+    const localTop = (prop.y - parentTransform.y) / scaleY;
+    const localCenterX = (prop.x + prop.width / 2 - parentTransform.x) / scaleX;
+    const localCenterY = (prop.y + prop.height / 2 - parentTransform.y) / scaleY;
+
+    this.localTransform = { x: localLeft, y: localTop };
+    this.#localCenter = { x: localCenterX, y: localCenterY };
+    this.#hasMeasuredCenter = true;
+    this.#hitCircle.localTransform = {
+      x: localCenterX - localLeft,
+      y: localCenterY - localTop,
+    };
+    this.#mouseHitBox.localTransform = {
+      x: localCenterX - localLeft,
+      y: localCenterY - localTop,
     };
   }
 
@@ -171,29 +230,59 @@ class ConnectorComponent extends ElementObject {
   }
 
   deleteLine(i: number): LineComponent | null {
-    if (this.#outgoingLines.length == 0) {
+    if (this.#outgoingLines.length == 0 || i < 0) {
       return null;
     }
 
     const line = this.#outgoingLines[i];
+    if (!line) {
+      return null;
+    }
+    const target = line.target;
+    if (target) {
+      target.#incomingLines = target.#incomingLines.filter(
+        (incomingLine) => incomingLine !== line,
+      );
+      this.#connectorCallback?.onDisconnectOutgoing?.(target);
+      target.#connectorCallback?.onDisconnectIncoming?.(this);
+    }
     line.destroy();
     this.#outgoingLines.splice(i, 1);
+    if (this.parent) {
+      this.parent.updateNodeLineList();
+    }
     return line;
   }
 
   deleteAllLines() {
-    for (const line of this.#outgoingLines) {
-      line.destroy();
+    for (const line of [...this.#outgoingLines]) {
+      this.deleteLine(this.#outgoingLines.indexOf(line));
     }
+    for (const line of [...this.#incomingLines]) {
+      line.start.deleteLine(line.start.outgoingLines.indexOf(line));
+    }
+    this.#incomingLines = [];
   }
 
   updateAllLines() {
     for (const line of [...this.#outgoingLines, ...this.#incomingLines]) {
+      line.schedule(
+        () => {
+          line.moveLineToConnectorTransform();
+          line.writeTransform();
+        },
+        {
+          stage: "WRITE_2",
+          queueId: `${line.id}-transform`,
+        },
+      );
+    }
+  }
+
+  writeAllLines() {
+    for (const line of [...this.#outgoingLines, ...this.#incomingLines]) {
       line.moveLineToConnectorTransform();
-      line.schedule(() => line.writeTransform(), {
-        stage: "WRITE_2",
-        queueId: `${line.id}-transform`,
-      });
+      line.writeTransform();
     }
   }
 
@@ -292,6 +381,46 @@ class ConnectorComponent extends ElementObject {
     }
   }
 
+  findClosestConnectorAtPoint(
+    position: { x: number; y: number },
+  ): ConnectorComponent | null {
+    const objectTable = this.global.getEngineObjectTable(this.engine);
+    const connectors = Object.values(objectTable)
+      .filter((object): object is ConnectorComponent => {
+        return object instanceof ConnectorComponent && object.id !== this.id;
+      })
+      .filter((connector) => this.canConnectToConnector(connector));
+
+    let closestConnector: ConnectorComponent | null = null;
+    let closestDistance = Number.POSITIVE_INFINITY;
+    for (const connector of connectors) {
+      const center = connector.center;
+      const distance = Math.hypot(center.x - position.x, center.y - position.y);
+      const hitRadius = connector.config.colliderRadius ?? 30;
+      if (distance <= hitRadius && distance < closestDistance) {
+        closestConnector = connector;
+        closestDistance = distance;
+      }
+    }
+    return closestConnector;
+  }
+
+  canConnectToConnector(connector: ConnectorComponent): boolean {
+    if (connector.id === this.id || connector.config.allowDragOut) {
+      return false;
+    }
+
+    const currentIncomingLines = connector.incomingLines.filter(
+      (i) => !i.isDeleteRequested,
+    );
+    if (currentIncomingLines.some((i) => i.start == this)) {
+      return false;
+    }
+
+    const maxConnectors = connector.config.maxConnectors ?? 1;
+    return maxConnectors < 0 || currentIncomingLines.length < maxConnectors;
+  }
+
   runDragOutLine(prop: dragProp) {
     if (this.#state != ConnectorState.DRAGGING) {
       return;
@@ -305,6 +434,7 @@ class ConnectorComponent extends ElementObject {
       x: prop.position.x,
       y: prop.position.y,
     };
+    this.#targetConnector = this.findClosestConnectorAtPoint(prop.position);
 
     let line = this.#outgoingLines[0];
 
@@ -342,7 +472,8 @@ class ConnectorComponent extends ElementObject {
     return [connectorCenter.x, connectorCenter.y];
   }
 
-  endDragOutLine(_: dragEndProp) {
+  endDragOutLine(prop: dragEndProp) {
+    this.#targetConnector = this.findClosestConnectorAtPoint(prop.end);
     if (
       this.#targetConnector &&
       this.#targetConnector instanceof ConnectorComponent
@@ -361,10 +492,7 @@ class ConnectorComponent extends ElementObject {
 
       target.#prop[target.#name] = this.#prop[this.#name];
 
-      this.#outgoingLines[0].setLineEnd(
-        target.worldTransform.x,
-        target.worldTransform.y,
-      );
+      this.#outgoingLines[0].setLineEndAtConnector();
     } else {
       this.deleteLine(0);
     }
@@ -377,22 +505,21 @@ class ConnectorComponent extends ElementObject {
 
   _endLineDragCleanup() {
     this.#state = ConnectorState.IDLE;
-    this.event.global.pointerMove = null;
-    this.event.global.pointerUp = null;
+    this.event.input.drag = null;
+    this.event.input.dragEnd = null;
     this.parent.updateNodeLineList();
     this.#targetConnector = null;
-    this.#mouseHitBox.event.collider.onBeginContact = null;
+    this.#mouseHitBox.event.collider.onCollide = null;
     this.#mouseHitBox.event.collider.onEndContact = null;
     this.#mouseHitBox.localTransform = { x: 0, y: 0 };
   }
 
   startPickUpLine(line: LineComponent, prop: pointerDownProp) {
-    line.start.disconnectFromConnector(this);
-    this.disconnectFromConnector(line.start);
-    line.start.deleteLine(line.start.outgoingLines.indexOf(line));
-    this.engine?.input.setPointerDragOwner(prop.event.pointerId, line.start);
-    line.start.targetConnector = this;
-    line.start.startDragOutLine(prop);
+    const startConnector = line.start;
+    startConnector.disconnectFromConnector(this);
+    this.engine?.input.setPointerDragOwner(prop.event.pointerId, startConnector);
+    startConnector.targetConnector = this;
+    startConnector.startDragOutLine(prop);
     this.#state = ConnectorState.DRAGGING;
   }
 
@@ -400,15 +527,7 @@ class ConnectorComponent extends ElementObject {
     connector: ConnectorComponent,
     line: LineComponent | null,
   ): boolean {
-    const currentIncomingLines = connector.incomingLines.filter(
-      (i) => !i.isDeleteRequested,
-    );
-
-    if (currentIncomingLines.some((i) => i.start == this)) {
-      return false;
-    }
-
-    if (connector.config.maxConnectors === currentIncomingLines.length) {
+    if (!this.canConnectToConnector(connector)) {
       return false;
     }
 
@@ -418,7 +537,11 @@ class ConnectorComponent extends ElementObject {
     }
 
     line.target = connector;
-    connector.incomingLines.push(line);
+    if (!connector.incomingLines.includes(line)) {
+      connector.incomingLines.push(line);
+    }
+    line.setLineStartAtConnector();
+    line.setLineEndAtConnector();
 
     this.parent.updateNodeLineList();
 
@@ -430,14 +553,20 @@ class ConnectorComponent extends ElementObject {
   }
 
   disconnectFromConnector(connector: ConnectorComponent) {
-    for (const line of this.#outgoingLines) {
-      if (line.target == connector) {
-        line.isDeleteRequested = true;
-        break;
-      }
+    const lineIndex = this.#outgoingLines.findIndex(
+      (line) => line.target == connector,
+    );
+    if (lineIndex !== -1) {
+      this.deleteLine(lineIndex);
     }
-    this.#connectorCallback?.onDisconnectOutgoing?.(connector);
-    connector.#connectorCallback?.onDisconnectIncoming?.(this);
+  }
+
+  destroy() {
+    this.deleteAllLines();
+    if (this.parent?._connectors[this.#name] === this) {
+      delete this.parent._connectors[this.#name];
+    }
+    super.destroy();
   }
 }
 

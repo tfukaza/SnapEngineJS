@@ -65,7 +65,7 @@ class NodeComponent extends ElementObject {
           this._hitBox.width = property.width;
           this._hitBox.height = property.height;
           for (const connector of Object.values(this._connectors)) {
-            connector.readDom({ unapplyTransform: false }, "READ_1");
+            connector.measureLocalCenter("READ_1");
           }
         },
         { stage: "READ_1" },
@@ -104,23 +104,26 @@ class NodeComponent extends ElementObject {
   }
 
   setSelected(selected: boolean) {
+    if (!this.global.data.select) {
+      this.global.data.select = [];
+    }
     this._selected = selected;
     this.dataAttribute = {
-      selected: selected,
+      selected: String(selected),
+      "snapline-state": selected ? "focus" : "idle",
     };
     if (selected) {
-      this.global.data.select.push(this);
+      if (!this.global.data.select.includes(this)) {
+        this.global.data.select.push(this);
+      }
     } else {
-      this.classList = this.classList.filter(
-        (className) => className !== "selected",
-      );
       this.global.data.select = this.global.data.select.filter(
         (node: NodeComponent) => node.id !== this.id,
       );
     }
     this.schedule(() => this.writeDom(), {
       stage: "WRITE_1",
-      queueId: "WRITE_1",
+      queueId: `${this.id}-selected`,
     });
   }
 
@@ -139,6 +142,17 @@ class NodeComponent extends ElementObject {
     }
   }
 
+  writeNodeLines(): void {
+    for (const connector of Object.values(this._connectors)) {
+      connector.writeAllLines();
+    }
+  }
+
+  writeTransformAndLines(): void {
+    this.writeTransform();
+    this.writeNodeLines();
+  }
+
   updateNodeLineList(): void {
     if (this._lineListCallback) {
       // console.log("updateNodeLineList", this.id);
@@ -155,8 +169,9 @@ class NodeComponent extends ElementObject {
       return;
     }
 
+    this._hasMoved = false;
     if (this.global.data.select?.includes(this) == false) {
-      for (const node of this.global.data.select) {
+      for (const node of [...this.global.data.select]) {
         node.setSelected(false);
       }
       this.setSelected(true);
@@ -194,8 +209,7 @@ class NodeComponent extends ElementObject {
       x: this._dragStartX + dx,
       y: this._dragStartY + dy,
     };
-    this.updateNodeLines();
-    this.schedule(() => this.writeTransform(), {
+    this.schedule(() => this.writeTransformAndLines(), {
       stage: "WRITE_2",
       queueId: `${this.id}-transform`,
     });
@@ -219,18 +233,20 @@ class NodeComponent extends ElementObject {
       x: this._dragStartX + dx,
       y: this._dragStartY + dy,
     };
-    // this.calculateLocalTransform();
-    this.updateNodeLines();
+    this.schedule(() => this.writeTransformAndLines(), {
+      stage: "WRITE_2",
+      queueId: `${this.id}-transform`,
+    });
   }
 
   onUp(_prop: pointerUpProp) {
     if (this._hasMoved == false) {
-      for (const node of this.global.data.select ?? []) {
+      for (const node of [...(this.global.data.select ?? [])]) {
         node.setSelected(false);
       }
       this.setSelected(true);
-      return;
     }
+    this._hasMoved = false;
   }
 
   getConnector(name: string): ConnectorComponent | null {
@@ -292,6 +308,15 @@ class NodeComponent extends ElementObject {
     for (const connector of Object.values(this._connectors)) {
       this.setProp(connector.name, this.getProp(connector.name));
     }
+  }
+
+  destroy() {
+    for (const connector of Object.values(this._connectors)) {
+      connector.deleteAllLines();
+    }
+    this.setSelected(false);
+    this._connectors = {};
+    super.destroy();
   }
 }
 

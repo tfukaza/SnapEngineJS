@@ -1,13 +1,16 @@
 <script lang="ts">
   import { Engine } from "@snap-engine/asset-base-svelte";
+  import { Select } from "@snap-engine/snapline-svelte";
   import SimpleNode from "./SimpleNode.svelte";
 </script>
 
 <Engine id="node-ui-demo-canvas">
   <div id="node-ui-demo">
-    <SimpleNode title="Node A" />
-    <SimpleNode title="Node B"  />
-    <SimpleNode title="Node C"  />
+    <div id="sl-background"></div>
+    <Select />
+    <SimpleNode title="Node A" x={120} y={120} />
+    <SimpleNode title="Node B" x={440} y={170} />
+    <SimpleNode title="Node C" x={280} y={360} />
   </div>
 </Engine>
 
@@ -22,6 +25,12 @@
     }
     
     :global(.node) {
+        pointer-events: auto;
+    }
+
+    #sl-background {
+        position: absolute;
+        inset: 0;
         pointer-events: auto;
     }
 </style>

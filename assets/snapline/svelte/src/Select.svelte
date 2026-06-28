@@ -2,7 +2,7 @@
 <script lang="ts">
     import { RectSelectComponent } from "@snap-engine/snapline";
     import type { Engine } from "@snap-engine/core";
-    import { onMount, getContext } from "svelte";
+    import { onDestroy, onMount, getContext } from "svelte";
 
     let selectDOM: HTMLDivElement | null = null;
     let engine: Engine = getContext("engine");
@@ -12,9 +12,13 @@
         select.element = selectDOM as HTMLElement;
     });
 
+    onDestroy(() => {
+        select.destroy();
+    });
+
 </script>
 
-<div id="select-container" bind:this={selectDOM}></div>
+<div id="select-container" data-snapline-type="selection" bind:this={selectDOM}></div>
 
 <style>
     #select-container {
