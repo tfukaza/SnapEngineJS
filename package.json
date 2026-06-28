@@ -46,6 +46,7 @@
     "test:camera-control": "playwright test -c tests/e2e/camera-control.playwright.config.ts",
     "test:snapline": "playwright test -c tests/e2e/snapline.playwright.config.ts",
     "test:snapline-react": "playwright test -c tests/e2e/snapline-react.playwright.config.ts",
+    "test:snapsort-react": "playwright test -c tests/e2e/snapsort-react.playwright.config.ts",
     "test:snapsort": "playwright test -c tests/e2e/snapsort.playwright.config.ts",
     "test:ui": "start-server-and-test server:vanilla http://localhost:3001 'playwright test --ui'",
     "render:collision-dots": "node scripts/render_collision_text_dots.mjs",

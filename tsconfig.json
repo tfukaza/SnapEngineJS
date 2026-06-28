@@ -32,6 +32,7 @@
       "@snap-engine/snapsort-svelte": [
         "./assets/snapsort/svelte/src/index.ts"
       ],
+      "@snap-engine/snapsort-react": ["./assets/snapsort/react/src/index.ts"],
       "@snap-engine/snapsort": ["./assets/snapsort/core/src/index.ts"],
       "@snap-engine/snapline-svelte": ["./assets/snapline/svelte/src/index.ts"],
       "@snap-engine/snapline-react": ["./assets/snapline/react/src/index.ts"],
