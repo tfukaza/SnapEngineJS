@@ -27,6 +27,7 @@
   const DOT_DISPLACEMENT_MAX = 30;
   const DOT_DISPLACEMENT_POWER = 1.45;
   const DOT_SQUARE_CORNER_BONUS = 18;
+  const DOT_DISPLACEMENT_MIN_OPACITY = 0.18;
   const ACTIVE_DISPLACEMENT_EPSILON = 0.01;
   const DESCRIPTION_DISPLACEMENT_MIN = 3;
   const DESCRIPTION_DISPLACEMENT_MAX = 22;
@@ -302,12 +303,18 @@
     function setDotDisplacement(x: number, y: number) {
       object?.schedule(
         () => {
-          const isActive = Math.hypot(x, y) > ACTIVE_DISPLACEMENT_EPSILON;
+          const displacementLength = Math.hypot(x, y);
+          const isActive = displacementLength > ACTIVE_DISPLACEMENT_EPSILON;
           setObjectActiveClass(object, baseClassList, isActive);
           if (isActive) {
+            const displacementProgress = clamp(displacementLength / DOT_DISPLACEMENT_MAX, 0, 1);
+            const opacity =
+              1 - displacementProgress * (1 - DOT_DISPLACEMENT_MIN_OPACITY);
             node.style.transform = `translate(${x.toFixed(2)}px, ${y.toFixed(2)}px)`;
+            node.style.opacity = opacity.toFixed(2);
           } else {
             node.style.transform = "";
+            node.style.opacity = "";
           }
         },
         { stage: "WRITE_2", queueId: "dot-displacement" },
@@ -679,10 +686,11 @@
 <style lang="scss">
   .collision-card {
     --card-padding: var(--size-48);
+    --card-top-padding: var(--card-padding);
     --dot-gap: 0px;
     --title-description-gap: 36px;
     min-height: 520px;
-    height: 100%;
+    height: auto;
     display: flex;
     align-items: center;
     justify-content: center;
@@ -695,12 +703,16 @@
 
     :global(#snap-canvas) {
       width: 100%;
-      height: 100%;
+      height: auto !important;
+      min-height: inherit;
+      flex: 1 1 auto;
     }
 
     @media (max-width: 720px) {
       --card-padding: var(--size-24);
+      --card-top-padding: var(--highlight-card-mobile-top-padding);
       --title-description-gap: 30px;
+      padding-block: var(--card-top-padding) 0;
       grid-column: span 2;
     }
   }
@@ -709,6 +721,7 @@
     position: relative;
     width: 100%;
     height: 100%;
+    min-height: inherit;
     overflow: hidden;
   }
 
@@ -744,14 +757,13 @@
 
   .dot-cell.is-active {
     transition: transform 320ms cubic-bezier(0.22, 1, 0.36, 1);
-    will-change: transform, background-color;
+    will-change: transform, opacity, background-color;
   }
 
   .collision-description {
     width: min(26rem, calc(100% - var(--size-48)));
     margin: 0;
     color: #000000;
-    font-family: "Geist", sans-serif;
     font-size: var(--font-size-16);
     line-height: 1.35;
     text-align: center;

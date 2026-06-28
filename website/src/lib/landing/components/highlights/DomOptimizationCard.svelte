@@ -315,6 +315,7 @@
 <style lang="scss">
   .dom-optimization-card {
     --card-padding: 40px;
+    --card-top-padding: var(--card-padding);
     --operation-card-height: 23.35rem;
     container-type: inline-size;
     container-name: dom-optimization-card;
@@ -322,13 +323,14 @@
     height: 100%;
     min-height: 0;
     box-sizing: border-box;
-    padding: var(--card-padding);
+    padding: var(--card-top-padding) var(--card-padding) var(--card-padding);
     background: var(--color-background-tint);
     border-radius: var(--ui-radius);
     overflow: hidden;
 
     @media (max-width: 720px) {
       --card-padding: var(--size-24);
+      --card-top-padding: var(--highlight-card-mobile-top-padding);
       grid-column: span 2;
     }
   }
@@ -371,7 +373,7 @@
     width: min-content;
     margin: 0;
     font-family: "Geist Pixel", sans-serif;
-    font-size: 3.55rem;
+    font-size: var(--highlight-card-heading-size);
     line-height: 0.9;
   }
 
@@ -389,7 +391,6 @@
   @container dom-optimization-card (max-width: 450px) {
     .dom-optimization-copy h3 {
       width: max-content;
-      font-size: 3.55rem;
     }
 
     .dom-title-desktop-line {

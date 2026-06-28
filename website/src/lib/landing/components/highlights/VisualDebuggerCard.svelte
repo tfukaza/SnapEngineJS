@@ -29,6 +29,7 @@
 <style lang="scss">
   .visual-debugger-card {
     --card-padding: var(--size-48);
+    --card-top-padding: var(--card-padding);
     display: flex;
     align-items: center;
     justify-content: center;
@@ -40,6 +41,7 @@
 
     @media (max-width: 720px) {
       --card-padding: var(--size-24);
+      --card-top-padding: var(--highlight-card-mobile-top-padding);
       grid-column: span 2;
     }
   }
@@ -50,7 +52,7 @@
     align-items: center;
     justify-content: center;
     gap: var(--size-24);
-    padding: var(--card-padding);
+    padding: var(--card-top-padding) var(--card-padding) var(--card-padding);
     text-align: center;
 
     h3 {
@@ -59,13 +61,13 @@
       width: min-content;
       margin: 0;
       font-family: "Geist Pixel Circle", "Doto", sans-serif;
-      font-size: clamp(3rem, 6.5vw, 5.25rem);
+      font-size: var(--highlight-card-heading-size);
       line-height: 1;
     }
 
     @media (max-width: 720px) {
       gap: var(--size-20);
-      padding: var(--card-padding);
+      padding: var(--card-top-padding) var(--card-padding) var(--card-padding);
     }
   }
 

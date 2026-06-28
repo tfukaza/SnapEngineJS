@@ -280,81 +280,83 @@
 </script>
 
 <article class="input-handling-card theme-secondary-5">
-  <div class="input-card-heading">
-    <h3>Input Handling</h3>
-    <p>Common API for multiple types of input devices. Includes support for touch gestures.</p>
-  </div>
-
-  <div class="input-card-body card">
-    <div
-      class={`tap-display display ${glyphPanelHidden ? "glyph-panel-hidden" : ""}`}
-      aria-live="polite"
-      bind:this={tapDisplayElement}
-    >
-      {#each rows as row, index (row)}
-        <div class={`display-row ${activeRow === row ? "is-active" : ""}`}>
-          <span class="display-bullet" aria-hidden="true">{bulletGlyph(row)}</span>
-          <span class="display-value">{rowOutput(row)}</span>
-          <span class="display-arrow" aria-hidden="true">{rowArrows[row]}</span>
-          {#if !glyphPanelHidden}
-            <span class="ascii-box-row" aria-hidden="true">{asciiBoxRow(index)}</span>
-          {/if}
-        </div>
-      {/each}
+  <div class="input-card-layout">
+    <div class="input-card-heading">
+      <h3>Input Handling</h3>
+      <p>Common API for multiple types of input devices. Includes support for touch gestures.</p>
     </div>
 
-    <div
-      class="tap-surface"
-      role="application"
-      aria-label="Input gesture area"
-      onpointerdown={handlePointerDown}
-      onpointermove={handlePointerMove}
-      onpointerup={handlePointerUp}
-      onpointercancel={handlePointerUp}
-      oncontextmenu={handleContextMenu}
-    >
-      <div class="touch-plus-grid" aria-hidden="true">
-        {#each plusCells as cell (cell)}
-          <span>+</span>
+    <div class="input-card-body card">
+      <div
+        class={`tap-display display ${glyphPanelHidden ? "glyph-panel-hidden" : ""}`}
+        aria-live="polite"
+        bind:this={tapDisplayElement}
+      >
+        {#each rows as row, index (row)}
+          <div class={`display-row ${activeRow === row ? "is-active" : ""}`}>
+            <span class="display-bullet" aria-hidden="true">{bulletGlyph(row)}</span>
+            <span class="display-value">{rowOutput(row)}</span>
+            <span class="display-arrow" aria-hidden="true">{rowArrows[row]}</span>
+            {#if !glyphPanelHidden}
+              <span class="ascii-box-row" aria-hidden="true">{asciiBoxRow(index)}</span>
+            {/if}
+          </div>
         {/each}
       </div>
 
-      <svg class="gesture-lines" viewBox="0 0 100 100" preserveAspectRatio="none" aria-hidden="true">
+      <div
+        class="tap-surface"
+        role="application"
+        aria-label="Input gesture area"
+        onpointerdown={handlePointerDown}
+        onpointermove={handlePointerMove}
+        onpointerup={handlePointerUp}
+        onpointercancel={handlePointerUp}
+        oncontextmenu={handleContextMenu}
+      >
+        <div class="touch-plus-grid" aria-hidden="true">
+          {#each plusCells as cell (cell)}
+            <span>+</span>
+          {/each}
+        </div>
+
+        <svg class="gesture-lines" viewBox="0 0 100 100" preserveAspectRatio="none" aria-hidden="true">
+          {#each dragLines as line (line.id)}
+            <line
+              class="drag-line"
+              x1={line.start.xp}
+              y1={line.start.yp}
+              x2={line.current.xp}
+              y2={line.current.yp}
+            />
+          {/each}
+          {#if pinchLine}
+            <line
+              class="pinch-line"
+              x1={pinchLine.a.xp}
+              y1={pinchLine.a.yp}
+              x2={pinchLine.b.xp}
+              y2={pinchLine.b.yp}
+            />
+          {/if}
+        </svg>
+
         {#each dragLines as line (line.id)}
-          <line
-            class="drag-line"
-            x1={line.start.xp}
-            y1={line.start.yp}
-            x2={line.current.xp}
-            y2={line.current.yp}
-          />
+          <span
+            class="gesture-pin start-pin"
+            style={`left: ${line.start.xp}%; top: ${line.start.yp}%;`}
+            aria-hidden="true"
+          ></span>
         {/each}
-        {#if pinchLine}
-          <line
-            class="pinch-line"
-            x1={pinchLine.a.xp}
-            y1={pinchLine.a.yp}
-            x2={pinchLine.b.xp}
-            y2={pinchLine.b.yp}
-          />
-        {/if}
-      </svg>
 
-      {#each dragLines as line (line.id)}
-        <span
-          class="gesture-pin start-pin"
-          style={`left: ${line.start.xp}%; top: ${line.start.yp}%;`}
-          aria-hidden="true"
-        ></span>
-      {/each}
-
-      {#each activePointers as pointer (pointer.id)}
-        <span
-          class="gesture-pin active-pin"
-          style={`left: ${pointer.xp}%; top: ${pointer.yp}%;`}
-          aria-hidden="true"
-        ></span>
-      {/each}
+        {#each activePointers as pointer (pointer.id)}
+          <span
+            class="gesture-pin active-pin"
+            style={`left: ${pointer.xp}%; top: ${pointer.yp}%;`}
+            aria-hidden="true"
+          ></span>
+        {/each}
+      </div>
     </div>
   </div>
 </article>
@@ -362,51 +364,65 @@
 <style lang="scss">
   .input-handling-card {
     --card-padding: var(--size-48);
+    --card-top-padding: var(--card-padding);
     container-type: inline-size;
     container-name: input-handling-card;
     min-height: 520px;
     height: 100%;
     overflow: hidden;
-    display: flex;
-    flex-direction: column;
-    gap: var(--size-32);
     box-sizing: border-box;
     background: var(--color-background-tint);
     border-radius: var(--ui-radius);
 
     @media (max-width: 720px) {
       --card-padding: var(--size-24);
+      --card-top-padding: var(--highlight-card-mobile-top-padding);
       grid-column: span 2;
     }
+  }
 
-    @container input-handling-card (max-width: 500px) {
-      gap: 0;
+  .input-card-layout {
+    width: 100%;
+    min-height: inherit;
+    height: 100%;
+    display: grid;
+    grid-template-columns: minmax(0, 0.42fr) minmax(0, 0.58fr);
+    align-items: stretch;
+    gap: var(--size-32);
+    box-sizing: border-box;
+
+    @container input-handling-card (max-width: 400px) {
+      display: flex;
+      flex-direction: column;
     }
   }
 
   .input-card-heading {
-    display: grid;
-    grid-template-columns: auto 1fr;
-    align-items: start;
-    justify-content: space-between;
-    gap: var(--size-48);
-    padding: var(--card-padding) var(--card-padding) 0 var(--card-padding);
+    display: flex;
+    flex-direction: column;
+    align-items: flex-start;
+    justify-content: center;
+    gap: var(--size-16);
+    padding: var(--card-top-padding) 0 var(--card-padding) var(--card-padding);
+    min-width: 0;
 
     h3 {
-      width: min-content;
+      width: min(100%, min-content);
       margin: 0;
       font-family: "Geist Pixel Circle", "Doto", sans-serif;
-      font-size: 58px;
+      font-size: var(--highlight-card-heading-size);
       line-height: 0.88;
     }
 
     p {
       margin: 0;
+      max-width: 18rem;
     }
 
-    @container input-handling-card (max-width: 500px) {
+    @container input-handling-card (max-width: 400px) {
+      justify-content: flex-start;
       gap: var(--size-12);
-      grid-template-columns: 1fr;
+      padding: var(--card-top-padding) var(--card-padding) 0 var(--card-padding);
 
       > * {
         grid-column: auto;
@@ -415,10 +431,9 @@
   }
 
   .input-card-body {
-    flex: 1;
+    min-width: 0;
     min-height: 360px;
-    margin: 0 var(--card-padding) var(--card-padding) var(--card-padding);
-    margin-top: calc(var(--size-48) * -1);
+    margin: var(--card-padding) var(--card-padding) var(--card-padding) 0;
     overflow: hidden;
     display: flex;
     flex-direction: column;
@@ -427,11 +442,9 @@
     gap: var(--size-24);
     padding: var(--size-24);
     box-sizing: border-box;
-    transform: translateY(var(--size-80));
 
-    @container input-handling-card (max-width: 500px) {
-      margin-top: 0;
-      transform: none;
+    @container input-handling-card (max-width: 400px) {
+      margin: 0 var(--card-padding) var(--card-padding) var(--card-padding);
     }
   }
 

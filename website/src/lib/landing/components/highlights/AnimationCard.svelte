@@ -420,101 +420,101 @@
 </script>
 
 <article class="animation-card theme-secondary-4">
-  <div class="animation-card-body card">
-    <Engine id="highlight-animation" bind:engine bind:this={canvasComponent} debug={debugState.enabled}>
-      <div class="animation-demo">
-        <div class="timeline grid-layout">
-          <div class="timeline-content">
-            <!-- <label class="timeline-label" for="animation-timeline-range"
-              >Time</label
-            > -->
-            <span></span>
-            <div class="timeline-slider">
-              <input
-                id="animation-timeline-range"
-                type="range"
-                min="0"
-                max={TOTAL_DURATION}
-                step="0.01"
-                value={currentTime}
-                oninput={handleTimelineInput}
-                onpointerdown={beginTimelineScrub}
-                onpointerup={endTimelineScrub}
-                onpointerleave={endTimelineScrub}
-                onpointercancel={endTimelineScrub}
-                aria-label="Scrub animation time"
-              />
-              <span class="playhead" style={`left: calc(8px + (100% - 16px) * ${currentTime / TOTAL_DURATION});`}></span>
-            </div>
-
-            <span class="timeline-placeholder" aria-hidden="true"></span>
-            <div class="timeline-header">
-              {#each timelineMarkers as marker}
-                <span>{marker}s</span>
-              {/each}
-            </div>
-
-            {#each tracks as track}
-              <div class="track-meta">
-                <span class="track-label">{track.label}</span>
+  <div class="animation-card-layout">
+    <div class="animation-card-body card">
+      <Engine id="highlight-animation" bind:engine bind:this={canvasComponent} debug={debugState.enabled}>
+        <div class="animation-demo">
+          <div class="timeline grid-layout">
+            <div class="timeline-content">
+              <!-- <label class="timeline-label" for="animation-timeline-range"
+                >Time</label
+              > -->
+              <span></span>
+              <div class="timeline-slider">
+                <input
+                  id="animation-timeline-range"
+                  type="range"
+                  min="0"
+                  max={TOTAL_DURATION}
+                  step="0.01"
+                  value={currentTime}
+                  oninput={handleTimelineInput}
+                  onpointerdown={beginTimelineScrub}
+                  onpointerup={endTimelineScrub}
+                  onpointerleave={endTimelineScrub}
+                  onpointercancel={endTimelineScrub}
+                  aria-label="Scrub animation time"
+                />
+                <span class="playhead" style={`left: calc(8px + (100% - 16px) * ${currentTime / TOTAL_DURATION});`}></span>
               </div>
-              <div
-                class={`track-lane ${track.type}`}
-                style={`--range-color: ${TRACK_COLORS[track.type]};`}
-                aria-hidden="true"
-              >
-                <span
-                  class="track-line"
-                  style={`left: ${toPercent(track.range.start)}; width: calc(${toPercent(track.range.end)} - ${toPercent(track.range.start)});`}
-                ></span>
-                {#each track.keyframes as keyframe}
-                  <span
-                    class="keyframe-point"
-                    style={`left: ${toPercent(keyframe.time)};`}
-                  ></span>
+
+              <span class="timeline-placeholder" aria-hidden="true"></span>
+              <div class="timeline-header">
+                {#each timelineMarkers as marker}
+                  <span>{marker}s</span>
                 {/each}
               </div>
+
+              {#each tracks as track}
+                <div class="track-meta">
+                  <span class="track-label">{track.label}</span>
+                </div>
+                <div
+                  class={`track-lane ${track.type}`}
+                  style={`--range-color: ${TRACK_COLORS[track.type]};`}
+                  aria-hidden="true"
+                >
+                  <span
+                    class="track-line"
+                    style={`left: ${toPercent(track.range.start)}; width: calc(${toPercent(track.range.end)} - ${toPercent(track.range.start)});`}
+                  ></span>
+                  {#each track.keyframes as keyframe}
+                    <span
+                      class="keyframe-point"
+                      style={`left: ${toPercent(keyframe.time)};`}
+                    ></span>
+                  {/each}
+                </div>
+              {/each}
+            </div>
+          </div>
+
+          <div class="preview-area">
+          <div class="preview-plus-grid" aria-hidden="true">
+            {#each plusCells as cell (cell)}
+              <span>+</span>
             {/each}
           </div>
+          <div class="preview-value-container">
+            <span
+              class="animated-value value-readout"
+              bind:this={animatedValueRef}
+              style={`transform: ${valueTransform};`}
+            >
+              {counterValue}
+            </span>
+          </div>
+            <!-- <button class="playback-toggle" type="button" onclick={togglePlayback}>
+              {isPlaying ? "Pause" : "Play"}
+            </button> -->
+          </div>
         </div>
+      </Engine>
+    </div>
 
-        <div class="preview-area">
-        <div class="preview-plus-grid" aria-hidden="true">
-          {#each plusCells as cell (cell)}
-            <span>+</span>
-          {/each}
-        </div>
-        <div class="preview-value-container">
-          <span
-            class="animated-value value-readout"
-            bind:this={animatedValueRef}
-            style={`transform: ${valueTransform};`}
-          >
-            {counterValue}
-          </span>
-        </div>
-          <!-- <button class="playback-toggle" type="button" onclick={togglePlayback}>
-            {isPlaying ? "Pause" : "Play"}
-          </button> -->
-        </div>
-      </div>
-    </Engine>
-  </div>
-
-  <div class="animation-card-heading">
-    <h3>Animation Engine</h3>
-    <p>WAAPI based animation engine that's lightweight and performant.</p>
+    <div class="animation-card-heading">
+      <h3>Animation Engine</h3>
+      <p>WAAPI based animation engine that's lightweight and performant.</p>
+    </div>
   </div>
 </article>
 
 <style lang="scss">
   .animation-card {
     --card-padding: var(--size-48);
+    --card-top-padding: var(--card-padding);
     container-type: inline-size;
     container-name: animation-card;
-    display: flex;
-    flex-direction: column;
-    gap: var(--size-32);
     height: 100%;
     box-sizing: border-box;
     background: var(--color-background-tint);
@@ -523,40 +523,67 @@
 
     @media (max-width: 720px) {
       --card-padding: var(--size-24);
+      --card-top-padding: var(--highlight-card-mobile-top-padding);
       grid-column: span 2;
     }
   }
 
-  .animation-card-heading {
+  .animation-card-layout {
+    width: 100%;
+    min-height: inherit;
+    height: 100%;
     display: grid;
-    grid-template-columns: auto 1fr;
-    align-items: start;
-    justify-content: space-between;
+    grid-template-columns: minmax(0, 0.6fr) minmax(0, 0.4fr);
+    grid-template-areas: "visual heading";
+    align-items: stretch;
     gap: var(--size-48);
-    padding: 0 var(--card-padding) var(--card-padding) var(--card-padding);
+    box-sizing: border-box;
+
+    @container animation-card (max-width: 400px) {
+      display: flex;
+      flex-direction: column;
+      gap: var(--size-24);
+    }
+  }
+
+  .animation-card-heading {
+    grid-area: heading;
+    display: flex;
+    flex-direction: column;
+    align-items: flex-start;
+    justify-content: center;
+    gap: var(--size-16);
+    min-width: 0;
 
     h3 {
-      width: min-content;
+      width: min(100%, min-content);
       margin-bottom: 0;
       font-family: "Geist Pixel Circle", "Doto", sans-serif;
-      font-size: clamp(2.25rem, 8.4cqi, 4.25rem);
+      font-size: var(--highlight-card-heading-size);
       line-height: 0.88;
     }
 
-    @container animation-card (max-width: 500px) {
-      gap: var(--size-12);
-      grid-template-columns: 1fr;
+    p {
+      margin: 0;
+      max-width: 18rem;
+    }
 
-      > * {
-        grid-column: auto;
-      }
+    @container animation-card (max-width: 400px) {
+      justify-content: flex-start;
+      gap: var(--size-12);
+      padding: 0 var(--card-padding) var(--card-padding) var(--card-padding);
     }
   }
 
   .animation-card-body {
-    flex: 1;
-    min-height: 0;
-    margin: var(--size-16) var(--card-padding) 0 var(--card-padding);
+    grid-area: visual;
+    min-width: 0;
+    /* min-height: 360px; */
+    margin: var(--card-top-padding) 0 var(--card-padding) var(--card-padding) ;
+
+    @container animation-card (max-width: 400px) {
+      margin: var(--card-top-padding) var(--card-padding) 0 var(--card-padding);
+    }
   }
 
   .animation-demo {
@@ -578,7 +605,7 @@
     align-items: center;
     justify-content: center;
     background-color: var(--color-background-tint);
-    min-height: 0;
+    min-height: 100px;
     isolation: isolate;
   }
 
