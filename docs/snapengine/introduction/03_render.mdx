@@ -1,0 +1,56 @@
+---
+title: Render Queue
+order: 3
+project: snapengine
+projectTitle: SnapEngine
+section: introduction
+sectionTitle: Introduction
+sectionOrder: 1
+---
+
+Interactive web UI often needs to read layout from the DOM and then 
+write visual updates back to it. Doing those reads and writes in the 
+wrong order can force the browser to recalculate layout repeatedly,
+in a phenomenon known as _layout thrashing_.
+
+The solution is to batch DOM reads and writes as much as possible.
+SnapEngine implements a _frame queue_, consisting of six queues for every frame:
+`READ_1`, `WRITE_1`, `READ_2`, `WRITE_2`, `READ_3`, and `WRITE_3`.
+Every read from the DOM **must** be performed in one of the READ queue, 
+and every write to the DOM **must** happen in a WRITE queue.
+
+Whenever you want to read a DOM property for an ElementObject, 
+you must enqueue a read _task_ to one of the three READ queues. 
+When the browser is ready to render the next frame (usually once every 1/60 second),
+the read task will be executed. Likewise, to write a property to DOM, 
+such as a new world coordinate of the object or a CSS style, 
+you need to manually enqueue a task to the write queue after updating the
+corresponding property.
+
+## The Design
+At this point many of you may be wondering:
+- Why do we need six queues, instead of just a single READ and single WRITE?
+- Why do we need to queue a write task ourselves? For example, can't an update to the world position automatically trigger a write queue?
+
+The answer to both is that, DOM updates are harder than it seems. 
+Take the SnapSort library for example. When we drag an item around, 
+the tiles move around the cursor while playing an animation. 
+Seems simple enough, until we break down what happens in a single frame
+when an item is moved and dropped:
+- WRITE_1: The item is moved to where the cursor is.
+- READ_2: Save the current position of all items.
+- WRITE_2: The item is placed in a new position in the DOM.
+- READ_3: Read the final positions of all items.
+- WRITE_3: Animate all items between current and final positions.
+
+This also illustrates why we can't just automatically queue a write task;
+the "right" queue is dependent on what action is being performed, 
+so we need to reply on the developer to specify explicitly.
+
+If all of this seems daunting, the good news is that you will 
+rarely need to manage it yourself, since we have pre-made assets 
+that handles the ugly implementations for you.
+
+
+> [!NOTE]
+> For queue stages, scheduling examples, DOM read/write methods, and transform writing details, see [Render Queue reference](/docs/snapengine/reference/render_queue).

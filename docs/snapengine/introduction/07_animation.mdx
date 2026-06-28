@@ -1,0 +1,17 @@
+---
+title: Animation
+order: 7
+project: snapengine
+projectTitle: SnapEngine
+section: introduction
+sectionTitle: Introduction
+sectionOrder: 1
+---
+
+SnapEngine animation wraps the Web Animations API so animations can participate in the engine frame loop. It supports ordinary CSS property animation and custom variables that can drive engine state.
+
+Animations can be attached to objects and processed between render stages. This makes animation updates predictable relative to DOM writes, collision detection, and debug rendering.
+
+Sequences group multiple animations behind one playback controller. They are useful when several elements or variables need to start, pause, reverse, or seek together.
+
+For AnimationObject, SequenceObject, keyframes, custom variables, timing options, and playback controls, see [Animation reference](/docs/snapengine/reference/animation).

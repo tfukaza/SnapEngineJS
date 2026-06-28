@@ -1,6 +1,5 @@
 
 <script lang="ts">
-	import "@demo-root/app.scss";
 	import "./doc.scss";
 	let { data } = $props();
 
@@ -8,28 +7,38 @@
 	import { _getGroupedEntries, entries } from './+page.js';
 	const docSections = _getGroupedEntries();
 	const allEntries = entries();
+	const projectOptions = [
+		{ slug: 'snapengine', label: 'SnapEngine', href: '/docs/snapengine/introduction' },
+		{ slug: 'snapsort', label: 'SnapSort', href: '/docs/snapsort/introduction' }
+	];
 
 	// Compute breadcrumbs from $page.params.slug
 	import { page } from '$app/stores';
 	const slugParts = $derived($page.params.slug ? $page.params.slug.split('/') : []);
 	// Strip leading two-digit number prefix (e.g., "01_intro" -> "intro")
-	const formatBreadcrumb = (part: string) => {
+	const formatBreadcrumb = (part: string, index: number) => {
+		if (index === 0) {
+			return projectOptions.find((project) => project.slug === part)?.label ?? part;
+		}
+
 		const stripped = part.replace(/^\d{2}_/, '');
 		return stripped.charAt(0).toUpperCase() + stripped.slice(1).replace(/_/g, ' ');
 	};
 	const breadcrumbs = $derived([
-		{ name: 'Docs', href: '/docs' },
 		...slugParts.map((part, i) => ({
-			name: formatBreadcrumb(part),
+			name: formatBreadcrumb(part, i),
 			href: '/docs/' + slugParts.slice(0, i + 1).join('/')
 		}))
 	]);
 
 	// Compute prev/next navigation
 	const currentSlug = $derived($page.params.slug || '');
-	const currentIndex = $derived(allEntries.findIndex(e => e.slug === currentSlug));
-	const prevEntry = $derived(currentIndex > 0 ? allEntries[currentIndex - 1] : null);
-	const nextEntry = $derived(currentIndex < allEntries.length - 1 ? allEntries[currentIndex + 1] : null);
+	const currentProject = $derived(slugParts[0] || 'snapengine');
+	const visibleDocSections = $derived(docSections.filter((section) => section.project === currentProject));
+	const currentProjectEntries = $derived(allEntries.filter((entry) => entry.project === currentProject));
+	const currentIndex = $derived(currentProjectEntries.findIndex(e => e.slug === currentSlug));
+	const prevEntry = $derived(currentIndex > 0 ? currentProjectEntries[currentIndex - 1] : null);
+	const nextEntry = $derived(currentIndex < currentProjectEntries.length - 1 ? currentProjectEntries[currentIndex + 1] : null);
 
 	// Mobile menu state
 	let mobileMenuOpen = $state(false);
@@ -40,6 +49,16 @@
 
 	function closeMobileMenu() {
 		mobileMenuOpen = false;
+	}
+
+	function handleProjectChange(event: Event) {
+		const selectedProject = projectOptions.find(
+			(project) => project.slug === (event.currentTarget as HTMLSelectElement).value
+		);
+
+		if (selectedProject && selectedProject.slug !== currentProject) {
+			window.location.href = selectedProject.href;
+		}
 	}
 </script>
 
@@ -63,7 +82,17 @@
 	<!-- Mobile dropdown menu -->
 	<div class="mobile-menu-dropdown" class:open={mobileMenuOpen}>
 		<nav>
-			{#each docSections as section}
+			<div class="form-control-group form-group">
+				<label for="mobile-doc-project">Project</label>
+				<select id="mobile-doc-project" onchange={handleProjectChange} aria-label="Select docs project">
+					{#each projectOptions as project}
+						<option value={project.slug} selected={project.slug === currentProject}>
+							{project.label}
+						</option>
+					{/each}
+				</select>
+			</div>
+			{#each visibleDocSections as section}
 				<div class="sidebar-section">
 					{#if section.name}
 						<h3 class="section-title">{section.title}</h3>
@@ -96,8 +125,17 @@
 
 <div class="doc-layout">
 	<aside class="doc-sidebar">
+		<div class="form-control-group form-group">
+			<select id="desktop-doc-project" onchange={handleProjectChange} aria-label="Select docs project">
+				{#each projectOptions as project}
+					<option value={project.slug} selected={project.slug === currentProject}>
+						{project.label}
+					</option>
+				{/each}
+			</select>
+		</div>
 		<nav>
-			{#each docSections as section}
+			{#each visibleDocSections as section}
 				<div class="sidebar-section">
 					{#if section.name}
 						<h3 class="section-title">{section.title}</h3>

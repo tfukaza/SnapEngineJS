@@ -520,27 +520,10 @@ object.schedule(() => &#123;
   }
 
   .form-group {
-    margin-bottom: var(--size-16);
-    display: flex;
-    flex-direction: column;
-    gap: var(--size-8);
-
     input[type="text"],
     input[type="number"] {
       height: var(--size-32);
     }
-  }
-
-  .form-control-group select,
-  .form-control-group input[type="number"],
-  .form-control-group input[type="text"],
-  .form-control-group input[type="date"],
-  .form-control-group input[type="datetime-local"],
-  .form-control-group input[type="time"] {
-    font-family: "Geist", sans-serif;
-    font-size: 1rem;
-    border: 1px solid #d5d8dc;
-    box-shadow: none;
   }
 
   .toggle-demo {

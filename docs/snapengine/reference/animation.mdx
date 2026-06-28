@@ -1,0 +1,165 @@
+---
+title: Animation
+order: 8
+project: snapengine
+projectTitle: SnapEngine
+section: reference
+sectionTitle: Reference
+sectionOrder: 2
+---
+
+## Imports
+
+```ts
+import { AnimationObject, SequenceObject } from "@snap-engine/core/animation";
+```
+
+## Basic Usage
+
+```ts
+import { Engine, ElementObject } from "@snap-engine/core";
+import { AnimationObject } from "@snap-engine/core/animation";
+
+const engine = new Engine();
+engine.enableAnimationEngine();
+
+const object = new ElementObject(engine);
+object.element = document.getElementById("box");
+
+if (object.element) {
+  const animation = new AnimationObject(
+    object.element,
+    { transform: ["translateX(0px)", "translateX(200px)"] },
+    { duration: 1000, easing: "ease-out" },
+  );
+
+  object.addAnimation(animation);
+  animation.play();
+}
+```
+
+## AnimationObject
+
+```ts
+const animation = new AnimationObject(target, keyframes, options, engine);
+```
+
+| Parameter | Type | Description |
+|-----------|------|-------------|
+| `target` | `Element \| null` | DOM element to animate. Use null for variable-only animations. |
+| `keyframes` | `Record<string, PropertyIndexedKeyframes[string]>` | CSS properties or custom variables. |
+| `options` | `KeyframeProperty` | Timing, easing, callback, and persistence options. |
+| `engine` | `Engine` | Optional engine used for the shared variable animation target. |
+
+## Keyframes
+
+```ts
+new AnimationObject(element, {
+  opacity: [1, 0.5, 1],
+  transform: ["scale(1)", "scale(1.5)", "scale(1)"],
+});
+```
+
+## Options
+
+```ts
+const animation = new AnimationObject(
+  element,
+  { opacity: [0, 1] },
+  {
+    duration: 400,
+    delay: 100,
+    easing: "ease-out",
+    offset: [0, 1],
+    start: () => console.log("started"),
+    tick: () => console.log("frame"),
+    finish: () => console.log("done"),
+    persist: true,
+  },
+);
+```
+
+| Option | Description |
+|--------|-------------|
+| `duration` | Number or list of segment durations in milliseconds. |
+| `delay` | Delay before playback starts. |
+| `easing` | CSS easing string or list of easing strings. |
+| `offset` | Number or percentage offsets for keyframe positions. |
+| `start` | Called when play starts. |
+| `tick` | Called during engine animation processing. |
+| `finish` | Called when animation finishes. |
+| `persist` | Keeps final styles and pauses instead of canceling on finish. |
+
+## Custom Variables
+
+Prefix a keyframe property with `$` to animate a numeric variable and read it in `tick`.
+
+```ts
+const animation = new AnimationObject(
+  null,
+  { $progress: [0, 100], $scale: [1, 2] },
+  {
+    duration: 2000,
+    tick: (vars) => {
+      object.worldTransform = { x: vars.$progress * 5 };
+      object.schedule(() => object.writeTransform(), {
+        stage: "WRITE_1",
+        queueId: `${object.id}-transform`,
+      });
+    },
+  },
+  engine,
+);
+```
+
+## Playback
+
+```ts
+animation.play();
+animation.pause();
+animation.reverse();
+animation.cancel();
+
+animation.currentTime = 500;
+animation.progress = 0.5;
+```
+
+## SequenceObject
+
+```ts
+const sequence = new SequenceObject();
+
+sequence.add(new AnimationObject(
+  elementOne,
+  { opacity: [0, 1] },
+  { duration: 500 },
+));
+
+sequence.add(new AnimationObject(
+  elementTwo,
+  { transform: ["translateY(-20px)", "translateY(0)"] },
+  { duration: 500, delay: 100 },
+));
+
+sequence.play();
+sequence.pause();
+sequence.reverse();
+```
+
+## Public API
+
+| API | Description |
+|-----|-------------|
+| `new AnimationObject(target, keyframes, options?, engine?)` | Creates an animation wrapper. |
+| `animation.play()` | Starts or resumes playback. |
+| `animation.pause()` | Pauses playback. |
+| `animation.cancel()` | Cancels playback and marks the animation for removal. |
+| `animation.reverse()` | Reverses playback direction. |
+| `animation.currentTime` | Gets or sets playback time. |
+| `animation.progress` | Gets or sets playback progress. |
+| `new SequenceObject()` | Creates a grouped animation controller. |
+| `sequence.add(animation)` | Adds an animation to the sequence. |
+| `sequence.play()` | Plays all animations. |
+| `sequence.pause()` | Pauses all animations. |
+| `sequence.cancel()` | Cancels all animations. |
+| `sequence.reverse()` | Reverses all animations. |

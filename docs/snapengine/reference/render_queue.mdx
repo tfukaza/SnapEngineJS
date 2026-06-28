@@ -1,0 +1,142 @@
+---
+title: Render Queue
+order: 4
+project: snapengine
+projectTitle: SnapEngine
+section: reference
+sectionTitle: Reference
+sectionOrder: 2
+---
+
+## Stages
+
+| Stage | Purpose |
+|-------|---------|
+| `READ_1` | Initial DOM read phase. |
+| `WRITE_1` | First DOM write phase. |
+| `READ_2` | Second DOM read phase. |
+| `WRITE_2` | Second DOM write phase. Animation processing follows this stage. |
+| `READ_3` | Final DOM read phase. |
+| `WRITE_3` | Final DOM write phase. Collision and debug rendering follow this stage. |
+
+## Scheduling Work
+
+```ts
+object.schedule(callback, {
+  stage: "READ_1",
+  queueId: "measure",
+});
+```
+
+If a `queueId` is reused for the same object, the newest queued task replaces the earlier task for that id.
+
+```ts
+object.schedule(() => {
+  const width = object.element?.offsetWidth ?? 0;
+  object.state.width = width;
+}, { stage: "READ_1", queueId: "measure-width" });
+
+object.schedule(() => {
+  object.style = { width: `${object.state.width + 10}px` };
+  object.writeDom();
+}, { stage: "WRITE_1", queueId: "write-width" });
+```
+
+## Writing DOM State
+
+```ts
+object.style = { backgroundColor: "red", padding: "10px" };
+object.classList = ["active", "highlighted"];
+object.dataAttribute = { state: "selected" };
+
+object.schedule(() => {
+  object.writeDom();
+}, { stage: "WRITE_1" });
+```
+
+## Writing Transforms
+
+```ts
+object.worldTransform = { x: 100, y: 200 };
+
+object.schedule(() => {
+  object.writeTransform();
+}, { stage: "WRITE_1" });
+```
+
+Transform writing supports these modes:
+
+| Mode | Description |
+|------|-------------|
+| `direct` | Writes the object's world transform directly. |
+| `relative` | Writes a transform relative to the last read DOM position. |
+| `origin` | Writes relative to `transformOrigin`, or the parent when unset. |
+| `none` | Clears SnapEngine's generated transform. |
+
+```ts
+object.transformMode = "relative";
+object.transformOrigin = parentObject;
+```
+
+## Reading DOM State
+
+```ts
+object.schedule(() => {
+  object.readDom();
+  const props = object.getDomProperty("READ_1");
+
+  console.log(props.screenX, props.screenY, props.width, props.height);
+}, { stage: "READ_1" });
+```
+
+```ts
+object.schedule(() => {
+  object.readDom();
+  object.copyDomProperty("READ_2", "READ_3");
+}, { stage: "READ_2" });
+```
+
+```ts
+object.schedule(() => {
+  object.readDom();
+  object.saveDomProperety("READ_1");
+}, { stage: "READ_1" });
+```
+
+```ts
+object.schedule(() => {
+  object.readDom({ unapplyTransform: true });
+  const props = object.getDomProperty("READ_1");
+
+  console.log(props.x, props.y);
+}, { stage: "READ_1" });
+```
+
+## FLIP Helper
+
+```ts
+object.requestFLIP(
+  () => {
+    object.style = { width: "240px" };
+    object.writeDom();
+  },
+  () => {
+    object.writeTransform();
+  },
+);
+```
+
+## Public API
+
+| API | Description |
+|-----|-------------|
+| `schedule(callback, { stage, queueId? })` | Queues read or write work. |
+| `FrameTask.cancel()` | Cancels a queued task callback. |
+| `readDom(config?, stage?)` | Reads DOM geometry in a read stage. |
+| `readDomRecursive(config?)` | Reads this object and child element objects recursively. |
+| `getDomProperty(stage?)` | Returns a cached DOM property object. |
+| `copyDomProperty(fromStage, toStage)` | Copies cached geometry between read stages. |
+| `saveDomProperety(stage?)` | Saves read geometry into world transform position. |
+| `writeDom()` | Applies pending style, classes, and data attributes. |
+| `writeTransform()` | Applies transform state as CSS transform. |
+| `requestFLIP(writeCallback, transformCallback)` | Queues a two-read/two-write FLIP sequence. |

@@ -1,0 +1,125 @@
+---
+title: Objects
+order: 3
+project: snapengine
+projectTitle: SnapEngine
+section: reference
+sectionTitle: Reference
+sectionOrder: 2
+---
+
+## Imports
+
+```ts
+import { BaseObject, ElementObject } from "@snap-engine/core";
+```
+
+## Base Objects
+
+```ts
+import { Engine, BaseObject } from "@snap-engine/core";
+
+const engine = new Engine();
+const object = new BaseObject(engine);
+```
+
+Objects receive a globally unique `id` when they are created.
+
+## Element Objects
+
+```ts
+import { Engine, ElementObject } from "@snap-engine/core";
+
+const engine = new Engine();
+const object = new ElementObject(engine);
+const element = document.getElementById("box");
+
+if (element) {
+  object.element = element;
+}
+```
+
+## Parent and Child Objects
+
+```ts
+const parent = new BaseObject(engine);
+const child = new BaseObject(engine, parent);
+
+parent.appendChild(child);
+parent.removeChild(child);
+
+child.parent = parent;
+child.parent = null;
+```
+
+## Transforms
+
+```ts
+object.worldTransform = { x: 100, y: 200 };
+object.localTransform = { x: 50, y: 50 };
+
+console.log(object.worldTransform.x, object.worldTransform.y);
+console.log(object.localTransform.x, object.localTransform.y);
+```
+
+When a parent moves, child world transforms update from the preserved local offset.
+
+```ts
+const parent = new BaseObject(engine);
+const child = new BaseObject(engine, parent);
+
+child.localTransform = { x: 50, y: 50 };
+parent.worldTransform = { x: 100, y: 100 };
+
+console.log(child.worldTransform.x, child.worldTransform.y);
+```
+
+## Coordinate Helpers
+
+```ts
+object.worldTransform = { x: 100, y: 200 };
+object.cameraPosition = [50, 100];
+object.screenPosition = [300, 400];
+```
+
+## ElementObject DOM APIs
+
+```ts
+object.style = { backgroundColor: "red", padding: "10px" };
+object.classList = ["active", "highlighted"];
+object.dataAttribute = { role: "node" };
+
+object.schedule(() => {
+  object.writeDom();
+}, { stage: "WRITE_1" });
+```
+
+```ts
+object.schedule(() => {
+  object.readDom();
+  object.saveDomProperety("READ_1");
+}, { stage: "READ_1" });
+```
+
+## Public API
+
+| API | Description |
+|-----|-------------|
+| `new BaseObject(engine, parent?)` | Creates an engine object. |
+| `new ElementObject(engine, parent?)` | Creates an object backed by a DOM element. |
+| `object.id` | Unique object id. |
+| `object.parent` | Parent object or null. |
+| `object.children` | Child objects. |
+| `object.worldTransform` | World transform state. |
+| `object.localTransform` | Local transform state. |
+| `object.cameraPosition` | Position converted through the engine camera. |
+| `object.screenPosition` | Position converted to viewport coordinates. |
+| `object.schedule(callback, config)` | Queues frame work. |
+| `object.destroy()` | Removes engine registrations and related resources. |
+| `elementObject.element` | DOM element assigned to an element object. |
+| `elementObject.readDom(config?, stage?)` | Reads and caches DOM geometry. |
+| `elementObject.getDomProperty(stage?)` | Returns cached DOM geometry. |
+| `elementObject.copyDomProperty(fromStage, toStage)` | Copies cached DOM geometry between read stages. |
+| `elementObject.saveDomProperety(stage?)` | Saves cached DOM position into the object transform. |
+| `elementObject.writeDom()` | Applies style, class, and data attribute state. |
+| `elementObject.writeTransform()` | Applies transform state to the DOM element. |

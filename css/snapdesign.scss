@@ -12,6 +12,8 @@ body {
   margin: 0;
   padding: 0;
   background-color: #ffffff;
+  color: var(--color-text);
+  font-family: "Geist", sans-serif;
 }
 
 :root {
@@ -689,6 +691,29 @@ label:has(input[type="checkbox"].toggle) {
   }
 }
 
+.form-group {
+  margin-bottom: var(--size-16);
+  display: flex;
+  flex-direction: column;
+  gap: var(--size-8);
+
+  select {
+    width: 100%;
+  }
+}
+
+.form-control-group select,
+.form-control-group input[type="number"],
+.form-control-group input[type="text"],
+.form-control-group input[type="date"],
+.form-control-group input[type="datetime-local"],
+.form-control-group input[type="time"] {
+  font-family: "Geist", sans-serif;
+  font-size: 1rem;
+  border: 1px solid #d5d8dc;
+  box-shadow: none;
+}
+
 input[type="range"] {
   --specular-angle: 130deg;
 
@@ -761,6 +786,7 @@ button,
   color: var(--color-text);
 
   cursor: pointer;
+  font-family: inherit;
   font-size: 1rem;
   position: relative;
 
@@ -997,7 +1023,7 @@ select,
 }
 
 select {
-  font-family: "IBM Plex Mono", monospace;
+  font-family: "Geist", sans-serif;
   font-size: 1rem;
   color: var(--color-text);
   user-select: none;

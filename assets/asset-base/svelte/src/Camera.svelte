@@ -39,6 +39,7 @@
     width: 100%;
     height: 100%;
     background-color: #fff;
+    transform-origin: 0 0;
     user-select: none;
   }
 </style>

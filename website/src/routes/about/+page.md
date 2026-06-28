@@ -1,11 +1,7 @@
 <section class="about-section">
   <div class="about-container">
 
-# SnapEngine - An Engine for Building Interactive UI
-
----
-
-## Why SnapEngine?
+## Background
 It may surprise you that, even today, implementing interactive UI is still very difficult.
 <br>
 

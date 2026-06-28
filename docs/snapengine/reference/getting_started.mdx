@@ -1,12 +1,12 @@
 ---
 title: Getting Started
-order: 0
-sectionTitle: SnapEngine
-sectionOrder: 1
+order: 1
+project: snapengine
+projectTitle: SnapEngine
+section: reference
+sectionTitle: Reference
+sectionOrder: 2
 ---
-
-> [!NOTE]
-> SnapEngine is currently in alpha. APIs may change between versions.
 
 ## Installation
 
@@ -31,7 +31,6 @@ Additional modules are available as subpath imports:
 
 ```ts
 import { DebugRenderer } from "@snap-engine/core/debug";
-import { Animation } from "@snap-engine/core/animation";
-import { CollisionSystem } from "@snap-engine/core/collision";
+import { AnimationObject, SequenceObject } from "@snap-engine/core/animation";
+import { CollisionEngine, RectCollider, CircleCollider } from "@snap-engine/core/collision";
 ```
-

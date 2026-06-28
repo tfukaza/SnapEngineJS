@@ -1,0 +1,17 @@
+---
+title: Collision
+order: 6
+project: snapengine
+projectTitle: SnapEngine
+section: introduction
+sectionTitle: Introduction
+sectionOrder: 1
+---
+
+SnapEngine can attach collision shapes to objects and test them after the render stages have completed. This keeps collision results aligned with the latest object transforms.
+
+The collision system supports rectangular, circular, and point shapes. Each collider follows its parent object, so collision geometry can stay connected to the same hierarchy and coordinate model as the rest of the scene.
+
+Collision callbacks distinguish the start of contact, continuing overlap, and the end of contact. This lets interactions respond once when contact begins, every frame while contact continues, or when two objects separate.
+
+For collider constructors, event callbacks, collision engine setup, and examples, see [Collision reference](/docs/snapengine/reference/collision).
