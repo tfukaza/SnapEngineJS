@@ -1,7 +1,6 @@
 <script lang="ts">
   import { onDestroy, tick } from "svelte";
   import { Engine } from "@snap-engine/asset-base-svelte";
-  import { ElementObject } from "@snapline/object";
   import { AnimationObject } from "@snapline/animation";
   import type { Engine as EngineType } from "@snapline/index";
   import { debugState } from "$lib/landing/debugState.svelte";
@@ -125,9 +124,7 @@
   let optimize = $state(false);
   let engine: EngineType | null = $state(null);
   let visualRef: HTMLDivElement | null = $state(null);
-  let timelineObject: ElementObject | null = null;
-  let operationObjects = new Map<string, ElementObject>();
-  let operationMotion = new Map<string, { dx: number; dy: number; isEntering: boolean }>();
+  let operationAnimations: Array<InstanceType<typeof AnimationObject>> = [];
   let pendingOperationRects: Map<string, OperationRect> | null = null;
   let runKey = "";
 
@@ -151,9 +148,6 @@
 
   onDestroy(() => {
     stopTimeline();
-    destroyOperationObjects();
-    timelineObject?.destroy();
-    timelineObject = null;
   });
 
   async function toggleOptimize() {
@@ -168,61 +162,28 @@
     }
 
     stopTimeline();
-    destroyOperationObjects();
-
-    if (!timelineObject) {
-      timelineObject = new ElementObject(engine, null);
-      timelineObject.element = visualRef;
-    }
 
     const previousRects = pendingOperationRects;
     pendingOperationRects = null;
-
-    for (const element of visualRef.querySelectorAll<HTMLElement>(
-      "[data-operation-id]",
-    )) {
-      const id = element.dataset.operationId;
-      if (!id) {
-        continue;
-      }
-
-      const object = new ElementObject(engine, null);
-      object.element = element;
-      object.transformMode = "direct";
-      operationObjects.set(id, object);
-
-      const currentRect = element.getBoundingClientRect();
-      const previousRect = previousRects?.get(id);
-      operationMotion.set(id, {
-        dx: previousRect ? previousRect.x - currentRect.x : 0,
-        dy: previousRect ? previousRect.y - currentRect.y : 0,
-        isEntering: !previousRect,
-      });
-    }
 
     animateOperationObjects(previousRects);
   }
 
   function stopTimeline() {
-    timelineObject?.cancelAnimations();
-  }
-
-  function destroyOperationObjects() {
-    for (const object of operationObjects.values()) {
-      (object as unknown as { _dom: { element: HTMLElement | null } })._dom.element =
-        null;
-      object.destroy();
+    for (const animation of operationAnimations) {
+      animation.cancel();
     }
-    operationObjects = new Map();
+    operationAnimations = [];
   }
 
   function animateOperationObjects(
     previousRects: Map<string, OperationRect> | null,
   ) {
     operations.forEach((operation) => {
-      const object = operationObjects.get(operation.id);
-      const element = object?.element;
-      if (!object || !element) {
+      const element = visualRef?.querySelector<HTMLElement>(
+        `[data-operation-id="${operation.id}"]`,
+      );
+      if (!element) {
         return;
       }
 
@@ -262,7 +223,7 @@
         },
       );
 
-      object.addAnimation(animation);
+      operationAnimations.push(animation);
       animation.play();
     });
   }
@@ -295,8 +256,7 @@
     <div class="dom-optimization-copy">
       <h3>
         <span class="dom-title-line">DOM</span>
-        <span class="dom-title-line dom-title-desktop-line">Opti-</span>
-        <span class="dom-title-line dom-title-desktop-line">mization</span>
+        <span class="dom-title-line dom-title-desktop-line">Optimization</span>
         <span class="dom-title-line dom-title-mobile-line">Optimization</span>
       </h3>
       <p>Batch DOM work to avoid layout thrash.</p>
@@ -321,8 +281,7 @@
           tabindex="0"
         >
           <span class={`optimize-label optimize-label-left ${!optimize ? "is-active" : ""}`}>
-            <span class="optimize-label-text">unoptimized</span>
-            <span class="optimize-label-icon material-symbols-outlined" aria-hidden="true">traffic_jam</span>
+            <span class="optimize-label-icon material-symbols-outlined" aria-label="Unoptimized">traffic_jam</span>
           </span>
           <div
             class="mini-toggle-switch slot"
@@ -331,8 +290,7 @@
             <div class="mini-toggle-knob disk"></div>
           </div>
           <span class={`optimize-label optimize-label-right ${optimize ? "is-active" : ""}`}>
-            <span class="optimize-label-text">optimized</span>
-            <span class="optimize-label-icon material-symbols-outlined" aria-hidden="true">bolt</span>
+            <span class="optimize-label-icon material-symbols-outlined" aria-label="Optimized">bolt</span>
           </span>
         </div>
 
@@ -445,7 +403,6 @@
 
   .dom-optimization-copy p {
     margin: var(--size-12) 0 0;
-    font-family: "Geist", sans-serif;
     font-size: 0.92rem;
     line-height: 1.35;
   }
@@ -483,7 +440,7 @@
   }
 
   .optimize-label-icon {
-    display: none;
+    display: inline-block;
     font-family: "Material Symbols Outlined";
     font-size: 1.15rem;
     font-style: normal;
@@ -503,16 +460,6 @@
   .optimize-label.is-active .optimize-label-icon {
     color: var(--color-primary);
     filter: drop-shadow(0 0 6px rgba(255, 117, 58, 0.58));
-  }
-
-  @container dom-optimization-visual (max-width: 250px) {
-    .optimize-label-text {
-      display: none;
-    }
-
-    .optimize-label-icon {
-      display: inline-block;
-    }
   }
 
   .optimize-label-left {
