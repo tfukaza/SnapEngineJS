@@ -1,7 +1,22 @@
 import { defineConfig } from "vite";
+import path from "path";
+
+const root = path.resolve(__dirname, "../..");
 
 export default defineConfig(({ command, mode }) => {
   return {
+    resolve: {
+      alias: {
+        "@snap-engine/core/animation": path.resolve(root, "src/animation.ts"),
+        "@snap-engine/core/collision": path.resolve(root, "src/collision.ts"),
+        "@snap-engine/core/debug": path.resolve(root, "src/debug.ts"),
+        "@snap-engine/core": path.resolve(root, "src/index.ts"),
+        "@snap-engine/snapsort": path.resolve(
+          root,
+          "assets/snapsort/core/src/index.ts",
+        ),
+      },
+    },
     server: {
       port: 3001,
       open: false,

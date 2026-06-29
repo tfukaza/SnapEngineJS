@@ -1,5 +1,10 @@
 import { BaseObject, ElementObject, cloneDomProperty } from "@snap-engine/core";
-import type { AnimationConfig, ContainerBase } from "./container";
+import type {
+  AnimationConfig,
+  ContainerBase,
+  GhostCreateEvent,
+  GhostUpdateEvent,
+} from "./container";
 import type {
   dragStartProp,
   dragProp,
@@ -32,12 +37,10 @@ interface FlipSnapshot {
 }
 
 export type ItemId = string;
-
 export interface ItemMetadata extends Record<string, unknown> {
   itemId?: ItemId;
 }
-
-type ItemBaseConstructor = new (
+export type ItemBaseConstructor = new (
   engine: any,
   parent: BaseObject | null,
   isGhost?: boolean,
@@ -46,8 +49,8 @@ type ItemBaseConstructor = new (
 export class ItemBase extends ElementObject {
   #rootContainer: ContainerBase | null = null;
   #metadata: ItemMetadata = {};
-  #locked: boolean = false; // Locked items cannot be dragged
-  noDrop: boolean = false; // Containers marked as noDrop cannot be a drop target
+  #locked: boolean = false;
+  noDrop: boolean = false;
 
   #dragOffsetX: number = 0;
   #dragOffsetY: number = 0;
@@ -55,11 +58,12 @@ export class ItemBase extends ElementObject {
   #dragSnapshotOrderedList: ItemBase[] = [];
   #dragPositionContextSnapshot: Map<HTMLElement, string> = new Map();
 
-  #itemOrderedList: ItemBase[] = []; // Wrapper around children to maintain their order in the DOM
+  #itemOrderedList: ItemBase[] = [];
 
   #isGhost: boolean = false;
+  #frameworkManagedGhostElement: boolean = false;
   #depth: number = 0;
-  ghostItem: ItemBase | null = null; // The ghost item instance, so we can remove it later
+  ghostItem: ItemBase | null = null;
   #pendingGhostTarget: {
     ghostItem: ItemBase;
     container: ContainerBase;
@@ -88,8 +92,30 @@ export class ItemBase extends ElementObject {
     return false;
   }
 
-  protected createGhostItem(_original: ItemBase): ItemBase | null {
+  protected get ghostItemConstructor(): ItemBaseConstructor | null {
     return null;
+  }
+
+  protected createGhostItem(event: GhostUpdateEvent): ItemBase | null {
+    const itemConstructor = this.ghostItemConstructor;
+    if (!itemConstructor) return null;
+
+    const ghostItem = new itemConstructor(this.engine, null, true);
+    ghostItem.metadata = { ...this.metadata };
+    const createEvent: GhostCreateEvent = {
+      original: this,
+      originalMetadata: this.metadata,
+      ghostItem,
+    };
+    const ghostElement =
+      event.container?.callbacks?.createItemGhost?.(createEvent);
+    if (ghostElement instanceof HTMLElement) {
+      ghostItem.element = ghostElement;
+      ghostItem.#frameworkManagedGhostElement = false;
+    } else {
+      ghostItem.#frameworkManagedGhostElement = true;
+    }
+    return ghostItem;
   }
 
   protected resolveDropTarget(
@@ -97,25 +123,6 @@ export class ItemBase extends ElementObject {
     _root: ItemBase,
   ): DropCandidate | null {
     return null;
-  }
-
-  protected createDefaultGhostItem(
-    itemConstructor: ItemBaseConstructor,
-    original: ItemBase,
-  ): ItemBase {
-    const ghostElement = document.createElement("div");
-    ghostElement.id = "spacer";
-
-    const origProp = original.dragSnapshot ?? original.currentDomProperty;
-    ghostElement.style.width = origProp.width + "px";
-    ghostElement.style.height = origProp.height + "px";
-    ghostElement.style.margin = `${origProp.margin.top}px ${origProp.margin.right}px ${origProp.margin.bottom}px ${origProp.margin.left}px`;
-    ghostElement.style.boxSizing = "border-box";
-    ghostElement.classList.add("ghost");
-
-    const ghostItem = new itemConstructor(this.engine, null, true);
-    ghostItem.element = ghostElement;
-    return ghostItem;
   }
 
   addItem(item: ItemBase) {
@@ -233,13 +240,13 @@ export class ItemBase extends ElementObject {
     this.#locked = value;
   }
 
-  getIndexAndContainer(): { index: number; container: ItemBase | null } {
+  getIndexAndContainer(): { index: number; container: ContainerBase | null } {
     if (!this.parent) {
       DEBUG_LOGS &&
         debugLog(`[getIndexAndContainer] ${this.id} has no parent → index=-1`);
       return { index: -1, container: null };
     }
-    const parentContainer = this.parent as unknown as ItemBase;
+    const parentContainer = this.parent as unknown as ContainerBase;
     const idx = parentContainer.#itemOrderedList.indexOf(this);
     DEBUG_LOGS &&
       debugLog(
@@ -270,6 +277,14 @@ export class ItemBase extends ElementObject {
 
   get rootContainer(): ContainerBase | null {
     return this.#rootContainer;
+  }
+
+  get pendingGhostTarget() {
+    return this.#pendingGhostTarget;
+  }
+
+  set pendingGhostTarget(value: typeof this.#pendingGhostTarget) {
+    this.#pendingGhostTarget = value;
   }
 
   setRootContainer(root: ContainerBase | null) {
@@ -383,7 +398,7 @@ export class ItemBase extends ElementObject {
     config: { unapplyTransform?: boolean; saveWorldPosition?: boolean } = {},
   ) {
     this.schedule(
-      () => {
+      async () => {
         this.#readDomTree(config);
       },
       { stage, queueId },
@@ -501,7 +516,9 @@ export class ItemBase extends ElementObject {
     return config.animation?.reorder ?? null;
   }
 
-  #dropAnimationConfig(container: ContainerBase | null): AnimationConfig | null {
+  #dropAnimationConfig(
+    container: ContainerBase | null,
+  ): AnimationConfig | null {
     if (!container) return null;
     const config = container.configuration;
     if (config.animation === null) return null;
@@ -518,8 +535,8 @@ export class ItemBase extends ElementObject {
    * @param container Container whose callback should run after mutation.
    * @returns A promise that resolves once the caller's DOM flush hook completes.
    */
-  async #afterDomMutation(container: ContainerBase | null) {
-    await container?.callbacks?.afterDomMutation?.();
+  async #awaitMutation(container: ContainerBase | null) {
+    await container?.callbacks?.awaitMutation?.();
   }
 
   /**
@@ -697,25 +714,23 @@ export class ItemBase extends ElementObject {
   }
 
   #playDropAnimation(
-    first: DomProperty | null,
-    last: DomProperty | null,
+    first: DOMRect | null,
+    last: DOMRect | null,
+    targetElement: HTMLElement | null,
     animationConfig: AnimationConfig | null,
+    animationOwner: ItemBase,
   ) {
-    if (!this.element || !first || !last || !animationConfig) return;
+    if (!targetElement || !first || !last || !animationConfig) return;
 
-    const dx = first.screenX - last.screenX;
-    const dy = first.screenY - last.screenY;
-    if (
-      Math.abs(dx) < MIN_FLIP_DISTANCE &&
-      Math.abs(dy) < MIN_FLIP_DISTANCE
-    ) {
+    const dx = first.x - last.x;
+    const dy = first.y - last.y;
+    if (Math.abs(dx) < MIN_FLIP_DISTANCE && Math.abs(dy) < MIN_FLIP_DISTANCE) {
       return;
     }
 
     this.cancelAnimations();
     const duration = animationConfig.duration ?? 160;
     const easing = animationConfig.timing_function ?? "ease-out";
-    const targetElement = this.element;
     const transformAt = (t: number) =>
       `translate3d(${dx * (1 - t)}px, ${dy * (1 - t)}px, 0px)`;
     const animation = new AnimationObject(
@@ -736,7 +751,9 @@ export class ItemBase extends ElementObject {
     );
 
     targetElement.style.transform = transformAt(0);
-    this.addAnimation(animation);
+    (targetElement === this.element ? this : animationOwner).addAnimation(
+      animation,
+    );
     animation.play();
   }
 
@@ -748,7 +765,7 @@ export class ItemBase extends ElementObject {
    * @param mutate DOM mutation to perform between first and last measurements.
    * @returns Nothing.
    */
-  #withReorderAnimation(
+  withReorderAnimation(
     container: ContainerBase | null,
     excludedItem: ItemBase | null,
     mutate: () => void,
@@ -783,7 +800,7 @@ export class ItemBase extends ElementObject {
           item.element!.style.transform = "";
         }
         mutate();
-        await this.#afterDomMutation(container);
+        await this.#awaitMutation(container);
       },
       { stage: "WRITE_2", queueId: `${queuePrefix}-mutate` },
     );
@@ -844,10 +861,6 @@ export class ItemBase extends ElementObject {
   /**
    * Move the active dragged DOM node under the current target container.
    *
-   * The item intentionally stays out of the destination container's ordered
-   * list until drop; the ghost owns layout space while this absolute element
-   * follows the closest useful positioning parent.
-   *
    * @param container Container that currently owns the ghost/drop target.
    * @returns Nothing.
    */
@@ -856,9 +869,9 @@ export class ItemBase extends ElementObject {
     if (!this.element || !containerItem.element) return;
 
     this.#setTemporaryPosition(containerItem.element, "relative");
-    if (this.element.parentElement !== containerItem.element) {
-      containerItem.element.appendChild(this.element);
-    }
+    // if (this.element.parentElement !== containerItem.element) {
+    //   // containerItem.element.appendChild(this.element);
+    // }
     this.transformMode = "relative";
     this.transformOrigin = null;
     this.style = {
@@ -868,7 +881,7 @@ export class ItemBase extends ElementObject {
     };
     this.writeDom();
     this.schedule(
-      () => {
+      async () => {
         this.readDom({ unapplyTransform: true });
       },
       { stage: "READ_2", queueId: `dragged-read-${this.id}` },
@@ -889,11 +902,7 @@ export class ItemBase extends ElementObject {
    * @param index Destination index in the destination container.
    * @returns Nothing.
    */
-  moveItemToContainer(
-    container: ContainerBase,
-    item: ItemBase,
-    index: number,
-  ) {
+  moveItemToContainer(container: ContainerBase, item: ItemBase, index: number) {
     const move = () => {
       const sourceContainer = item.parent as unknown as ItemBase | null;
       const sourceIndex = sourceContainer
@@ -931,7 +940,7 @@ export class ItemBase extends ElementObject {
           index -= 1;
         }
       }
-      this.#detachItemFromContainer(item.container, item);
+      this.detachItemFromContainer(item.container, item);
       this.insertItemAt(container, item, index);
       DEBUG_LOGS &&
         debugLog(
@@ -948,7 +957,7 @@ export class ItemBase extends ElementObject {
       return;
     }
 
-    this.#withReorderAnimation(container, null, move);
+    this.withReorderAnimation(container, null, move);
   }
 
   #attachItemToContainer(
@@ -969,11 +978,7 @@ export class ItemBase extends ElementObject {
     }
   }
 
-  #insertItemElement(
-    container: ContainerBase,
-    item: ItemBase,
-    index: number,
-  ) {
+  #insertItemElement(container: ContainerBase, item: ItemBase, index: number) {
     const itemAfterIndex =
       index >= container.#itemOrderedList.length - 1
         ? null
@@ -983,9 +988,9 @@ export class ItemBase extends ElementObject {
         `[insertItemAt]   DOM insertBefore: item.element=${item.element?.id ?? "null"}, before=${itemAfterIndex ? (itemAfterIndex as any).element?.id ?? itemAfterIndex.id : "null (append)"}`,
       );
 
-    const onDomInsert = item.isGhost ? null : container.callbacks?.onDomInsert;
-    if (onDomInsert) {
-      onDomInsert({
+    const onInsert = container.callbacks?.onItemInsert;
+    if (onInsert) {
+      onInsert({
         item,
         itemMetadata: item.metadata,
         container,
@@ -994,9 +999,11 @@ export class ItemBase extends ElementObject {
         beforeElement: itemAfterIndex,
       });
       return;
+    } else {
+      throw new Error("Container callback onItemInsert is not defined");
     }
 
-    container.element?.insertBefore(item.element!, itemAfterIndex);
+    // container.element?.insertBefore(item.element!, itemAfterIndex);
   }
 
   /**
@@ -1026,7 +1033,7 @@ export class ItemBase extends ElementObject {
     this.#insertItemElement(container, item, index);
   }
 
-  #detachItemFromContainer(container: ContainerBase, item: ItemBase) {
+  detachItemFromContainer(container: ContainerBase, item: ItemBase) {
     container.removeChild(item);
     container.#itemOrderedList = container.#itemOrderedList.filter(
       (i) => i !== item,
@@ -1034,18 +1041,23 @@ export class ItemBase extends ElementObject {
   }
 
   #removeItemElement(container: ContainerBase, item: ItemBase) {
-    const onDomRemove = item.isGhost ? null : container.callbacks?.onDomRemove;
-    if (onDomRemove) {
-      onDomRemove({
+    // const onRemove = item.isGhost
+    //   ? container.callbacks?.onGhostRemove
+    //   : container.callbacks?.onItemRemove;
+    const onRemove = container.callbacks?.onItemRemove;
+    if (onRemove) {
+      onRemove({
         item,
         itemMetadata: item.metadata,
         container,
         containerMetadata: container.metadata,
       });
       return;
+    } else {
+      throw new Error("Container callback onItemRemove is not defined");
     }
 
-    item.element?.remove();
+    // item.element?.remove();
   }
 
   /**
@@ -1064,7 +1076,7 @@ export class ItemBase extends ElementObject {
       debugLog(
         `[removeItemFrom]   BEFORE orderedList=[${container.#itemOrderedList.map((i) => i.id).join(", ")}]`,
       );
-    this.#detachItemFromContainer(container, item);
+    this.detachItemFromContainer(container, item);
     DEBUG_LOGS &&
       debugLog(
         `[removeItemFrom]   AFTER orderedList=[${container.#itemOrderedList.map((i) => i.id).join(", ")}]`,
@@ -1133,41 +1145,31 @@ export class ItemBase extends ElementObject {
    * @param index The index at which to place the ghost element.
    * @returns Nothing.
    */
-  #updateGhostElement(
-    original: ItemBase,
-    container: ContainerBase | null,
-    index: number,
-  ) {
-    const root = (this.#rootContainer as unknown as ItemBase | null) ?? this;
+  async #updateGhostElement(event: GhostUpdateEvent) {
+    const { original, container, index } = event;
+    const root = original.#rootContainer as unknown as ItemBase | null;
+    if (!root) {
+      throw new Error("Root container not found");
+    }
     let ghostItem = root.ghostItem;
-    DEBUG_LOGS &&
-      debugLog(
-        `[updateGhostElement] original=${original.id} container=${container ? (container as unknown as ItemBase).id : "null"} index=${index} existingGhost=${ghostItem ? ghostItem.id : "none"}`,
-      );
 
     if (container === null) {
       root.#pendingGhostTarget = null;
       if (ghostItem) {
-        DEBUG_LOGS &&
-          debugLog(
-            `[updateGhostElement] removing ghost ${ghostItem.id} from ${(ghostItem.parent as ItemBase | null)?.id ?? "null"}`,
-          );
-        const ghostContainer = ghostItem.parent as unknown as ContainerBase | null;
+        const ghostContainer =
+          ghostItem.parent as unknown as ContainerBase | null;
         if (ghostContainer) {
-          // Remove the ghost item and element from its current container.
-          this.removeItemFrom(ghostContainer, ghostItem);
+          original.removeItemFrom(ghostContainer, ghostItem);
+          await original.#awaitMutation(ghostContainer);
         }
         ghostItem.destroy();
         root.ghostItem = null;
       }
       return;
     }
-    // If ghost element already exists, use that instead of creating a new one.
-    // Otherwise, create a new ghost element
-    if (!ghostItem) {
-      DEBUG_LOGS && debugLog(`[updateGhostElement] creating new ghost element`);
 
-      ghostItem = this.createGhostItem(original);
+    if (!ghostItem) {
+      ghostItem = original.createGhostItem(event);
       if (!ghostItem) return;
     }
     root.ghostItem = ghostItem;
@@ -1180,49 +1182,24 @@ export class ItemBase extends ElementObject {
         pendingTarget?.ghostItem !== ghostItem ||
         pendingTarget.container !== container ||
         pendingTarget.index !== index ||
-        !ghostItem.element ||
+        (!ghostItem.element && !ghostItem.#frameworkManagedGhostElement) ||
         !container.element
       ) {
-        DEBUG_LOGS &&
-          debugLog(`[updateGhostElement] skipping stale ghost move`);
         return;
       }
-      // Remove ghost from its current container before re-inserting at the new position
+
       if (ghostItem.parent) {
-        DEBUG_LOGS &&
-          debugLog(
-            `[updateGhostElement] removing ghost from current container=${(ghostItem.container as unknown as ItemBase)?.id}`,
-          );
-        this.#detachItemFromContainer(ghostItem.container, ghostItem);
-      } else {
-        DEBUG_LOGS &&
-          debugLog(`[updateGhostElement] ghost has no parent, skipping remove`);
+        container.detachItemFromContainer(ghostItem.container, ghostItem);
       }
-      // Insert the ghost item at the new position in the DOM and item list.
-      // This also sets the ghost item's container to the new container.
-      DEBUG_LOGS &&
-        debugLog(
-          `[updateGhostElement] inserting ghost at container=${(container as unknown as ItemBase).id} index=${index}`,
-        );
-      this.insertItemAt(container, ghostItem, index);
+      container.insertItemAt(container, ghostItem, index);
     };
 
     if (ghostItem.parent) {
-      this.#withReorderAnimation(container, original, moveGhost);
+      container.withReorderAnimation(container, original, moveGhost);
     } else {
       moveGhost();
+      await original.#awaitMutation(container);
     }
-
-    // let item =
-    //   itemIndex > this.#itemList.length - 1 ? null : this.#itemList[itemIndex];
-
-    // if (!this.element) {
-    //   return;
-    // }
-    // this.element.insertBefore(tmpDomElement, item ? item.element : null);
-    // this.#ghostDomElement = tmpDomElement;
-    // this.#spacerIndex = itemIndex;
-    // this.reorderItemList();
   }
 
   /**
@@ -1231,7 +1208,7 @@ export class ItemBase extends ElementObject {
    * @param item Item currently being dragged.
    * @returns Nothing.
    */
-  updateDropTarget(item: ItemBase) {
+  async updateDropTarget(item: ItemBase) {
     const root = (this.#rootContainer as unknown as ItemBase) ?? this;
     // Defensive guard for a drag-start/drag race: the deeper fix should live in
     // the engine scheduler as built-in debounce/coalescing support for input
@@ -1253,12 +1230,13 @@ export class ItemBase extends ElementObject {
       target?.container != null
         ? this.#liveIndexFromSnapshotIndex(target.container, target.index, item)
         : -1;
+    const targetContainer = target?.container as ContainerBase;
     DEBUG_LOGS &&
       debugLog(
         `[updateDropTarget] item=${item.id} target=${target ? `${target.container.id}[snapshot:${target.index} live:${targetIndex}]` : "null"} ghostPos=${ghostSource?.container ? `${(ghostSource.container as unknown as ItemBase).id}[${ghostSource.index}]` : "null"}`,
       );
-    if (target?.container && ghostSource?.container) {
-      const sameContainer = target.container === ghostSource.container;
+    if (targetContainer && ghostSource?.container) {
+      const sameContainer = targetContainer === ghostSource.container;
       const sameIndex = targetIndex === ghostSource.index;
       DEBUG_LOGS &&
         debugLog(
@@ -1267,30 +1245,30 @@ export class ItemBase extends ElementObject {
       if (!sameContainer || !sameIndex) {
         DEBUG_LOGS &&
           debugLog(
-            `[updateDropTarget]   >>> MOVING ghost to ${target.container.id}[${targetIndex}]`,
+            `[updateDropTarget]   >>> MOVING ghost to ${targetContainer.id}[${targetIndex}]`,
           );
-        this.#updateGhostElement(
-          item,
-          target.container as unknown as ContainerBase,
-          targetIndex,
-        );
+        await item.#updateGhostElement({
+          original: item,
+          container: targetContainer as unknown as ContainerBase,
+          index: targetIndex,
+        });
         this.#moveDraggedElementToContainer(
-          target.container as unknown as ContainerBase,
+          targetContainer as unknown as ContainerBase,
         );
       } else {
         DEBUG_LOGS &&
           debugLog(`[updateDropTarget]   SKIP: ghost already at target`);
         this.#moveDraggedElementToContainer(
-          target.container as unknown as ContainerBase,
+          targetContainer as unknown as ContainerBase,
         );
       }
     } else if (target?.container) {
       DEBUG_LOGS && debugLog(`[updateDropTarget]   >>> PLACING initial ghost`);
-      this.#updateGhostElement(
-        item,
-        target.container as unknown as ContainerBase,
-        targetIndex,
-      );
+      await item.#updateGhostElement({
+        original: item,
+        container: target.container as unknown as ContainerBase,
+        index: targetIndex,
+      });
       this.#moveDraggedElementToContainer(
         target.container as unknown as ContainerBase,
       );
@@ -1330,20 +1308,20 @@ export class ItemBase extends ElementObject {
     );
 
     this.schedule(
-      () => {
+      async () => {
         DEBUG_LOGS &&
           debugLog(
             `[dragStart WRITE_1 callback] placing ghost at container=${currentContainer?.id ?? "null"} index=${currentIndex}`,
           );
 
-        this.#updateGhostElement(
-          this,
-          currentContainer as unknown as ContainerBase,
-          currentIndex,
-        );
+        await this.#updateGhostElement({
+          original: this,
+          container: currentContainer as unknown as ContainerBase,
+          index: currentIndex,
+        });
         // Remove the dragged item from its container's orderedList and engine children.
         // The ghost now takes its place in the layout. The DOM element is kept (hoisted to root below).
-        this.#detachItemFromContainer(
+        this.detachItemFromContainer(
           currentContainer as unknown as ContainerBase,
           this,
         );
@@ -1386,7 +1364,7 @@ export class ItemBase extends ElementObject {
 
   drag(prop: dragProp) {
     this.schedule(
-      () => {
+      async () => {
         // Move the item according to mouse position
         this.worldTransform = {
           x: prop.position.x - this.#dragOffsetX,
@@ -1394,7 +1372,7 @@ export class ItemBase extends ElementObject {
         };
         this.writeTransform();
 
-        this.updateDropTarget(this);
+        await this.updateDropTarget(this);
       },
       { stage: "WRITE_1", queueId: `drag-${this.id}` },
     );
@@ -1407,15 +1385,21 @@ export class ItemBase extends ElementObject {
 
   dragEnd(_: dragEndProp) {
     const root = (this.#rootContainer as unknown as ItemBase) ?? this;
-    let dropFirst: DomProperty | null = null;
-    let dropLast: DomProperty | null = null;
+    const dropKey = this.#itemID(this);
+    let dropFirst: DOMRect | null = null;
+    let dropLast: DOMRect | null = null;
+    let dropTargetElement: HTMLElement | null = null;
     let dropAnimationConfig: AnimationConfig | null = null;
 
     this.schedule(
       () => {
         if (!this.element) return;
-        dropFirst = cloneDomProperty(
-          this.readDom({ unapplyTransform: false }, "READ_1"),
+        const first = this.readDom({ unapplyTransform: false }, "READ_1");
+        dropFirst = new DOMRect(
+          first.screenX,
+          first.screenY,
+          first.width,
+          first.height,
         );
       },
       { stage: "READ_1", queueId: `drag-end-read-first-${this.id}` },
@@ -1462,7 +1446,11 @@ export class ItemBase extends ElementObject {
         }
 
         // Remove the ghost first
-        this.#updateGhostElement(this, null, -1);
+        await this.#updateGhostElement({
+          original: this,
+          container: null,
+          index: -1,
+        });
 
         // Re-insert the dragged item at the ghost's former position
         if (ghostPos?.container) {
@@ -1470,7 +1458,7 @@ export class ItemBase extends ElementObject {
             ghostPos.container as unknown as ContainerBase;
           dropAnimationConfig = this.#dropAnimationConfig(destinationContainer);
           this.insertItemAt(destinationContainer, this, ghostPos.index);
-          await this.#afterDomMutation(destinationContainer);
+          await this.#awaitMutation(destinationContainer);
           DEBUG_LOGS &&
             debugLog(
               `[dragEnd] re-inserted item at ${(ghostPos.container as unknown as ItemBase).id}[${ghostPos.index}]`,
@@ -1484,19 +1472,29 @@ export class ItemBase extends ElementObject {
       { stage: "WRITE_1", queueId: `drag-end-${this.id}` },
     );
 
-    this.schedule(
+    root.schedule(
       () => {
-        if (!this.element) return;
-        dropLast = cloneDomProperty(
-          this.readDom({ unapplyTransform: false }, "READ_2"),
-        );
+        dropTargetElement =
+          root.#findFlipElement(root, dropKey) ??
+          (this.element?.isConnected ? this.element : null);
+        if (!dropTargetElement) return;
+        if (dropTargetElement === this.element) {
+          this.readDom({ unapplyTransform: false }, "READ_2");
+        }
+        dropLast = dropTargetElement.getBoundingClientRect();
       },
       { stage: "READ_2", queueId: `drag-end-read-last-${this.id}` },
     );
 
-    this.schedule(
+    root.schedule(
       () => {
-        this.#playDropAnimation(dropFirst, dropLast, dropAnimationConfig);
+        this.#playDropAnimation(
+          dropFirst,
+          dropLast,
+          dropTargetElement,
+          dropAnimationConfig,
+          root,
+        );
       },
       { stage: "WRITE_2", queueId: `drag-end-play-${this.id}` },
     );
@@ -1504,7 +1502,7 @@ export class ItemBase extends ElementObject {
 
   destroy() {
     if (this.parent) {
-      this.#detachItemFromContainer(
+      this.detachItemFromContainer(
         this.parent as unknown as ContainerBase,
         this,
       );
@@ -1518,8 +1516,8 @@ export class ItemEuclidean extends ItemBase {
     return true;
   }
 
-  protected createGhostItem(original: ItemBase): ItemBase {
-    return this.createDefaultGhostItem(ItemEuclidean, original);
+  protected get ghostItemConstructor(): ItemBaseConstructor {
+    return ItemEuclidean;
   }
 
   protected resolveDropTarget(
@@ -1535,8 +1533,8 @@ export class ItemProgressive extends ItemBase {
     return true;
   }
 
-  protected createGhostItem(original: ItemBase): ItemBase {
-    return this.createDefaultGhostItem(ItemProgressive, original);
+  protected get ghostItemConstructor(): ItemBaseConstructor {
+    return ItemProgressive;
   }
 
   protected resolveDropTarget(

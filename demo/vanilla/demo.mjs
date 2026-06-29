@@ -1,487 +1,410 @@
+import { Engine } from "@snap-engine/core";
+import { CollisionEngine } from "@snap-engine/core/collision";
 import {
-  Engine,
-  ConnectorComponent,
-  LineComponent,
-} from "./snapline/snapline.mjs";
+  ContainerEuclidean,
+  ItemEuclidean,
+} from "@snap-engine/snapsort";
 
-const sl = new Engine();
+const snapSortAnimation = {
+  duration: 180,
+  timing_function: "cubic-bezier(0.2, 0, 0, 1)",
+};
 
-let addNodeMenu = null;
+const initialColumns = [
+  {
+    id: "backlog",
+    title: "Backlog",
+    items: [
+      { id: "item-1", label: "Profile fields", detail: "Account settings" },
+      { id: "item-2", label: "Invite flow", detail: "Workspace setup" },
+      { id: "item-3", label: "Audit log", detail: "Admin tools" },
+      { id: "item-4", label: "Search filters", detail: "Results page" },
+    ],
+  },
+  {
+    id: "active",
+    title: "Active",
+    items: [
+      { id: "item-5", label: "Board polish", detail: "Column controls" },
+    ],
+  },
+  {
+    id: "done",
+    title: "Done",
+    items: [{ id: "item-6", label: "Audit export", detail: "CSV polish" }],
+  },
+];
 
-let container = null;
-let canvas = null;
-let background = null;
-let selection = null;
+const engine = new Engine();
+engine.setCollisionEngine(new CollisionEngine());
 
-let lineStyle = "black";
+let boardElement;
+let canvasElement;
+let itemCountElement;
+let rootContainer = null;
+let nextItemNumber = 7;
+let columns = cloneColumns(initialColumns);
 
-document.addEventListener("DOMContentLoaded", function () {
-  addNodeMenu = document.getElementById("addNodeButton");
+const columnObjects = new Map();
+const itemObjects = new Map();
+const itemData = new Map();
 
-  // document
-  //   .getElementById("addNodeButton")
-  //   .addEventListener("click", (e) => toggleMenu(e, "addNodeMenu"));
+document.addEventListener("DOMContentLoaded", () => {
+  boardElement = document.getElementById("vanilla-board");
+  canvasElement = document.getElementById("vanilla-snapsort-canvas");
+  itemCountElement = document.getElementById("item-count");
 
-  document
-    .getElementById("mathButton")
-    .addEventListener("mouseup", (e) => addNode("sl-node-math", 0, 0));
-  document
-    .getElementById("lerpButton")
-    .addEventListener("mouseup", (e) => addNode("sl-node-lerp", 0, 0));
-  document
-    .getElementById("printButton")
-    .addEventListener("mouseup", (e) => addNode("sl-node-print", 0, 0));
-  document
-    .getElementById("constantButton")
-    .addEventListener("mouseup", (e) => addNode("sl-node-number", 0, 0));
-
-  document.getElementById("enable-zoom").addEventListener("change", (e) => {
-    sl.g.camera.config.enableZoom = e.target.checked;
-  });
-
-  document.getElementById("zoom-min").addEventListener("input", (e) => {
-    sl.g.camera.config.zoomBounds.min = e.target.value;
-  });
-
-  document.getElementById("zoom-max").addEventListener("input", (e) => {
-    sl.g.camera.config.zoomBounds.max = e.target.value;
-  });
-
-  document.getElementById("enable-pan").addEventListener("change", (e) => {
-    sl.g.camera.config.enablePan = e.target.checked;
-  });
-
-  document.getElementById("pan-top").addEventListener("input", (e) => {
-    sl.g.camera.config.panBounds.top = e.target.value;
-  });
-
-  document.getElementById("pan-left").addEventListener("input", (e) => {
-    sl.g.camera.config.panBounds.left = e.target.value;
-  });
-
-  document.getElementById("pan-right").addEventListener("input", (e) => {
-    sl.g.camera.config.panBounds.right = e.target.value;
-  });
-
-  document.getElementById("pan-bottom").addEventListener("input", (e) => {
-    sl.g.camera.config.panBounds.bottom = e.target.value;
-  });
-
-  document.getElementById("line-style").addEventListener("change", (e) => {
-    lineStyle = e.target.value;
-  });
+  engine.assignDom(canvasElement);
+  engine.camera?.setCameraPosition(0, 0);
 
   document
-    .getElementById("lock-position-button")
-    .addEventListener("click", (e) => {
-      sl.g.focusNodes.forEach((node) => {
-        node._config.lockPosition = true;
-      });
-    });
-
+    .getElementById("add-item-button")
+    .addEventListener("click", addItem);
   document
-    .getElementById("unlock-position-button")
-    .addEventListener("click", (e) => {
-      sl.g.focusNodes.forEach((node) => {
-        node._config.lockPosition = false;
-      });
-    });
+    .getElementById("reset-button")
+    .addEventListener("click", resetBoard);
+  canvasElement.addEventListener("pointerup", scheduleStateSync);
+  canvasElement.addEventListener("pointercancel", scheduleStateSync);
 
-  container = document.getElementById("sl-canvas-container");
-  canvas = document.getElementById("sl-canvas");
-  background = document.getElementById("sl-background");
-  selection = document.getElementById("sl-selection");
-
-  sl.init(container, canvas, background, selection);
-
-  let node1 = addNode("sl-node-number", -250, -150);
-  let node2 = addNode("sl-node-number", -250, 0);
-  let node3 = addNode("sl-node-math", 0, -150);
-  let node4 = addNode("sl-node-print", 250, -150);
-
-  node1
-    .getConnector("output")
-    .connectToConnector(node3.getConnector("input_1"), null);
-  node2
-    .getConnector("output")
-    .connectToConnector(node3.getConnector("input_2"), null);
-  // node3
-  //   .getConnector("result")
-  //   .connectToConnector(node4.getConnector("input"), null);
+  buildBoard();
 });
 
-function addNode(name, x, y) {
-  let ele = document.createElement(name);
-  let node = sl.createNode(ele, x, y, {
-    nodeClass: name.split("-")[2],
+function cloneColumns(source) {
+  return source.map((column) => ({
+    ...column,
+    items: column.items.map((item) => ({ ...item })),
+  }));
+}
+
+function buildBoard() {
+  boardElement.textContent = "";
+  columnObjects.clear();
+  itemObjects.clear();
+  itemData.clear();
+
+  rootContainer = createContainer(
+    boardElement,
+    null,
+    {
+      direction: "row",
+      name: "vanilla-kanban-root",
+      noDrop: true,
+    },
+    { boardId: "vanilla-kanban" },
+  );
+
+  for (const column of columns) {
+    createColumn(column);
+  }
+
+  updateBoardMeta();
+}
+
+function createColumn(column) {
+  const columnElement = document.createElement("section");
+  columnElement.className =
+    column.id === "backlog"
+      ? "snapsort-container snapsort-container-euclidean list-panel array-list"
+      : "snapsort-container snapsort-container-euclidean list-panel";
+  columnElement.dataset.columnId = column.id;
+  columnElement.style.flexDirection = "column";
+  columnElement.style.justifyContent = "flex-start";
+
+  const header = document.createElement("div");
+  header.className = "list-header";
+
+  const title = document.createElement("h2");
+  title.textContent = column.title;
+
+  const count = document.createElement("span");
+  count.dataset.columnCount = column.id;
+  count.textContent = String(column.items.length);
+
+  header.append(title, count);
+  columnElement.append(header);
+  boardElement.append(columnElement);
+
+  const columnObject = createContainer(
+    columnElement,
+    rootContainer,
+    {
+      direction: "column",
+      groupID: "vanilla-kanban",
+      name: `vanilla-${column.id}`,
+      animation: {
+        reorder: snapSortAnimation,
+        drop: snapSortAnimation,
+        clickMove: snapSortAnimation,
+      },
+    },
+    { columnId: column.id },
+  );
+
+  columnObjects.set(column.id, columnObject);
+
+  for (const item of column.items) {
+    createItem(item, columnObject);
+  }
+}
+
+function createContainer(element, parent, config, metadata) {
+  const container = new ContainerEuclidean(engine, null, config);
+  container.locked = true;
+  container.metadata = metadata;
+  container.element = element;
+  if (parent) {
+    parent.addItem(container);
+  }
+  return container;
+}
+
+function createItem(item, container) {
+  itemData.set(item.id, item);
+
+  const itemElement = document.createElement("article");
+  itemElement.className =
+    "snapsort-item snapsort-item-euclidean task-card";
+  itemElement.dataset.snapsortItemKey = item.id;
+
+  const content = document.createElement("div");
+  content.className = "task-content";
+
+  const main = document.createElement("div");
+  main.className = "task-main";
+
+  const label = document.createElement("strong");
+  label.textContent = item.label;
+
+  const detail = document.createElement("span");
+  detail.textContent = item.detail;
+
+  const actions = document.createElement("div");
+  actions.className = "card-actions";
+
+  actions.append(
+    createIconButton("delete", `Delete ${item.label}`, () =>
+      deleteItem(item.id),
+    ),
+    createIconButton("arrow_left_alt", `Move ${item.label} left`, () =>
+      moveItemAcrossColumns(item.id, -1),
+    ),
+    createIconButton("arrow_right_alt", `Move ${item.label} right`, () =>
+      moveItemAcrossColumns(item.id, 1),
+    ),
+  );
+
+  main.append(label, detail);
+  content.append(main, actions);
+  itemElement.append(content);
+  container.element.append(itemElement);
+
+  const itemObject = new ItemEuclidean(engine, null);
+  itemObject.metadata = { itemId: item.id };
+  itemObject.element = itemElement;
+  container.addItem(itemObject);
+  itemObjects.set(item.id, itemObject);
+
+  return itemObject;
+}
+
+function createIconButton(iconName, label, action) {
+  const button = document.createElement("button");
+  button.type = "button";
+  button.className = "icon-button";
+  button.ariaLabel = label;
+
+  const icon = document.createElement("span");
+  icon.className = "material-symbols-outlined";
+  icon.ariaHidden = "true";
+  icon.textContent = iconName;
+  button.append(icon);
+
+  const stop = (event) => {
+    event.preventDefault();
+    event.stopPropagation();
+  };
+  const run = (event) => {
+    stop(event);
+    action();
+  };
+  button.addEventListener("pointerdown", stop);
+  button.addEventListener("pointerup", run);
+  button.addEventListener("mousedown", stop);
+  button.addEventListener("mouseup", stop);
+  button.addEventListener("click", (event) => {
+    stop(event);
+    if (event.detail === 0) {
+      action();
+    }
   });
-  ele.initComponent(node);
 
-  canvas.appendChild(ele);
-
-  return node;
+  return button;
 }
 
-class CustomConnector extends ConnectorComponent {
-  createLine(dom) {
-    let lineClass = null;
-    if (lineStyle == "curved") {
-      lineClass = CurvedLine;
-      const svg = document.createElementNS("http://www.w3.org/2000/svg", "svg");
-      const path = document.createElementNS(
-        "http://www.w3.org/2000/svg",
-        "path",
-      );
-      svg.appendChild(path);
-      path.setAttribute("stroke-width", "4");
-      path.setAttribute("fill", "none");
-      dom = svg;
-    } else if (lineStyle == "zigzag") {
-      lineClass = ZigZagLine;
-      const svg = document.createElementNS("http://www.w3.org/2000/svg", "svg");
-      const path = document.createElementNS(
-        "http://www.w3.org/2000/svg",
-        "path",
-      );
-      svg.appendChild(path);
-      path.setAttribute("stroke-width", "4");
-      path.setAttribute("fill", "none");
-      dom = svg;
-    } else {
-      lineClass = StraightLine;
-      const svg = document.createElementNS("http://www.w3.org/2000/svg", "svg");
-      const line = document.createElementNS(
-        "http://www.w3.org/2000/svg",
-        "line",
-      );
-      svg.appendChild(line);
-      line.setAttribute("stroke-width", "4");
-      dom = svg;
-    }
-    return new lineClass(
-      this.connectorX,
-      this.connectorY,
-      0,
-      0,
-      dom,
-      this,
-      this.g,
+function createItemData() {
+  const itemNumber = nextItemNumber++;
+  return {
+    id: `item-${itemNumber}`,
+    label: `Task ${itemNumber}`,
+    detail: "Added from plain JS state",
+  };
+}
+
+function addItem() {
+  const item = createItemData();
+  const firstColumn = columns[0];
+  const firstColumnObject = columnObjects.get(firstColumn.id);
+  if (!firstColumnObject) return;
+
+  firstColumn.items.push(item);
+  createItem(item, firstColumnObject);
+  updateBoardMeta();
+}
+
+function deleteItem(itemId) {
+  const itemObject = itemObjects.get(itemId);
+  if (!itemObject) return;
+
+  itemObject.destroy();
+  itemObjects.delete(itemId);
+  itemData.delete(itemId);
+  syncColumnsFromDom();
+}
+
+function moveItemAcrossColumns(itemId, direction) {
+  syncColumnsFromDom();
+
+  const sourceColumnIndex = columns.findIndex((column) =>
+    column.items.some((item) => item.id === itemId),
+  );
+  if (sourceColumnIndex === -1) return;
+
+  const targetColumnIndex = sourceColumnIndex + direction;
+  if (targetColumnIndex < 0 || targetColumnIndex >= columns.length) return;
+
+  const sourceColumn = columns[sourceColumnIndex];
+  const targetColumn = columns[targetColumnIndex];
+  const sourceIndex = sourceColumn.items.findIndex(
+    (item) => item.id === itemId,
+  );
+  const sourceContainer = columnObjects.get(sourceColumn.id);
+  const targetContainer = columnObjects.get(targetColumn.id);
+  if (!sourceContainer || !targetContainer || sourceIndex === -1) return;
+
+  const destinationIndex = Math.min(sourceIndex, targetColumn.items.length);
+  const movedBySnapSort = sourceContainer.moveItem(
+    itemId,
+    targetContainer,
+    destinationIndex,
+  );
+  if (movedBySnapSort) {
+    scheduleStateSync();
+    return;
+  }
+
+  const itemObject = itemObjects.get(itemId);
+  if (itemObject) {
+    targetContainer.element.append(itemObject.element);
+    sourceContainer.detachItemFromContainer(sourceContainer, itemObject);
+    targetContainer.addItem(itemObject);
+  }
+  scheduleStateSync();
+}
+
+function resetBoard() {
+  for (const itemObject of itemObjects.values()) {
+    itemObject.destroy();
+  }
+  for (const columnObject of columnObjects.values()) {
+    columnObject.destroy();
+  }
+  rootContainer?.destroy();
+
+  nextItemNumber = 7;
+  columns = cloneColumns(initialColumns);
+  boardElement = createBoardElement();
+  buildBoard();
+}
+
+function createBoardElement() {
+  const boardFrame = canvasElement.querySelector(".board-frame");
+  const nextBoardElement = document.createElement("div");
+  nextBoardElement.id = "vanilla-board";
+  nextBoardElement.className =
+    "snapsort-container snapsort-container-euclidean board";
+  nextBoardElement.ariaLabel = "SnapSort vanilla Kanban board";
+  boardFrame.append(nextBoardElement);
+  return nextBoardElement;
+}
+
+function scheduleStateSync() {
+  window.requestAnimationFrame(() => {
+    window.requestAnimationFrame(syncColumnsFromDom);
+  });
+}
+
+function syncColumnsFromDom() {
+  columns = columns.map((column) => {
+    const columnElement = boardElement.querySelector(
+      `[data-column-id="${column.id}"]`,
     );
-  }
+    if (!columnElement) return column;
+
+    const ids = [...columnElement.querySelectorAll(".task-card")]
+      .map((element) => element.dataset.snapsortItemKey)
+      .filter(Boolean);
+    const items = ids
+      .map((id) => itemData.get(id))
+      .filter((item) => item != null);
+
+    return { ...column, items };
+  });
+  updateBoardMeta();
 }
 
-class StraightLine extends LineComponent {
-  renderLine() {
-    const svg = this.dom;
-    this.setDomStyle(svg, {
-      position: "absolute",
-      overflow: "visible",
-      pointerEvents: "none",
-      willChange: "transform",
-      transform: `translate3d(${this.x_start}px, ${this.y_start}px, 0)`,
+function updateBoardMeta() {
+  const itemCount = columns.reduce(
+    (total, column) => total + column.items.length,
+    0,
+  );
+  itemCountElement.textContent = String(itemCount);
+
+  for (const column of columns) {
+    const countElement = boardElement.querySelector(
+      `[data-column-count="${column.id}"]`,
+    );
+    if (countElement) {
+      countElement.textContent = String(column.items.length);
+    }
+  }
+
+  updateActionButtons();
+}
+
+function updateActionButtons() {
+  const columnIndexByItem = new Map();
+  columns.forEach((column, columnIndex) => {
+    column.items.forEach((item) => {
+      columnIndexByItem.set(item.id, columnIndex);
     });
-    const line = this.dom.children[0];
-    line.setAttribute("x1", "" + 0);
-    line.setAttribute("y1", "" + 0);
-    line.setAttribute("x2", "" + (this.x_end - this.x_start));
-    line.setAttribute("y2", "" + (this.y_end - this.y_start));
-  }
-}
+  });
 
-class CurvedLine extends LineComponent {
-  // createDefaultLine() {
-  //   // path.setAttribute("d", "M 0 0 C 100, 100 200, 0 300, 100");
-  //   return svg;
-  // }
+  for (const [itemId, itemObject] of itemObjects) {
+    const itemElement = itemObject.element;
+    if (!itemElement) continue;
 
-  renderLine() {
-    const svg = this.dom;
-    this.setDomStyle(svg, {
-      position: "absolute",
-      overflow: "visible",
-      pointerEvents: "none",
-      willChange: "transform",
-      transform: `translate3d(${this.x_start}px, ${this.y_start}px, 0)`,
-    });
-    const path = this.dom.children[0];
-    let dx = this.x_end - this.x_start;
-    let dy = this.y_end - this.y_start;
-    let x1 = Math.abs(dx / 2);
-    let y1 = 0;
-    let x2 = dx - Math.abs(dx / 2);
-    let y2 = dy;
-    let x3 = dx;
-    let y3 = dy;
-    path.setAttribute("d", `M 0,0 C ${x1}, ${y1} ${x2}, ${y2} ${x3}, ${y3}`);
-  }
-}
+    const columnIndex = columnIndexByItem.get(itemId);
+    const [deleteButton, leftButton, rightButton] =
+      itemElement.querySelectorAll(".icon-button");
 
-class ZigZagLine extends LineComponent {
-  renderLine() {
-    const svg = this.dom;
-    this.setDomStyle(svg, {
-      position: "absolute",
-      overflow: "visible",
-      pointerEvents: "none",
-      willChange: "transform",
-      transform: `translate3d(${this.x_start}px, ${this.y_start}px, 0)`,
-    });
-    const path = this.dom.children[0];
-    let dx = this.x_end - this.x_start;
-    let dy = this.y_end - this.y_start;
-    if (dx > 0) {
-      let x1 = dx / 2;
-      let y1 = 0;
-      let x2 = dx / 2;
-      let y2 = dy;
-      let x3 = dx;
-      let y3 = dy;
-      path.setAttribute(
-        "d",
-        `M 0,0 L ${x1}, ${y1} L ${x2}, ${y2} L ${x3}, ${y3}`,
-      );
-    } else {
-      let offset = 10;
-      path.setAttribute(
-        "d",
-        `M 0,0 L ${offset}, 0 L ${offset}, ${dy / 2} L ${dx - offset}, ${dy / 2} L ${dx - offset}, ${dy} L ${dx} ${dy}`,
-      );
+    if (deleteButton) {
+      deleteButton.disabled = false;
+    }
+    if (leftButton) {
+      leftButton.disabled = columnIndex === 0;
+    }
+    if (rightButton) {
+      rightButton.disabled = columnIndex === columns.length - 1;
     }
   }
 }
-
-// function addNode(e, name) {
-//   // Create a new Web Component element based on the node type
-//   let ele = document.createElement(name);
-//   let node = sl.createNode(ele);
-
-//   ele.initComponent(node);
-
-//   sl.addNodeAtMouse(node, e);
-
-//   toggleMenu(e, "addNodeMenu");
-// }
-
-customElements.define(
-  "sl-node-math",
-  class extends HTMLElement {
-    constructor() {
-      super();
-
-      const templateClone = document
-        .getElementById("node-math")
-        .content.cloneNode(true);
-      this._node = templateClone;
-      this._input_1 = templateClone.querySelector("#input_1");
-      this._input_2 = templateClone.querySelector("#input_2");
-      this._form_1 = templateClone.querySelector("#form_1");
-      this._form_2 = templateClone.querySelector("#form_2");
-      this._operation = templateClone.querySelector("#operation");
-      this._result = templateClone.querySelector("#result");
-
-      this.templateClone = templateClone;
-    }
-
-    connectedCallback() {
-      this.append(this.templateClone);
-    }
-
-    initComponent(nodeRef) {
-      this._nodeRef = nodeRef;
-
-      nodeRef.addConnector(this._input_1, "input_1", 1, false, CustomConnector);
-      nodeRef.addSetPropCallback(this.calculateMath.bind(this), "input_1");
-      nodeRef.addConnector(this._input_2, "input_2", 1, false, CustomConnector);
-      nodeRef.addSetPropCallback(this.calculateMath.bind(this), "input_2");
-      nodeRef.addConnector(this._result, "result", 0, true, CustomConnector);
-
-      this._form_1.addEventListener("input", this.updateText1.bind(this));
-      this._form_2.addEventListener("input", this.updateText2.bind(this));
-      this._operation.addEventListener(
-        "change",
-        this.updateOperation.bind(this),
-      );
-      this.initMath.call(this);
-    }
-
-    calculateMath(_) {
-      let input1 = +this._nodeRef.getProp("input_1");
-      let input2 = +this._nodeRef.getProp("input_2");
-      let operation = this._nodeRef.getProp("operation");
-
-      let result = 0;
-
-      if (operation == "+") {
-        result = input1 + input2;
-      } else if (operation == "-") {
-        result = input1 - input2;
-      } else if (operation == "*") {
-        result = input1 * input2;
-      } else {
-        result = input1 / input2;
-      }
-
-      this._nodeRef.setProp("result", result);
-    }
-
-    updateText1(_) {
-      this._nodeRef.setProp("input_1", this._form_1.value);
-    }
-
-    updateText2(_) {
-      this._nodeRef.setProp("input_2", this._form_2.value);
-    }
-
-    updateOperation(_) {
-      this._nodeRef.setProp("operation", this._operation.value);
-      this.calculateMath.call(this);
-    }
-
-    initMath() {
-      this._nodeRef.setProp("input_1", 0);
-      this._nodeRef.setProp("input_2", 0);
-      this._nodeRef.setProp("operation", "+");
-      this.calculateMath.call(this);
-    }
-  },
-);
-
-customElements.define(
-  "sl-node-lerp",
-  class extends HTMLElement {
-    constructor() {
-      super();
-
-      const templateClone = document
-        .getElementById("node-lerp")
-        .content.cloneNode(true);
-
-      this._node = templateClone;
-      this._input_1 = templateClone.querySelector("#input_1");
-      this._input_2 = templateClone.querySelector("#input_2");
-      this._form_1 = templateClone.querySelector("#form_1");
-      this._form_2 = templateClone.querySelector("#form_2");
-      this._alpha = templateClone.querySelector("#alpha");
-      this._result = templateClone.querySelector("#result");
-
-      this.templateClone = templateClone;
-    }
-
-    connectedCallback() {
-      this.append(this.templateClone);
-    }
-
-    initComponent(nodeRef) {
-      this._nodeRef = nodeRef;
-
-      nodeRef.addConnector(this._input_1, "input_1", 1, false, CustomConnector);
-      nodeRef.addSetPropCallback(this.calculateMath.bind(this), "input_1");
-      nodeRef.addConnector(this._input_2, "input_2", 1, false, CustomConnector);
-      nodeRef.addSetPropCallback(this.calculateMath.bind(this), "input_2");
-      nodeRef.addConnector(this._result, "result", 0, true);
-
-      this._form_1.addEventListener("input", this.updateText1.bind(this));
-      this._form_2.addEventListener("input", this.updateText2.bind(this));
-      this._alpha.addEventListener("input", this.updateAlpha.bind(this));
-      this._alpha.addEventListener("mousedown", (e) => e.stopPropagation());
-      this.initMath.call(this);
-    }
-
-    calculateMath(_) {
-      let input1 = +this._nodeRef.getProp("input_1");
-      let input2 = +this._nodeRef.getProp("input_2");
-      let alpha = +this._nodeRef.getProp("alpha");
-
-      let result = input1 + ((input2 - input1) * alpha) / 100;
-
-      this._nodeRef.setProp("result", result);
-    }
-
-    updateText1(e) {
-      this._nodeRef.setProp("input_1", this._form_1.value);
-    }
-
-    updateText2(e) {
-      this._nodeRef.setProp("input_2", this._form_2.value);
-    }
-
-    updateAlpha(e) {
-      this._nodeRef.setProp("alpha", this._alpha.value);
-      this.calculateMath.call(this);
-      e.stopPropagation();
-    }
-
-    initMath() {
-      this._nodeRef.setProp("input_1", 0);
-      this._nodeRef.setProp("input_2", 100);
-      this._nodeRef.setProp("alpha", 50);
-      this.calculateMath.call(this);
-    }
-  },
-);
-
-customElements.define(
-  "sl-node-print",
-  class extends HTMLElement {
-    constructor() {
-      super();
-
-      const templateClone = document
-        .getElementById("node-print")
-        .content.cloneNode(true);
-
-      this._node = templateClone;
-      this._input = templateClone.querySelector("#input");
-      this._print = templateClone.querySelector("#print");
-
-      this.templateClone = templateClone;
-    }
-
-    connectedCallback() {
-      this.append(this.templateClone);
-    }
-
-    initComponent(nodeRef) {
-      this._nodeRef = nodeRef;
-      nodeRef.addConnector(this._input, "input", 1, false, CustomConnector);
-      nodeRef.addSetPropCallback(this.printValue.bind(this), "input");
-    }
-
-    printValue(value) {
-      this._print.innerHTML = value;
-    }
-  },
-);
-
-customElements.define(
-  "sl-node-number",
-  class extends HTMLElement {
-    constructor() {
-      super();
-
-      const templateClone = document
-        .getElementById("node-number")
-        .content.cloneNode(true);
-      this._node = templateClone;
-      this._value = templateClone.querySelector("#value");
-      this._output = templateClone.querySelector("#output");
-
-      this.templateClone = templateClone;
-    }
-
-    connectedCallback() {
-      this.append(this._node);
-    }
-
-    initComponent(nodeRef) {
-      this._nodeRef = nodeRef;
-      nodeRef.addConnector(this._output, "output", 1, true, CustomConnector);
-
-      this._value.addEventListener("input", this.updateText.bind(this));
-    }
-
-    updateText(e) {
-      this._nodeRef.setProp("output", this._value.value);
-    }
-  },
-);

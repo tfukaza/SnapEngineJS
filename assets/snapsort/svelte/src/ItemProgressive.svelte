@@ -13,34 +13,45 @@
     style = "",
     className = "",
     metadata = {},
+    itemObject: providedItemObject = null,
+    itemKey = null,
   }: {
     children: any;
     style?: string;
     className?: string;
     metadata?: ItemMetadata;
+    itemObject?: ItemBase | null;
+    itemKey?: string | null;
   } = $props();
 
   const engine: Engine = getContext("engine");
   const container: ContainerBase | null = getContext("container");
-  const itemObject: ItemBase = new ItemProgressive(engine, null);
-  itemObject.metadata = metadata;
+  const ownsItem = providedItemObject == null;
+  const itemObject: ItemBase = providedItemObject ?? new ItemProgressive(engine, null);
+  if (ownsItem || Object.keys(metadata).length > 0) {
+    itemObject.metadata = metadata;
+  }
 
   const metadataItemKey = (value: ItemMetadata) => value.itemId ?? null;
-  let itemKey = $derived(metadataItemKey(metadata));
+  let resolvedItemKey = $derived(itemKey ?? metadataItemKey(itemObject.metadata));
 
   onMount(() => {
-    container?.addItem(itemObject);
+    if (ownsItem) {
+      container?.addItem(itemObject);
+    }
   });
 
   onDestroy(() => {
-    itemObject.destroy();
+    if (ownsItem) {
+      itemObject.destroy();
+    }
   });
 </script>
 
 <div
   class="snapsort-item snapsort-item-progressive {className}"
   bind:this={itemObject.element}
-  data-snapsort-item-key={itemKey}
+  data-snapsort-item-key={resolvedItemKey}
   {style}
 >
   {@render children()}

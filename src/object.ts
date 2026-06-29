@@ -120,47 +120,47 @@ class EventCallback {
   }
 }
 
-export class TransformView implements TransformProperty {
-  #transform: ObjectTransform;
-  #space: TransformSpace;
+// export class TransformView implements TransformProperty {
+//   #transform: ObjectTransform;
+//   #space: TransformSpace;
 
-  constructor(transform: ObjectTransform, space: TransformSpace) {
-    this.#transform = transform;
-    this.#space = space;
-  }
+//   constructor(transform: ObjectTransform, space: TransformSpace) {
+//     this.#transform = transform;
+//     this.#space = space;
+//   }
 
-  get x(): number {
-    return this.#transform.get(this.#space, "x");
-  }
+//   get x(): number {
+//     return this.#transform.get(this.#space, "x");
+//   }
 
-  set x(value: number) {
-    this.#transform.set(this.#space, "x", value);
-  }
+//   set x(value: number) {
+//     this.#transform.set(this.#space, "x", value);
+//   }
 
-  get y(): number {
-    return this.#transform.get(this.#space, "y");
-  }
+//   get y(): number {
+//     return this.#transform.get(this.#space, "y");
+//   }
 
-  set y(value: number) {
-    this.#transform.set(this.#space, "y", value);
-  }
+//   set y(value: number) {
+//     this.#transform.set(this.#space, "y", value);
+//   }
 
-  get scaleX(): number {
-    return this.#transform.get(this.#space, "scaleX");
-  }
+//   get scaleX(): number {
+//     return this.#transform.get(this.#space, "scaleX");
+//   }
 
-  set scaleX(value: number) {
-    this.#transform.set(this.#space, "scaleX", value);
-  }
+//   set scaleX(value: number) {
+//     this.#transform.set(this.#space, "scaleX", value);
+//   }
 
-  get scaleY(): number {
-    return this.#transform.get(this.#space, "scaleY");
-  }
+//   get scaleY(): number {
+//     return this.#transform.get(this.#space, "scaleY");
+//   }
 
-  set scaleY(value: number) {
-    this.#transform.set(this.#space, "scaleY", value);
-  }
-}
+//   set scaleY(value: number) {
+//     this.#transform.set(this.#space, "scaleY", value);
+//   }
+// }
 
 let transformEpoch = 0;
 
@@ -180,34 +180,34 @@ export class ObjectTransform {
     scaleY: 1,
   };
   #cachedWorldEpoch: number = -1;
-  world: TransformView;
-  local: TransformView;
+  // world: TransformView;
+  // local: TransformView;
 
   constructor(owner: CoreObject) {
     this.#owner = owner;
-    this.world = new TransformView(this, "world");
-    this.local = new TransformView(this, "local");
+    // this.world = new TransformView(this, "world");
+    // this.local = new TransformView(this, "local");
   }
 
-  get(space: TransformSpace, property: keyof TransformProperty): number {
-    if (space === "local") {
-      return this.#local[property];
-    }
-    return this.#getCachedWorld()[property];
-  }
+  // get(space: TransformSpace, property: keyof TransformProperty): number {
+  //   if (space === "local") {
+  //     return this.#local[property];
+  //   }
+  //   return this.#getCachedWorld()[property];
+  // }
 
-  set(space: TransformSpace, property: keyof TransformProperty, value: number) {
-    const transform = {
-      ...(space === "local" ? this.#local : this.#getCachedWorld()),
-      [property]: value,
-    };
-    if (space === "local") {
-      this.setLocal(transform);
-      this.#owner.notifyTransformChange();
-    } else {
-      this.setWorld(transform);
-    }
-  }
+  // set(space: TransformSpace, property: keyof TransformProperty, value: number) {
+  //   const transform = {
+  //     ...(space === "local" ? this.#local : this.#getCachedWorld()),
+  //     [property]: value,
+  //   };
+  //   if (space === "local") {
+  //     this.setLocal(transform);
+  //     this.#owner.notifyTransformChange();
+  //   } else {
+  //     this.setWorld(transform);
+  //   }
+  // }
 
   getWorld(): ReadonlyTransformProperty {
     return this.#getCachedWorld();
@@ -534,17 +534,6 @@ const animationOwnerMap = new WeakMap<AnimationInterface, BaseObject>();
 
 /**
  * Base class for all objects in the engine.
- *
- * Provides core functionality for:
- * - Transform management (position, scale)
- * - Parent-child hierarchies
- * - Event handling (global and input events)
- * - Collision detection
- * - Animations
- * - Debug markers
- *
- * Each object belongs to a specific Engine instance while sharing the global
- * GlobalManager singleton for ID generation.
  */
 export class BaseObject extends CoreObject {
   #id!: string;

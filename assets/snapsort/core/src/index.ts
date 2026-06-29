@@ -9,8 +9,10 @@ export type {
   AnimationConfig,
   ContainerAnimations,
   ContainerCallbacks,
-  SnapSortDomInsertEvent,
-  SnapSortDomRemoveEvent,
+  ItemInsertEvent,
+  ItemRemoveEvent,
+  GhostCreateEvent,
+  GhostUpdateEvent,
 } from "./container";
 export type { LayoutMainAxisAlign } from "./layout";
 export {

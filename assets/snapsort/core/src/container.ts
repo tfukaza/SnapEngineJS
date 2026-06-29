@@ -1,11 +1,19 @@
 import { BaseObject } from "@snap-engine/core";
-import { ItemBase, ItemEuclidean, ItemProgressive, type ItemMetadata } from "./item";
+import {
+  ItemBase,
+  ItemEuclidean,
+  ItemProgressive,
+  type ItemBaseConstructor,
+  type ItemMetadata,
+} from "./item";
 import {
   determineDropTarget,
   determineProgressiveDropTarget,
   type DropCandidate,
 } from "./algorithm";
 import type { LayoutMainAxisAlign } from "./layout";
+// import type { Engine } from "@snap-engine/core";
+// import { Item } from "src";
 
 export interface AnimationConfig {
   timing_function?: string;
@@ -18,14 +26,14 @@ export interface ContainerAnimations {
   clickMove?: AnimationConfig | null;
 }
 
-export interface SnapSortDomRemoveEvent {
+export interface ItemRemoveEvent {
   item: ItemBase;
   itemMetadata: ItemMetadata;
   container: ContainerBase;
   containerMetadata: Record<string, unknown>;
 }
 
-export interface SnapSortDomInsertEvent {
+export interface ItemInsertEvent {
   item: ItemBase;
   itemMetadata: ItemMetadata;
   container: ContainerBase;
@@ -34,10 +42,23 @@ export interface SnapSortDomInsertEvent {
   beforeElement: HTMLElement | null;
 }
 
+export interface GhostUpdateEvent {
+  original: ItemBase;
+  container: ContainerBase | null;
+  index: number;
+}
+
+export interface GhostCreateEvent {
+  original: ItemBase;
+  originalMetadata: ItemMetadata;
+  ghostItem: ItemBase;
+}
+
 export interface ContainerCallbacks {
-  onDomRemove?: (event: SnapSortDomRemoveEvent) => void;
-  onDomInsert?: (event: SnapSortDomInsertEvent) => void;
-  afterDomMutation?: () => void | Promise<void>;
+  onItemInsert?: (event: ItemInsertEvent) => void;
+  onItemRemove?: (event: ItemRemoveEvent) => void;
+  createItemGhost?: (event: GhostCreateEvent) => HTMLElement | void | null;
+  awaitMutation?: () => void | Promise<void>;
 }
 
 export interface ContainerConfig {
@@ -52,6 +73,56 @@ export interface ContainerConfig {
   callbacks?: ContainerCallbacks;
 }
 
+function insertItemAt(
+  // item: ItemBase,
+  // _itemMetadata: ItemMetadata,
+  // container: ContainerBase,
+  // _containerMetadata: any,
+  // _index: number,
+  // beforeElement: HTMLElement,
+  event: ItemInsertEvent,
+) {
+  event.container.element?.insertBefore(
+    event.item.element!,
+    event.beforeElement,
+  );
+}
+
+function removeItem(event: ItemRemoveEvent): void {
+  event.item.element?.remove();
+}
+
+function createItemGhost(event: GhostCreateEvent): HTMLElement {
+  const ghostElement = document.createElement("div");
+  ghostElement.id = "spacer";
+
+  const origProp =
+    event.original.dragSnapshot ?? event.original.currentDomProperty;
+  ghostElement.style.width = origProp.width + "px";
+  ghostElement.style.height = origProp.height + "px";
+  ghostElement.style.margin = `${origProp.margin.top}px ${origProp.margin.right}px ${origProp.margin.bottom}px ${origProp.margin.left}px`;
+  ghostElement.style.boxSizing = "border-box";
+  ghostElement.classList.add("ghost");
+
+  return ghostElement;
+}
+
+const defaultConfig: ContainerConfig = {
+  groupID: "default-group",
+  direction: "column",
+  animation: {
+    reorder: { duration: 100, timing_function: "ease-out" },
+    drop: { duration: 100, timing_function: "ease-out" },
+    clickMove: { duration: 100, timing_function: "ease-out" },
+  },
+  noDrop: false,
+  callbacks: {
+    onItemInsert: insertItemAt,
+    onItemRemove: removeItem,
+    createItemGhost,
+  },
+};
+
 export class ContainerBase extends ItemBase {
   #itemList: ItemBase[] = [];
   #config: ContainerConfig;
@@ -64,39 +135,47 @@ export class ContainerBase extends ItemBase {
   ) {
     super(engine, parent);
     this.locked = true;
-    this.#config = config || {};
-    if (!this.#config.groupID) {
-      this.#config.groupID = "default-group";
-    }
-    if (!this.#config.direction) {
-      this.#config.direction = "column";
-    }
-    if (this.#config.animation === undefined) {
-      const defaultAnimation = { duration: 100, timing_function: "ease-out" };
-      this.#config.animation = {
-        reorder: defaultAnimation,
-        drop: defaultAnimation,
-        clickMove: defaultAnimation,
-      };
-    } else if (this.#config.animation) {
-      const defaultAnimation = { duration: 100, timing_function: "ease-out" };
-      this.#config.animation = {
-        reorder: this.#config.animation.reorder ?? defaultAnimation,
-        drop: this.#config.animation.drop ?? defaultAnimation,
-        clickMove: this.#config.animation.clickMove ?? defaultAnimation,
-      };
-    }
+    this.#config = {
+      ...defaultConfig,
+      ...(config || {}),
+      callbacks: {
+        ...defaultConfig.callbacks,
+        ...(config?.callbacks || {}),
+      },
+    };
+    // this.#config = config || {};
+    // if (!this.#config.groupID) {
+    //   this.#config.groupID = "default-group";
+    // }
+    // if (!this.#config.direction) {
+    //   this.#config.direction = "column";
+    // }
+    // if (this.#config.animation === undefined) {
+    //   const defaultAnimation = { duration: 100, timing_function: "ease-out" };
+    //   this.#config.animation = {
+    //     reorder: defaultAnimation,
+    //     drop: defaultAnimation,
+    //     clickMove: defaultAnimation,
+    //   };
+    // } else if (this.#config.animation) {
+    //   const defaultAnimation = { duration: 100, timing_function: "ease-out" };
+    //   this.#config.animation = {
+    //     reorder: this.#config.animation.reorder ?? defaultAnimation,
+    //     drop: this.#config.animation.drop ?? defaultAnimation,
+    //     clickMove: this.#config.animation.clickMove ?? defaultAnimation,
+    //   };
+    // }
     if (!this.#config.name) {
       if (!this.global.data["dragAndDropContainerCounter"]) {
         this.global.data["dragAndDropContainerCounter"] = 0;
       }
       this.#config.name = `container-${this.global.data["dragAndDropContainerCounter"]++}`;
     }
-    if (!this.#config.noDrop) {
-      this.noDrop = false;
-    } else {
-      this.noDrop = this.#config.noDrop;
-    }
+    // if (!this.#config.noDrop) {
+    //   this.noDrop = false;
+    // } else {
+    //   this.noDrop = this.#config.noDrop;
+    // }
 
     this.style = {
       position: "relative",
@@ -160,6 +239,10 @@ export class ContainerBase extends ItemBase {
     return this.#depth;
   }
 
+  get config() {
+    return this.#config;
+  }
+
   // addItem(item: ItemBase) {
   //   this.#itemList.push(item);
   //   item.setContainer(this);
@@ -202,8 +285,8 @@ export class ContainerEuclidean extends ContainerBase {
     return true;
   }
 
-  protected createGhostItem(original: ItemBase): ItemBase {
-    return this.createDefaultGhostItem(ItemEuclidean, original);
+  protected get ghostItemConstructor(): ItemBaseConstructor {
+    return ItemEuclidean;
   }
 
   protected resolveDropTarget(
@@ -219,8 +302,8 @@ export class ContainerProgressive extends ContainerBase {
     return true;
   }
 
-  protected createGhostItem(original: ItemBase): ItemBase {
-    return this.createDefaultGhostItem(ItemProgressive, original);
+  protected get ghostItemConstructor(): ItemBaseConstructor {
+    return ItemProgressive;
   }
 
   protected resolveDropTarget(

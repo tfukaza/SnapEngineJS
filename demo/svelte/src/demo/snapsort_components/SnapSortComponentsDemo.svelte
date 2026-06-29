@@ -10,8 +10,10 @@
   } from "@snap-engine/snapsort-svelte";
   import type {
     ContainerBase as SortContainer,
-    SnapSortDomInsertEvent,
-    SnapSortDomRemoveEvent,
+    GhostCreateEvent,
+    ItemBase,
+    ItemInsertEvent,
+    ItemRemoveEvent,
   } from "@snap-engine/snapsort";
 
   type DemoItem = {
@@ -26,6 +28,24 @@
     items: DemoItem[];
     container?: SortContainer;
   };
+
+  type DemoGhostEntry = {
+    id: string;
+    isGhost: true;
+    columnId: string;
+    index: number;
+    originalItemId: string | null;
+    ghostItem: ItemBase;
+    label: string;
+    detail: string;
+  };
+
+  type RenderedDemoItem =
+    | {
+        isGhost: false;
+        item: DemoItem;
+      }
+    | DemoGhostEntry;
 
   type ProgressiveTile = {
     id: string;
@@ -117,6 +137,7 @@
 
   let nextItemNumber = $state(7);
   let columns = $state<DemoColumn[]>(structuredClone(initialColumns));
+  let ghostEntry = $state<DemoGhostEntry | null>(null);
   let itemCount = $derived(
     columns.reduce((total, column) => total + column.items.length, 0),
   );
@@ -135,6 +156,7 @@
   }
 
   function addItem() {
+    ghostEntry = null;
     columns = columns.map((column, index) =>
       index === 0
         ? { ...column, items: [...column.items, createItem()] }
@@ -143,6 +165,7 @@
   }
 
   function deleteItem(itemId: string) {
+    ghostEntry = null;
     columns = columns.map((column) => ({
       ...column,
       items: column.items.filter((item) => item.id !== itemId),
@@ -209,14 +232,65 @@
 
   function resetItems() {
     nextItemNumber = 7;
+    ghostEntry = null;
     columns = cloneInitialColumns();
   }
 
-  function handleSnapSortDomInsert(event: SnapSortDomInsertEvent) {
+  function createFrameworkGhost(_event: GhostCreateEvent): void {
+    return;
+  }
+
+  function findDemoItem(itemId: string | undefined) {
+    if (!itemId) return null;
+    for (const column of columns) {
+      const item = column.items.find((candidate) => candidate.id === itemId);
+      if (item) return item;
+    }
+    return null;
+  }
+
+  function renderedColumnItems(column: DemoColumn): RenderedDemoItem[] {
+    const renderedItems: RenderedDemoItem[] = column.items.map((item) => ({
+      isGhost: false,
+      item,
+    }));
+    if (ghostEntry?.columnId !== column.id) return renderedItems;
+
+    const coreIndex = Math.max(
+      0,
+      Math.min(ghostEntry.index, renderedItems.length),
+    );
+    const originalIndex = ghostEntry.originalItemId
+      ? column.items.findIndex((item) => item.id === ghostEntry.originalItemId)
+      : -1;
+    const destinationIndex =
+      originalIndex !== -1 && originalIndex <= coreIndex
+        ? coreIndex + 1
+        : coreIndex;
+    renderedItems.splice(destinationIndex, 0, ghostEntry);
+    return renderedItems;
+  }
+
+  function handleSnapSortDomInsert(event: ItemInsertEvent) {
     const itemId = event.itemMetadata.itemId;
     if (typeof itemId !== "string") return;
     const targetColumnId = event.containerMetadata.columnId;
     if (typeof targetColumnId !== "string") return;
+
+    if (event.item.isGhost) {
+      const sourceItem = findDemoItem(itemId);
+      ghostEntry = {
+        id: `ghost-${event.item.id}`,
+        isGhost: true,
+        columnId: targetColumnId,
+        index: event.index,
+        originalItemId: itemId,
+        ghostItem: event.item,
+        label: sourceItem?.label ?? "",
+        detail: sourceItem?.detail ?? "",
+      };
+      return;
+    }
 
     let movedItem: DemoItem | null = null;
     const withoutMovedItem = columns.map((column) => {
@@ -244,7 +318,14 @@
     });
   }
 
-  function handleSnapSortDomRemove(event: SnapSortDomRemoveEvent) {
+  function handleSnapSortDomRemove(event: ItemRemoveEvent) {
+    if (event.item.isGhost) {
+      if (ghostEntry?.ghostItem === event.item) {
+        ghostEntry = null;
+      }
+      return;
+    }
+
     const itemId = event.itemMetadata.itemId;
     if (typeof itemId !== "string") return;
 
@@ -336,9 +417,10 @@
                       clickMove: snapSortCubicAnimation,
                     },
                     callbacks: {
-                      onDomInsert: handleSnapSortDomInsert,
-                      onDomRemove: handleSnapSortDomRemove,
-                      afterDomMutation: tick,
+                      onItemInsert: handleSnapSortDomInsert,
+                      onItemRemove: handleSnapSortDomRemove,
+                      createItemGhost: createFrameworkGhost,
+                      awaitMutation: tick,
                     },
                   }}
                   locked={true}
@@ -349,34 +431,49 @@
                     <span>{column.items.length}</span>
                   </div>
 
-                  {#each column.items as item (item.id)}
-                    <ItemEuclidean className="task-card" metadata={{ itemId: item.id }}>
-                      <div class="task-content">
-                        <div class="task-main">
-                          <strong>{item.label}</strong>
-                          <span>{item.detail}</span>
+                  {#each renderedColumnItems(column) as entry (entry.isGhost ? entry.id : entry.item.id)}
+                    {#if entry.isGhost}
+                      <ItemEuclidean
+                        className="task-card ghost task-ghost"
+                        itemObject={entry.ghostItem}
+                        itemKey={entry.id}
+                      >
+                        <div class="task-content">
+                          <div class="task-main">
+                            <strong>{entry.label}</strong>
+                            <span>{entry.detail}</span>
+                          </div>
                         </div>
-                        <div class="card-actions">
-                          <button
-                            class="icon-button"
-                            aria-label={`Delete ${item.label}`}
-                            use:controlButton={() => deleteItem(item.id)}
-                          ><span class="material-symbols-outlined" aria-hidden="true">delete</span></button>
-                          <button
-                            class="icon-button"
-                            aria-label={`Move ${item.label} left`}
-                            disabled={columns.findIndex((candidate) => candidate.id === column.id) === 0}
-                            use:controlButton={() => moveItemAcrossColumns(item.id, -1)}
-                          ><span class="material-symbols-outlined" aria-hidden="true">arrow_left_alt</span></button>
-                          <button
-                            class="icon-button"
-                            aria-label={`Move ${item.label} right`}
-                            disabled={columns.findIndex((candidate) => candidate.id === column.id) === columns.length - 1}
-                            use:controlButton={() => moveItemAcrossColumns(item.id, 1)}
-                          ><span class="material-symbols-outlined" aria-hidden="true">arrow_right_alt</span></button>
+                      </ItemEuclidean>
+                    {:else}
+                      <ItemEuclidean className="task-card" metadata={{ itemId: entry.item.id }}>
+                        <div class="task-content">
+                          <div class="task-main">
+                            <strong>{entry.item.label}</strong>
+                            <span>{entry.item.detail}</span>
+                          </div>
+                          <div class="card-actions">
+                            <button
+                              class="icon-button"
+                              aria-label={`Delete ${entry.item.label}`}
+                              use:controlButton={() => deleteItem(entry.item.id)}
+                            ><span class="material-symbols-outlined" aria-hidden="true">delete</span></button>
+                            <button
+                              class="icon-button"
+                              aria-label={`Move ${entry.item.label} left`}
+                              disabled={columns.findIndex((candidate) => candidate.id === column.id) === 0}
+                              use:controlButton={() => moveItemAcrossColumns(entry.item.id, -1)}
+                            ><span class="material-symbols-outlined" aria-hidden="true">arrow_left_alt</span></button>
+                            <button
+                              class="icon-button"
+                              aria-label={`Move ${entry.item.label} right`}
+                              disabled={columns.findIndex((candidate) => candidate.id === column.id) === columns.length - 1}
+                              use:controlButton={() => moveItemAcrossColumns(entry.item.id, 1)}
+                            ><span class="material-symbols-outlined" aria-hidden="true">arrow_right_alt</span></button>
+                          </div>
                         </div>
-                      </div>
-                    </ItemEuclidean>
+                      </ItemEuclidean>
+                    {/if}
                   {/each}
                 </ContainerEuclidean>
               {/each}

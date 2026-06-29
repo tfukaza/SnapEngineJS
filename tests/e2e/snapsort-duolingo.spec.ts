@@ -10,6 +10,8 @@ type ConsoleEntry = {
 type DragSample = {
   step: number;
   spacerCount: number;
+  defaultSpacerCount: number;
+  frameworkGhostCount: number;
   answerChildOrder: string[];
   bankChildOrder: string[];
   draggedParentClass: string | null;
@@ -62,13 +64,18 @@ async function collectSample(page: Page, step: number): Promise<DragSample> {
     const childOrder = (selector: string) =>
       [...(document.querySelector(selector)?.children ?? [])].map((node) => {
         if (node.id === "spacer") return "#spacer";
+        if (node.classList.contains("tile-ghost")) return ".tile-ghost";
         return node.textContent?.trim().replace(/\s+/g, " ") ?? "";
       });
     const active = document.querySelector(".snapsort-item[style*='absolute']");
-    const spacer = document.querySelector("#spacer");
+    const spacer = document.querySelector("#spacer, .tile-ghost");
+    const defaultSpacerCount = document.querySelectorAll("#spacer").length;
+    const frameworkGhostCount = document.querySelectorAll(".tile-ghost").length;
     return {
       step,
-      spacerCount: document.querySelectorAll("#spacer").length,
+      spacerCount: defaultSpacerCount + frameworkGhostCount,
+      defaultSpacerCount,
+      frameworkGhostCount,
       answerChildOrder: childOrder(".answer-box"),
       bankChildOrder: childOrder(".tile-bank"),
       draggedParentClass: active?.parentElement?.className ?? null,
@@ -216,7 +223,7 @@ test.describe("SnapSort Kiokun sentence builder demo", () => {
     );
   });
 
-  test("drags a tile from bank to answer and moves DOM ownership with the spacer", async ({
+  test("drags a tile from bank to answer with a framework-owned ghost", async ({
     page,
   }, testInfo) => {
     const consoleEntries: ConsoleEntry[] = [];
@@ -238,10 +245,11 @@ test.describe("SnapSort Kiokun sentence builder demo", () => {
       samples.some(
         (sample) =>
           sample.spacerCount === 1 &&
-          sample.spacerParentClass?.includes("answer-box") &&
-          sample.draggedParentClass?.includes("answer-box"),
+          sample.frameworkGhostCount === 1 &&
+          sample.defaultSpacerCount === 0 &&
+          sample.spacerParentClass?.includes("answer-box"),
       ),
-      "dragged element should move under the answer container when the spacer does",
+      "framework-owned ghost should render under the answer container without a default spacer",
     ).toBe(true);
 
     await expectCleanConsole(
@@ -287,7 +295,7 @@ test.describe("SnapSort Kiokun sentence builder demo", () => {
     );
   });
 
-  test("drags a selected tile back to the bank without losing the active DOM node", async ({
+  test("drags a selected tile back to the bank with a framework-owned ghost", async ({
     page,
   }, testInfo) => {
     const consoleEntries: ConsoleEntry[] = [];
@@ -312,10 +320,11 @@ test.describe("SnapSort Kiokun sentence builder demo", () => {
       samples.some(
         (sample) =>
           sample.spacerCount === 1 &&
-          sample.spacerParentClass?.includes("tile-bank") &&
-          sample.draggedParentClass?.includes("tile-bank"),
+          sample.frameworkGhostCount === 1 &&
+          sample.defaultSpacerCount === 0 &&
+          sample.spacerParentClass?.includes("tile-bank"),
       ),
-      "dragged element should move back under the bank container",
+      "framework-owned ghost should render under the bank container without a default spacer",
     ).toBe(true);
 
     await expectCleanConsole(

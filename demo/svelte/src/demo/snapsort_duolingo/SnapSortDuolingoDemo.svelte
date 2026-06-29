@@ -7,8 +7,10 @@
   } from "@snap-engine/snapsort-svelte";
   import type {
     ContainerBase as SortContainer,
-    SnapSortDomInsertEvent,
-    SnapSortDomRemoveEvent,
+    GhostCreateEvent,
+    ItemBase,
+    ItemInsertEvent,
+    ItemRemoveEvent,
   } from "@snap-engine/snapsort";
 
   type TileZone = "answer" | "bank";
@@ -24,6 +26,23 @@
     target: string;
     tiles: string[];
   };
+
+  type TileGhostEntry = {
+    id: string;
+    isGhost: true;
+    zone: TileZone;
+    index: number;
+    originalItemId: string | null;
+    ghostItem: ItemBase;
+    text: string;
+  };
+
+  type RenderedTile =
+    | {
+        isGhost: false;
+        tile: TileData;
+      }
+    | TileGhostEntry;
 
   let { embedded = false }: { embedded?: boolean } = $props();
 
@@ -42,6 +61,7 @@
   let bankContainer: SortContainer | undefined = $state();
   let answerTiles: TileData[] = $state([]);
   let bankTiles: TileData[] = $state(toTileData(exercise.tiles));
+  let ghostEntry = $state<TileGhostEntry | null>(null);
   let result: { correct: boolean; expected: string } | null = $state(null);
   let lookupTarget: string | null = $state(null);
   let tilePointerStart: { x: number; y: number } | null = null;
@@ -60,6 +80,7 @@
   }
 
   function updateTileZone(tileId: string, targetZone: TileZone, targetIndex: number) {
+    ghostEntry = null;
     const allTiles = [...answerTiles, ...bankTiles];
     const movedTile = allTiles.find((tile) => tile.id === tileId);
     if (!movedTile) return;
@@ -75,22 +96,75 @@
     result = null;
   }
 
-  function handleSnapSortDomInsert(event: SnapSortDomInsertEvent) {
+  function handleSnapSortDomInsert(event: ItemInsertEvent) {
     const itemId = event.itemMetadata.itemId;
     if (typeof itemId !== "string") return;
 
     const targetZone = event.containerMetadata.zone;
     if (targetZone !== "answer" && targetZone !== "bank") return;
 
+    if (event.item.isGhost) {
+      const sourceTile = findTile(itemId);
+      ghostEntry = {
+        id: `ghost-${event.item.id}`,
+        isGhost: true,
+        zone: targetZone,
+        index: event.index,
+        originalItemId: itemId,
+        ghostItem: event.item,
+        text: sourceTile?.text ?? "",
+      };
+      return;
+    }
+
     updateTileZone(itemId, targetZone, event.index);
   }
 
-  function handleSnapSortDomRemove(event: SnapSortDomRemoveEvent) {
+  function handleSnapSortDomRemove(event: ItemRemoveEvent) {
+    if (event.item.isGhost) {
+      if (ghostEntry?.ghostItem === event.item) {
+        ghostEntry = null;
+      }
+      return;
+    }
+
     const itemId = event.itemMetadata.itemId;
     if (typeof itemId !== "string") return;
 
     answerTiles = answerTiles.filter((tile) => tile.id !== itemId);
     bankTiles = bankTiles.filter((tile) => tile.id !== itemId);
+  }
+
+  function createFrameworkGhost(_event: GhostCreateEvent): void {
+    return;
+  }
+
+  function tilesForZone(zone: TileZone) {
+    return zone === "answer" ? answerTiles : bankTiles;
+  }
+
+  function findTile(tileId: string | undefined) {
+    if (!tileId) return null;
+    return [...answerTiles, ...bankTiles].find((tile) => tile.id === tileId) ?? null;
+  }
+
+  function renderedTiles(zone: TileZone): RenderedTile[] {
+    const rendered: RenderedTile[] = tilesForZone(zone).map((tile) => ({
+      isGhost: false,
+      tile,
+    }));
+    if (ghostEntry?.zone !== zone) return rendered;
+
+    const coreIndex = Math.max(0, Math.min(ghostEntry.index, rendered.length));
+    const originalIndex = ghostEntry.originalItemId
+      ? tilesForZone(zone).findIndex((tile) => tile.id === ghostEntry?.originalItemId)
+      : -1;
+    const destinationIndex =
+      originalIndex !== -1 && originalIndex <= coreIndex
+        ? coreIndex + 1
+        : coreIndex;
+    rendered.splice(destinationIndex, 0, ghostEntry);
+    return rendered;
   }
 
   function moveTileToZone(tile: TileData, targetZone: TileZone) {
@@ -144,6 +218,7 @@
   }
 
   function resetTiles() {
+    ghostEntry = null;
     answerTiles = [];
     bankTiles = toTileData(exercise.tiles);
     result = null;
@@ -202,32 +277,43 @@
                 clickMove: snapSortAnimation,
               },
               callbacks: {
-                onDomInsert: handleSnapSortDomInsert,
-                onDomRemove: handleSnapSortDomRemove,
-                afterDomMutation: tick,
+                onItemInsert: handleSnapSortDomInsert,
+                onItemRemove: handleSnapSortDomRemove,
+                createItemGhost: createFrameworkGhost,
+                awaitMutation: tick,
               },
             }}
             locked={true}
             metadata={{ zone: "answer" }}
           >
-            {#each answerTiles as tile (tile.id)}
-              <ItemProgressive className="tile-wrapper" metadata={{ itemId: tile.id }}>
-                <button
-                  type="button"
-                  class="tile selected"
-                  onpointerdown={handleTilePointerDown}
-                  onpointermove={handleTilePointerMove}
-                  onclick={(event) => handleTileClick(event, () => moveTileToZone(tile, "bank"))}
-                  ondblclick={() => openLookup(tile.text)}
-                  onkeydown={(event) => handleTileKeydown(event, tile, "bank")}
-                  aria-label={tile.text}
-                  title="Click to remove"
+            {#each renderedTiles("answer") as entry (entry.isGhost ? entry.id : entry.tile.id)}
+              {#if entry.isGhost}
+                <ItemProgressive
+                  className="tile-wrapper ghost tile-ghost"
+                  itemObject={entry.ghostItem}
+                  itemKey={entry.id}
                 >
-                  {tile.text}
-                </button>
-              </ItemProgressive>
+                  <button type="button" class="tile selected" tabindex="-1">{entry.text}</button>
+                </ItemProgressive>
+              {:else}
+                <ItemProgressive className="tile-wrapper" metadata={{ itemId: entry.tile.id }}>
+                  <button
+                    type="button"
+                    class="tile selected"
+                    onpointerdown={handleTilePointerDown}
+                    onpointermove={handleTilePointerMove}
+                    onclick={(event) => handleTileClick(event, () => moveTileToZone(entry.tile, "bank"))}
+                    ondblclick={() => openLookup(entry.tile.text)}
+                    onkeydown={(event) => handleTileKeydown(event, entry.tile, "bank")}
+                    aria-label={entry.tile.text}
+                    title="Click to remove"
+                  >
+                    {entry.tile.text}
+                  </button>
+                </ItemProgressive>
+              {/if}
             {/each}
-            {#if answerTiles.length === 0}
+            {#if answerTiles.length === 0 && ghostEntry?.zone !== "answer"}
               <span class="placeholder">Drag tiles here or click to add</span>
             {/if}
           </ContainerProgressive>
@@ -247,30 +333,41 @@
                 clickMove: snapSortAnimation,
               },
               callbacks: {
-                onDomInsert: handleSnapSortDomInsert,
-                onDomRemove: handleSnapSortDomRemove,
-                afterDomMutation: tick,
+                onItemInsert: handleSnapSortDomInsert,
+                onItemRemove: handleSnapSortDomRemove,
+                createItemGhost: createFrameworkGhost,
+                awaitMutation: tick,
               },
             }}
             locked={true}
             metadata={{ zone: "bank" }}
           >
-            {#each bankTiles as tile (tile.id)}
-              <ItemProgressive className="tile-wrapper" metadata={{ itemId: tile.id }}>
-                <button
-                  type="button"
-                  class="tile"
-                  onpointerdown={handleTilePointerDown}
-                  onpointermove={handleTilePointerMove}
-                  onclick={(event) => handleTileClick(event, () => moveTileToZone(tile, "answer"))}
-                  ondblclick={() => openLookup(tile.text)}
-                  onkeydown={(event) => handleTileKeydown(event, tile, "answer")}
-                  aria-label={tile.text}
-                  title="Click to add"
+            {#each renderedTiles("bank") as entry (entry.isGhost ? entry.id : entry.tile.id)}
+              {#if entry.isGhost}
+                <ItemProgressive
+                  className="tile-wrapper ghost tile-ghost"
+                  itemObject={entry.ghostItem}
+                  itemKey={entry.id}
                 >
-                  {tile.text}
-                </button>
-              </ItemProgressive>
+                  <button type="button" class="tile" tabindex="-1">{entry.text}</button>
+                </ItemProgressive>
+              {:else}
+                <ItemProgressive className="tile-wrapper" metadata={{ itemId: entry.tile.id }}>
+                  <button
+                    type="button"
+                    class="tile"
+                    onpointerdown={handleTilePointerDown}
+                    onpointermove={handleTilePointerMove}
+                    onclick={(event) => handleTileClick(event, () => moveTileToZone(entry.tile, "answer"))}
+                    ondblclick={() => openLookup(entry.tile.text)}
+                    onkeydown={(event) => handleTileKeydown(event, entry.tile, "answer")}
+                    aria-label={entry.tile.text}
+                    title="Click to add"
+                  >
+                    {entry.tile.text}
+                  </button>
+                </ItemProgressive>
+              {/if}
             {/each}
           </ContainerProgressive>
         </ContainerProgressive>
