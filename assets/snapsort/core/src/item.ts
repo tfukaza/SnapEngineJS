@@ -876,6 +876,7 @@ export class ItemBase extends ElementObject {
     this.transformOrigin = null;
     this.style = {
       position: "absolute",
+      zIndex: "1000",
       top: "0px",
       left: "0px",
     };

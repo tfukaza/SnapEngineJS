@@ -1,13 +1,77 @@
 <script lang="ts">
-  import { onMount } from "svelte";
+  import { onMount, tick } from "svelte";
   import { Engine } from "@snap-engine/asset-base-svelte";
   import type { Engine as SnapEngine } from "@snap-engine/core";
-  import { Container, Item } from "@snap-engine/snapsort-svelte";
+  import {
+    Container,
+    ContainerProgressive,
+    Item,
+    ItemProgressive,
+  } from "@snap-engine/snapsort-svelte";
+  import SnapSortContextBoundary from "./SnapSortContextBoundary.svelte";
+  import type {
+    ContainerBase as SortContainer,
+    GhostCreateEvent,
+    ItemBase,
+    ItemInsertEvent,
+    ItemRemoveEvent,
+  } from "@snap-engine/snapsort";
 
   type TitleLinePosition = {
     id: string;
     left: number;
     right: number;
+  };
+
+  type SentenceZone = "answer" | "bank";
+
+  type SentenceTile = {
+    id: string;
+    text: string;
+  };
+
+  type SentenceGhostEntry = {
+    id: string;
+    isGhost: true;
+    zone: SentenceZone;
+    index: number;
+    originalItemId: string | null;
+    ghostItem: ItemBase;
+    text: string;
+  };
+
+  type RenderedSentenceTile =
+    | {
+        isGhost: false;
+        tile: SentenceTile;
+      }
+    | SentenceGhostEntry;
+
+  type EditorFieldType =
+    | "shortText"
+    | "longText"
+    | "multipleChoice"
+    | "checkboxes"
+    | "dropdown"
+    | "date"
+    | "rating";
+
+  type EditorPaletteItem = {
+    type: EditorFieldType;
+    label: string;
+    icon: string;
+  };
+
+  type EditorOption = {
+    id: string;
+    label: string;
+  };
+
+  type EditorField = {
+    id: string;
+    type: EditorFieldType;
+    label: string;
+    options?: EditorOption[];
   };
 
   let heroSection: HTMLElement | undefined = $state();
@@ -95,88 +159,149 @@
     id: `snapsort-letter-${i}`,
   }));
 
-  const todoItems = [
+  let todoItems = $state([
     {
       id: "t-1",
-      text: "Buy groceries",
+      text: "Plan the grocery run for dinner, breakfast, and the weekend snack drawer",
+      due: "Due in 2h",
+      priority: "Home",
+      estimate: "20m",
       checked: false,
-      priority: "Med",
     },
     {
       id: "t-2",
-      text: "Walk the dog",
+      text: "Take the evening neighborhood walk before the weather turns colder",
+      due: "Done",
+      priority: "Routine",
+      estimate: "15m",
       checked: true,
-      priority: "Low",
     },
     {
       id: "t-3",
-      text: "Reply to emails",
+      text: "Clear the client inbox and flag anything that needs a follow-up tomorrow",
+      due: "Due today",
+      priority: "Work",
+      estimate: "30m",
       checked: false,
-      priority: "High",
     },
     {
       id: "t-4",
-      text: "Gym workout",
+      text: "Fit in a short strength session before the evening calendar fills up",
+      due: "6:30 PM",
+      priority: "Health",
+      estimate: "45m",
       checked: false,
-      priority: "Med",
     },
     {
       id: "t-5",
-      text: "Read book",
+      text: "Read the next chapter and save three notes for the weekend review",
+      due: "Done",
+      priority: "Focus",
+      estimate: "25m",
       checked: true,
-      priority: "Low",
     },
     {
       id: "t-6",
-      text: "Pay bills",
+      text: "Review autopay dates and pay the two bills that still need approval",
+      due: "Tomorrow",
+      priority: "Finance",
+      estimate: "10m",
       checked: false,
-      priority: "High",
     },
     {
       id: "t-7",
-      text: "Call mom",
+      text: "Call mom back and send the photos from last weekend's visit",
+      due: "Tonight",
+      priority: "Family",
+      estimate: "20m",
       checked: false,
-      priority: "Low",
     },
     {
       id: "t-8",
-      text: "Water plants",
+      text: "Water the balcony plants and rotate the herbs toward the light",
+      due: "Due in 4h",
+      priority: "Home",
+      estimate: "8m",
       checked: false,
-      priority: "Med",
     },
-  ];
+  ]);
 
   const kanbanTodo = [
     {
       id: "k-1",
       text: "Fix Bug #12",
-      tag: "Bug",
       desc: "Fix the login issue on Safari browser.",
+      assignee: "Maya Chen",
+      avatar: "MC",
+      avatarColor: "#0088ff",
+      due: "Today",
+      tag: "Bug",
+      activity: "3",
     },
     {
       id: "k-2",
       text: "Write Tests",
-      tag: "Dev",
       desc: "Add unit tests for the new payment module.",
+      assignee: "Noah Kim",
+      avatar: "NK",
+      avatarColor: "#8f3dff",
+      due: "Jun 30",
+      tag: "QA",
+      activity: "1",
+    },
+  ];
+
+  const kanbanReview = [
+    {
+      id: "k-3",
+      text: "Code Review",
+      desc: "Review the PR for the new feature.",
+      assignee: "Ari Patel",
+      avatar: "AP",
+      avatarColor: "#ff7a00",
+      due: "Jul 1",
+      tag: "Dev",
+      activity: "5",
+    },
+    {
+      id: "k-4",
+      text: "Design QA",
+      desc: "Check spacing, empty states, and mobile behavior.",
+      assignee: "Lina Park",
+      avatar: "LP",
+      avatarColor: "#ff3d7f",
+      due: "Jul 2",
+      tag: "UI",
+      activity: "2",
     },
   ];
 
   const kanbanDone = [
     {
-      id: "k-3",
-      text: "Code Review",
-      tag: "Dev",
-      desc: "Review the PR for the new feature.",
+      id: "k-5",
+      text: "Publish Docs",
+      desc: "Update the release notes and component examples.",
+      assignee: "Eli Stone",
+      avatar: "ES",
+      avatarColor: "#14a44d",
+      due: "Done",
+      tag: "Docs",
+      activity: "4",
     },
     {
-      id: "k-4",
+      id: "k-6",
       text: "Deploy to Prod",
-      tag: "Ops",
       desc: "Deploy the latest build to production.",
+      assignee: "Tara Ito",
+      avatar: "TI",
+      avatarColor: "#00a9a5",
+      due: "Done",
+      tag: "Ops",
+      activity: "6",
     },
   ];
 
-  const sentenceWords = [
+  const sentenceWords: SentenceTile[] = [
     { id: "sw-1", text: "あり" },
     { id: "sw-2", text: "の" },
     { id: "sw-3", text: "ます" },
@@ -185,32 +310,68 @@
     { id: "sw-6", text: "用途" },
   ];
 
-  const kaomojis = [
-    "(o^▽^o)",
-    "(ﾉ◕ヮ◕)ﾉ*:･ﾟ✧",
-    "(;¬_¬)",
-    "(╯°□°）╯︵ ┻━┻",
-    "┬─┬ノ( º _ ºノ)",
-    "¯\\_(ツ)_/¯",
-    "(ง'̀-'́)ง",
-    "(;´༎ຶД༎ຶ`)",
-    "( ͡° ͜ʖ ͡°)",
-    "(づ｡◕‿‿◕｡)づ",
-    "(*￣▽￣)b",
-    "(*・ω・)ﾉ",
-    "(ノ= ⏠ = )ノ",
-    "(=^･ω･^=)",
-    "(*μ_μ)",
-    "( ˘▽˘)っ♨",
+  const sentenceAnimation = {
+    duration: 180,
+    timing_function: "cubic-bezier(0.2, 0, 0, 1)",
+  };
+
+  const editorPalette: EditorPaletteItem[] = [
+    { type: "shortText", label: "Short text", icon: "short_text" },
+    { type: "longText", label: "Long text", icon: "notes" },
+    { type: "multipleChoice", label: "Multiple choice", icon: "radio_button_checked" },
+    { type: "checkboxes", label: "Checkboxes", icon: "checklist" },
+    { type: "dropdown", label: "Dropdown", icon: "arrow_drop_down_circle" },
+    { type: "date", label: "Date", icon: "event" },
+    { type: "rating", label: "Rating", icon: "star" },
   ];
 
-  const gridItems = Array.from({ length: kaomojis.length }, (_, i) => ({
-    id: `g-${i}`,
-    text: kaomojis[i % kaomojis.length],
-  }));
+  let editorOptionCount = 7;
 
-  let sentenceDropZone = $state<HTMLElement>();
+  function createEditorOption(label: string): EditorOption {
+    editorOptionCount += 1;
+    return {
+      id: `editor-option-${editorOptionCount}`,
+      label,
+    };
+  }
+
+  function defaultEditorOptions(type: EditorFieldType): EditorOption[] | undefined {
+    if (type === "multipleChoice" || type === "checkboxes") {
+      return [createEditorOption("Option 1"), createEditorOption("Option 2")];
+    }
+    if (type === "dropdown") {
+      return [
+        createEditorOption("Option 1"),
+        createEditorOption("Option 2"),
+        createEditorOption("Option 3"),
+      ];
+    }
+    return undefined;
+  }
+
+  let editorFieldCount = 3;
+  let editorFields: EditorField[] = $state([
+    { id: "editor-field-1", type: "shortText", label: "Question 1" },
+    {
+      id: "editor-field-2",
+      type: "multipleChoice",
+      label: "Question 2",
+      options: [
+        { id: "editor-option-1", label: "Option 1" },
+        { id: "editor-option-2", label: "Option 2" },
+      ],
+    },
+    { id: "editor-field-3", type: "rating", label: "Question 3" },
+  ]);
+
+  let sentenceAnswerContainer: SortContainer | undefined = $state();
+  let sentenceBankContainer: SortContainer | undefined = $state();
+  let sentenceAnswerTiles: SentenceTile[] = $state([]);
+  let sentenceBankTiles: SentenceTile[] = $state([...sentenceWords]);
+  let sentenceGhostEntry = $state<SentenceGhostEntry | null>(null);
   let sentenceResult = $state("");
+  let sentencePointerStart: { x: number; y: number } | null = null;
+  let suppressSentenceClick = false;
   let debug = $state(false);
   let canvasComponent: Engine | null = null;
 
@@ -233,11 +394,223 @@
     window.location.href = "/docs/snapsort/introduction";
   }
 
+  function addEditorField(type: EditorFieldType) {
+    editorFieldCount += 1;
+    editorFields = [
+      ...editorFields,
+      {
+        id: `editor-field-${editorFieldCount}`,
+        type,
+        label: `Question ${editorFieldCount}`,
+        options: defaultEditorOptions(type),
+      },
+    ];
+  }
+
+  function updateEditorFieldLabel(id: string, label: string) {
+    editorFields = editorFields.map((field) =>
+      field.id === id ? { ...field, label } : field,
+    );
+  }
+
+  function updateEditorFieldOptions(
+    fieldId: string,
+    update: (options: EditorOption[]) => EditorOption[],
+  ) {
+    editorFields = editorFields.map((field) =>
+      field.id === fieldId
+        ? { ...field, options: update(field.options ?? []) }
+        : field,
+    );
+  }
+
+  function updateEditorOptionLabel(fieldId: string, optionId: string, label: string) {
+    updateEditorFieldOptions(fieldId, (options) =>
+      options.map((option) => option.id === optionId ? { ...option, label } : option),
+    );
+  }
+
+  function addEditorOption(fieldId: string) {
+    const field = editorFields.find((candidate) => candidate.id === fieldId);
+    const nextLabel = `Option ${(field?.options?.length ?? 0) + 1}`;
+    updateEditorFieldOptions(fieldId, (options) => [...options, createEditorOption(nextLabel)]);
+  }
+
+  function removeEditorOption(fieldId: string, optionId: string) {
+    updateEditorFieldOptions(fieldId, (options) =>
+      options.length <= 1 ? options : options.filter((option) => option.id !== optionId),
+    );
+  }
+
+  function reorderEditorOption(fieldId: string, optionId: string, index: number) {
+    updateEditorFieldOptions(fieldId, (options) => {
+      const option = options.find((candidate) => candidate.id === optionId);
+      if (!option) return options;
+
+      const nextOptions = options.filter((candidate) => candidate.id !== optionId);
+      const targetIndex = Math.max(0, Math.min(index, nextOptions.length));
+      nextOptions.splice(targetIndex, 0, option);
+      return nextOptions;
+    });
+  }
+
+  function handleEditorOptionInsert(event: ItemInsertEvent) {
+    if (event.item.isGhost) {
+      event.container.element?.insertBefore(event.item.element!, event.beforeElement);
+      return;
+    }
+
+    const fieldId = event.containerMetadata.fieldId;
+    const optionId = event.itemMetadata.itemId;
+    if (typeof fieldId !== "string" || typeof optionId !== "string") return;
+
+    reorderEditorOption(fieldId, optionId, event.index);
+  }
+
+  function handleEditorOptionRemove(event: ItemRemoveEvent) {
+    if (event.item.isGhost) {
+      event.item.element?.remove();
+    }
+  }
+
+  function sentenceContainerForZone(zone: SentenceZone) {
+    return zone === "answer" ? sentenceAnswerContainer : sentenceBankContainer;
+  }
+
+  function sentenceTilesForZone(zone: SentenceZone) {
+    return zone === "answer" ? sentenceAnswerTiles : sentenceBankTiles;
+  }
+
+  function findSentenceTile(tileId: string | undefined) {
+    if (!tileId) return null;
+    return [...sentenceAnswerTiles, ...sentenceBankTiles].find((tile) => tile.id === tileId) ?? null;
+  }
+
+  function updateSentenceTileZone(tileId: string, targetZone: SentenceZone, targetIndex: number) {
+    sentenceGhostEntry = null;
+    const allTiles = [...sentenceAnswerTiles, ...sentenceBankTiles];
+    const movedTile = allTiles.find((tile) => tile.id === tileId);
+    if (!movedTile) return;
+
+    const nextAnswerTiles = sentenceAnswerTiles.filter((tile) => tile.id !== tileId);
+    const nextBankTiles = sentenceBankTiles.filter((tile) => tile.id !== tileId);
+    const targetTiles = targetZone === "answer" ? nextAnswerTiles : nextBankTiles;
+    const destinationIndex = Math.max(0, Math.min(targetIndex, targetTiles.length));
+
+    targetTiles.splice(destinationIndex, 0, movedTile);
+    sentenceAnswerTiles = nextAnswerTiles;
+    sentenceBankTiles = nextBankTiles;
+    sentenceResult = "";
+  }
+
+  function handleSentenceInsert(event: ItemInsertEvent) {
+    const itemId = event.itemMetadata.itemId;
+    if (typeof itemId !== "string") return;
+
+    const targetZone = event.containerMetadata.zone;
+    if (targetZone !== "answer" && targetZone !== "bank") return;
+
+    if (event.item.isGhost) {
+      const sourceTile = findSentenceTile(itemId);
+      sentenceGhostEntry = {
+        id: `sentence-ghost-${event.item.id}`,
+        isGhost: true,
+        zone: targetZone,
+        index: event.index,
+        originalItemId: itemId,
+        ghostItem: event.item,
+        text: sourceTile?.text ?? "",
+      };
+      return;
+    }
+
+    updateSentenceTileZone(itemId, targetZone, event.index);
+  }
+
+  function handleSentenceRemove(event: ItemRemoveEvent) {
+    if (event.item.isGhost) {
+      if (sentenceGhostEntry?.ghostItem === event.item) {
+        sentenceGhostEntry = null;
+      }
+      return;
+    }
+
+    const itemId = event.itemMetadata.itemId;
+    if (typeof itemId !== "string") return;
+
+    sentenceAnswerTiles = sentenceAnswerTiles.filter((tile) => tile.id !== itemId);
+    sentenceBankTiles = sentenceBankTiles.filter((tile) => tile.id !== itemId);
+  }
+
+  function createSentenceGhost(_event: GhostCreateEvent): void {
+    return;
+  }
+
+  function renderedSentenceTiles(zone: SentenceZone): RenderedSentenceTile[] {
+    const rendered: RenderedSentenceTile[] = sentenceTilesForZone(zone).map((tile) => ({
+      isGhost: false,
+      tile,
+    }));
+    if (sentenceGhostEntry?.zone !== zone) return rendered;
+
+    const coreIndex = Math.max(0, Math.min(sentenceGhostEntry.index, rendered.length));
+    const originalIndex = sentenceGhostEntry.originalItemId
+      ? sentenceTilesForZone(zone).findIndex((tile) => tile.id === sentenceGhostEntry?.originalItemId)
+      : -1;
+    const destinationIndex =
+      originalIndex !== -1 && originalIndex <= coreIndex
+        ? coreIndex + 1
+        : coreIndex;
+    rendered.splice(destinationIndex, 0, sentenceGhostEntry);
+    return rendered;
+  }
+
+  function moveSentenceTileToZone(tile: SentenceTile, targetZone: SentenceZone) {
+    const sourceZone: SentenceZone = sentenceAnswerTiles.some((candidate) => candidate.id === tile.id)
+      ? "answer"
+      : "bank";
+    const sourceContainer = sentenceContainerForZone(sourceZone);
+    const targetContainer = sentenceContainerForZone(targetZone);
+    const fallbackIndex = targetZone === "answer" ? sentenceAnswerTiles.length : sentenceBankTiles.length;
+
+    if (sourceContainer && targetContainer) {
+      const movedBySnapSort = sourceContainer.moveItem(tile.id, targetContainer, fallbackIndex);
+      if (movedBySnapSort) return;
+    }
+
+    updateSentenceTileZone(tile.id, targetZone, fallbackIndex);
+  }
+
+  function handleSentenceTilePointerDown(event: PointerEvent) {
+    sentencePointerStart = { x: event.clientX, y: event.clientY };
+    suppressSentenceClick = false;
+  }
+
+  function handleSentenceTilePointerMove(event: PointerEvent) {
+    if (!sentencePointerStart) return;
+    const distance = Math.hypot(
+      event.clientX - sentencePointerStart.x,
+      event.clientY - sentencePointerStart.y,
+    );
+    if (distance > 3) {
+      suppressSentenceClick = true;
+    }
+  }
+
+  function handleSentenceTileClick(event: MouseEvent, action: () => void) {
+    if (suppressSentenceClick) {
+      event.preventDefault();
+      event.stopPropagation();
+      suppressSentenceClick = false;
+      sentencePointerStart = null;
+      return;
+    }
+
+    action();
+  }
+
   function checkSentence() {
-    if (!sentenceDropZone) return;
-    const words = Array.from(
-      sentenceDropZone.querySelectorAll(".sentence-drop-zone .sentence-word"),
-    ).map((el) => el.textContent?.trim());
+    const words = sentenceAnswerTiles.map((tile) => tile.text);
     const correct = ["多く", "の", "用途", "が", "あり", "ます"];
 
     if (
@@ -250,25 +623,6 @@
     }
   }
 
-  function priorityChipClass(priority: string) {
-    const classes: Record<string, string> = {
-      High: "chip-warning",
-      Med: "chip-ready",
-      Low: "chip-muted",
-    };
-
-    return classes[priority] ?? "chip-muted";
-  }
-
-  function tagChipClass(tag: string) {
-    const classes: Record<string, string> = {
-      Bug: "chip-warning",
-      Dev: "chip-ready",
-      Ops: "chip-code",
-    };
-
-    return classes[tag] ?? "chip-muted";
-  }
 </script>
 
 <svelte:window onkeydown={handleKeydown} />
@@ -312,18 +666,12 @@
           </Container>
         </div>
         <div class="hero-copy">
-          <p>Drag and drop any element</p>
+          <p>The ultimate library for drag and drop interfaces. From todo lists to kanban boards and beyond, SnapSort has you covered. </p>
           <button class="primary" type="button" onclick={goToDocs}>See docs</button>
         </div>
       </div>
 
   </Engine>
-</section>
-<section class="snapsort-intro">
-  <h2 id="drag-drop-header">Sorting that feels like a snap</h2>
-  <p>
-    SnapSort gives any UI element precise, animated drag-and-drop behavior.
-  </p>
 </section>
 <section>
   <Engine id="snapsort-examples-canvas" bind:this={canvasComponent} bind:engine={examplesEngine} {debug}>
@@ -331,17 +679,30 @@
     <div class="examples-grid">
       <div class="example-card pm-example">
         <h3>TODO List</h3>
-        <div class="card ground project-list">
+        <div class="project-list">
           <Container config={{ direction: "column", groupID: "project-list" }}>
-            {#each todoItems as { id, text, checked, priority } (id)}
+            {#each todoItems as todo (todo.id)}
               <Item>
-                <div class="project-card">
+                <div class="project-card" class:checked={todo.checked}>
                   <label>
-                    <input type="checkbox" checked={checked} />
+                    <input type="checkbox" bind:checked={todo.checked} />
                     <span></span>
                   </label>
-                  <span class="project-text">{text}</span>
-                  <span class={`chip ${priorityChipClass(priority)} priority`}>{priority}</span>
+                  <span class="project-text">{todo.text}</span>
+                  <div class="project-meta" aria-label="Task metadata">
+                    <span class="project-meta-item">
+                      <i class="material-symbols-rounded" aria-hidden="true">schedule</i>
+                      {todo.due}
+                    </span>
+                    <span class="project-meta-item">
+                      <i class="material-symbols-rounded" aria-hidden="true">flag</i>
+                      {todo.priority}
+                    </span>
+                    <span class="project-meta-item">
+                      <i class="material-symbols-rounded" aria-hidden="true">timer</i>
+                      {todo.estimate}
+                    </span>
+                  </div>
                 </div>
               </Item>
             {/each}
@@ -357,29 +718,97 @@
             locked={true}
           >
             <Container
-              className="kanban-column card ground"
+              className="kanban-column"
               config={{
                 direction: "column",
                 name: "kanban-todo",
-                onClickAction: { action: "moveTo", target: "kanban-done" },
+                onClickAction: { action: "moveTo", target: "kanban-review" },
               }}
               locked={true}
             >
               <h4>To Do</h4>
-              {#each kanbanTodo as { id, text, tag, desc } (id)}
+              {#each kanbanTodo as { id, text, desc, assignee, avatar, avatarColor, due, tag, activity } (id)}
                 <Item>
-                  <div class="kanban-card">
+                  <div class="kanban-card card">
                     <div class="kanban-header">
                       <span class="kanban-title">{text}</span>
                     </div>
                     <p class="kanban-desc">{desc}</p>
-                    <span class={`chip ${tagChipClass(tag)} tag`}>{tag}</span>
+                    <div class="kanban-footer">
+                      <span
+                        class="kanban-avatar"
+                        style={`--avatar-color: ${avatarColor};`}
+                        title={assignee}
+                        aria-label={assignee}
+                      >
+                        {avatar}
+                      </span>
+                      <div class="kanban-meta" aria-label="Task metadata">
+                        <span class="kanban-meta-item">
+                          <i class="material-symbols-rounded" aria-hidden="true">event</i>
+                          {due}
+                        </span>
+                        <span class="kanban-meta-item">
+                          <i class="material-symbols-rounded" aria-hidden="true">sell</i>
+                          {tag}
+                        </span>
+                        <span class="kanban-meta-item">
+                          <i class="material-symbols-rounded" aria-hidden="true">forum</i>
+                          {activity}
+                        </span>
+                      </div>
+                    </div>
                   </div>
                 </Item>
               {/each}
             </Container>
             <Container
-              className="kanban-column card ground"
+              className="kanban-column"
+              config={{
+                direction: "column",
+                name: "kanban-review",
+                onClickAction: { action: "moveTo", target: "kanban-done" },
+              }}
+              locked={true}
+            >
+              <h4>Review</h4>
+              {#each kanbanReview as { id, text, desc, assignee, avatar, avatarColor, due, tag, activity } (id)}
+                <Item>
+                  <div class="kanban-card card">
+                    <div class="kanban-header">
+                      <span class="kanban-title">{text}</span>
+                    </div>
+                    <p class="kanban-desc">{desc}</p>
+                    <div class="kanban-footer">
+                      <span
+                        class="kanban-avatar"
+                        style={`--avatar-color: ${avatarColor};`}
+                        title={assignee}
+                        aria-label={assignee}
+                      >
+                        {avatar}
+                      </span>
+                      <div class="kanban-meta" aria-label="Task metadata">
+                        <span class="kanban-meta-item">
+                          <i class="material-symbols-rounded" aria-hidden="true">event</i>
+                          {due}
+                        </span>
+                        <span class="kanban-meta-item">
+                          <i class="material-symbols-rounded" aria-hidden="true">sell</i>
+                          {tag}
+                        </span>
+                        <span class="kanban-meta-item">
+                          <i class="material-symbols-rounded" aria-hidden="true">forum</i>
+                          {activity}
+                        </span>
+                      </div>
+                    </div>
+                  </div>
+                </Item>
+              {/each}
+            </Container>
+            <Container
+              className="kanban-column"
               config={{
                 direction: "column",
                 name: "kanban-done",
@@ -388,14 +817,37 @@
               locked={true}
             >
               <h4>Done</h4>
-              {#each kanbanDone as { id, text, tag, desc } (id)}
+              {#each kanbanDone as { id, text, desc, assignee, avatar, avatarColor, due, tag, activity } (id)}
                 <Item>
-                  <div class="kanban-card">
+                  <div class="kanban-card card">
                     <div class="kanban-header">
                       <span class="kanban-title">{text}</span>
                     </div>
                     <p class="kanban-desc">{desc}</p>
-                    <span class={`chip ${tagChipClass(tag)} tag`}>{tag}</span>
+                    <div class="kanban-footer">
+                      <span
+                        class="kanban-avatar"
+                        style={`--avatar-color: ${avatarColor};`}
+                        title={assignee}
+                        aria-label={assignee}
+                      >
+                        {avatar}
+                      </span>
+                      <div class="kanban-meta" aria-label="Task metadata">
+                        <span class="kanban-meta-item">
+                          <i class="material-symbols-rounded" aria-hidden="true">event</i>
+                          {due}
+                        </span>
+                        <span class="kanban-meta-item">
+                          <i class="material-symbols-rounded" aria-hidden="true">sell</i>
+                          {tag}
+                        </span>
+                        <span class="kanban-meta-item">
+                          <i class="material-symbols-rounded" aria-hidden="true">forum</i>
+                          {activity}
+                        </span>
+                      </div>
+                    </div>
                   </div>
                 </Item>
               {/each}
@@ -414,40 +866,110 @@
               <span>It has many uses</span>
             </div>
           </div>
-          <div class="sentence-container-area" bind:this={sentenceDropZone}>
-            <Container
+          <div class="sentence-container-area">
+            <ContainerProgressive
               className="sentence-workspace-root"
               config={{ direction: "column", name: "sentence-root", noDrop: true }}
               locked={true}
             >
-              <Container
+              <ContainerProgressive
                 className="sentence-drop-zone"
+                bind:container={sentenceAnswerContainer}
                 config={{
                   direction: "row",
                   groupID: "sentence",
                   name: "sentence-target",
-                  onClickAction: { action: "moveTo", target: "sentence-source" },
+                  dropArea: true,
+                  animation: {
+                    reorder: sentenceAnimation,
+                    drop: sentenceAnimation,
+                    clickMove: sentenceAnimation,
+                  },
+                  callbacks: {
+                    onItemInsert: handleSentenceInsert,
+                    onItemRemove: handleSentenceRemove,
+                    createItemGhost: createSentenceGhost,
+                    awaitMutation: tick,
+                  },
                 }}
                 locked={true}
+                metadata={{ zone: "answer" }}
               >
-              </Container>
-              <Container
+                {#each renderedSentenceTiles("answer") as entry (entry.isGhost ? entry.id : entry.tile.id)}
+                  {#if entry.isGhost}
+                    <ItemProgressive
+                      className="sentence-tile-wrapper ghost sentence-tile-ghost"
+                      itemObject={entry.ghostItem}
+                      itemKey={entry.id}
+                    >
+                      <button type="button" class="word-card sentence-word selected" tabindex="-1">{entry.text}</button>
+                    </ItemProgressive>
+                  {:else}
+                    <ItemProgressive className="sentence-tile-wrapper" metadata={{ itemId: entry.tile.id }}>
+                      <button
+                        type="button"
+                        class="word-card sentence-word selected"
+                        onpointerdown={handleSentenceTilePointerDown}
+                        onpointermove={handleSentenceTilePointerMove}
+                        onclick={(event) => handleSentenceTileClick(event, () => moveSentenceTileToZone(entry.tile, "bank"))}
+                        aria-label={`Move ${entry.tile.text} to bank`}
+                      >
+                        {entry.tile.text}
+                      </button>
+                    </ItemProgressive>
+                  {/if}
+                {/each}
+              </ContainerProgressive>
+              <ContainerProgressive
                 className="sentence-source-zone"
+                bind:container={sentenceBankContainer}
                 config={{
                   direction: "row",
+                  mainAxisAlign: "center",
                   groupID: "sentence",
                   name: "sentence-source",
-                  onClickAction: { action: "moveTo", target: "sentence-target" },
+                  dropArea: true,
+                  animation: {
+                    reorder: sentenceAnimation,
+                    drop: sentenceAnimation,
+                    clickMove: sentenceAnimation,
+                  },
+                  callbacks: {
+                    onItemInsert: handleSentenceInsert,
+                    onItemRemove: handleSentenceRemove,
+                    createItemGhost: createSentenceGhost,
+                    awaitMutation: tick,
+                  },
                 }}
                 locked={true}
+                metadata={{ zone: "bank" }}
               >
-                {#each sentenceWords as { id, text } (id)}
-                  <Item>
-                    <div class="word-card sentence-word">{text}</div>
-                  </Item>
+                {#each renderedSentenceTiles("bank") as entry (entry.isGhost ? entry.id : entry.tile.id)}
+                  {#if entry.isGhost}
+                    <ItemProgressive
+                      className="sentence-tile-wrapper ghost sentence-tile-ghost"
+                      itemObject={entry.ghostItem}
+                      itemKey={entry.id}
+                    >
+                      <button type="button" class="word-card sentence-word" tabindex="-1">{entry.text}</button>
+                    </ItemProgressive>
+                  {:else}
+                    <ItemProgressive className="sentence-tile-wrapper" metadata={{ itemId: entry.tile.id }}>
+                      <button
+                        type="button"
+                        class="word-card sentence-word"
+                        onpointerdown={handleSentenceTilePointerDown}
+                        onpointermove={handleSentenceTilePointerMove}
+                        onclick={(event) => handleSentenceTileClick(event, () => moveSentenceTileToZone(entry.tile, "answer"))}
+                        aria-label={`Move ${entry.tile.text} to answer`}
+                      >
+                        {entry.tile.text}
+                      </button>
+                    </ItemProgressive>
+                  {/if}
                 {/each}
-              </Container>
-            </Container>
+              </ContainerProgressive>
+            </ContainerProgressive>
           </div>
           <div class="controls">
             <button
@@ -461,18 +983,255 @@
         </div>
       </div>
 
-      <div class="example-card layout-example">
-        <h3>Multi-row Flex Layout</h3>
-        <div class="card ground grid-layout">
-          <Container config={{ direction: "row", groupID: "grid-layout" }}>
-            {#each gridItems as { id, text } (id)}
-              <Item style="padding: 0.15rem;">
-                <div class="grid-card">
-                  {text}
-                </div>
-              </Item>
+      <div class="example-card editor-example">
+        <h3 class="editor-title">Editor</h3>
+        <div class="editor-builder">
+          <div class="editor-palette" aria-label="Field palette">
+            {#each editorPalette as item (item.type)}
+              <button
+                type="button"
+                class="editor-tool"
+                onclick={() => addEditorField(item.type)}
+              >
+                <i class="material-symbols-rounded" aria-hidden="true">{item.icon}</i>
+                <span>{item.label}</span>
+              </button>
             {/each}
-          </Container>
+          </div>
+          <div class="editor-canvas card form-control-group" aria-label="Form canvas">
+            <div class="editor-canvas-header">
+              <h4 class="editor-canvas-title">My Form</h4>
+            </div>
+            <Container
+              className="editor-field-list"
+              config={{ direction: "column", groupID: "editor-fields" }}
+            >
+              {#each editorFields as field (field.id)}
+                <Item>
+                  <div class="editor-field">
+                    <div class="editor-field-main">
+                      <input
+                        class="editor-question-input"
+                        type="text"
+                        value={field.label}
+                        aria-label="Question text"
+                        oninput={(event) =>
+                          updateEditorFieldLabel(field.id, event.currentTarget.value)}
+                        onpointerdown={(event) => event.stopPropagation()}
+                        onclick={(event) => event.stopPropagation()}
+                      />
+                      {#if field.type === "shortText"}
+                        <input id={field.id} type="text" value="Short answer" readonly tabindex="-1" />
+                      {:else if field.type === "longText"}
+                        <textarea id={field.id} rows="3" readonly tabindex="-1">Long answer response</textarea>
+                      {:else if field.type === "multipleChoice"}
+                        <SnapSortContextBoundary>
+                          <ContainerProgressive
+                            className="editor-option-stack"
+                            config={{
+                              direction: "column",
+                              groupID: `editor-options-${field.id}`,
+                              name: `editor-options-${field.id}`,
+                              callbacks: {
+                                onItemInsert: handleEditorOptionInsert,
+                                onItemRemove: handleEditorOptionRemove,
+                                awaitMutation: tick,
+                              },
+                            }}
+                            locked={true}
+                            metadata={{ fieldId: field.id }}
+                          >
+                            {#each field.options ?? [] as option (option.id)}
+                              <ItemProgressive className="editor-option-item" metadata={{ itemId: option.id }}>
+                                <div class="editor-option-row">
+                                  <label class="radio-label">
+                                    <input type="radio" name={`${field.id}-choice`} checked={option === field.options?.[0]} tabindex="-1" />
+                                    <span></span>
+                                  </label>
+                                  <input
+                                    class="editor-option-input"
+                                    type="text"
+                                    value={option.label}
+                                    aria-label="Option text"
+                                    oninput={(event) =>
+                                      updateEditorOptionLabel(field.id, option.id, event.currentTarget.value)}
+                                    onpointerdown={(event) => event.stopPropagation()}
+                                    onclick={(event) => event.stopPropagation()}
+                                  />
+                                  <button
+                                    class="editor-option-action"
+                                    type="button"
+                                    aria-label="Remove option"
+                                    disabled={(field.options?.length ?? 0) <= 1}
+                                    onpointerdown={(event) => event.stopPropagation()}
+                                    onclick={(event) => {
+                                      event.stopPropagation();
+                                      removeEditorOption(field.id, option.id);
+                                    }}
+                                  >
+                                    <i class="material-symbols-rounded" aria-hidden="true">delete</i>
+                                  </button>
+                                  <i class="material-symbols-rounded editor-option-grip" aria-hidden="true">drag_indicator</i>
+                                </div>
+                              </ItemProgressive>
+                            {/each}
+                          </ContainerProgressive>
+                        </SnapSortContextBoundary>
+                        <button
+                          class="editor-add-option"
+                          type="button"
+                          onpointerdown={(event) => event.stopPropagation()}
+                          onclick={(event) => {
+                            event.stopPropagation();
+                            addEditorOption(field.id);
+                          }}
+                        >
+                          <i class="material-symbols-rounded" aria-hidden="true">add</i>
+                          Add option
+                        </button>
+                      {:else if field.type === "checkboxes"}
+                        <SnapSortContextBoundary>
+                          <ContainerProgressive
+                            className="editor-option-stack"
+                            config={{
+                              direction: "column",
+                              groupID: `editor-options-${field.id}`,
+                              name: `editor-options-${field.id}`,
+                              callbacks: {
+                                onItemInsert: handleEditorOptionInsert,
+                                onItemRemove: handleEditorOptionRemove,
+                                awaitMutation: tick,
+                              },
+                            }}
+                            locked={true}
+                            metadata={{ fieldId: field.id }}
+                          >
+                            {#each field.options ?? [] as option (option.id)}
+                              <ItemProgressive className="editor-option-item" metadata={{ itemId: option.id }}>
+                                <div class="editor-option-row">
+                                  <label class="checkbox-label">
+                                    <input type="checkbox" checked={option === field.options?.[0]} tabindex="-1" />
+                                    <span></span>
+                                  </label>
+                                  <input
+                                    class="editor-option-input"
+                                    type="text"
+                                    value={option.label}
+                                    aria-label="Option text"
+                                    oninput={(event) =>
+                                      updateEditorOptionLabel(field.id, option.id, event.currentTarget.value)}
+                                    onpointerdown={(event) => event.stopPropagation()}
+                                    onclick={(event) => event.stopPropagation()}
+                                  />
+                                  <button
+                                    class="editor-option-action"
+                                    type="button"
+                                    aria-label="Remove option"
+                                    disabled={(field.options?.length ?? 0) <= 1}
+                                    onpointerdown={(event) => event.stopPropagation()}
+                                    onclick={(event) => {
+                                      event.stopPropagation();
+                                      removeEditorOption(field.id, option.id);
+                                    }}
+                                  >
+                                    <i class="material-symbols-rounded" aria-hidden="true">delete</i>
+                                  </button>
+                                  <i class="material-symbols-rounded editor-option-grip" aria-hidden="true">drag_indicator</i>
+                                </div>
+                              </ItemProgressive>
+                            {/each}
+                          </ContainerProgressive>
+                        </SnapSortContextBoundary>
+                        <button
+                          class="editor-add-option"
+                          type="button"
+                          onpointerdown={(event) => event.stopPropagation()}
+                          onclick={(event) => {
+                            event.stopPropagation();
+                            addEditorOption(field.id);
+                          }}
+                        >
+                          <i class="material-symbols-rounded" aria-hidden="true">add</i>
+                          Add option
+                        </button>
+                      {:else if field.type === "dropdown"}
+                        <SnapSortContextBoundary>
+                          <ContainerProgressive
+                            className="editor-option-stack"
+                            config={{
+                              direction: "column",
+                              groupID: `editor-options-${field.id}`,
+                              name: `editor-options-${field.id}`,
+                              callbacks: {
+                                onItemInsert: handleEditorOptionInsert,
+                                onItemRemove: handleEditorOptionRemove,
+                                awaitMutation: tick,
+                              },
+                            }}
+                            locked={true}
+                            metadata={{ fieldId: field.id }}
+                          >
+                            {#each field.options ?? [] as option (option.id)}
+                              <ItemProgressive className="editor-option-item" metadata={{ itemId: option.id }}>
+                                <div class="editor-option-row">
+                                  <i class="material-symbols-rounded editor-option-type-icon" aria-hidden="true">arrow_drop_down</i>
+                                  <input
+                                    class="editor-option-input"
+                                    type="text"
+                                    value={option.label}
+                                    aria-label="Option text"
+                                    oninput={(event) =>
+                                      updateEditorOptionLabel(field.id, option.id, event.currentTarget.value)}
+                                    onpointerdown={(event) => event.stopPropagation()}
+                                    onclick={(event) => event.stopPropagation()}
+                                  />
+                                  <button
+                                    class="editor-option-action"
+                                    type="button"
+                                    aria-label="Remove option"
+                                    disabled={(field.options?.length ?? 0) <= 1}
+                                    onpointerdown={(event) => event.stopPropagation()}
+                                    onclick={(event) => {
+                                      event.stopPropagation();
+                                      removeEditorOption(field.id, option.id);
+                                    }}
+                                  >
+                                    <i class="material-symbols-rounded" aria-hidden="true">delete</i>
+                                  </button>
+                                  <i class="material-symbols-rounded editor-option-grip" aria-hidden="true">drag_indicator</i>
+                                </div>
+                              </ItemProgressive>
+                            {/each}
+                          </ContainerProgressive>
+                        </SnapSortContextBoundary>
+                        <button
+                          class="editor-add-option"
+                          type="button"
+                          onpointerdown={(event) => event.stopPropagation()}
+                          onclick={(event) => {
+                            event.stopPropagation();
+                            addEditorOption(field.id);
+                          }}
+                        >
+                          <i class="material-symbols-rounded" aria-hidden="true">add</i>
+                          Add option
+                        </button>
+                      {:else if field.type === "date"}
+                        <input id={field.id} type="date" tabindex="-1" />
+                      {:else}
+                        <div class="editor-rating-preview" aria-label="5 star rating">
+                          {#each Array(5) as _, index}
+                            <i class="material-symbols-rounded" class:filled={index < 4} aria-hidden="true">star</i>
+                          {/each}
+                        </div>
+                      {/if}
+                    </div>
+                    <i class="material-symbols-rounded editor-field-grip" aria-hidden="true">drag_indicator</i>
+                  </div>
+                </Item>
+              {/each}
+            </Container>
+          </div>
         </div>
       </div>
     </div>
@@ -481,29 +1240,6 @@
 
 <style lang="scss">
   @use "../../lib/landing/landing.scss";
-
-  .debug-toggle {
-    position: fixed;
-    top: 1rem;
-    right: 1rem;
-    z-index: 1000;
-  }
-
-  .debug-toggle button {
-    padding: 0.5rem 1rem;
-    background: rgba(58, 42, 34, 0.8);
-    color: white;
-    border: none;
-    border-radius: 6px;
-    cursor: pointer;
-    font-weight: 600;
-    font-family: inherit;
-    backdrop-filter: blur(4px);
-  }
-
-  .debug-toggle button:hover {
-    background: rgba(58, 42, 34, 1);
-  }
 
   #landing {
     background: var(--color-background-tint);
@@ -741,46 +1477,23 @@
     margin-top: 2.5rem;
   }
 
-  .powered-by {
-    margin-top: 2rem;
-    font-size: 0.9rem;
-    color: #7d6a5f;
-    opacity: 0.8;
-    font-weight: 500;
-  }
-
-
-  .snapsort-intro {
-    text-align: center;
-    max-width: 720px;
-    margin: 7rem auto 4rem;
-  }
-
-  #drag-drop-header {
-    font-size: 3rem;
-    line-height: 1.05;
-    margin: 0 0 1rem;
-  }
-
-  .snapsort-intro p {
-    margin: 0;
-    color: #7d6a5f;
-    font-size: 1.12rem;
-    line-height: 1.55;
+  .hero-copy p {
+    max-width: 500px;
   }
 
   /* Examples Section */
   .examples-grid {
     display: grid;
     grid-template-columns: repeat(3, minmax(0, 1fr));
-    grid-template-rows: repeat(2, minmax(0, auto));
+    grid-template-rows: repeat(3, minmax(0, auto));
     grid-template-areas:
-      "pm kanban kanban"
-      "pm sentence layout";
+      "pm pm sentence"
+      "kanban kanban kanban"
+      "editor editor editor";
     gap: var(--size-24);
     width: 100%;
     max-width: 1200px;
-    margin: 4rem auto;
+    margin: 7rem auto 4rem;
   }
 
   .example-card {
@@ -815,62 +1528,30 @@
     grid-area: sentence;
   }
 
-  .layout-example {
-    grid-area: layout;
+  .editor-example {
+    grid-area: editor;
+    position: relative;
+    gap: 0;
+    justify-content: stretch;
+    min-height: 470px;
   }
 
-  .insights-example {
-    grid-area: insights;
+  .editor-title {
+    position: absolute;
+    top: var(--size-32);
+    left: var(--size-32);
+    z-index: 1;
   }
-
-  .insights-card {
-    padding: 1.5rem;
-    background: white;
-    border-radius: var(--ui-radius);
-    border: 1px solid rgba(0, 0, 0, 0.05);
-    display: flex;
-    flex-direction: column;
-    gap: 0.75rem;
-  }
-
-  .insight {
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-    font-weight: 600;
-  }
-
-  .insight .label {
-    font-size: 0.85rem;
-    color: #7d6a5f;
-  }
-
-  .insight-footnote {
-    margin: 0;
-    font-size: 0.75rem;
-    color: #9e8f85;
-    text-transform: uppercase;
-    letter-spacing: 0.08em;
-  }
-
-  // @media (max-width: 1024px) {
-  //   .examples-grid {
-  //     grid-template-columns: repeat(2, minmax(0, 1fr));
-  //     grid-template-rows: none;
-  //     grid-template-areas:
-  //       "pm pm"
-  //       "pm pm"
-  //       "kanban kanban"
-  //       "insights sentence"
-  //       "layout layout";
-  //   }
-  // }
 
   @media (max-width: 720px) {
     .examples-grid {
       display: flex;
       flex-direction: column;
       margin: 2rem 0;
+    }
+
+    .kanban-example {
+      display: none;
     }
   }
 
@@ -891,24 +1572,11 @@
     font-family: "Bitcount Grid Single", monospace;
   }
 
-  .prompt-label {
-    font-size: 0.85rem;
-    font-weight: 600;
-    color: #3a2a22;
-  }
-
   .english-sentence {
     span {
       color: #ffffff;
       font-family: inherit;
     }
-  }
-
-  .speaker-icon {
-    width: 24px;
-    height: 24px;
-    opacity: 0.6;
-    cursor: pointer;
   }
 
   .sentence-container-area {
@@ -938,17 +1606,24 @@
     border-bottom: 2px solid #eee;
     padding-bottom: var(--size-2);
     align-items: flex-start;
+    align-content: flex-start;
   }
 
   .sentence-builder :global(.sentence-source-zone) {
-    align-content: center;
-    justify-content: flex-start;
-    padding: var(--size-4) 0 var(--size-20);
+    align-content: flex-start;
+    justify-content: center;
+    margin-top: auto;
+    padding: var(--size-16) 0 0;
   }
 
-  .sentence-builder :global(.sentence-drop-zone .snapsort-item),
-  .sentence-builder :global(.sentence-source-zone .snapsort-item) {
+  .sentence-builder :global(.sentence-tile-wrapper) {
     padding: 0.15rem;
+  }
+
+  .sentence-builder :global(.sentence-tile-ghost) {
+    background: #d8dde0;
+    border-radius: 4px;
+    opacity: 0.55;
   }
 
   .sentence-word {
@@ -960,10 +1635,17 @@
     touch-action: none;
     font-family: "DotGothic16", sans-serif;
     box-shadow: 0 3px 0 0 #d8dde0;
+    color: #232526;
+    font-size: 1rem;
+    line-height: 1.2;
   }
 
   .sentence-word:active {
     cursor: grabbing;
+  }
+
+  .sentence-word.selected {
+    box-shadow: 0 3px 0 0 #b9c3ca;
   }
 
   .controls {
@@ -990,9 +1672,295 @@
     --button-color: #2e7d32;
   }
 
+  /* Editor Builder */
+  .editor-builder {
+    display: grid;
+    grid-template-columns: minmax(180px, 240px) minmax(0, 1fr);
+    gap: var(--size-24);
+    min-height: 406px;
+    padding-top: 2.2rem;
+  }
+
+  .editor-palette {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    align-content: start;
+    gap: 0.65rem;
+    padding: var(--size-16);
+  }
+
+  .editor-tool {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 0.35rem;
+    min-height: 74px;
+    padding: 0.75rem 0.55rem;
+    border: 1px solid #d5d8dc;
+    border-radius: var(--ui-radius);
+    background: #ffffff;
+    color: #232526;
+    box-shadow: none;
+    cursor: pointer;
+  }
+
+  .editor-tool:hover {
+    border-color: var(--color-primary);
+  }
+
+  .editor-tool :global(.material-symbols-rounded) {
+    font-family: "Material Symbols Rounded";
+    font-size: 1.25rem;
+    line-height: 1;
+    font-style: normal;
+    font-variation-settings: "FILL" 0, "wght" 500, "GRAD" 0, "opsz" 24;
+  }
+
+  .editor-tool span {
+    font-size: 0.82rem;
+    line-height: 1;
+  }
+
+  .editor-canvas {
+    --card-color: #eef0f2;
+    display: flex;
+    flex-direction: column;
+    justify-self: center;
+    min-width: 0;
+    width: min(calc(100% - 3rem), 640px);
+    align-self: stretch;
+    padding: var(--size-32);
+    margin-inline: 1.5rem;
+    box-sizing: border-box;
+    background: var(--card-color);
+  }
+
+  .editor-canvas-header {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    margin-bottom: 2rem;
+  }
+
+  .editor-canvas-title {
+    margin: 0;
+    color: #232526;
+    font-family: "Bitcount Grid Single", monospace !important;
+    font-size: 2.8rem;
+    font-weight: 300;
+    line-height: 1;
+  }
+
+  .editor-canvas :global(.editor-field-list) {
+    width: 100%;
+    align-items: stretch;
+    gap: 1.25rem;
+  }
+
+  .editor-canvas :global(.editor-field-list .snapsort-item) {
+    width: 100%;
+    align-items: stretch;
+    padding: 0;
+  }
+
+  .editor-field {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) auto;
+    align-items: start;
+    gap: 1rem;
+    padding: 1rem;
+    background: #ffffff;
+    border: 1px solid #d5d8dc;
+    border-radius: var(--ui-radius);
+    cursor: grab;
+    touch-action: none;
+  }
+
+  .editor-field:active {
+    cursor: grabbing;
+  }
+
+  .editor-field-main {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr);
+    align-items: stretch;
+    gap: 0.85rem;
+    min-width: 0;
+  }
+
+  .editor-question-input {
+    font-weight: 600;
+    pointer-events: auto;
+    min-width: 0;
+  }
+
+  .editor-field input:not([type="checkbox"]):not([type="radio"]):not([type="range"]),
+  .editor-field textarea {
+    width: 100%;
+    min-width: 0;
+    box-sizing: border-box;
+    padding: 0.55rem 0.8rem;
+  }
+
+  .editor-field textarea {
+    resize: none;
+    font-family: "Geist", sans-serif;
+    font-size: 1rem;
+    border: 1px solid #d5d8dc;
+    border-radius: var(--ui-radius);
+    background: #ffffff;
+    box-shadow: none;
+  }
+
+  .editor-field input,
+  .editor-field textarea {
+    pointer-events: none;
+  }
+
+  .editor-field .editor-question-input {
+    pointer-events: auto;
+  }
+
+  .editor-canvas :global(.editor-option-stack) {
+    display: flex;
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 0.45rem;
+    min-width: 0;
+    width: 100%;
+  }
+
+  .editor-canvas :global(.editor-option-item) {
+    width: 100%;
+    align-items: stretch;
+    padding: 0;
+  }
+
+  .editor-option-row {
+    display: grid;
+    grid-template-columns: auto minmax(0, 1fr) auto auto;
+    align-items: center;
+    gap: 0.55rem;
+    width: 100%;
+    cursor: grab;
+    touch-action: none;
+  }
+
+  .editor-option-row:active {
+    cursor: grabbing;
+  }
+
+  .editor-option-row :global(label) {
+    margin: 0;
+  }
+
+  .editor-field .editor-option-input {
+    pointer-events: auto;
+  }
+
+  .editor-option-action,
+  .editor-add-option {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 0.25rem;
+    width: fit-content;
+    min-height: 0;
+    padding: 0.25rem 0.45rem;
+    font-size: 0.78rem;
+    line-height: 1;
+    border: 0 !important;
+    background: transparent !important;
+    box-shadow: none !important;
+  }
+
+  .editor-option-action {
+    padding: 0.25rem;
+    color: #c7472f;
+  }
+
+  .editor-option-action :global(.material-symbols-rounded),
+  .editor-add-option :global(.material-symbols-rounded),
+  .editor-option-type-icon,
+  .editor-option-grip {
+    font-family: "Material Symbols Rounded";
+    font-size: 1rem;
+    line-height: 1;
+    font-style: normal;
+    font-variation-settings: "FILL" 0, "wght" 500, "GRAD" 0, "opsz" 20;
+  }
+
+  .editor-option-type-icon,
+  .editor-option-grip {
+    color: #8f9497;
+  }
+
+  .editor-add-option {
+    justify-self: start;
+    margin-top: 0.1rem;
+    pointer-events: auto;
+    color: var(--color-primary);
+    font-weight: 500;
+  }
+
+  .editor-rating-preview {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    justify-self: center;
+    gap: 0.2rem;
+    width: 100%;
+    padding: 0.3rem 0;
+    color: #b8bec2;
+  }
+
+  .editor-rating-preview :global(.material-symbols-rounded) {
+    font-family: "Material Symbols Rounded";
+    font-size: 1.7rem;
+    line-height: 1;
+    font-style: normal;
+    font-variation-settings: "FILL" 0, "wght" 500, "GRAD" 0, "opsz" 24;
+  }
+
+  .editor-rating-preview :global(.material-symbols-rounded.filled) {
+    color: var(--color-primary);
+    font-variation-settings: "FILL" 1, "wght" 500, "GRAD" 0, "opsz" 24;
+  }
+
+  .editor-field-grip {
+    font-family: "Material Symbols Rounded";
+    font-size: 1.2rem;
+    line-height: 1;
+    color: #8f9497;
+    padding-top: 0.15rem;
+  }
+
+  @media (max-width: 720px) {
+    .editor-title {
+      position: static;
+      align-self: flex-end;
+      margin-bottom: 1rem;
+    }
+
+    .editor-builder {
+      grid-template-columns: 1fr;
+      padding-top: 0;
+    }
+
+    .editor-palette {
+      padding: var(--size-16);
+    }
+
+    .editor-field-main {
+      gap: 0.55rem;
+    }
+  }
+
   /* Project List */
   .project-list {
     padding: 1rem;
+    background: transparent;
     // height: 100%;
   }
 
@@ -1009,9 +1977,10 @@
 
   .project-card {
     display: grid;
-    grid-template-columns: auto 1fr auto;
+    grid-template-columns: auto minmax(0, 1fr) auto;
     align-items: center;
-    gap: 1rem;
+    gap: 0.75rem;
+    font-size: 0.8rem;
     padding: 0.75rem 1rem;
     margin-bottom: 0.5rem;
     background: white;
@@ -1021,6 +1990,7 @@
     touch-action: none;
     width: 100%;
     box-sizing: border-box;
+    box-shadow: 0 1px 0 rgba(35, 37, 38, 0.04);
   }
 
   .project-card:active {
@@ -1028,51 +1998,92 @@
   }
 
   .project-text {
+    color: #232526;
+    font-size: 0.8rem;
     font-weight: 500;
-    white-space: nowrap;
+    line-height: 1.15;
+    min-width: 0;
     overflow: hidden;
     text-overflow: ellipsis;
+    white-space: nowrap;
   }
 
-  .avatar {
-    width: 24px;
-    height: 24px;
-    border-radius: 50%;
-    background: #eee;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    font-size: 0.7rem;
-    font-weight: 600;
-    color: #555;
+  .project-card.checked .project-text {
+    color: #747a7d;
+    text-decoration: line-through;
+    text-decoration-thickness: 1.5px;
+    text-decoration-color: #747a7d;
   }
 
-  .priority {
+  .project-meta {
+    display: grid;
+    grid-template-columns: repeat(3, max-content);
+    gap: 0.55rem;
+    color: #8f9497;
+    font-size: 0.58rem;
+    line-height: 1;
     justify-self: end;
   }
 
-  .date {
-    font-size: 0.85rem;
-    color: #7d6a5f;
-    text-align: right;
+  .project-meta-item {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.28rem;
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
   }
 
-  .checkbox {
-    width: 1.25rem;
-    height: 1.25rem;
-    border: 2px solid #ddd;
-    border-radius: 4px;
+  .project-meta-item :global(.material-symbols-rounded) {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    font-family: "Material Symbols Rounded";
+    color: var(--todo-icon-color);
+    font-size: inherit;
+    font-weight: 500;
+    line-height: 1;
+    font-style: normal;
+    font-variation-settings: "FILL" 0, "wght" 500, "GRAD" 0, "opsz" 20;
+    -webkit-font-feature-settings: "liga";
+    -webkit-font-smoothing: antialiased;
+    font-feature-settings: "liga";
   }
 
-  .checkbox.checked {
-    background: #3a2a22;
-    border-color: #3a2a22;
+  .project-meta-item:nth-child(1) {
+    --todo-icon-color: #4f8fc7;
+  }
+
+  .project-meta-item:nth-child(2) {
+    --todo-icon-color: #d1843f;
+  }
+
+  .project-meta-item:nth-child(3) {
+    --todo-icon-color: #5a9b73;
+  }
+
+  .project-card.checked .project-meta {
+    color: #a3a8ab;
+  }
+
+  .project-list :global(label) {
+    margin: 0;
+  }
+
+  @media (max-width: 720px) {
+    .project-meta {
+      grid-template-columns: repeat(2, max-content);
+    }
+
+    .project-meta-item:nth-child(2) {
+      display: none;
+    }
   }
 
   /* Kanban Board */
   .kanban-board {
     display: flex;
-    gap: 1rem;
     height: 100%;
   }
 
@@ -1086,8 +2097,11 @@
   .kanban-board :global(.kanban-column) {
     flex: 1;
     padding: 1rem;
-    min-height: 300px;
+    min-height: 600px;
     align-items: stretch;
+    border: 1px solid #c7cccf;
+    border-radius: var(--ui-radius);
+    background: transparent;
   }
 
   .kanban-board :global(.kanban-column .snapsort-item) {
@@ -1098,20 +2112,19 @@
 
   .kanban-board :global(.kanban-column h4) {
     margin: 0 0 1rem 0;
+    font-family: "Bitcount Grid Single", monospace;
     font-size: 0.9rem;
+    font-weight: 300;
     text-transform: uppercase;
     letter-spacing: 0.05em;
-    color: #7d6a5f;
+    color: #8f9497;
   }
 
   .kanban-card {
     display: flex;
     flex-direction: column;
-    gap: 0.25rem;
-    padding: 0.75rem;
+    gap: 0.5rem;
     margin-bottom: 0.5rem;
-    background: white;
-    border: 1px solid rgba(0, 0, 0, 0.05);
     cursor: grab;
     touch-action: none;
     width: 100%;
@@ -1125,21 +2138,19 @@
   .kanban-header {
     display: flex;
     align-items: center;
-    gap: 0.5rem;
-    margin-bottom: 0.1rem;
   }
 
   .kanban-title {
     font-weight: 600;
-    font-size: 0.9rem;
-    color: #3a2a22;
+    font-size: 1.05rem;
+    color: #232526;
     margin: 0;
   }
 
   .kanban-desc {
     margin: 0;
-    font-size: 0.75rem;
-    color: #7d6a5f;
+    font-size: 0.9rem;
+    color: #232526;
     line-height: 1.3;
     display: -webkit-box;
     line-clamp: 2;
@@ -1148,43 +2159,61 @@
     overflow: hidden;
   }
 
-  .tag {
-    width: fit-content;
-    margin: 0;
+  .kanban-footer {
+    display: grid;
+    grid-template-columns: auto auto;
+    align-items: center;
+    justify-content: space-between;
+    gap: 0.75rem;
+    padding-top: 0.45rem;
   }
 
-  /* Grid Layout */
-  .grid-layout {
-    padding: 1rem;
-    font-family: "DotGothic16", sans-serif;
-    // background: #fafafa;
-  }
-
-  .grid-card {
-    min-height: 24px;
+  .kanban-avatar {
+    width: 1.85rem;
+    height: 1.85rem;
+    border-radius: 50%;
     display: flex;
     align-items: center;
     justify-content: center;
-    background: white;
-    font-weight: 600;
-    color: #5e4d44;
-    border: 1px solid rgb(216, 216, 216);
-    cursor: grab;
-    touch-action: none;
-    border-radius: 3px;
-    font-size: 0.75rem;
-    padding: 0.25rem 0.75rem;
-    font-family: inherit;
+    background: var(--avatar-color);
+    color: white;
+    font-family: "Bitcount Grid Single", monospace;
+    font-size: 0.67rem;
+    font-weight: 300;
+    line-height: 1;
+    box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.28);
   }
 
-  .grid-card:active {
-    cursor: grabbing;
-    border-color: #3a2a22;
+  .kanban-meta {
+    display: grid;
+    grid-template-columns: repeat(3, max-content);
+    gap: 0.65rem;
+    justify-self: end;
+    color: #232526;
+    font-size: 0.9rem;
+    line-height: 1;
   }
 
-  @media (max-width: 900px) {
-    .examples-section {
-      flex-direction: column;
-    }
+  .kanban-meta-item {
+    min-width: 0;
+    display: flex;
+    align-items: center;
+    justify-content: flex-end;
+    gap: 0.18rem;
+    color: inherit;
+    font-size: inherit;
+    overflow: hidden;
+    white-space: nowrap;
+    text-overflow: ellipsis;
   }
+
+  .kanban-meta-item :global(.material-symbols-rounded) {
+    flex: 0 0 auto;
+    font-family: "Material Symbols Rounded";
+    color: currentColor;
+    font-size: inherit;
+    font-weight: 500;
+    line-height: 1;
+  }
+
 </style>
