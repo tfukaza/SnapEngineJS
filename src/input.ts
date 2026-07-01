@@ -461,17 +461,34 @@ class InputControl {
     }
   }
 
-  #onPointerDown = (event: PointerEvent) => {
+  dispatchPointerDown(
+    object: ElementObject,
+    params?: { x?: number; y?: number; buttons?: number; pointerId?: number },
+  ) {
+    const event = new PointerEvent("pointerdown", {
+      clientX: params?.x ?? object.worldTransform.x,
+      clientY: params?.y ?? object.worldTransform.y,
+      buttons: params?.buttons ?? mouseButtonBitmap.LEFT,
+      pointerId: params?.pointerId,
+    });
+    this.#onPointerDown(event, object);
+  }
+
+  #onPointerDown = (
+    event: PointerEvent,
+    object: ElementObject | null = null,
+  ) => {
     if (!this.#isEventInsideContainer(event)) {
       return;
     }
 
-    const owner = this.#getTargetOwner(event);
+    const owner = object ?? this.#getTargetOwner(event);
     const position = this.#getCoordinates(event.clientX, event.clientY);
     const isWithinEngine = this.#isCoordinateWithinEngine(
       event.clientX,
       event.clientY,
     );
+    // TODO: Use persistentDeviceId if available
     this.#pointerDict[event.pointerId] = {
       id: event.pointerId,
       callerObjectId: owner?.id ?? null,
