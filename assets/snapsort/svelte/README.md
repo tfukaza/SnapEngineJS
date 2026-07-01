@@ -18,6 +18,7 @@ npm install @snap-engine/snapsort-svelte @snap-engine/snapsort
 - `ItemEuclidean`
 - `ContainerProgressive`
 - `ItemProgressive`
+- `Handle`
 - `Container`
 - `Item`
 
@@ -28,6 +29,7 @@ npm install @snap-engine/snapsort-svelte @snap-engine/snapsort
   import {
     Container,
     Item,
+    Handle,
     ContainerProgressive,
     ItemProgressive,
   } from "@snap-engine/snapsort-svelte";

@@ -5,6 +5,7 @@
   import {
     ContainerEuclidean,
     ContainerProgressive,
+    Handle,
     ItemEuclidean,
     ItemProgressive,
   } from "@snap-engine/snapsort-svelte";
@@ -367,7 +368,7 @@
 <svelte:head>
   <link
     rel="stylesheet"
-    href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined&icon_names=arrow_left_alt,arrow_right_alt,delete&display=block"
+    href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined&icon_names=arrow_left_alt,arrow_right_alt,delete,drag_indicator&display=block"
   />
 </svelte:head>
 
@@ -448,6 +449,9 @@
                     {:else}
                       <ItemEuclidean className="task-card" metadata={{ itemId: entry.item.id }}>
                         <div class="task-content">
+                          <Handle className="task-drag-handle">
+                            <span class="material-symbols-outlined" aria-hidden="true">drag_indicator</span>
+                          </Handle>
                           <div class="task-main">
                             <strong>{entry.item.label}</strong>
                             <span>{entry.item.detail}</span>
@@ -869,30 +873,48 @@
     align-items: stretch;
     border: 2px solid #000;
     background: #fff;
-    cursor: grab;
     box-sizing: border-box;
     margin: 0;
     padding: 0;
   }
 
-  :global(.task-card:active) {
-    cursor: grabbing;
-  }
-
   .task-content {
     display: flex;
     justify-content: space-between;
-    align-items: flex-start;
-    gap: var(--size-12);
+    align-items: stretch;
+    gap: var(--size-10);
     width: 100%;
-    padding: var(--size-12);
+    padding: var(--size-10) var(--size-12) var(--size-10) var(--size-8);
     box-sizing: border-box;
+  }
+
+  :global(.task-drag-handle) {
+    width: 28px;
+    min-width: 28px;
+    margin-right: var(--size-2);
+    align-self: stretch;
+    border: 1px solid #000;
+    background: #f2f2f2;
+    color: #111;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    cursor: grab;
+    box-sizing: border-box;
+    touch-action: none;
+    user-select: none;
+  }
+
+  :global(.task-drag-handle:active) {
+    cursor: grabbing;
+    background: #e4e4e4;
   }
 
   .task-main {
     min-width: 0;
     display: flex;
     flex-direction: column;
+    justify-content: center;
     gap: var(--size-4);
   }
 

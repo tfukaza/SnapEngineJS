@@ -46,6 +46,12 @@ export type ItemBaseConstructor = new (
   isGhost?: boolean,
 ) => ItemBase;
 
+type GhostTarget = {
+  ghostItem: ItemBase;
+  container: ContainerBase;
+  index: number;
+};
+
 export class ItemBase extends ElementObject {
   #rootContainer: ContainerBase | null = null;
   #metadata: ItemMetadata = {};
@@ -64,11 +70,7 @@ export class ItemBase extends ElementObject {
   #frameworkManagedGhostElement: boolean = false;
   #depth: number = 0;
   ghostItem: ItemBase | null = null;
-  #pendingGhostTarget: {
-    ghostItem: ItemBase;
-    container: ContainerBase;
-    index: number;
-  } | null = null;
+  #pendingGhostTarget: GhostTarget | null = null;
 
   constructor(
     engine: any,
@@ -271,19 +273,15 @@ export class ItemBase extends ElementObject {
     return this.parent as unknown as ContainerBase;
   }
 
-  setContainer(_value: ContainerBase) {
-    // this.#containerObject = value;
-  }
-
   get rootContainer(): ContainerBase | null {
     return this.#rootContainer;
   }
 
-  get pendingGhostTarget() {
+  get pendingGhostTarget(): GhostTarget | null {
     return this.#pendingGhostTarget;
   }
 
-  set pendingGhostTarget(value: typeof this.#pendingGhostTarget) {
+  set pendingGhostTarget(value: GhostTarget) {
     this.#pendingGhostTarget = value;
   }
 

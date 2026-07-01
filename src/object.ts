@@ -53,6 +53,9 @@ interface BoxSpacing {
   left: number;
 }
 
+let transformEpoch = 0;
+const animationOwnerMap = new WeakMap<AnimationInterface, BaseObject>();
+
 class EventCallback {
   #object: BaseObject;
   #global: InputEventCallback;
@@ -120,50 +123,6 @@ class EventCallback {
   }
 }
 
-// export class TransformView implements TransformProperty {
-//   #transform: ObjectTransform;
-//   #space: TransformSpace;
-
-//   constructor(transform: ObjectTransform, space: TransformSpace) {
-//     this.#transform = transform;
-//     this.#space = space;
-//   }
-
-//   get x(): number {
-//     return this.#transform.get(this.#space, "x");
-//   }
-
-//   set x(value: number) {
-//     this.#transform.set(this.#space, "x", value);
-//   }
-
-//   get y(): number {
-//     return this.#transform.get(this.#space, "y");
-//   }
-
-//   set y(value: number) {
-//     this.#transform.set(this.#space, "y", value);
-//   }
-
-//   get scaleX(): number {
-//     return this.#transform.get(this.#space, "scaleX");
-//   }
-
-//   set scaleX(value: number) {
-//     this.#transform.set(this.#space, "scaleX", value);
-//   }
-
-//   get scaleY(): number {
-//     return this.#transform.get(this.#space, "scaleY");
-//   }
-
-//   set scaleY(value: number) {
-//     this.#transform.set(this.#space, "scaleY", value);
-//   }
-// }
-
-let transformEpoch = 0;
-
 export class ObjectTransform {
   #owner: CoreObject;
   #parentTransform: ObjectTransform | null = null;
@@ -180,60 +139,20 @@ export class ObjectTransform {
     scaleY: 1,
   };
   #cachedWorldEpoch: number = -1;
-  // world: TransformView;
-  // local: TransformView;
 
   constructor(owner: CoreObject) {
     this.#owner = owner;
-    // this.world = new TransformView(this, "world");
-    // this.local = new TransformView(this, "local");
   }
-
-  // get(space: TransformSpace, property: keyof TransformProperty): number {
-  //   if (space === "local") {
-  //     return this.#local[property];
-  //   }
-  //   return this.#getCachedWorld()[property];
-  // }
-
-  // set(space: TransformSpace, property: keyof TransformProperty, value: number) {
-  //   const transform = {
-  //     ...(space === "local" ? this.#local : this.#getCachedWorld()),
-  //     [property]: value,
-  //   };
-  //   if (space === "local") {
-  //     this.setLocal(transform);
-  //     this.#owner.notifyTransformChange();
-  //   } else {
-  //     this.setWorld(transform);
-  //   }
-  // }
 
   getWorld(): ReadonlyTransformProperty {
     return this.#getCachedWorld();
   }
-
-  // #getWorld(property: keyof TransformProperty): number {
-  //   return this.#getCachedWorld()[property];
-  // }
 
   setWorld(transform: TransformProperty) {
     this.#local = this.#worldToLocal(transform);
     this.#markLocalChange();
     this.#owner.notifyTransformChange();
   }
-
-  // #setWorld(property: keyof TransformProperty, value: number) {
-  //   const world = this.#getCachedWorld();
-  //   // Safe to modify the cache since it will be invalidated anyways
-  //   world[property] = value;
-  //   const local = this.#worldToLocal(world);
-  //   this.#localX = local.x;
-  //   this.#localY = local.y;
-  //   this.#localScaleX = local.scaleX;
-  //   this.#localScaleY = local.scaleY;
-  //   this.#markLocalChange();
-  // }
 
   getLocal(): TransformProperty {
     return this.#local;
@@ -311,9 +230,6 @@ export class CoreObject {
   #transformParent: CoreObject | null = null;
   #transformChildren: CoreObject[] = [];
 
-  // worldTransform: TransformView;
-  // localTransform: TransformView;
-
   constructor(engine: Engine) {
     const global = engine.global;
     if (!global) {
@@ -322,8 +238,6 @@ export class CoreObject {
     this.#engine = engine;
     this.#global = global;
     this.#transform = new ObjectTransform(this);
-    // this.worldTransform = this.#transform.world;
-    // this.localTransform = this.#transform.local;
   }
 
   get global(): GlobalManager {
@@ -500,8 +414,6 @@ export class CoreObject {
   }
 }
 
-// const objectTransformByOwner = new WeakMap<CoreObject, ObjectTransform>();
-
 export class FrameTask {
   id: string;
   object: BaseObject;
@@ -529,8 +441,6 @@ export class FrameTask {
     this.callback = null;
   }
 }
-
-const animationOwnerMap = new WeakMap<AnimationInterface, BaseObject>();
 
 /**
  * Base class for all objects in the engine.
@@ -1060,6 +970,8 @@ export class ElementObject extends BaseObject {
   transformMode: "direct" | "relative" | "origin" | "none";
   transformOrigin: BaseObject | null;
 
+  #inputAlias: HTMLElement | null = null;
+
   constructor(engine: Engine, parent: BaseObject | null = null) {
     super(engine, parent);
     this.#property = createDomProperty();
@@ -1115,6 +1027,28 @@ export class ElementObject extends BaseObject {
     }
     this.#assignElement(element);
     this.event.dom.onAssignDom?.();
+  }
+
+  addInputAlias(element: HTMLElement): void {
+    if (this.#inputAlias === element) {
+      return;
+    }
+
+    this.engine.input.unregisterObjectElement(this);
+    this.#inputAlias = element;
+    this.engine.input.registerObjectElement(this, element);
+  }
+
+  removeInputAlias(element: HTMLElement): void {
+    if (this.#inputAlias !== element) {
+      return;
+    }
+
+    this.engine.input.unregisterObjectElement(this, element);
+    this.#inputAlias = null;
+    if (this.#element) {
+      this.engine.input.registerObjectElement(this, this.#element);
+    }
   }
 
   destroy() {
@@ -1230,34 +1164,6 @@ export class ElementObject extends BaseObject {
         child.readDomRecursive(config);
       }
     }
-  }
-
-  requestFLIP(writeCallback: () => void, transformCallback: () => void): void {
-    this.schedule(
-      () => {
-        this.readDom({ unapplyTransform: false });
-        this.saveDomProperety("READ_1");
-      },
-      { stage: "READ_1", queueId: "READ_1" },
-    );
-    this.schedule(
-      async () => {
-        this.writeDom();
-        await writeCallback();
-      },
-      { stage: "WRITE_1", queueId: "WRITE_1" },
-    );
-    this.schedule(
-      () => {
-        this.readDom({ unapplyTransform: false });
-        this.saveDomProperety("READ_2");
-      },
-      { stage: "READ_2", queueId: "READ_2" },
-    );
-    this.schedule(async () => await transformCallback(), {
-      stage: "WRITE_2",
-      queueId: "WRITE_2",
-    });
   }
 
   writeDom() {
@@ -1393,6 +1299,10 @@ export class ElementObject extends BaseObject {
   destroyDom() {
     this.#resizeObserver?.disconnect();
     this.#mutationObserver?.disconnect();
+    if (this.#inputAlias) {
+      this.engine?.input.unregisterObjectElement(this, this.#inputAlias);
+      this.#inputAlias = null;
+    }
     if (this.#element) {
       this.engine?.input.unregisterObjectElement(this, this.#element);
       this.#element.remove();
@@ -1407,7 +1317,9 @@ export class ElementObject extends BaseObject {
     }
 
     this.#element = element;
-    this.engine.input.registerObjectElement(this, element);
+    if (this.#inputAlias == null) {
+      this.engine.input.registerObjectElement(this, element);
+    }
 
     this.#resizeObserver = new ResizeObserver(() => {
       this.event.dom.onResize?.();

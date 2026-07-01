@@ -12,8 +12,6 @@ import {
   type DropCandidate,
 } from "./algorithm";
 import type { LayoutMainAxisAlign } from "./layout";
-// import type { Engine } from "@snap-engine/core";
-// import { Item } from "src";
 
 export interface AnimationConfig {
   timing_function?: string;
@@ -73,15 +71,7 @@ export interface ContainerConfig {
   callbacks?: ContainerCallbacks;
 }
 
-function insertItemAt(
-  // item: ItemBase,
-  // _itemMetadata: ItemMetadata,
-  // container: ContainerBase,
-  // _containerMetadata: any,
-  // _index: number,
-  // beforeElement: HTMLElement,
-  event: ItemInsertEvent,
-) {
+function insertItemAt(event: ItemInsertEvent) {
   event.container.element?.insertBefore(
     event.item.element!,
     event.beforeElement,
@@ -143,39 +133,13 @@ export class ContainerBase extends ItemBase {
         ...(config?.callbacks || {}),
       },
     };
-    // this.#config = config || {};
-    // if (!this.#config.groupID) {
-    //   this.#config.groupID = "default-group";
-    // }
-    // if (!this.#config.direction) {
-    //   this.#config.direction = "column";
-    // }
-    // if (this.#config.animation === undefined) {
-    //   const defaultAnimation = { duration: 100, timing_function: "ease-out" };
-    //   this.#config.animation = {
-    //     reorder: defaultAnimation,
-    //     drop: defaultAnimation,
-    //     clickMove: defaultAnimation,
-    //   };
-    // } else if (this.#config.animation) {
-    //   const defaultAnimation = { duration: 100, timing_function: "ease-out" };
-    //   this.#config.animation = {
-    //     reorder: this.#config.animation.reorder ?? defaultAnimation,
-    //     drop: this.#config.animation.drop ?? defaultAnimation,
-    //     clickMove: this.#config.animation.clickMove ?? defaultAnimation,
-    //   };
-    // }
+
     if (!this.#config.name) {
       if (!this.global.data["dragAndDropContainerCounter"]) {
         this.global.data["dragAndDropContainerCounter"] = 0;
       }
       this.#config.name = `container-${this.global.data["dragAndDropContainerCounter"]++}`;
     }
-    // if (!this.#config.noDrop) {
-    //   this.noDrop = false;
-    // } else {
-    //   this.noDrop = this.#config.noDrop;
-    // }
 
     this.style = {
       position: "relative",
@@ -242,20 +206,6 @@ export class ContainerBase extends ItemBase {
   get config() {
     return this.#config;
   }
-
-  // addItem(item: ItemBase) {
-  //   this.#itemList.push(item);
-  //   item.setContainer(this);
-  // }
-
-  // insertItemAt(item: ItemBase, index: number) {
-  //   if (index >= this.#itemList.length) {
-  //     this.#itemList.push(item);
-  //   } else {
-  //     this.#itemList.splice(index, 0, item);
-  //   }
-  //   item.setContainer(this);
-  // }
 
   setAllDepth(depth: number, root: ContainerBase | null = null) {
     this.#depth = depth;

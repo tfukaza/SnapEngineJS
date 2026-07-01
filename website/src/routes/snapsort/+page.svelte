@@ -5,6 +5,7 @@
   import {
     Container,
     ContainerProgressive,
+    Handle,
     Item,
     ItemProgressive,
   } from "@snap-engine/snapsort-svelte";
@@ -684,6 +685,9 @@
             {#each todoItems as todo (todo.id)}
               <Item>
                 <div class="project-card" class:checked={todo.checked}>
+                  <Handle className="project-drag-handle">
+                    <i class="material-symbols-rounded" aria-hidden="true">drag_indicator</i>
+                  </Handle>
                   <label>
                     <input type="checkbox" bind:checked={todo.checked} />
                     <span></span>
@@ -1009,6 +1013,9 @@
               {#each editorFields as field (field.id)}
                 <Item>
                   <div class="editor-field">
+                    <Handle className="editor-field-handle">
+                      <i class="material-symbols-rounded editor-field-grip" aria-hidden="true">drag_indicator</i>
+                    </Handle>
                     <div class="editor-field-main">
                       <input
                         class="editor-question-input"
@@ -1044,6 +1051,9 @@
                             {#each field.options ?? [] as option (option.id)}
                               <ItemProgressive className="editor-option-item" metadata={{ itemId: option.id }}>
                                 <div class="editor-option-row">
+                                  <Handle className="editor-option-handle">
+                                    <i class="material-symbols-rounded editor-option-grip" aria-hidden="true">drag_indicator</i>
+                                  </Handle>
                                   <label class="radio-label">
                                     <input type="radio" name={`${field.id}-choice`} checked={option === field.options?.[0]} tabindex="-1" />
                                     <span></span>
@@ -1071,7 +1081,6 @@
                                   >
                                     <i class="material-symbols-rounded" aria-hidden="true">delete</i>
                                   </button>
-                                  <i class="material-symbols-rounded editor-option-grip" aria-hidden="true">drag_indicator</i>
                                 </div>
                               </ItemProgressive>
                             {/each}
@@ -1109,6 +1118,9 @@
                             {#each field.options ?? [] as option (option.id)}
                               <ItemProgressive className="editor-option-item" metadata={{ itemId: option.id }}>
                                 <div class="editor-option-row">
+                                  <Handle className="editor-option-handle">
+                                    <i class="material-symbols-rounded editor-option-grip" aria-hidden="true">drag_indicator</i>
+                                  </Handle>
                                   <label class="checkbox-label">
                                     <input type="checkbox" checked={option === field.options?.[0]} tabindex="-1" />
                                     <span></span>
@@ -1136,7 +1148,6 @@
                                   >
                                     <i class="material-symbols-rounded" aria-hidden="true">delete</i>
                                   </button>
-                                  <i class="material-symbols-rounded editor-option-grip" aria-hidden="true">drag_indicator</i>
                                 </div>
                               </ItemProgressive>
                             {/each}
@@ -1174,6 +1185,9 @@
                             {#each field.options ?? [] as option (option.id)}
                               <ItemProgressive className="editor-option-item" metadata={{ itemId: option.id }}>
                                 <div class="editor-option-row">
+                                  <Handle className="editor-option-handle">
+                                    <i class="material-symbols-rounded editor-option-grip" aria-hidden="true">drag_indicator</i>
+                                  </Handle>
                                   <i class="material-symbols-rounded editor-option-type-icon" aria-hidden="true">arrow_drop_down</i>
                                   <input
                                     class="editor-option-input"
@@ -1198,7 +1212,6 @@
                                   >
                                     <i class="material-symbols-rounded" aria-hidden="true">delete</i>
                                   </button>
-                                  <i class="material-symbols-rounded editor-option-grip" aria-hidden="true">drag_indicator</i>
                                 </div>
                               </ItemProgressive>
                             {/each}
@@ -1226,7 +1239,6 @@
                         </div>
                       {/if}
                     </div>
-                    <i class="material-symbols-rounded editor-field-grip" aria-hidden="true">drag_indicator</i>
                   </div>
                 </Item>
               {/each}
@@ -1723,7 +1735,7 @@
   }
 
   .editor-canvas {
-    --card-color: #eef0f2;
+    --card-color: #f2f2f3;
     display: flex;
     flex-direction: column;
     justify-self: center;
@@ -1766,19 +1778,13 @@
 
   .editor-field {
     display: grid;
-    grid-template-columns: minmax(0, 1fr) auto;
-    align-items: start;
-    gap: 1rem;
+    grid-template-columns: auto minmax(0, 1fr);
+    align-items: stretch;
+    gap: 0.85rem;
     padding: 1rem;
     background: #ffffff;
     border: 1px solid #d5d8dc;
     border-radius: var(--ui-radius);
-    cursor: grab;
-    touch-action: none;
-  }
-
-  .editor-field:active {
-    cursor: grabbing;
   }
 
   .editor-field-main {
@@ -1839,16 +1845,10 @@
 
   .editor-option-row {
     display: grid;
-    grid-template-columns: auto minmax(0, 1fr) auto auto;
+    grid-template-columns: auto auto minmax(0, 1fr) auto;
     align-items: center;
     gap: 0.55rem;
     width: 100%;
-    cursor: grab;
-    touch-action: none;
-  }
-
-  .editor-option-row:active {
-    cursor: grabbing;
   }
 
   .editor-option-row :global(label) {
@@ -1891,9 +1891,42 @@
     font-variation-settings: "FILL" 0, "wght" 500, "GRAD" 0, "opsz" 20;
   }
 
-  .editor-option-type-icon,
-  .editor-option-grip {
+  .editor-option-type-icon {
     color: #8f9497;
+  }
+
+  .editor-option-grip {
+    color: currentColor;
+  }
+
+  :global(.editor-option-handle),
+  :global(.editor-field-handle) {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    color: #7c8387;
+    cursor: grab;
+    touch-action: none;
+    user-select: none;
+  }
+
+  :global(.editor-field-handle) {
+    width: 1.35rem;
+    align-self: stretch;
+    border: 1px solid #d5d8dc;
+    border-radius: calc(var(--ui-radius) - 2px);
+    background: #f3f5f6;
+  }
+
+  :global(.editor-option-handle) {
+    width: 1.25rem;
+    min-height: 2rem;
+  }
+
+  :global(.editor-option-handle:active),
+  :global(.editor-field-handle:active) {
+    cursor: grabbing;
+    color: #232526;
   }
 
   .editor-add-option {
@@ -1932,8 +1965,7 @@
     font-family: "Material Symbols Rounded";
     font-size: 1.2rem;
     line-height: 1;
-    color: #8f9497;
-    padding-top: 0.15rem;
+    color: currentColor;
   }
 
   @media (max-width: 720px) {
@@ -1977,7 +2009,7 @@
 
   .project-card {
     display: grid;
-    grid-template-columns: auto minmax(0, 1fr) auto;
+    grid-template-columns: auto auto minmax(0, 1fr) auto;
     align-items: center;
     gap: 0.75rem;
     font-size: 0.8rem;
@@ -1986,15 +2018,33 @@
     background: white;
     border: 1px solid rgb(219, 219, 219);
     border-radius: var(--ui-radius);
-    cursor: grab;
-    touch-action: none;
     width: 100%;
     box-sizing: border-box;
     box-shadow: 0 1px 0 rgba(35, 37, 38, 0.04);
   }
 
-  .project-card:active {
+  :global(.project-drag-handle) {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 1.2rem;
+    height: 1.2rem;
+    color: #8f9497;
+    cursor: grab;
+    touch-action: none;
+    user-select: none;
+  }
+
+  :global(.project-drag-handle:active) {
     cursor: grabbing;
+  }
+
+  :global(.project-drag-handle) :global(.material-symbols-rounded) {
+    font-family: "Material Symbols Rounded";
+    font-size: 1rem;
+    line-height: 1;
+    font-style: normal;
+    font-variation-settings: "FILL" 0, "wght" 500, "GRAD" 0, "opsz" 20;
   }
 
   .project-text {

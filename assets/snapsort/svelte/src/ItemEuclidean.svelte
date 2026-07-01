@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { getContext, onDestroy, onMount } from "svelte";
+  import { getContext, setContext, onDestroy, onMount } from "svelte";
   import { ItemEuclidean } from "@snap-engine/snapsort";
   import type {
     ItemBase,
@@ -28,6 +28,9 @@
   const container: ContainerBase | null = getContext("container");
   const ownsItem = providedItemObject == null;
   const itemObject: ItemBase = providedItemObject ?? new ItemEuclidean(engine, null);
+
+  setContext("item", itemObject);
+
   if (ownsItem || Object.keys(metadata).length > 0) {
     itemObject.metadata = metadata;
   }

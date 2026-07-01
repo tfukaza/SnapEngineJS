@@ -18,7 +18,8 @@
     "./ContainerEuclidean.svelte": "./src/ContainerEuclidean.svelte",
     "./ItemEuclidean.svelte": "./src/ItemEuclidean.svelte",
     "./ContainerProgressive.svelte": "./src/ContainerProgressive.svelte",
-    "./ItemProgressive.svelte": "./src/ItemProgressive.svelte"
+    "./ItemProgressive.svelte": "./src/ItemProgressive.svelte",
+    "./Handle.svelte": "./src/Handle.svelte"
   },
   "keywords": [
     "drag-and-drop",
