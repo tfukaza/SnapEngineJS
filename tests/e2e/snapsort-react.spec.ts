@@ -33,7 +33,7 @@ test.beforeEach(async ({ page }) => {
 test("renders the React SnapSort demo list", async ({ page }) => {
   await expect(page.locator(".snapsort-container")).toHaveCount(1);
   await expect(page.locator(".snapsort-react-card")).toHaveCount(4);
-  await expect(page.locator("[data-snapsort-item-key='react-task-1']")).toHaveText(
+  await expect(page.locator(".snapsort-react-card").first()).toHaveText(
     /Design API/,
   );
 });

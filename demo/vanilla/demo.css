@@ -325,6 +325,247 @@ h2 {
   opacity: 1;
 }
 
+.file-tree-section {
+  width: min(520px, 100%);
+}
+
+.file-tree-demo {
+  width: 100%;
+}
+
+.file-tree-panel {
+  width: min(420px, 100%);
+  min-height: 640px;
+  overflow: hidden;
+  border: 2px solid #000000;
+  background: #f8fafc;
+  box-shadow: 4px 4px 0 #000000;
+}
+
+.explorer-title {
+  height: 36px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--size-8);
+  padding: 0 10px 0 18px;
+  border-bottom: 2px solid #000000;
+  color: #475569;
+  text-transform: uppercase;
+  font-size: 11px;
+  letter-spacing: 0.04em;
+}
+
+.title-actions {
+  display: flex;
+  align-items: center;
+  gap: var(--size-4);
+}
+
+.title-actions button {
+  height: 24px;
+  border: 1px solid #000000;
+  background: #ffffff;
+  padding: 0 var(--size-8);
+  font-size: 12px;
+  text-transform: none;
+}
+
+.workspace-row {
+  height: 24px;
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  padding: 0 10px;
+  color: #334155;
+  font-size: 11px;
+  font-weight: 700;
+  text-transform: uppercase;
+  user-select: none;
+}
+
+.file-tree-canvas {
+  min-height: 580px;
+  overflow: hidden;
+  position: relative;
+  touch-action: none;
+}
+
+.code-tree,
+.tree-folder {
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  gap: 0;
+  padding: 0;
+}
+
+.code-tree {
+  min-height: 560px;
+  padding: 8px 0 12px;
+}
+
+.tree-folder {
+  width: 100%;
+  margin: 0;
+  border: 0;
+  outline: 0;
+  background: transparent;
+}
+
+.tree-row,
+.tree-folder > .tree-row {
+  --indent-size: 14px;
+  width: 100%;
+  min-height: 24px;
+  margin: 0;
+  padding: 3px 8px 3px calc(8px + (var(--depth, 0) * var(--indent-size)));
+  display: grid;
+  grid-template-columns: 14px 18px minmax(0, 1fr);
+  align-items: center;
+  border: 1px solid transparent;
+  border-radius: 0;
+  background: transparent;
+  color: #1f2937;
+  cursor: grab;
+  user-select: none;
+  -webkit-user-select: none;
+  justify-content: initial;
+  justify-items: stretch;
+  font-size: 14px;
+  font-weight: 500;
+  position: relative;
+}
+
+.tree-row:hover,
+.tree-folder > .tree-row:hover {
+  background: #eef4ff;
+}
+
+.tree-row.active,
+.tree-folder.active > .tree-row {
+  background: #dbeafe;
+  color: #0f172a;
+}
+
+.tree-row[data-snapsort-dragging="true"],
+.tree-folder[data-snapsort-dragging="true"] > .tree-row {
+  background: #bfdbfe;
+  border-color: #3b82f6;
+  opacity: 0.78;
+  cursor: grabbing;
+}
+
+.indent {
+  position: absolute;
+  left: calc(14px + ((var(--depth, 0) - 1) * var(--indent-size)));
+  top: 0;
+  bottom: 0;
+  width: 1px;
+  background-image: linear-gradient(#d4dbe7, #d4dbe7);
+  background-size: 1px 100%;
+  background-repeat: repeat-y;
+  background-position: 0 0;
+  opacity: min(var(--depth, 0), 1);
+  pointer-events: none;
+}
+
+.chevron,
+.chevron-spacer {
+  width: 16px;
+  height: 16px;
+  position: relative;
+  display: inline-block;
+}
+
+.chevron::before {
+  content: "";
+  position: absolute;
+  left: 5px;
+  top: 4px;
+  width: 6px;
+  height: 6px;
+  border-right: 1.5px solid #64748b;
+  border-bottom: 1.5px solid #64748b;
+  transform: rotate(-45deg);
+}
+
+.chevron.open::before {
+  left: 4px;
+  top: 3px;
+  transform: rotate(45deg);
+}
+
+.folder-icon,
+.file-icon {
+  width: 16px;
+  height: 16px;
+  position: relative;
+  display: inline-block;
+}
+
+.folder-icon::before {
+  content: "";
+  position: absolute;
+  left: 1px;
+  top: 6px;
+  width: 14px;
+  height: 9px;
+  border-radius: 1px;
+  background: #d99a22;
+}
+
+.folder-icon::after {
+  content: "";
+  position: absolute;
+  left: 2px;
+  top: 3px;
+  width: 7px;
+  height: 4px;
+  border-radius: 1px 1px 0 0;
+  background: #e5b24a;
+}
+
+.file-icon::before {
+  content: "";
+  position: absolute;
+  left: 3px;
+  top: 1px;
+  width: 10px;
+  height: 14px;
+  border: 1px solid #8aa6c1;
+  border-radius: 1px;
+  background: #ffffff;
+  box-sizing: border-box;
+}
+
+.file-icon::after {
+  content: "";
+  position: absolute;
+  left: 5px;
+  top: 5px;
+  width: 6px;
+  height: 1px;
+  background: #8aa6c1;
+  box-shadow:
+    0 3px 0 #8aa6c1,
+    0 6px 0 #8aa6c1;
+}
+
+.row-name {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 14px;
+  font-weight: 500;
+}
+
+[data-snapsort-ghost="insertion"] {
+  background: currentColor;
+  color: #2563eb;
+  box-shadow: 0 0 0 2px rgba(37, 99, 235, 0.18);
+}
+
 @media (max-width: 700px) {
   .components-demo {
     padding: var(--size-16);

@@ -8,6 +8,8 @@
   import type {
     ContainerBase as SortContainer,
     GhostCreateEvent,
+    GhostInsertEvent,
+    GhostRemoveEvent,
     ItemBase,
     ItemInsertEvent,
     ItemRemoveEvent,
@@ -103,36 +105,40 @@
     const targetZone = event.containerMetadata.zone;
     if (targetZone !== "answer" && targetZone !== "bank") return;
 
-    if (event.item.isGhost) {
-      const sourceTile = findTile(itemId);
-      ghostEntry = {
-        id: `ghost-${event.item.id}`,
-        isGhost: true,
-        zone: targetZone,
-        index: event.index,
-        originalItemId: itemId,
-        ghostItem: event.item,
-        text: sourceTile?.text ?? "",
-      };
-      return;
-    }
-
     updateTileZone(itemId, targetZone, event.index);
   }
 
-  function handleSnapSortDomRemove(event: ItemRemoveEvent) {
-    if (event.item.isGhost) {
-      if (ghostEntry?.ghostItem === event.item) {
-        ghostEntry = null;
-      }
-      return;
-    }
+  function handleSnapSortGhostInsert(event: GhostInsertEvent) {
+    const itemId = event.originalMetadata.itemId;
+    if (typeof itemId !== "string") return;
 
+    const targetZone = event.containerMetadata.zone;
+    if (targetZone !== "answer" && targetZone !== "bank") return;
+
+    const sourceTile = findTile(itemId);
+    ghostEntry = {
+      id: `ghost-${event.ghostItem.id}`,
+      isGhost: true,
+      zone: targetZone,
+      index: event.index,
+      originalItemId: itemId,
+      ghostItem: event.ghostItem,
+      text: sourceTile?.text ?? "",
+    };
+  }
+
+  function handleSnapSortDomRemove(event: ItemRemoveEvent) {
     const itemId = event.itemMetadata.itemId;
     if (typeof itemId !== "string") return;
 
     answerTiles = answerTiles.filter((tile) => tile.id !== itemId);
     bankTiles = bankTiles.filter((tile) => tile.id !== itemId);
+  }
+
+  function handleSnapSortGhostRemove(event: GhostRemoveEvent) {
+    if (ghostEntry?.ghostItem === event.ghostItem) {
+      ghostEntry = null;
+    }
   }
 
   function createFrameworkGhost(_event: GhostCreateEvent): void {
@@ -279,6 +285,8 @@
               callbacks: {
                 onItemInsert: handleSnapSortDomInsert,
                 onItemRemove: handleSnapSortDomRemove,
+                onGhostInsert: handleSnapSortGhostInsert,
+                onGhostRemove: handleSnapSortGhostRemove,
                 createItemGhost: createFrameworkGhost,
                 awaitMutation: tick,
               },
@@ -291,7 +299,6 @@
                 <ItemProgressive
                   className="tile-wrapper ghost tile-ghost"
                   itemObject={entry.ghostItem}
-                  itemKey={entry.id}
                 >
                   <button type="button" class="tile selected" tabindex="-1">{entry.text}</button>
                 </ItemProgressive>
@@ -335,6 +342,8 @@
               callbacks: {
                 onItemInsert: handleSnapSortDomInsert,
                 onItemRemove: handleSnapSortDomRemove,
+                onGhostInsert: handleSnapSortGhostInsert,
+                onGhostRemove: handleSnapSortGhostRemove,
                 createItemGhost: createFrameworkGhost,
                 awaitMutation: tick,
               },
@@ -347,7 +356,6 @@
                 <ItemProgressive
                   className="tile-wrapper ghost tile-ghost"
                   itemObject={entry.ghostItem}
-                  itemKey={entry.id}
                 >
                   <button type="button" class="tile" tabindex="-1">{entry.text}</button>
                 </ItemProgressive>

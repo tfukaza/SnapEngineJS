@@ -2,11 +2,18 @@ import { Engine } from "@snap-engine/core";
 import { CollisionEngine } from "@snap-engine/core/collision";
 import {
   ContainerEuclidean,
+  ContainerInsertion,
   ItemEuclidean,
+  ItemInsertion,
 } from "@snap-engine/snapsort";
 
 const snapSortAnimation = {
   duration: 180,
+  timing_function: "cubic-bezier(0.2, 0, 0, 1)",
+};
+
+const fileTreeAnimation = {
+  duration: 260,
   timing_function: "cubic-bezier(0.2, 0, 0, 1)",
 };
 
@@ -37,25 +44,35 @@ const initialColumns = [
 
 const engine = new Engine();
 engine.setCollisionEngine(new CollisionEngine());
+const fileTreeEngine = new Engine();
+fileTreeEngine.setCollisionEngine(new CollisionEngine());
 
 let boardElement;
 let canvasElement;
 let itemCountElement;
 let rootContainer = null;
+let fileTreeElement;
+let fileTreeCanvasElement;
+let fileTreeRootContainer = null;
 let nextItemNumber = 7;
 let columns = cloneColumns(initialColumns);
 
 const columnObjects = new Map();
 const itemObjects = new Map();
 const itemData = new Map();
+const itemIdByElement = new WeakMap();
 
 document.addEventListener("DOMContentLoaded", () => {
   boardElement = document.getElementById("vanilla-board");
   canvasElement = document.getElementById("vanilla-snapsort-canvas");
   itemCountElement = document.getElementById("item-count");
+  fileTreeElement = document.getElementById("vanilla-file-tree");
+  fileTreeCanvasElement = document.getElementById("vanilla-file-tree-canvas");
 
   engine.assignDom(canvasElement);
   engine.camera?.setCameraPosition(0, 0);
+  fileTreeEngine.assignDom(fileTreeCanvasElement);
+  fileTreeEngine.camera?.setCameraPosition(0, 0);
 
   document
     .getElementById("add-item-button")
@@ -63,11 +80,68 @@ document.addEventListener("DOMContentLoaded", () => {
   document
     .getElementById("reset-button")
     .addEventListener("click", resetBoard);
+  document
+    .getElementById("reset-tree-button")
+    .addEventListener("click", resetFileTree);
   canvasElement.addEventListener("pointerup", scheduleStateSync);
   canvasElement.addEventListener("pointercancel", scheduleStateSync);
 
   buildBoard();
+  buildFileTree();
 });
+
+const initialTree = [
+  {
+    id: "tree-src",
+    name: "src",
+    kind: "folder",
+    open: true,
+    children: [
+      {
+        id: "tree-components",
+        name: "components",
+        kind: "folder",
+        open: true,
+        children: [
+          { id: "tree-container", name: "Container.svelte", kind: "file" },
+          { id: "tree-item", name: "Item.svelte", kind: "file" },
+          { id: "tree-handle", name: "Handle.svelte", kind: "file" },
+        ],
+      },
+      {
+        id: "tree-core",
+        name: "core",
+        kind: "folder",
+        open: true,
+        children: [
+          { id: "tree-algorithm", name: "algorithm.ts", kind: "file" },
+          { id: "tree-item-ts", name: "item.ts", kind: "file", active: true },
+          { id: "tree-container-ts", name: "container.ts", kind: "file" },
+        ],
+      },
+    ],
+  },
+  {
+    id: "tree-demo",
+    name: "demo",
+    kind: "folder",
+    open: true,
+    children: [
+      {
+        id: "tree-vanilla",
+        name: "vanilla",
+        kind: "folder",
+        open: true,
+        children: [
+          { id: "tree-demo-mjs", name: "demo.mjs", kind: "file" },
+          { id: "tree-demo-css", name: "demo.css", kind: "file" },
+        ],
+      },
+    ],
+  },
+  { id: "tree-package", name: "package.json", kind: "file" },
+  { id: "tree-readme", name: "README.md", kind: "file" },
+];
 
 function cloneColumns(source) {
   return source.map((column) => ({
@@ -158,13 +232,134 @@ function createContainer(element, parent, config, metadata) {
   return container;
 }
 
+function buildFileTree() {
+  fileTreeElement.textContent = "";
+  fileTreeRootContainer?.destroy();
+
+  fileTreeRootContainer = createInsertionContainer(
+    fileTreeElement,
+    null,
+    {
+      direction: "column",
+      groupID: "vanilla-file-tree",
+      name: "vanilla-file-tree-root",
+      animation: {
+        reorder: fileTreeAnimation,
+        drop: fileTreeAnimation,
+      },
+    },
+    { containerId: "root", treeId: "vanilla-file-tree" },
+    true,
+  );
+
+  for (const node of initialTree) {
+    createFileTreeNode(node, 0, fileTreeRootContainer);
+  }
+}
+
+function createInsertionContainer(element, parent, config, metadata, locked) {
+  const container = new ContainerInsertion(fileTreeEngine, null, config);
+  container.locked = locked;
+  container.metadata = metadata;
+  container.element = element;
+  if (parent) {
+    parent.addItem(container);
+  }
+  return container;
+}
+
+function createFileTreeNode(node, depth, parentContainer) {
+  if (node.kind === "folder") {
+    createFileTreeFolder(node, depth, parentContainer);
+    return;
+  }
+
+  createFileTreeFile(node, depth, parentContainer);
+}
+
+function createFileTreeFolder(node, depth, parentContainer) {
+  const folderElement = document.createElement("div");
+  folderElement.className = `snapsort-container snapsort-container-insertion tree-node tree-folder depth-${depth}${node.active ? " active" : ""}`;
+  folderElement.style.flexDirection = "column";
+  folderElement.style.justifyContent = "flex-start";
+
+  const row = createTreeRow(node, depth, true);
+  folderElement.append(row);
+  parentContainer.element.append(folderElement);
+
+  const folderContainer = createInsertionContainer(
+    folderElement,
+    parentContainer,
+    {
+      direction: "column",
+      groupID: "vanilla-file-tree",
+      name: `vanilla-file-tree-${node.id}`,
+      noDrop: node.open === false,
+      animation: {
+        reorder: fileTreeAnimation,
+        drop: fileTreeAnimation,
+      },
+    },
+    { itemId: node.id, containerId: node.id },
+    false,
+  );
+
+  if (node.open !== false) {
+    for (const child of node.children ?? []) {
+      createFileTreeNode(child, depth + 1, folderContainer);
+    }
+  }
+}
+
+function createFileTreeFile(node, depth, parentContainer) {
+  const itemElement = createTreeRow(node, depth, false);
+  itemElement.classList.add("snapsort-item", "snapsort-item-insertion");
+  parentContainer.element.append(itemElement);
+
+  const itemObject = new ItemInsertion(fileTreeEngine, null);
+  itemObject.metadata = { itemId: node.id };
+  itemObject.element = itemElement;
+  parentContainer.addItem(itemObject);
+}
+
+function createTreeRow(node, depth, isFolder) {
+  const row = document.createElement(isFolder ? "div" : "article");
+  row.className = `tree-row ${isFolder ? "folder-row" : "file-row"} depth-${depth}${node.active ? " active" : ""}`;
+  row.style.setProperty("--depth", String(depth));
+
+  const indent = document.createElement("span");
+  indent.className = "indent";
+  indent.ariaHidden = "true";
+
+  const chevron = document.createElement("span");
+  chevron.className = isFolder
+    ? `chevron${node.open === false ? "" : " open"}`
+    : "chevron-spacer";
+  chevron.ariaHidden = "true";
+
+  const icon = document.createElement("span");
+  icon.className = isFolder ? "folder-icon" : "file-icon";
+  icon.ariaHidden = "true";
+
+  const name = document.createElement("span");
+  name.className = "row-name";
+  name.textContent = node.name;
+
+  row.append(indent, chevron, icon, name);
+  return row;
+}
+
+function resetFileTree() {
+  buildFileTree();
+}
+
 function createItem(item, container) {
   itemData.set(item.id, item);
 
   const itemElement = document.createElement("article");
   itemElement.className =
     "snapsort-item snapsort-item-euclidean task-card";
-  itemElement.dataset.snapsortItemKey = item.id;
+  itemIdByElement.set(itemElement, item.id);
 
   const content = document.createElement("div");
   content.className = "task-content";
@@ -351,7 +546,7 @@ function syncColumnsFromDom() {
     if (!columnElement) return column;
 
     const ids = [...columnElement.querySelectorAll(".task-card")]
-      .map((element) => element.dataset.snapsortItemKey)
+      .map((element) => itemIdByElement.get(element))
       .filter(Boolean);
     const items = ids
       .map((id) => itemData.get(id))

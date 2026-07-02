@@ -14,14 +14,12 @@
     className = "",
     metadata = {},
     itemObject: providedItemObject = null,
-    itemKey = null,
   }: {
     children: any;
     style?: string;
     className?: string;
     metadata?: ItemMetadata;
     itemObject?: ItemBase | null;
-    itemKey?: string | null;
   } = $props();
 
   const engine: Engine = getContext("engine");
@@ -34,9 +32,6 @@
   if (ownsItem || Object.keys(metadata).length > 0) {
     itemObject.metadata = metadata;
   }
-
-  const metadataItemKey = (value: ItemMetadata) => value.itemId ?? null;
-  let resolvedItemKey = $derived(itemKey ?? metadataItemKey(itemObject.metadata));
 
   onMount(() => {
     if (ownsItem) {
@@ -54,7 +49,6 @@
 <div
   class="snapsort-item snapsort-item-progressive {className}"
   bind:this={itemObject.element}
-  data-snapsort-item-key={resolvedItemKey}
   {style}
 >
   {@render children()}

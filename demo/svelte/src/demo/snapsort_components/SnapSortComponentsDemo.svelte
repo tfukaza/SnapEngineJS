@@ -12,6 +12,8 @@
   import type {
     ContainerBase as SortContainer,
     GhostCreateEvent,
+    GhostInsertEvent,
+    GhostRemoveEvent,
     ItemBase,
     ItemInsertEvent,
     ItemRemoveEvent,
@@ -278,21 +280,6 @@
     const targetColumnId = event.containerMetadata.columnId;
     if (typeof targetColumnId !== "string") return;
 
-    if (event.item.isGhost) {
-      const sourceItem = findDemoItem(itemId);
-      ghostEntry = {
-        id: `ghost-${event.item.id}`,
-        isGhost: true,
-        columnId: targetColumnId,
-        index: event.index,
-        originalItemId: itemId,
-        ghostItem: event.item,
-        label: sourceItem?.label ?? "",
-        detail: sourceItem?.detail ?? "",
-      };
-      return;
-    }
-
     let movedItem: DemoItem | null = null;
     const withoutMovedItem = columns.map((column) => {
       const sourceIndex = column.items.findIndex((item) => item.id === itemId);
@@ -319,18 +306,36 @@
     });
   }
 
-  function handleSnapSortDomRemove(event: ItemRemoveEvent) {
-    if (event.item.isGhost) {
-      if (ghostEntry?.ghostItem === event.item) {
-        ghostEntry = null;
-      }
-      return;
-    }
+  function handleSnapSortGhostInsert(event: GhostInsertEvent) {
+    const itemId = event.originalMetadata.itemId;
+    if (typeof itemId !== "string") return;
+    const targetColumnId = event.containerMetadata.columnId;
+    if (typeof targetColumnId !== "string") return;
 
+    const sourceItem = findDemoItem(itemId);
+    ghostEntry = {
+      id: `ghost-${event.ghostItem.id}`,
+      isGhost: true,
+      columnId: targetColumnId,
+      index: event.index,
+      originalItemId: itemId,
+      ghostItem: event.ghostItem,
+      label: sourceItem?.label ?? "",
+      detail: sourceItem?.detail ?? "",
+    };
+  }
+
+  function handleSnapSortDomRemove(event: ItemRemoveEvent) {
     const itemId = event.itemMetadata.itemId;
     if (typeof itemId !== "string") return;
 
     deleteItem(itemId);
+  }
+
+  function handleSnapSortGhostRemove(event: GhostRemoveEvent) {
+    if (ghostEntry?.ghostItem === event.ghostItem) {
+      ghostEntry = null;
+    }
   }
 
   function stopControlEvent(event: Event) {
@@ -420,6 +425,8 @@
                     callbacks: {
                       onItemInsert: handleSnapSortDomInsert,
                       onItemRemove: handleSnapSortDomRemove,
+                      onGhostInsert: handleSnapSortGhostInsert,
+                      onGhostRemove: handleSnapSortGhostRemove,
                       createItemGhost: createFrameworkGhost,
                       awaitMutation: tick,
                     },
@@ -437,7 +444,6 @@
                       <ItemEuclidean
                         className="task-card ghost task-ghost"
                         itemObject={entry.ghostItem}
-                        itemKey={entry.id}
                       >
                         <div class="task-content">
                           <div class="task-main">

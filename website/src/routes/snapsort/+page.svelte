@@ -10,9 +10,12 @@
     ItemProgressive,
   } from "@snap-engine/snapsort-svelte";
   import SnapSortContextBoundary from "./SnapSortContextBoundary.svelte";
+  import FileExplorerExample from "./FileExplorerExample.svelte";
   import type {
     ContainerBase as SortContainer,
     GhostCreateEvent,
+    GhostInsertEvent,
+    GhostRemoveEvent,
     ItemBase,
     ItemInsertEvent,
     ItemRemoveEvent,
@@ -511,36 +514,40 @@
     const targetZone = event.containerMetadata.zone;
     if (targetZone !== "answer" && targetZone !== "bank") return;
 
-    if (event.item.isGhost) {
-      const sourceTile = findSentenceTile(itemId);
-      sentenceGhostEntry = {
-        id: `sentence-ghost-${event.item.id}`,
-        isGhost: true,
-        zone: targetZone,
-        index: event.index,
-        originalItemId: itemId,
-        ghostItem: event.item,
-        text: sourceTile?.text ?? "",
-      };
-      return;
-    }
-
     updateSentenceTileZone(itemId, targetZone, event.index);
   }
 
   function handleSentenceRemove(event: ItemRemoveEvent) {
-    if (event.item.isGhost) {
-      if (sentenceGhostEntry?.ghostItem === event.item) {
-        sentenceGhostEntry = null;
-      }
-      return;
-    }
-
     const itemId = event.itemMetadata.itemId;
     if (typeof itemId !== "string") return;
 
     sentenceAnswerTiles = sentenceAnswerTiles.filter((tile) => tile.id !== itemId);
     sentenceBankTiles = sentenceBankTiles.filter((tile) => tile.id !== itemId);
+  }
+
+  function handleSentenceGhostInsert(event: GhostInsertEvent) {
+    const itemId = event.originalMetadata.itemId;
+    if (typeof itemId !== "string") return;
+
+    const targetZone = event.containerMetadata.zone;
+    if (targetZone !== "answer" && targetZone !== "bank") return;
+
+    const sourceTile = findSentenceTile(itemId);
+    sentenceGhostEntry = {
+      id: `sentence-ghost-${event.ghostItem.id}`,
+      isGhost: true,
+      zone: targetZone,
+      index: event.index,
+      originalItemId: itemId,
+      ghostItem: event.ghostItem,
+      text: sourceTile?.text ?? "",
+    };
+  }
+
+  function handleSentenceGhostRemove(event: GhostRemoveEvent) {
+    if (sentenceGhostEntry?.ghostItem === event.ghostItem) {
+      sentenceGhostEntry = null;
+    }
   }
 
   function createSentenceGhost(_event: GhostCreateEvent): void {
@@ -892,6 +899,8 @@
                   callbacks: {
                     onItemInsert: handleSentenceInsert,
                     onItemRemove: handleSentenceRemove,
+                    onGhostInsert: handleSentenceGhostInsert,
+                    onGhostRemove: handleSentenceGhostRemove,
                     createItemGhost: createSentenceGhost,
                     awaitMutation: tick,
                   },
@@ -904,7 +913,6 @@
                     <ItemProgressive
                       className="sentence-tile-wrapper ghost sentence-tile-ghost"
                       itemObject={entry.ghostItem}
-                      itemKey={entry.id}
                     >
                       <button type="button" class="word-card sentence-word selected" tabindex="-1">{entry.text}</button>
                     </ItemProgressive>
@@ -941,6 +949,8 @@
                   callbacks: {
                     onItemInsert: handleSentenceInsert,
                     onItemRemove: handleSentenceRemove,
+                    onGhostInsert: handleSentenceGhostInsert,
+                    onGhostRemove: handleSentenceGhostRemove,
                     createItemGhost: createSentenceGhost,
                     awaitMutation: tick,
                   },
@@ -953,7 +963,6 @@
                     <ItemProgressive
                       className="sentence-tile-wrapper ghost sentence-tile-ghost"
                       itemObject={entry.ghostItem}
-                      itemKey={entry.id}
                     >
                       <button type="button" class="word-card sentence-word" tabindex="-1">{entry.text}</button>
                     </ItemProgressive>
@@ -985,6 +994,11 @@
             </button>
           </div>
         </div>
+      </div>
+
+      <div class="example-card file-example">
+        <h3>File Explorer</h3>
+        <FileExplorerExample />
       </div>
 
       <div class="example-card editor-example">
@@ -1499,7 +1513,7 @@
     grid-template-columns: repeat(3, minmax(0, 1fr));
     grid-template-rows: repeat(3, minmax(0, auto));
     grid-template-areas:
-      "pm pm sentence"
+      "pm sentence file"
       "kanban kanban kanban"
       "editor editor editor";
     gap: var(--size-24);
@@ -1538,6 +1552,11 @@
 
   .sentence-example {
     grid-area: sentence;
+  }
+
+  .file-example {
+    grid-area: file;
+    min-width: 0;
   }
 
   .editor-example {

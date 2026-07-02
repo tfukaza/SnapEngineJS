@@ -1,6 +1,7 @@
 export {
   ContainerBase,
   ContainerEuclidean,
+  ContainerInsertion,
   ContainerProgressive,
   ContainerEuclidean as Container,
 } from "./container";
@@ -9,13 +10,17 @@ export type {
   AnimationConfig,
   ContainerAnimations,
   ContainerCallbacks,
+  GhostInsertEvent,
+  GhostRemoveEvent,
   ItemInsertEvent,
   ItemRemoveEvent,
   GhostCreateEvent,
+  GhostRect,
   GhostUpdateEvent,
 } from "./container";
 export type { LayoutMainAxisAlign } from "./layout";
 export {
+  ItemInsertion,
   ItemProgressive,
   ItemBase,
   ItemEuclidean,

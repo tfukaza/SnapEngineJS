@@ -6,7 +6,10 @@ import {
   flowLayoutPositions,
   type LayoutNode,
 } from "../../assets/snapsort/core/src/layout";
-import { determineProgressiveDropTarget } from "../../assets/snapsort/core/src/algorithm";
+import {
+  determineInsertionDropTarget,
+  determineProgressiveDropTarget,
+} from "../../assets/snapsort/core/src/algorithm";
 
 type Rect = { x: number; y: number; width: number; height: number };
 type Box = Rect & {
@@ -347,6 +350,352 @@ test("progressive placement selects the ghost slot under the dragged center", ()
   expect(determineProgressiveDropTarget(dragged as any, row as any)).toMatchObject(
     { container: row, index: 1 },
   );
+});
+
+test("insertion placement maps a downward same-container gap to the live index", () => {
+  const itemA = mockSnapSortItem("a", {
+    x: 0,
+    y: 0,
+    width: 120,
+    height: 40,
+  });
+  const dragged = mockSnapSortItem("dragged", {
+    x: 0,
+    y: 48,
+    width: 120,
+    height: 40,
+  });
+  const itemB = mockSnapSortItem("b", {
+    x: 0,
+    y: 96,
+    width: 120,
+    height: 40,
+  });
+  const itemC = mockSnapSortItem("c", {
+    x: 0,
+    y: 144,
+    width: 120,
+    height: 40,
+  });
+  const container = mockSnapSortContainer(
+    "container",
+    { x: 0, y: 0, width: 120, height: 184 },
+    [itemA, dragged, itemB, itemC],
+    "column",
+  );
+  dragged.worldTransform = { x: 0, y: 120, scaleX: 1, scaleY: 1 };
+
+  const target = determineInsertionDropTarget(
+    dragged as any,
+    container as any,
+  );
+
+  expect(target?.container).toBe(container);
+  expect(target?.index).toBe(3);
+  expect(target?.ghostRect).toEqual({
+    x: 0,
+    y: 138.5,
+    width: 120,
+    height: 3,
+  });
+});
+
+test.describe("SnapSort insertion marker strategy", () => {
+  test("keeps insertion marker absolute and does not displace siblings during hover", async ({
+    page,
+  }) => {
+    await page.goto("/snapsort-insertion", { waitUntil: "networkidle" });
+
+    const firstList = page.locator(".insertion-list").first();
+    const firstCard = firstList.locator(".insertion-card").first();
+    const secondCard = firstList.locator(".insertion-card").nth(1);
+
+    const firstRect = await itemRect(firstCard);
+    const secondBefore = await itemRect(secondCard);
+    const start = center(firstRect);
+
+    await page.mouse.move(start.x, start.y);
+    await page.mouse.down();
+    await page.mouse.move(start.x, start.y + firstRect.height + 18);
+    await page.waitForTimeout(120);
+
+    const marker = page.locator('[data-snapsort-ghost="insertion"]').first();
+    await expect(marker).toHaveCount(1);
+
+    const markerState = await marker.evaluate((element) => {
+      const style = window.getComputedStyle(element);
+      const rect = element.getBoundingClientRect();
+      return {
+        position: style.position,
+        inlineHeight: (element as HTMLElement).style.height,
+        borderTopWidth: style.borderTopWidth,
+        rectHeight: rect.height,
+      };
+    });
+    expect(markerState.position).toBe("absolute");
+    expect(markerState.inlineHeight).toBe("0px");
+    expect(parseFloat(markerState.borderTopWidth)).toBeGreaterThan(0);
+    expect(markerState.rectHeight).toBeLessThanOrEqual(
+      parseFloat(markerState.borderTopWidth) + 2,
+    );
+
+    const secondDuring = await itemRect(secondCard);
+    expect(Math.abs(secondDuring.x - secondBefore.x)).toBeLessThan(1);
+    expect(Math.abs(secondDuring.y - secondBefore.y)).toBeLessThan(1);
+
+    await page.mouse.up();
+  });
+});
+
+test("insertion placement maps an upward same-container gap to the live index", () => {
+  const itemA = mockSnapSortItem("a", {
+    x: 0,
+    y: 0,
+    width: 120,
+    height: 40,
+  });
+  const itemB = mockSnapSortItem("b", {
+    x: 0,
+    y: 48,
+    width: 120,
+    height: 40,
+  });
+  const dragged = mockSnapSortItem("dragged", {
+    x: 0,
+    y: 96,
+    width: 120,
+    height: 40,
+  });
+  const itemC = mockSnapSortItem("c", {
+    x: 0,
+    y: 144,
+    width: 120,
+    height: 40,
+  });
+  const container = mockSnapSortContainer(
+    "container",
+    { x: 0, y: 0, width: 120, height: 184 },
+    [itemA, itemB, dragged, itemC],
+    "column",
+  );
+  dragged.worldTransform = { x: 0, y: 32, scaleX: 1, scaleY: 1 };
+
+  const target = determineInsertionDropTarget(
+    dragged as any,
+    container as any,
+  );
+
+  expect(target?.container).toBe(container);
+  expect(target?.index).toBe(1);
+  expect(target?.ghostRect).toEqual({
+    x: 0,
+    y: 42.5,
+    width: 120,
+    height: 3,
+  });
+});
+
+test("insertion placement keeps the top boundary reachable when dragging the first item", () => {
+  const dragged = mockSnapSortItem("dragged", {
+    x: 0,
+    y: 0,
+    width: 120,
+    height: 40,
+  });
+  const itemA = mockSnapSortItem("a", {
+    x: 0,
+    y: 48,
+    width: 120,
+    height: 40,
+  });
+  const itemB = mockSnapSortItem("b", {
+    x: 0,
+    y: 96,
+    width: 120,
+    height: 40,
+  });
+  const container = mockSnapSortContainer(
+    "container",
+    { x: 0, y: 0, width: 120, height: 136 },
+    [dragged, itemA, itemB],
+    "column",
+  );
+  dragged.worldTransform = { x: 0, y: -22, scaleX: 1, scaleY: 1 };
+
+  const target = determineInsertionDropTarget(
+    dragged as any,
+    container as any,
+  );
+
+  expect(target?.container).toBe(container);
+  expect(target?.index).toBe(1);
+  expect(target?.ghostRect).toEqual({
+    x: 0,
+    y: -1.5,
+    width: 120,
+    height: 3,
+  });
+});
+
+test("insertion placement keeps the bottom boundary reachable when dragging the last item", () => {
+  const itemA = mockSnapSortItem("a", {
+    x: 0,
+    y: 0,
+    width: 120,
+    height: 40,
+  });
+  const itemB = mockSnapSortItem("b", {
+    x: 0,
+    y: 48,
+    width: 120,
+    height: 40,
+  });
+  const dragged = mockSnapSortItem("dragged", {
+    x: 0,
+    y: 96,
+    width: 120,
+    height: 40,
+  });
+  const container = mockSnapSortContainer(
+    "container",
+    { x: 0, y: 0, width: 120, height: 136 },
+    [itemA, itemB, dragged],
+    "column",
+  );
+  dragged.worldTransform = { x: 0, y: 132, scaleX: 1, scaleY: 1 };
+
+  const target = determineInsertionDropTarget(
+    dragged as any,
+    container as any,
+  );
+
+  expect(target?.container).toBe(container);
+  expect(target?.index).toBe(3);
+  expect(target?.ghostRect).toEqual({
+    x: 0,
+    y: 134.5,
+    width: 120,
+    height: 3,
+  });
+});
+
+test("insertion placement spans the container content box on the marker cross axis", () => {
+  const itemA = mockSnapSortItem("a", {
+    x: 34,
+    y: 40,
+    width: 120,
+    height: 40,
+  });
+  const dragged = mockSnapSortItem("dragged", {
+    x: 34,
+    y: 88,
+    width: 120,
+    height: 40,
+  });
+  const itemB = mockSnapSortItem("b", {
+    x: 34,
+    y: 136,
+    width: 120,
+    height: 40,
+  });
+  const container = mockSnapSortContainer(
+    "container",
+    { x: 10, y: 20, width: 220, height: 180 },
+    [itemA, dragged, itemB],
+    "column",
+  );
+  const containerBox = layoutBox(
+    { x: 10, y: 20, width: 220, height: 180 },
+    {},
+    { top: 8, right: 12, bottom: 8, left: 20 },
+    { top: 2, right: 2, bottom: 2, left: 2 },
+  );
+  container.dragSnapshot = containerBox;
+  container.currentDomProperty = containerBox;
+  dragged.worldTransform = { x: 34, y: 112, scaleX: 1, scaleY: 1 };
+
+  const target = determineInsertionDropTarget(
+    dragged as any,
+    container as any,
+  );
+
+  expect(target?.container).toBe(container);
+  expect(target?.ghostRect?.x).toBe(32);
+  expect(target?.ghostRect?.width).toBe(184);
+});
+
+test("insertion placement carries snapshot marker insets on the ghost rect", () => {
+  const itemA = mockSnapSortItem("a", {
+    x: 34,
+    y: 40,
+    width: 120,
+    height: 40,
+  });
+  const dragged = mockSnapSortItem("dragged", {
+    x: 34,
+    y: 88,
+    width: 120,
+    height: 40,
+  });
+  const itemB = mockSnapSortItem("b", {
+    x: 34,
+    y: 136,
+    width: 120,
+    height: 40,
+  });
+  const container = mockSnapSortContainer(
+    "container",
+    { x: 10, y: 20, width: 220, height: 180 },
+    [itemA, dragged, itemB],
+    "column",
+  );
+  Object.defineProperty(container, "dragSnapshotInsertionMarkerInsets", {
+    get: () => ({ left: 18, right: 6 }),
+  });
+  (container as any).metadata = {
+    insertionMarkerInsetLeft: 2,
+    insertionMarkerInsetRight: 2,
+  };
+  dragged.worldTransform = { x: 34, y: 112, scaleX: 1, scaleY: 1 };
+
+  const target = determineInsertionDropTarget(
+    dragged as any,
+    container as any,
+  );
+
+  expect(target?.ghostRect?.insetLeft).toBe(18);
+  expect(target?.ghostRect?.insetRight).toBe(6);
+  expect(target?.ghostRect?.width).toBe(220);
+});
+
+test("insertion placement shows a centered marker for an empty row container", () => {
+  const dragged = mockSnapSortItem("dragged", {
+    x: 0,
+    y: 0,
+    width: 60,
+    height: 32,
+  });
+  const container = mockSnapSortContainer(
+    "container",
+    { x: 10, y: 20, width: 200, height: 80 },
+    [],
+    "row",
+  );
+  dragged.worldTransform = { x: 80, y: 44, scaleX: 1, scaleY: 1 };
+
+  const target = determineInsertionDropTarget(
+    dragged as any,
+    container as any,
+  );
+
+  expect(target?.container).toBe(container);
+  expect(target?.index).toBe(0);
+  expect(target?.ghostRect).toEqual({
+    x: 108.5,
+    y: 20,
+    width: 3,
+    height: 80,
+  });
 });
 
 test("progressive placement uses the cross-axis line in wrapped rows", () => {
@@ -1577,7 +1926,7 @@ test.describe("Snapsort drag-start snapshot layout", () => {
         await new Promise((resolve) => requestAnimationFrame(resolve));
         const movingCard = [...document.querySelectorAll(".task-card")].find(
           (element) =>
-            element.getAttribute("data-snapsort-item-key") === "item-1",
+            element.textContent?.includes("Profile fields") ?? false,
         ) as HTMLElement | undefined;
         if (/^translate3d\(-?\d/.test(movingCard?.style.transform ?? "")) {
           return true;

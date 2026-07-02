@@ -3,6 +3,7 @@ import type {
   AnimationConfig,
   ContainerBase,
   GhostCreateEvent,
+  GhostRect,
   GhostUpdateEvent,
 } from "./container";
 import type {
@@ -13,6 +14,7 @@ import type {
 } from "@snap-engine/core";
 import {
   determineDropTarget,
+  determineInsertionDropTarget,
   determineProgressiveDropTarget,
   resetDropSnapshotDebugDump,
   type DropCandidate,
@@ -20,13 +22,6 @@ import {
 import { AnimationObject } from "@snap-engine/core/animation";
 
 const MIN_FLIP_DISTANCE = 0.5;
-const DEBUG_LOGS = false;
-
-function debugLog(...args: unknown[]) {
-  if (DEBUG_LOGS) {
-    console.debug(...args);
-  }
-}
 
 interface FlipSnapshot {
   item: ItemBase;
@@ -39,6 +34,8 @@ interface FlipSnapshot {
 export type ItemId = string;
 export interface ItemMetadata extends Record<string, unknown> {
   itemId?: ItemId;
+  insertionMarkerInsetLeft?: number;
+  insertionMarkerInsetRight?: number;
 }
 export type ItemBaseConstructor = new (
   engine: any,
@@ -50,7 +47,24 @@ type GhostTarget = {
   ghostItem: ItemBase;
   container: ContainerBase;
   index: number;
+  ghostRect?: GhostRect | null;
 };
+
+function insertionMarkerInsetsFromMetadata(metadata: ItemMetadata): {
+  left: number;
+  right: number;
+} {
+  return {
+    left:
+      typeof metadata.insertionMarkerInsetLeft === "number"
+        ? metadata.insertionMarkerInsetLeft
+        : 0,
+    right:
+      typeof metadata.insertionMarkerInsetRight === "number"
+        ? metadata.insertionMarkerInsetRight
+        : 0,
+  };
+}
 
 export class ItemBase extends ElementObject {
   #rootContainer: ContainerBase | null = null;
@@ -60,7 +74,10 @@ export class ItemBase extends ElementObject {
 
   #dragOffsetX: number = 0;
   #dragOffsetY: number = 0;
+  #dragPointerX: number = 0;
+  #dragPointerY: number = 0;
   #dragSnapshot: DomProperty | null = null;
+  #dragSnapshotMetadata: ItemMetadata | null = null;
   #dragSnapshotOrderedList: ItemBase[] = [];
   #dragPositionContextSnapshot: Map<HTMLElement, string> = new Map();
 
@@ -98,6 +115,10 @@ export class ItemBase extends ElementObject {
     return null;
   }
 
+  protected get usesInsertionDropMarker(): boolean {
+    return false;
+  }
+
   protected createGhostItem(event: GhostUpdateEvent): ItemBase | null {
     const itemConstructor = this.ghostItemConstructor;
     if (!itemConstructor) return null;
@@ -105,9 +126,11 @@ export class ItemBase extends ElementObject {
     const ghostItem = new itemConstructor(this.engine, null, true);
     ghostItem.metadata = { ...this.metadata };
     const createEvent: GhostCreateEvent = {
+      container: event.container!,
       original: this,
       originalMetadata: this.metadata,
       ghostItem,
+      ghostRect: event.ghostRect,
     };
     const ghostElement =
       event.container?.callbacks?.createItemGhost?.(createEvent);
@@ -138,21 +161,21 @@ export class ItemBase extends ElementObject {
   }
 
   #itemID(item: ItemBase) {
-    const id = item.metadata.itemId;
-    return id ?? item.id;
+    const id = item.metadata.itemId ?? item.id;
+    return item.isGhost && item.usesInsertionDropMarker ? `ghost:${id}` : id;
   }
 
-  removeItem(id: ItemId) {
-    const item =
-      this.#itemOrderedList.find((item) => this.#itemID(item) === id) ??
-      this.children.find(
-        (item): item is ItemBase =>
-          item instanceof ItemBase && this.#itemID(item) === id,
-      );
-    if (!item) return;
+  // removeItem(id: ItemId) {
+  //   const item =
+  //     this.#itemOrderedList.find((item) => this.#itemID(item) === id) ??
+  //     this.children.find(
+  //       (item): item is ItemBase =>
+  //         item instanceof ItemBase && this.#itemID(item) === id,
+  //     );
+  //   if (!item) return;
 
-    this.removeItemFrom(this as unknown as ContainerBase, item);
-  }
+  //   this.removeItemFrom(this as unknown as ContainerBase, item);
+  // }
 
   /**
    * Find a SnapSort item by its stable item metadata id within this subtree.
@@ -181,33 +204,11 @@ export class ItemBase extends ElementObject {
   }
 
   /**
-   * Recover an item object from the rendered DOM using the Svelte item key.
-   *
-   * Framework-driven moves can briefly leave SnapSort's object tree stale while
-   * the DOM already contains the correct keyed element. This fallback finds that
-   * element and maps its `data-engine-id` back to the engine object table.
-   *
-   * @param id Stable DOM item key, usually the same value as `metadata.itemId`.
-   * @returns Matching item object, or null when no keyed DOM element can be mapped.
-   */
-  #findItemByDomKey(id: ItemId): ItemBase | null {
-    const root = (this.#rootContainer as unknown as ItemBase | null) ?? this;
-    const element = root.#findFlipElement(root, id);
-    const objectId = element?.getAttribute("data-engine-id");
-    if (!objectId) return null;
-
-    const table = this.global.getEngineObjectTable(this.engine);
-    const object = table?.[objectId];
-    return object instanceof ItemBase ? object : null;
-  }
-
-  /**
    * Move an item identified by stable metadata id into a target container.
    *
    * This is the imperative API used by frameworks. It accepts
    * an id instead of an `ItemBase` so callers do not need to retain engine
-   * object references. If framework DOM and SnapSort's parent links are out of
-   * sync, it repairs the local parent/list relationship before moving the item.
+   * object references.
    *
    * @param id Stable item id from `metadata.itemId`.
    * @param container Destination SnapSort container.
@@ -216,8 +217,8 @@ export class ItemBase extends ElementObject {
    */
   moveItem(id: ItemId, container: ContainerBase, index: number) {
     this.#findRootContainer();
-    const root = (this.#rootContainer as unknown as ItemBase | null) ?? this;
-    const item = root.#findItemByID(id) ?? root.#findItemByDomKey(id);
+    const root = this.#rootContainer as unknown as ItemBase;
+    const item = root.#findItemByID(id);
     if (!item) return false;
     if (item.parent !== this && this.element?.contains(item.element)) {
       const staleParent = item.parent as ItemBase | null;
@@ -244,16 +245,10 @@ export class ItemBase extends ElementObject {
 
   getIndexAndContainer(): { index: number; container: ContainerBase | null } {
     if (!this.parent) {
-      DEBUG_LOGS &&
-        debugLog(`[getIndexAndContainer] ${this.id} has no parent → index=-1`);
       return { index: -1, container: null };
     }
     const parentContainer = this.parent as unknown as ContainerBase;
     const idx = parentContainer.#itemOrderedList.indexOf(this);
-    DEBUG_LOGS &&
-      debugLog(
-        `[getIndexAndContainer] ${this.id} → container=${parentContainer.id}, index=${idx}, orderedList=[${parentContainer.#itemOrderedList.map((i) => i.id).join(", ")}]`,
-      );
     return { index: idx, container: parentContainer };
   }
 
@@ -303,6 +298,21 @@ export class ItemBase extends ElementObject {
 
   get dragSnapshot(): DomProperty | null {
     return this.#dragSnapshot;
+  }
+
+  get dragSnapshotMetadata(): ItemMetadata | null {
+    return this.#dragSnapshotMetadata;
+  }
+
+  get dragSnapshotInsertionMarkerInsets(): { left: number; right: number } {
+    return insertionMarkerInsetsFromMetadata(
+      this.#dragSnapshotMetadata ?? this.#metadata,
+    );
+  }
+
+  get dragPointerPosition(): { x: number; y: number } | null {
+    if (!this.#dragSnapshot) return null;
+    return { x: this.#dragPointerX, y: this.#dragPointerY };
   }
 
   get dragSnapshotOrderedList(): ItemBase[] {
@@ -449,6 +459,7 @@ export class ItemBase extends ElementObject {
    */
   #captureDragSnapshotTree() {
     this.#dragSnapshot = cloneDomProperty(this.currentDomProperty);
+    this.#dragSnapshotMetadata = { ...this.#metadata };
     this.#dragSnapshotOrderedList = this.#itemOrderedList.slice();
     for (const child of this.#dragSnapshotOrderedList) {
       child.#captureDragSnapshotTree();
@@ -470,6 +481,7 @@ export class ItemBase extends ElementObject {
       ...this.#itemOrderedList,
     ]);
     this.#dragSnapshot = null;
+    this.#dragSnapshotMetadata = null;
     this.#dragSnapshotOrderedList = [];
 
     for (const child of childrenToClear) {
@@ -538,37 +550,6 @@ export class ItemBase extends ElementObject {
   }
 
   /**
-   * Escape a value so it can be safely used inside a quoted CSS attribute selector.
-   *
-   * @param value Raw item key.
-   * @returns Escaped selector value.
-   */
-  #escapeAttributeSelectorValue(value: string) {
-    if (typeof CSS !== "undefined" && CSS.escape) {
-      return CSS.escape(value);
-    }
-    return value.replace(/\\/g, "\\\\").replace(/"/g, '\\"');
-  }
-
-  /**
-   * Find the current DOM element for a FLIP snapshot key.
-   *
-   * This lets an animation continue even if a framework re-created the element
-   * during the data update, as long as the new element carries the same
-   * `data-snapsort-item-key`.
-   *
-   * @param root Root item whose DOM subtree should be searched.
-   * @param key Stable item key captured before mutation.
-   * @returns Current DOM element for the key, or null if it no longer exists.
-   */
-  #findFlipElement(root: ItemBase, key: string): HTMLElement | null {
-    if (!root.element) return null;
-    return root.element.querySelector(
-      `[data-snapsort-item-key="${this.#escapeAttributeSelectorValue(key)}"]`,
-    );
-  }
-
-  /**
    * Collect all currently visible SnapSort items in this subtree.
    *
    * @param node Root of the subtree to collect.
@@ -582,7 +563,7 @@ export class ItemBase extends ElementObject {
     items: ItemBase[] = [],
   ): ItemBase[] {
     for (const child of node.#itemOrderedList) {
-      if (child !== exclude && !child.isGhost && child.element) {
+      if (child !== exclude && child.element) {
         items.push(child);
       }
       this.#collectFlipItems(child, exclude, items);
@@ -627,14 +608,15 @@ export class ItemBase extends ElementObject {
         .#collectFlipItems(root, null)
         .map((item) => [this.#itemID(item), item]),
     );
-
     for (const entry of snapshot) {
       const currentItem = currentItems.get(entry.key) ?? null;
       if (currentItem) {
         entry.item = currentItem;
         entry.targetElement = currentItem.element;
       } else {
-        entry.targetElement = this.#findFlipElement(root, entry.key);
+        entry.targetElement = entry.item.element?.isConnected
+          ? entry.item.element
+          : null;
       }
       entry.last = entry.targetElement?.getBoundingClientRect() ?? null;
     }
@@ -685,33 +667,19 @@ export class ItemBase extends ElementObject {
       }
 
       movingAncestors.add(item);
-      const transformAt = (t: number) =>
-        `translate3d(${dx * (1 - t)}px, ${dy * (1 - t)}px, 0px)`;
-      const animation = new AnimationObject(
-        null,
-        {
-          $t: [0, 1],
-        },
-        {
-          duration,
-          easing,
-          tick: (vars) => {
-            targetElement.style.transform = transformAt(vars.$t);
-          },
-          finish: () => {
-            targetElement.style.transform = "";
-          },
-        },
+      this.#playElementRectAnimation(
+        item,
+        first,
+        last,
+        targetElement,
+        { duration, timing_function: easing },
+        targetElement === item.element ? item : animationOwner,
       );
-      targetElement.style.transform = transformAt(0);
-      (targetElement === item.element ? item : animationOwner).addAnimation(
-        animation,
-      );
-      animation.play();
     }
   }
 
-  #playDropAnimation(
+  #playElementRectAnimation(
+    item: ItemBase,
     first: DOMRect | null,
     last: DOMRect | null,
     targetElement: HTMLElement | null,
@@ -726,7 +694,7 @@ export class ItemBase extends ElementObject {
       return;
     }
 
-    this.cancelAnimations();
+    item.cancelAnimations();
     const duration = animationConfig.duration ?? 160;
     const easing = animationConfig.timing_function ?? "ease-out";
     const transformAt = (t: number) =>
@@ -749,10 +717,25 @@ export class ItemBase extends ElementObject {
     );
 
     targetElement.style.transform = transformAt(0);
-    (targetElement === this.element ? this : animationOwner).addAnimation(
-      animation,
-    );
+    animationOwner.addAnimation(animation);
     animation.play();
+  }
+
+  #playDropAnimation(
+    first: DOMRect | null,
+    last: DOMRect | null,
+    targetElement: HTMLElement | null,
+    animationConfig: AnimationConfig | null,
+    animationOwner: ItemBase,
+  ) {
+    this.#playElementRectAnimation(
+      this,
+      first,
+      last,
+      targetElement,
+      animationConfig,
+      targetElement === this.element ? this : animationOwner,
+    );
   }
 
   /**
@@ -783,7 +766,6 @@ export class ItemBase extends ElementObject {
 
     let snapshot: FlipSnapshot[] = [];
     const queuePrefix = `snapsort-flip-${root.id}`;
-
     root.schedule(
       () => {
         snapshot = this.#captureFlipSnapshot(root, excludedItem);
@@ -867,9 +849,6 @@ export class ItemBase extends ElementObject {
     if (!this.element || !containerItem.element) return;
 
     this.#setTemporaryPosition(containerItem.element, "relative");
-    // if (this.element.parentElement !== containerItem.element) {
-    //   // containerItem.element.appendChild(this.element);
-    // }
     this.transformMode = "relative";
     this.transformOrigin = null;
     this.style = {
@@ -903,56 +882,26 @@ export class ItemBase extends ElementObject {
    */
   moveItemToContainer(container: ContainerBase, item: ItemBase, index: number) {
     const move = () => {
-      const sourceContainer = item.parent as unknown as ItemBase | null;
-      const sourceIndex = sourceContainer
-        ? sourceContainer.#itemOrderedList.indexOf(item)
-        : -1;
-      DEBUG_LOGS &&
-        debugLog(
-          `[moveItemToContainer] item=${item.id} from=${sourceContainer?.id ?? "null"}[${sourceIndex}] to=${(container as unknown as ItemBase).id}[${index}]`,
-        );
-      DEBUG_LOGS &&
-        debugLog(
-          `[moveItemToContainer]   source orderedList=[${sourceContainer ? sourceContainer.#itemOrderedList.map((i) => i.id).join(", ") : "N/A"}]`,
-        );
-      DEBUG_LOGS &&
-        debugLog(
-          `[moveItemToContainer]   target orderedList=[${container.#itemOrderedList.map((i) => i.id).join(", ")}]`,
-        );
       // If the source and target container is the same, we must adjust the index
       // to account for the removal of the item from its original position.
       if (item.parent === container) {
         // If the source and target index is the same, no need to move.
         if (container.#itemOrderedList.indexOf(item) === index) {
-          DEBUG_LOGS &&
-            debugLog(
-              `[moveItemToContainer]   SKIP: same container, same index`,
-            );
           return;
         }
         const currentIndex = container.#itemOrderedList.indexOf(item);
         if (currentIndex !== -1 && currentIndex < index) {
-          DEBUG_LOGS &&
-            debugLog(
-              `[moveItemToContainer]   adjusting index: ${index} → ${index - 1} (same container, current=${currentIndex} < target=${index})`,
-            );
           index -= 1;
         }
       }
       this.detachItemFromContainer(item.container, item);
       this.insertItemAt(container, item, index);
-      DEBUG_LOGS &&
-        debugLog(
-          `[moveItemToContainer]   DONE. target orderedList=[${container.#itemOrderedList.map((i) => i.id).join(", ")}]`,
-        );
     };
 
     if (
       item.parent === container &&
       container.#itemOrderedList.indexOf(item) === index
     ) {
-      DEBUG_LOGS &&
-        debugLog(`[moveItemToContainer]   SKIP: same container, same index`);
       return;
     }
 
@@ -966,13 +915,8 @@ export class ItemBase extends ElementObject {
   ) {
     (container as unknown as ItemBase).appendChild(item);
     if (index >= container.#itemOrderedList.length) {
-      DEBUG_LOGS &&
-        debugLog(
-          `[insertItemAt]   index ${index} >= len ${container.#itemOrderedList.length}, appending`,
-        );
       container.#itemOrderedList.push(item);
     } else {
-      DEBUG_LOGS && debugLog(`[insertItemAt]   splicing at index ${index}`);
       container.#itemOrderedList.splice(index, 0, item);
     }
   }
@@ -982,27 +926,47 @@ export class ItemBase extends ElementObject {
       index >= container.#itemOrderedList.length - 1
         ? null
         : container.#itemOrderedList[index + 1].element;
-    DEBUG_LOGS &&
-      debugLog(
-        `[insertItemAt]   DOM insertBefore: item.element=${item.element?.id ?? "null"}, before=${itemAfterIndex ? (itemAfterIndex as any).element?.id ?? itemAfterIndex.id : "null (append)"}`,
-      );
 
     const onInsert = container.callbacks?.onItemInsert;
-    if (onInsert) {
-      onInsert({
-        item,
-        itemMetadata: item.metadata,
-        container,
-        containerMetadata: container.metadata,
-        index,
-        beforeElement: itemAfterIndex,
-      });
-      return;
-    } else {
+    if (!onInsert) {
       throw new Error("Container callback onItemInsert is not defined");
     }
+    onInsert({
+      item,
+      itemMetadata: item.metadata,
+      container,
+      containerMetadata: container.metadata,
+      index,
+      beforeElement: itemAfterIndex,
+    });
+    return;
+  }
 
-    // container.element?.insertBefore(item.element!, itemAfterIndex);
+  #insertGhostElement(
+    original: ItemBase,
+    container: ContainerBase,
+    ghostItem: ItemBase,
+    index: number,
+  ) {
+    const itemAfterIndex =
+      index >= container.#itemOrderedList.length - 1
+        ? null
+        : container.#itemOrderedList[index + 1].element;
+
+    const onInsert = container.callbacks?.onGhostInsert;
+    if (!onInsert) {
+      throw new Error("Container callback onGhostInsert is not defined");
+    }
+    onInsert({
+      original,
+      originalMetadata: original.metadata,
+      ghostItem,
+      ghostMetadata: ghostItem.metadata,
+      container,
+      containerMetadata: container.metadata,
+      index,
+      beforeElement: itemAfterIndex,
+    });
   }
 
   /**
@@ -1016,20 +980,18 @@ export class ItemBase extends ElementObject {
    * @returns Nothing.
    */
   insertItemAt(container: ContainerBase, item: ItemBase, index: number) {
-    DEBUG_LOGS &&
-      debugLog(
-        `[insertItemAt] item=${item.id} into container=${(container as unknown as ItemBase).id} at index=${index}`,
-      );
-    DEBUG_LOGS &&
-      debugLog(
-        `[insertItemAt]   BEFORE orderedList=[${container.#itemOrderedList.map((i) => i.id).join(", ")}] (len=${container.#itemOrderedList.length})`,
-      );
     this.#attachItemToContainer(container, item, index);
-    DEBUG_LOGS &&
-      debugLog(
-        `[insertItemAt]   AFTER orderedList=[${container.#itemOrderedList.map((i) => i.id).join(", ")}]`,
-      );
     this.#insertItemElement(container, item, index);
+  }
+
+  insertGhostAt(
+    original: ItemBase,
+    container: ContainerBase,
+    ghostItem: ItemBase,
+    index: number,
+  ) {
+    this.#attachItemToContainer(container, ghostItem, index);
+    this.#insertGhostElement(original, container, ghostItem, index);
   }
 
   detachItemFromContainer(container: ContainerBase, item: ItemBase) {
@@ -1040,23 +1002,36 @@ export class ItemBase extends ElementObject {
   }
 
   #removeItemElement(container: ContainerBase, item: ItemBase) {
-    // const onRemove = item.isGhost
-    //   ? container.callbacks?.onGhostRemove
-    //   : container.callbacks?.onItemRemove;
     const onRemove = container.callbacks?.onItemRemove;
-    if (onRemove) {
-      onRemove({
-        item,
-        itemMetadata: item.metadata,
-        container,
-        containerMetadata: container.metadata,
-      });
-      return;
-    } else {
+    if (!onRemove) {
       throw new Error("Container callback onItemRemove is not defined");
     }
+    onRemove({
+      item,
+      itemMetadata: item.metadata,
+      container,
+      containerMetadata: container.metadata,
+    });
+    return;
+  }
 
-    // item.element?.remove();
+  #removeGhostElement(
+    original: ItemBase,
+    container: ContainerBase,
+    ghostItem: ItemBase,
+  ) {
+    const onRemove = container.callbacks?.onGhostRemove;
+    if (!onRemove) {
+      throw new Error("Container callback onGhostRemove is not defined");
+    }
+    onRemove({
+      original,
+      originalMetadata: original.metadata,
+      ghostItem,
+      ghostMetadata: ghostItem.metadata,
+      container,
+      containerMetadata: container.metadata,
+    });
   }
 
   /**
@@ -1067,20 +1042,17 @@ export class ItemBase extends ElementObject {
    * @returns Nothing.
    */
   removeItemFrom(container: ContainerBase, item: ItemBase) {
-    DEBUG_LOGS &&
-      debugLog(
-        `[removeItemFrom] item=${item.id} from container=${(container as unknown as ItemBase).id}`,
-      );
-    DEBUG_LOGS &&
-      debugLog(
-        `[removeItemFrom]   BEFORE orderedList=[${container.#itemOrderedList.map((i) => i.id).join(", ")}]`,
-      );
     this.detachItemFromContainer(container, item);
-    DEBUG_LOGS &&
-      debugLog(
-        `[removeItemFrom]   AFTER orderedList=[${container.#itemOrderedList.map((i) => i.id).join(", ")}]`,
-      );
     this.#removeItemElement(container, item);
+  }
+
+  removeGhostFrom(
+    original: ItemBase,
+    container: ContainerBase,
+    ghostItem: ItemBase,
+  ) {
+    this.detachItemFromContainer(container, ghostItem);
+    this.#removeGhostElement(original, container, ghostItem);
   }
 
   /**
@@ -1135,6 +1107,95 @@ export class ItemBase extends ElementObject {
     return { container, index };
   }
 
+  #updateInsertionGhostStyle(event: GhostUpdateEvent, ghostItem: ItemBase) {
+    const { container, ghostRect } = event;
+    const ghostElement = ghostItem.element;
+    if (!container || !ghostRect || !ghostElement) return;
+
+    const containerProp =
+      (container as unknown as ItemBase).dragSnapshot ??
+      container.currentDomProperty;
+    const markerInsetLeft = ghostRect.insetLeft ?? 0;
+    const markerInsetRight = ghostRect.insetRight ?? 0;
+    const left = ghostRect.x - containerProp.x + markerInsetLeft;
+    const top = ghostRect.y - containerProp.y;
+    const width = Math.max(
+      0,
+      ghostRect.width - markerInsetLeft - markerInsetRight,
+    );
+
+    ghostElement.dataset.snapsortGhost = "insertion";
+    ghostElement.style.position = "absolute";
+    ghostElement.style.left = `${left}px`;
+    ghostElement.style.top = `${top}px`;
+    ghostElement.style.width = `${width}px`;
+    ghostElement.style.height = "0px";
+    ghostElement.style.margin = "0";
+    ghostElement.style.borderRadius = "999px";
+    ghostElement.style.borderTop = "3px solid currentColor";
+    ghostElement.style.background = "currentColor";
+    ghostElement.style.color = "rgb(37, 99, 235)";
+    ghostElement.style.pointerEvents = "none";
+    ghostElement.style.boxSizing = "border-box";
+    ghostElement.style.zIndex = "999";
+  }
+
+  async #updateInsertionGhostElement(event: GhostUpdateEvent) {
+    const { original, container, index, ghostRect } = event;
+    const root = original.#rootContainer as unknown as ItemBase | null;
+    if (!root) {
+      throw new Error("Root container not found");
+    }
+    let ghostItem = root.ghostItem;
+
+    if (container === null) {
+      root.#pendingGhostTarget = null;
+      if (ghostItem) {
+        ghostItem.element?.remove();
+        ghostItem.destroy();
+        root.ghostItem = null;
+      }
+      return;
+    }
+
+    if (!ghostRect) return;
+
+    const firstRect = ghostItem?.element?.isConnected
+      ? ghostItem.element.getBoundingClientRect()
+      : null;
+
+    if (!ghostItem) {
+      ghostItem = original.createGhostItem(event);
+      if (!ghostItem) return;
+    }
+    root.ghostItem = ghostItem;
+    root.#pendingGhostTarget = { ghostItem, container, index, ghostRect };
+
+    const ghostElement = ghostItem.element;
+    if (
+      (!ghostElement && !ghostItem.#frameworkManagedGhostElement) ||
+      !container.element
+    ) {
+      return;
+    }
+    if (!ghostElement) return;
+
+    if (ghostElement.parentElement !== container.element) {
+      container.element.appendChild(ghostElement);
+    }
+
+    original.#updateInsertionGhostStyle(event, ghostItem);
+    const lastRect = ghostElement.getBoundingClientRect();
+    original.#playElementRectAnimation(
+      ghostItem,
+      firstRect,
+      lastRect,
+      ghostElement,
+      original.#reorderAnimationConfig(container),
+      ghostItem,
+    );
+  }
+
   /**
    * Create or remove a ghost element at the specified container and index.
    * A null container means the ghost element should be removed.
@@ -1145,20 +1206,26 @@ export class ItemBase extends ElementObject {
    * @returns Nothing.
    */
   async #updateGhostElement(event: GhostUpdateEvent) {
-    const { original, container, index } = event;
+    const { original, container, index, ghostRect } = event;
+    if (original.usesInsertionDropMarker) {
+      await original.#updateInsertionGhostElement(event);
+      return;
+    }
+
     const root = original.#rootContainer as unknown as ItemBase | null;
     if (!root) {
       throw new Error("Root container not found");
     }
     let ghostItem = root.ghostItem;
 
+    // Null container - remove ghost
     if (container === null) {
       root.#pendingGhostTarget = null;
       if (ghostItem) {
         const ghostContainer =
           ghostItem.parent as unknown as ContainerBase | null;
         if (ghostContainer) {
-          original.removeItemFrom(ghostContainer, ghostItem);
+          original.removeGhostFrom(original, ghostContainer, ghostItem);
           await original.#awaitMutation(ghostContainer);
         }
         ghostItem.destroy();
@@ -1167,12 +1234,13 @@ export class ItemBase extends ElementObject {
       return;
     }
 
+    // If no ghost item exists, create one
     if (!ghostItem) {
       ghostItem = original.createGhostItem(event);
       if (!ghostItem) return;
     }
     root.ghostItem = ghostItem;
-    root.#pendingGhostTarget = { ghostItem, container, index };
+    root.#pendingGhostTarget = { ghostItem, container, index, ghostRect };
 
     const moveGhost = () => {
       const pendingTarget = root.#pendingGhostTarget;
@@ -1190,7 +1258,7 @@ export class ItemBase extends ElementObject {
       if (ghostItem.parent) {
         container.detachItemFromContainer(ghostItem.container, ghostItem);
       }
-      container.insertItemAt(container, ghostItem, index);
+      container.insertGhostAt(original, container, ghostItem, index);
     };
 
     if (ghostItem.parent) {
@@ -1208,77 +1276,74 @@ export class ItemBase extends ElementObject {
    * @returns Nothing.
    */
   async updateDropTarget(item: ItemBase) {
-    const root = (this.#rootContainer as unknown as ItemBase) ?? this;
+    const root = this.#rootContainer;
     // Defensive guard for a drag-start/drag race: the deeper fix should live in
     // the engine scheduler as built-in debounce/coalescing support for input
     // updates that depend on earlier READ/WRITE phases.
-    if (!root.#hasDragSnapshotTree() || !item.#dragSnapshot) {
-      DEBUG_LOGS &&
-        debugLog(
-          `[updateDropTarget] SKIP: waiting for drag snapshot root=${root.id} item=${item.id}`,
-        );
+    if (!root || !root.#hasDragSnapshotTree() || !item.#dragSnapshot) {
       return;
     }
 
     const target = this.resolveDropTarget(item, root);
+    if (!target) {
+      return;
+    }
     // Compare against the ghost's current position, not the dragged item's (which is removed from the list during drag)
     // In other words, check what the previous drop target was based on where the ghost is.
-    const ghostItem = this.#rootContainer?.ghostItem;
-    const ghostSource = this.#ghostInsertionPosition(ghostItem ?? null);
+    const ghostItem = root.ghostItem;
+    const ghostSource = item.usesInsertionDropMarker
+      ? root.#pendingGhostTarget?.ghostItem === ghostItem
+        ? {
+            container: root.#pendingGhostTarget
+              .container as unknown as ItemBase,
+            index: root.#pendingGhostTarget.index,
+          }
+        : null
+      : this.#ghostInsertionPosition(ghostItem ?? null);
     const targetIndex =
       target?.container != null
-        ? this.#liveIndexFromSnapshotIndex(target.container, target.index, item)
+        ? item.usesInsertionDropMarker
+          ? target.index
+          : this.#liveIndexFromSnapshotIndex(
+              target.container,
+              target.index,
+              item,
+            )
         : -1;
     const targetContainer = target?.container as ContainerBase;
-    DEBUG_LOGS &&
-      debugLog(
-        `[updateDropTarget] item=${item.id} target=${target ? `${target.container.id}[snapshot:${target.index} live:${targetIndex}]` : "null"} ghostPos=${ghostSource?.container ? `${(ghostSource.container as unknown as ItemBase).id}[${ghostSource.index}]` : "null"}`,
-      );
     if (targetContainer && ghostSource?.container) {
       const sameContainer = targetContainer === ghostSource.container;
       const sameIndex = targetIndex === ghostSource.index;
-      DEBUG_LOGS &&
-        debugLog(
-          `[updateDropTarget]   sameContainer=${sameContainer} sameIndex=${sameIndex} (${targetIndex}===${ghostSource.index})`,
-        );
       if (!sameContainer || !sameIndex) {
-        DEBUG_LOGS &&
-          debugLog(
-            `[updateDropTarget]   >>> MOVING ghost to ${targetContainer.id}[${targetIndex}]`,
-          );
         await item.#updateGhostElement({
           original: item,
           container: targetContainer as unknown as ContainerBase,
           index: targetIndex,
+          ghostRect: target.ghostRect,
         });
-        this.#moveDraggedElementToContainer(
-          targetContainer as unknown as ContainerBase,
-        );
-      } else {
-        DEBUG_LOGS &&
-          debugLog(`[updateDropTarget]   SKIP: ghost already at target`);
+      }
+      if (!item.usesInsertionDropMarker) {
         this.#moveDraggedElementToContainer(
           targetContainer as unknown as ContainerBase,
         );
       }
-    } else if (target?.container) {
-      DEBUG_LOGS && debugLog(`[updateDropTarget]   >>> PLACING initial ghost`);
+    } else if (targetContainer) {
       await item.#updateGhostElement({
         original: item,
-        container: target.container as unknown as ContainerBase,
+        container: targetContainer as unknown as ContainerBase,
         index: targetIndex,
+        ghostRect: target.ghostRect,
       });
-      this.#moveDraggedElementToContainer(
-        target.container as unknown as ContainerBase,
-      );
-    } else {
-      DEBUG_LOGS && debugLog(`[updateDropTarget]   SKIP: no target`);
+      if (!item.usesInsertionDropMarker) {
+        this.#moveDraggedElementToContainer(
+          targetContainer as unknown as ContainerBase,
+        );
+      }
     }
   }
 
   dragStart(prop: dragStartProp) {
     if (!this.dragDropEnabled || this.#locked) return;
-    DEBUG_LOGS && debugLog(`[dragStart] item=${this.id}`);
     // Set the root container for all items, and queue READ to update the state of all containers and items.
     this.#findRootContainer();
     const root = (this.#rootContainer as unknown as ItemBase) ?? this;
@@ -1286,21 +1351,14 @@ export class ItemBase extends ElementObject {
     // Get the current index of the item in its container.
     const { index: currentIndex, container: currentContainer } =
       this.getIndexAndContainer();
-    DEBUG_LOGS &&
-      debugLog(
-        `[dragStart] currentIndex=${currentIndex} currentContainer=${currentContainer?.id ?? "null"}`,
-      );
     // Compute the drag offset in READ_1, after DOM positions are read but before any WRITE_1
-    // callbacks (including drag events). This prevents race conditions where drag events
-    // modify this.transform before the offset is calculated.
+    // callbacks (including drag events).
     this.schedule(
       () => {
+        this.#dragPointerX = prop.start.x;
+        this.#dragPointerY = prop.start.y;
         this.#dragOffsetX = prop.start.x - this.worldTransform.x;
         this.#dragOffsetY = prop.start.y - this.worldTransform.y;
-        DEBUG_LOGS &&
-          debugLog(
-            `[dragStart READ_1] offset=(${this.#dragOffsetX}, ${this.#dragOffsetY}) start=(${prop.start.x}, ${prop.start.y}) transform=(${this.worldTransform.x}, ${this.worldTransform.y})`,
-          );
         root.#captureDragSnapshotTree();
       },
       { stage: "READ_1", queueId: `drag-start-offset-${this.id}` },
@@ -1308,10 +1366,13 @@ export class ItemBase extends ElementObject {
 
     this.schedule(
       async () => {
-        DEBUG_LOGS &&
-          debugLog(
-            `[dragStart WRITE_1 callback] placing ghost at container=${currentContainer?.id ?? "null"} index=${currentIndex}`,
-          );
+        if (this.usesInsertionDropMarker) {
+          if (this.element) {
+            this.element.dataset.snapsortDragging = "true";
+          }
+          await this.updateDropTarget(this);
+          return;
+        }
 
         await this.#updateGhostElement({
           original: this,
@@ -1319,15 +1380,11 @@ export class ItemBase extends ElementObject {
           index: currentIndex,
         });
         // Remove the dragged item from its container's orderedList and engine children.
-        // The ghost now takes its place in the layout. The DOM element is kept (hoisted to root below).
+        // The ghost now takes its place in the layout.
         this.detachItemFromContainer(
           currentContainer as unknown as ContainerBase,
           this,
         );
-        DEBUG_LOGS &&
-          debugLog(
-            `[dragStart] after removing dragged item, orderedList=[${(currentContainer as unknown as ItemBase).#itemOrderedList.map((i) => i.id).join(", ")}]`,
-          );
 
         const rootSnapshot = root.dragSnapshot;
         const hoistOffsetX = rootSnapshot
@@ -1364,6 +1421,14 @@ export class ItemBase extends ElementObject {
   drag(prop: dragProp) {
     this.schedule(
       async () => {
+        this.#dragPointerX = prop.position.x;
+        this.#dragPointerY = prop.position.y;
+
+        if (this.usesInsertionDropMarker) {
+          await this.updateDropTarget(this);
+          return;
+        }
+
         // Move the item according to mouse position
         this.worldTransform = {
           x: prop.position.x - this.#dragOffsetX,
@@ -1382,7 +1447,50 @@ export class ItemBase extends ElementObject {
     }
   }
 
+  #dragEndInsertion() {
+    const root = (this.#rootContainer as unknown as ItemBase) ?? this;
+
+    this.schedule(
+      async () => {
+        const ghostItem = this.#rootContainer?.ghostItem;
+        const pendingGhostTarget =
+          root.#pendingGhostTarget?.ghostItem === ghostItem
+            ? root.#pendingGhostTarget
+            : null;
+
+        if (this.element) {
+          delete this.element.dataset.snapsortDragging;
+        }
+        this.writeTransform();
+
+        await this.#updateGhostElement({
+          original: this,
+          container: null,
+          index: -1,
+        });
+
+        if (pendingGhostTarget?.container) {
+          this.moveItemToContainer(
+            pendingGhostTarget.container,
+            this,
+            pendingGhostTarget.index,
+          );
+          await this.#awaitMutation(pendingGhostTarget.container);
+        }
+
+        root.#clearDragSnapshotTree();
+        resetDropSnapshotDebugDump(this);
+      },
+      { stage: "WRITE_1", queueId: `drag-end-insertion-${this.id}` },
+    );
+  }
+
   dragEnd(_: dragEndProp) {
+    if (this.usesInsertionDropMarker) {
+      this.#dragEndInsertion();
+      return;
+    }
+
     const root = (this.#rootContainer as unknown as ItemBase) ?? this;
     const dropKey = this.#itemID(this);
     let dropFirst: DOMRect | null = null;
@@ -1423,11 +1531,6 @@ export class ItemBase extends ElementObject {
               container: pendingGhostTarget.container as unknown as ItemBase,
             }
           : liveGhostPos;
-        DEBUG_LOGS &&
-          debugLog(
-            `[dragEnd] item=${this.id} ghostPos=${ghostPos?.container ? `${(ghostPos.container as unknown as ItemBase).id}[${ghostPos.index}]` : "null"}`,
-          );
-
         this.style = {
           cursor: "grab",
           position: "relative",
@@ -1458,10 +1561,6 @@ export class ItemBase extends ElementObject {
           dropAnimationConfig = this.#dropAnimationConfig(destinationContainer);
           this.insertItemAt(destinationContainer, this, ghostPos.index);
           await this.#awaitMutation(destinationContainer);
-          DEBUG_LOGS &&
-            debugLog(
-              `[dragEnd] re-inserted item at ${(ghostPos.container as unknown as ItemBase).id}[${ghostPos.index}]`,
-            );
         }
 
         this.#restoreDragPositionContext();
@@ -1473,12 +1572,13 @@ export class ItemBase extends ElementObject {
 
     root.schedule(
       () => {
-        dropTargetElement =
-          root.#findFlipElement(root, dropKey) ??
-          (this.element?.isConnected ? this.element : null);
+        const currentItem = root.#findItemByID(dropKey) ?? this;
+        dropTargetElement = currentItem.element?.isConnected
+          ? currentItem.element
+          : null;
         if (!dropTargetElement) return;
-        if (dropTargetElement === this.element) {
-          this.readDom({ unapplyTransform: false }, "READ_2");
+        if (currentItem === this) {
+          currentItem.readDom({ unapplyTransform: false }, "READ_2");
         }
         dropLast = dropTargetElement.getBoundingClientRect();
       },
@@ -1541,5 +1641,26 @@ export class ItemProgressive extends ItemBase {
     root: ItemBase,
   ): DropCandidate | null {
     return determineProgressiveDropTarget(item, root);
+  }
+}
+
+export class ItemInsertion extends ItemBase {
+  protected get dragDropEnabled(): boolean {
+    return true;
+  }
+
+  protected get usesInsertionDropMarker(): boolean {
+    return true;
+  }
+
+  protected get ghostItemConstructor(): ItemBaseConstructor {
+    return ItemInsertion;
+  }
+
+  protected resolveDropTarget(
+    item: ItemBase,
+    root: ItemBase,
+  ): DropCandidate | null {
+    return determineInsertionDropTarget(item, root);
   }
 }

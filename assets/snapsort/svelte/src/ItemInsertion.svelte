@@ -1,6 +1,6 @@
 <script lang="ts">
   import { getContext, setContext, onDestroy, onMount } from "svelte";
-  import { ItemEuclidean } from "@snap-engine/snapsort";
+  import { ItemInsertion } from "@snap-engine/snapsort";
   import type {
     ItemBase,
     ContainerBase,
@@ -25,7 +25,7 @@
   const engine: Engine = getContext("engine");
   const container: ContainerBase | null = getContext("container");
   const ownsItem = providedItemObject == null;
-  const itemObject: ItemBase = providedItemObject ?? new ItemEuclidean(engine, null);
+  const itemObject: ItemBase = providedItemObject ?? new ItemInsertion(engine, null);
 
   setContext("item", itemObject);
 
@@ -47,7 +47,7 @@
 </script>
 
 <div
-  class="snapsort-item snapsort-item-euclidean {className}"
+  class="snapsort-item snapsort-item-insertion {className}"
   bind:this={itemObject.element}
   {style}
 >

@@ -22,10 +22,8 @@ const TAG_CANDIDATES = "drop-candidates";
 const TAG_LAYOUT = "drop-layout";
 const TAG_ZONES = "drop-zones";
 
-const snapshotDumpedForDrag = new WeakSet<ItemBase>();
-const SNAPSHOT_DUMP_TRACE = false;
-
 type Rect = { x: number; y: number; width: number; height: number };
+type InsertionGhostRect = Rect & { insetLeft?: number; insetRight?: number };
 type WorldRect = Rect;
 
 export interface VirtualGhost {
@@ -55,10 +53,11 @@ export interface DropCandidate {
   placementRect: Rect;
   placementDistance: number;
   placementContainsDragCenter: boolean;
+  ghostRect?: InsertionGhostRect;
 }
 
-export function resetDropSnapshotDebugDump(item: ItemBase) {
-  snapshotDumpedForDrag.delete(item);
+export function resetDropSnapshotDebugDump(_item: ItemBase) {
+  return;
 }
 
 function getDirection(node: ItemBase): "column" | "row" {
@@ -319,28 +318,6 @@ function chooseByContentBox(
   return a.distance <= b.distance ? a : b;
 }
 
-function dumpSnapshotOnce(item: ItemBase, root: ItemBase) {
-  if (!SNAPSHOT_DUMP_TRACE) return;
-  if (snapshotDumpedForDrag.has(item)) return;
-  snapshotDumpedForDrag.add(item);
-
-  const dumpNode = (node: ItemBase, depth = 0) => {
-    const prop = requireDragSnapshot(node);
-    const origin = contentBoxOrigin(prop);
-    const indent = "  ".repeat(depth);
-    console.log(
-      `${indent}${node.id} contentOrigin=(${Math.round(origin.x)},${Math.round(origin.y)})`,
-    );
-    for (const child of node.dragSnapshotOrderedList) {
-      dumpNode(child, depth + 1);
-    }
-  };
-
-  console.groupCollapsed?.(`[drop-snapshot] root=${root.id} drag=${item.id}`);
-  dumpNode(root);
-  console.groupEnd?.();
-}
-
 export function virtualDimensions(
   container: ItemBase,
   draggedItem: ItemBase,
@@ -563,7 +540,6 @@ function collectDropCandidates(
   const dragCenterX = item.worldTransform.x + dragProp.width / 2;
   const dragCenterY = item.worldTransform.y + dragProp.height / 2;
   const layoutOrigin = contentBoxOrigin(rootProp);
-  dumpSnapshotOnce(item, root);
 
   const { candidates: virtualCandidates } = virtualLayoutRecursive(
     root,
@@ -717,6 +693,237 @@ function drawCandidateDebug(
   }
 }
 
+function groupIDOf(item: ItemBase): string | undefined {
+  return "groupID" in item ? (item as any).groupID : undefined;
+}
+
+function compatibleInsertionContainer(
+  container: ItemBase,
+  sourceGroupID: string | undefined,
+): boolean {
+  if (!isContainerObject(container)) return false;
+  if (container.noDrop) return false;
+  const targetGroupID = groupIDOf(container);
+  return !sourceGroupID || !targetGroupID || sourceGroupID === targetGroupID;
+}
+
+function insertionMarkerInsets(container: ItemBase): {
+  left: number;
+  right: number;
+} {
+  const snapshotInsets = (container as any).dragSnapshotInsertionMarkerInsets;
+  if (
+    snapshotInsets &&
+    typeof snapshotInsets.left === "number" &&
+    typeof snapshotInsets.right === "number"
+  ) {
+    return snapshotInsets;
+  }
+
+  const metadata = (container as any).metadata;
+  return {
+    left:
+      typeof metadata?.insertionMarkerInsetLeft === "number"
+        ? metadata.insertionMarkerInsetLeft
+        : 0,
+    right:
+      typeof metadata?.insertionMarkerInsetRight === "number"
+        ? metadata.insertionMarkerInsetRight
+        : 0,
+  };
+}
+
+function insertionMarkerRect(
+  container: ItemBase,
+  index: number,
+  items: ItemBase[],
+  snapshotItems: ItemBase[],
+): InsertionGhostRect {
+  const direction = getDirection(container);
+  const contentRect = containerContentRect(container);
+  const thickness = 3;
+  const insets =
+    direction === "column"
+      ? insertionMarkerInsets(container)
+      : { left: 0, right: 0 };
+  const withInsets = (rect: Rect): InsertionGhostRect => {
+    if (insets.left === 0 && insets.right === 0) return rect;
+    return {
+      ...rect,
+      insetLeft: insets.left,
+      insetRight: insets.right,
+    };
+  };
+
+  if (items.length === 0) {
+    if (direction === "row") {
+      return withInsets({
+        x: contentRect.x + contentRect.width / 2 - thickness / 2,
+        y: contentRect.y,
+        width: thickness,
+        height: Math.max(1, contentRect.height),
+      });
+    }
+
+    return withInsets({
+      x: contentRect.x,
+      y: contentRect.y + contentRect.height / 2 - thickness / 2,
+      width: Math.max(1, contentRect.width),
+      height: thickness,
+    });
+  }
+
+  if (direction === "row") {
+    const previous =
+      index >= items.length
+        ? snapshotItems[snapshotItems.length - 1]
+        : items[index - 1];
+    const next = index === 0 ? snapshotItems[0] : items[index];
+    const previousRect = previous ? requireDragSnapshot(previous) : null;
+    const nextRect = next ? requireDragSnapshot(next) : null;
+    const markerCenter = previousRect
+      ? nextRect
+        ? (previousRect.x + previousRect.width + nextRect.x) / 2
+        : previousRect.x + previousRect.width
+      : nextRect!.x;
+
+    return withInsets({
+      x: markerCenter - thickness / 2,
+      y: contentRect.y,
+      width: thickness,
+      height: Math.max(1, contentRect.height),
+    });
+  }
+
+  const previous =
+    index >= items.length
+      ? snapshotItems[snapshotItems.length - 1]
+      : items[index - 1];
+  const next = index === 0 ? snapshotItems[0] : items[index];
+  const previousRect = previous ? requireDragSnapshot(previous) : null;
+  const nextRect = next ? requireDragSnapshot(next) : null;
+  const markerCenter = previousRect
+    ? nextRect
+      ? (previousRect.y + previousRect.height + nextRect.y) / 2
+      : previousRect.y + previousRect.height
+    : nextRect!.y;
+
+  return withInsets({
+    x: contentRect.x,
+    y: markerCenter - thickness / 2,
+    width: Math.max(1, contentRect.width),
+    height: thickness,
+  });
+}
+
+function collectInsertionCandidates(
+  item: ItemBase,
+  root: ItemBase,
+): {
+  candidates: DropCandidate[];
+  pointerX: number;
+  pointerY: number;
+} {
+  const pointer =
+    "dragPointerPosition" in item ? item.dragPointerPosition : null;
+  const dragProp = requireDragSnapshot(item);
+  const pointerX = pointer?.x ?? item.worldTransform.x + dragProp.width / 2;
+  const pointerY = pointer?.y ?? item.worldTransform.y + dragProp.height / 2;
+  const sourceParent = "parent" in item ? (item as any).parent : null;
+  const sourceGroupID = sourceParent ? groupIDOf(sourceParent) : undefined;
+  const candidates: DropCandidate[] = [];
+
+  const visit = (container: ItemBase) => {
+    if (container === item) return;
+
+    const children = container.dragSnapshotOrderedList.filter(
+      (child) => child !== item && !child.isGhost,
+    );
+    const snapshotChildren = container.dragSnapshotOrderedList.filter(
+      (child) => !child.isGhost,
+    );
+    const indexForGap = (index: number) => {
+      const nextItem = children[index] ?? null;
+      if (!nextItem) return container.dragSnapshotOrderedList.length;
+
+      const snapshotIndex = container.dragSnapshotOrderedList.indexOf(nextItem);
+      return snapshotIndex === -1 ? index : snapshotIndex;
+    };
+
+    if (compatibleInsertionContainer(container, sourceGroupID)) {
+      for (let index = 0; index <= children.length; index++) {
+        const insertionIndex = indexForGap(index);
+        const ghostRect = insertionMarkerRect(
+          container,
+          index,
+          children,
+          snapshotChildren,
+        );
+        const ghostCenterX = ghostRect.x + ghostRect.width / 2;
+        const ghostCenterY = ghostRect.y + ghostRect.height / 2;
+        candidates.push({
+          container,
+          index: insertionIndex,
+          ghostCenterX,
+          ghostCenterY,
+          distance: distanceToRect(ghostRect, pointerX, pointerY),
+          priority: 0,
+          lineIndex: index,
+          dragLineIndex: index,
+          lineDistance: 0,
+          prevPosition: null,
+          nextPosition: null,
+          placementRect: ghostRect,
+          placementDistance: distanceToRect(ghostRect, pointerX, pointerY),
+          placementContainsDragCenter: containsPoint(
+            ghostRect,
+            pointerX,
+            pointerY,
+          ),
+          ghostRect,
+        });
+      }
+    }
+
+    for (const child of children) {
+      if (isContainerObject(child)) {
+        visit(child);
+      }
+    }
+  };
+
+  visit(root);
+
+  return { candidates, pointerX, pointerY };
+}
+
+function chooseInsertionCandidate(
+  candidates: DropCandidate[],
+  pointerX: number,
+  pointerY: number,
+): DropCandidate | null {
+  let best: DropCandidate | null = null;
+  for (const candidate of candidates) {
+    if (!best) {
+      best = candidate;
+      continue;
+    }
+
+    if (
+      Math.abs(candidate.distance - best.distance) <= 1 &&
+      candidate.container.id !== best.container.id
+    ) {
+      best = chooseByContentBox(best, candidate, pointerX, pointerY);
+      continue;
+    }
+
+    if (candidate.distance < best.distance) {
+      best = candidate;
+    }
+  }
+  return best;
+}
+
 export function determineDropTarget(
   item: ItemBase,
   root: ItemBase,
@@ -740,6 +947,20 @@ export function determineProgressiveDropTarget(
     root,
   );
   const best = chooseProgressiveCandidate(candidates, dragCenterX, dragCenterY);
+  drawCandidateDebug(root, item, candidates, best);
+  debugDropTargetTree(root, item);
+  return best;
+}
+
+export function determineInsertionDropTarget(
+  item: ItemBase,
+  root: ItemBase,
+): DropCandidate | null {
+  const { candidates, pointerX, pointerY } = collectInsertionCandidates(
+    item,
+    root,
+  );
+  const best = chooseInsertionCandidate(candidates, pointerX, pointerY);
   drawCandidateDebug(root, item, candidates, best);
   debugDropTargetTree(root, item);
   return best;

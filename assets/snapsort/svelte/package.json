@@ -19,6 +19,8 @@
     "./ItemEuclidean.svelte": "./src/ItemEuclidean.svelte",
     "./ContainerProgressive.svelte": "./src/ContainerProgressive.svelte",
     "./ItemProgressive.svelte": "./src/ItemProgressive.svelte",
+    "./ContainerInsertion.svelte": "./src/ContainerInsertion.svelte",
+    "./ItemInsertion.svelte": "./src/ItemInsertion.svelte",
     "./Handle.svelte": "./src/Handle.svelte"
   },
   "keywords": [

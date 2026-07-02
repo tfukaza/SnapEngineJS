@@ -50,7 +50,6 @@ function createItemComponent(
     }
     const item = itemRef.current;
     item.metadata = metadata;
-    const itemKey = metadata.itemId ?? null;
 
     useImperativeHandle(ref, () => item, [item]);
 
@@ -70,7 +69,6 @@ function createItemComponent(
       <div
         ref={itemDomRef}
         className={`snapsort-item ${algorithmClassName} ${className}`.trim()}
-        data-snapsort-item-key={itemKey ?? undefined}
         style={{
           alignItems: "center",
           boxSizing: "border-box",

@@ -47,6 +47,37 @@
           </div>
         </div>
       </section>
+
+      <section class="algorithm-panel file-tree-section">
+        <div class="section-heading">
+          <h2>Insertion file explorer</h2>
+          <p>Vanilla DOM tree using built-in SnapSort insertion ghost and DOM callbacks.</p>
+        </div>
+
+        <div class="file-tree-demo">
+          <aside class="file-tree-panel" aria-label="Vanilla explorer file tree">
+            <div class="explorer-title">
+              <span>Explorer</span>
+              <div class="title-actions">
+                <button id="reset-tree-button" type="button">Reset</button>
+              </div>
+            </div>
+
+            <div class="workspace-row">
+              <span class="chevron open" aria-hidden="true"></span>
+              <strong>SNAPENGINEJS</strong>
+            </div>
+
+            <div id="vanilla-file-tree-canvas" class="file-tree-canvas">
+              <div
+                id="vanilla-file-tree"
+                class="snapsort-container snapsort-container-insertion code-tree"
+                aria-label="SnapSort vanilla file tree"
+              ></div>
+            </div>
+          </aside>
+        </div>
+      </section>
     </main>
   </body>
 </html>
