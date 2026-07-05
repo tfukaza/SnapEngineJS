@@ -20,6 +20,7 @@ const TAG_COLLISIONS = "drop-collisions";
 const TAG_CANDIDATES = "drop-candidates";
 const TAG_LAYOUT = "drop-layout";
 const TAG_ZONES = "drop-zones";
+const TOP_CANDIDATE_DEBUG_LIMIT = 3;
 
 type Rect = { x: number; y: number; width: number; height: number };
 type InsertionGhostRect = Rect & { insetLeft?: number; insetRight?: number };
@@ -713,11 +714,24 @@ function drawCandidateDebug(
   item: ItemBase,
   candidates: DropCandidate[],
   best: DropCandidate | null,
+  options: {
+    topCandidates?: boolean;
+    distanceOrigin?: { x: number; y: number };
+  } = {},
 ) {
   for (let i = 0; i < 50; i++) {
     root.clearDebugMarker(`drop-candidate-marker-${i}`);
     root.clearDebugMarker(`drop-candidate-label-${i}`);
   }
+  for (let i = 0; i < TOP_CANDIDATE_DEBUG_LIMIT; i++) {
+    root.clearDebugMarker(`drop-top-candidate-rect-${i}`);
+    root.clearDebugMarker(`drop-top-candidate-center-${i}`);
+    root.clearDebugMarker(`drop-top-candidate-label-${i}`);
+    root.clearDebugMarker(`drop-top-candidate-distance-${i}`);
+    root.clearDebugMarker(`drop-top-candidate-distance-label-${i}`);
+  }
+  root.clearDebugMarker("drop-distance-origin");
+  root.clearDebugMarker("drop-distance-origin-label");
 
   for (let i = 0; i < candidates.length; i++) {
     const candidate = candidates[i];
@@ -744,6 +758,103 @@ function drawCandidateDebug(
       `drop-candidate-label-${i}`,
       TAG_CANDIDATES,
     );
+  }
+
+  if (options.topCandidates) {
+    const topCandidates = candidates
+      .slice()
+      .sort((a, b) => a.distance - b.distance)
+      .slice(0, TOP_CANDIDATE_DEBUG_LIMIT);
+    const rankColors = [
+      "rgba(250, 204, 21, 0.95)",
+      "rgba(56, 189, 248, 0.9)",
+      "rgba(168, 85, 247, 0.85)",
+    ];
+
+    if (options.distanceOrigin) {
+      root.addDebugCircle(
+        options.distanceOrigin.x,
+        options.distanceOrigin.y,
+        5,
+        "rgba(239, 68, 68, 0.95)",
+        true,
+        "drop-distance-origin",
+        TAG_CANDIDATES,
+      );
+      root.addDebugText(
+        options.distanceOrigin.x + 8,
+        options.distanceOrigin.y - 8,
+        "drag center",
+        "rgba(239, 68, 68, 0.95)",
+        true,
+        "drop-distance-origin-label",
+        TAG_CANDIDATES,
+      );
+    }
+
+    for (let i = 0; i < topCandidates.length; i++) {
+      const candidate = topCandidates[i];
+      const color = rankColors[i] ?? "rgba(250, 204, 21, 0.9)";
+      const placementRect = candidate.placementRect;
+      const label = `#${i + 1} ${candidate.container.id}:${candidate.index} d=${Math.round(candidate.distance)}`;
+
+      root.addDebugRect(
+        placementRect.x,
+        placementRect.y,
+        placementRect.width,
+        placementRect.height,
+        color,
+        true,
+        `drop-top-candidate-rect-${i}`,
+        false,
+        i === 0 ? 3 : 2,
+        TAG_CANDIDATES,
+      );
+      root.addDebugCircle(
+        candidate.ghostCenterX,
+        candidate.ghostCenterY,
+        i === 0 ? 7 : 5,
+        color,
+        true,
+        `drop-top-candidate-center-${i}`,
+        TAG_CANDIDATES,
+      );
+      root.addDebugText(
+        placementRect.x,
+        placementRect.y - 8,
+        label,
+        color,
+        true,
+        `drop-top-candidate-label-${i}`,
+        TAG_CANDIDATES,
+      );
+
+      if (options.distanceOrigin) {
+        const midX = (options.distanceOrigin.x + candidate.ghostCenterX) / 2;
+        const midY = (options.distanceOrigin.y + candidate.ghostCenterY) / 2;
+        root.addDebugLine(
+          options.distanceOrigin.x,
+          options.distanceOrigin.y,
+          candidate.ghostCenterX,
+          candidate.ghostCenterY,
+          color,
+          true,
+          `drop-top-candidate-distance-${i}`,
+          i === 0 ? 3 : 1.5,
+          TAG_CANDIDATES,
+          true,
+        );
+        root.addDebugText(
+          midX + 6,
+          midY - 6,
+          `sqrt(dx^2+dy^2)=${Math.round(candidate.distance)}`,
+          color,
+          true,
+          `drop-top-candidate-distance-label-${i}`,
+          TAG_CANDIDATES,
+        );
+      }
+    }
   }
 
   if (best) {
@@ -998,9 +1109,15 @@ export function determineDropTarget(
   item: ItemBase,
   root: ItemBase,
 ): DropCandidate | null {
-  const { candidates } = collectDropCandidates(item, root);
+  const { candidates, dragCenterX, dragCenterY } = collectDropCandidates(
+    item,
+    root,
+  );
   const best = chooseEuclideanCandidate(candidates);
-  drawCandidateDebug(root, item, candidates, best);
+  drawCandidateDebug(root, item, candidates, best, {
+    topCandidates: true,
+    distanceOrigin: { x: dragCenterX, y: dragCenterY },
+  });
   debugDropTargetTree(root, item);
   return best;
 }

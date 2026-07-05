@@ -22,7 +22,6 @@ import type {
   LayoutDirection,
   LayoutMainAxisAlign,
 } from "./snapshot";
-import { DomProperty } from "@snap-engine/core";
 
 const MIN_FLIP_DISTANCE = 0.5;
 
@@ -61,7 +60,6 @@ interface ElementRectAnimationOptions {
   lastParentItem?: ItemBase | null;
   subtractAncestorOffset?: boolean;
   initialOffset?: TransformOffset;
-  afterWrite?: () => void;
 }
 
 export type ItemBaseConstructor = new (
@@ -90,8 +88,8 @@ export class ItemBase extends ElementObject {
   #dragStartX: number = 0;
   #dragStartY: number = 0;
 
-  #dragLayoutTransform: DomProperty | null = null;
   #dragSnapshot: ItemSnapshot<ItemBase> | null = null;
+  #dragTransformSyncAnimation: AnimationObject | null = null;
   // #dragPositionContextSnapshot: Map<HTMLElement, string> = new Map();
 
   #itemOrderedList: ItemBase[] = [];
@@ -864,6 +862,13 @@ export class ItemBase extends ElementObject {
     const easing = animationConfig.timing_function ?? "ease-out";
     const entriesByItem = new Map(snapshot.map((entry) => [entry.item, entry]));
 
+    // Sort the animations we have to play by their depth.
+    // This is needed because if a container and any of its child
+    // are both being animated, then the start and end positions
+    // for child elements must first be calibrated based on
+    // its parents' positions.
+    //
+    // TODO: Can we sort using this.depth?
     const orderedSnapshot = snapshot.slice().sort((a, b) => {
       if (this.#isFlipAncestor(a, b, entriesByItem)) return -1;
       if (this.#isFlipAncestor(b, a, entriesByItem)) return 1;
@@ -874,6 +879,7 @@ export class ItemBase extends ElementObject {
     });
     const initialOffsets = this.#initialFlipOffsets(orderedSnapshot);
 
+    // Start the animations
     for (const {
       item,
       first,
@@ -886,11 +892,6 @@ export class ItemBase extends ElementObject {
     } of orderedSnapshot) {
       if (!targetElement || !first || !last) continue;
 
-      const syncDraggedTransform =
-        draggedItem &&
-        this.#isItemAncestor(item, draggedItem.#dragCoordinateParent)
-          ? () => draggedItem.#writeDraggedTransform()
-          : undefined;
       this.#playElementRectAnimation(
         item,
         first,
@@ -905,14 +906,40 @@ export class ItemBase extends ElementObject {
           lastParent,
           lastParentItem,
           initialOffset: initialOffsets.get(item),
-          afterWrite: syncDraggedTransform,
         },
       );
     }
 
-    if (draggedItem) {
-      draggedItem.#writeDraggedTransform();
+    if (!draggedItem) {
+      return;
     }
+
+    // While the FLIP animations above move the dragged item's coordinate
+    // parent, re-sync the dragged item's transform every frame so it stays
+    // under the pointer.
+    draggedItem.#dragTransformSyncAnimation?.cancel();
+
+    const animation = new AnimationObject(
+      null,
+      {},
+      {
+        duration,
+        easing,
+        tick: () => {
+          draggedItem.#scheduleWriteDrag();
+        },
+        finish: () => {
+          if (draggedItem.#dragTransformSyncAnimation === animation) {
+            draggedItem.#dragTransformSyncAnimation = null;
+          }
+          draggedItem.#scheduleWriteDrag();
+        },
+      },
+    );
+
+    draggedItem.#dragTransformSyncAnimation = animation;
+    animationOwner.addAnimation(animation, { replaceExisting: false });
+    animation.play();
   }
 
   #flipAnimationDepth(
@@ -939,15 +966,6 @@ export class ItemBase extends ElementObject {
       if (parent === possibleAncestor.item) return true;
       parent =
         entriesByItem.get(parent)?.lastParentItem ?? parent.#parentItem();
-    }
-    return false;
-  }
-
-  #isItemAncestor(ancestor: ItemBase, descendant: ItemBase | null) {
-    let parent: ItemBase | null = descendant;
-    while (parent) {
-      if (parent === ancestor) return true;
-      parent = parent.#parentItem();
     }
     return false;
   }
@@ -1048,7 +1066,6 @@ export class ItemBase extends ElementObject {
           options.initialOffset.x,
           options.initialOffset.y,
         );
-        options.afterWrite?.();
         return;
       }
       item.#writeRectAnimationTransform(
@@ -1059,7 +1076,6 @@ export class ItemBase extends ElementObject {
         coordinateParent,
         subtractAncestorOffset,
       );
-      options.afterWrite?.();
     };
     const animation = new AnimationObject(
       null,
@@ -1210,44 +1226,6 @@ export class ItemBase extends ElementObject {
     );
   }
 
-  // /**
-  //  * Apply a temporary inline `position` while remembering the previous value.
-  //  *
-  //  * @param element Element to update.
-  //  * @param position Temporary CSS position value.
-  //  * @returns Nothing.
-  //  */
-  // #setTemporaryPosition(element: HTMLElement | null, position: string) {
-  //   if (!element || this.#dragPositionContextSnapshot.has(element)) return;
-  //   this.#dragPositionContextSnapshot.set(element, element.style.position);
-  //   element.style.position = position;
-  // }
-
-  // /**
-  //  * Prepare the root as a fallback absolute-positioning context.
-  //  *
-  //  * @returns Nothing.
-  //  */
-  // #applyDragPositionContext() {
-  //   const root = this.rootContainer;
-  //   if (!root?.element) return;
-
-  //   this.#dragPositionContextSnapshot.clear();
-  //   this.#setTemporaryPosition(root.element, "relative");
-  // }
-
-  // /**
-  //  * Restore inline position values changed by `#applyDragPositionContext`.
-  //  *
-  //  * @returns Nothing.
-  //  */
-  // #restoreDragPositionContext() {
-  //   for (const [element, position] of this.#dragPositionContextSnapshot) {
-  //     element.style.position = position;
-  //   }
-  //   this.#dragPositionContextSnapshot.clear();
-  // }
-
   /**
    * Renders the dragged item.
    *
@@ -1269,10 +1247,11 @@ export class ItemBase extends ElementObject {
       left: "0px",
     };
     this.writeDom();
-    // if (this.#dragLayoutPosition) {
-    //   this.#writeDraggedTransform();
-    // }
+    this.#scheduleWriteDrag();
+  }
 
+  #scheduleWriteDrag() {
+    const parentItem = this.#dragCoordinateParent;
     // There are some scenarios where the parent container
     // is moving. To account for this, we need to check the
     // latest positions of the dragged item and its ancestor,
@@ -1281,15 +1260,17 @@ export class ItemBase extends ElementObject {
     this.schedule(
       async () => {
         if (!this.element?.isConnected) return;
-        // Get the unaltered world position of the item's DOM.
-        // this.readDom({ unapplyTransform: true });
-        // If the parent container is being animated, we need to
-        // subtract any offsets caused by it to get the true world position of the item's DOM.
+        if (!parentItem?.element?.isConnected) return;
+        // Read the container's current visual position (FLIP transforms
+        // included), then remove the animation offsets applied this frame.
+        // What remains is the container's current layout position, which
+        // stays correct even after WRITE-stage DOM mutations move the
+        // container.
+        const visual = parentItem.readDom();
         const ancestorOffset = this.#ancestorVisualOffset(parentItem);
-        console.log("ancestorOffset", ancestorOffset);
         this.#dragLayoutPosition = {
-          x: this.#dragLayoutTransform!.x - ancestorOffset.x,
-          y: this.#dragLayoutTransform!.y - ancestorOffset.y,
+          x: visual.x - ancestorOffset.x,
+          y: visual.y - ancestorOffset.y,
         };
       },
       { stage: "READ_3", queueId: `dragged-read-${this.id}` },
@@ -1307,42 +1288,31 @@ export class ItemBase extends ElementObject {
    * @returns
    */
   #writeDraggedTransform() {
-    // if (!this.element) {
-    //   this.writeTransform();
-    //   return;
-    // }
-
     if (!this.#dragLayoutPosition) {
       if (this.#dragCoordinateParent) return;
       this.writeTransform();
       return;
     }
 
-    // const ancestorOffset = this.#ancestorVisualOffset(
-    //   this.#dragCoordinateParent,
-    // );
-    // const x =
-    //   this.worldTransform.x - this.#dragLayoutPosition.x - ancestorOffset.x;
-    // const y =
-    //   this.worldTransform.y - this.#dragLayoutPosition.y - ancestorOffset.y;
-
+    // The container's FLIP transform carries the dragged item's DOM along
+    // with it, so add the offsets applied this frame back onto the layout
+    // position to get where the container is actually painted. This runs
+    // after the FLIP WRITE_3 task, so freshly started animations have
+    // already written their initial offsets.
+    const ancestorOffset = this.#ancestorVisualOffset(
+      this.#dragCoordinateParent,
+    );
     this.worldTransform.x =
-      this.#dragPointerX - this.#dragLayoutPosition.x - this.#dragOffsetX;
+      this.#dragPointerX -
+      this.#dragLayoutPosition.x -
+      ancestorOffset.x -
+      this.#dragOffsetX;
     this.worldTransform.y =
-      this.#dragPointerY - this.#dragLayoutPosition.y - this.#dragOffsetY;
+      this.#dragPointerY -
+      this.#dragLayoutPosition.y -
+      ancestorOffset.y -
+      this.#dragOffsetY;
 
-    // this.worldTransform.x =
-    //   this.#dragPointerX -
-    //   this.#dragLayoutTransform!.x -
-    //   this.#dragOffsetX -
-    //   ancestorOffset.x;
-    // this.worldTransform.y =
-    //   this.#dragPointerY -
-    //   this.#dragLayoutTransform!.y -
-    //   this.#dragOffsetY -
-    //   ancestorOffset.y;
-    // this.worldTransform.y = this.#dragLayoutPosition.y + ancestorOffset.y;
-    // this.element.style.transform = `${this.#translateTransform(x, y)} scale(${this.worldTransform.scaleX}, ${this.worldTransform.scaleY})`;
     this.writeTransform();
   }
 
@@ -1582,6 +1552,8 @@ export class ItemBase extends ElementObject {
    * The live list may contain a ghost and no longer contain the dragged item,
    * so this maps through the snapshot item that should appear after the target.
    *
+   * TODO: Remove
+   *
    * @param container Container whose index is being translated.
    * @param snapshotIndex Candidate index from the frozen snapshot list.
    * @param draggedItem Item currently being dragged and omitted from live flow.
@@ -1743,9 +1715,7 @@ export class ItemBase extends ElementObject {
    * TODO: Since the code is so different, the insert classes should
    * just overwrite this function.
    *
-   * @param original The original item being dragged.
-   * @param container The container to place the ghost element in, or null to remove it.
-   * @param index The index at which to place the ghost element.
+   * @param event Ghost update event containing the target container and index.
    * @returns Nothing.
    */
   async #updateGhostElement(event: GhostUpdateEvent) {
@@ -1859,6 +1829,7 @@ export class ItemBase extends ElementObject {
               item,
             )
         : -1;
+
     const targetContainer = target?.container as ContainerBase;
     if (targetContainer && ghostSource?.container) {
       const sameContainer = targetContainer === ghostSource.container;
@@ -1929,10 +1900,7 @@ export class ItemBase extends ElementObject {
         this.#dragOffsetX = prop.start.x - this.worldTransform.x;
         this.#dragOffsetY = prop.start.y - this.worldTransform.y;
 
-        const layoutWorldTransform = currentContainer.readDom({
-          unapplyTransform: true,
-        });
-        this.#dragLayoutTransform = layoutWorldTransform;
+        currentContainer.readDom({ unapplyTransform: true });
         // Capture key data like the DOM element size.
         root.#captureDragSnapshotTree();
       },
@@ -1976,15 +1944,11 @@ export class ItemBase extends ElementObject {
           width: dragSnapshot ? `${dragSnapshot.box.width}px` : "",
           height: dragSnapshot ? `${dragSnapshot.box.height}px` : "",
         };
-        // this.#applyDragPositionContext();
-        //
+
         // The dragged item's DOM element stays under its original DOM parent
         // for the whole drag, so we maintain a logical reference to it.
         this.#dragCoordinateParent = currentContainer;
-        // this.worldTransform = {
-        //   x: prop.start.x - this.#dragOffsetX,
-        //   y: prop.start.y - this.#dragOffsetY,
-        // };
+
         this.#refreshDraggedItemPosition();
         this.debugAllItems();
       },
@@ -2002,18 +1966,12 @@ export class ItemBase extends ElementObject {
         this.#dragPointerX = prop.position.x;
         this.#dragPointerY = prop.position.y;
 
+        await this.updateDropTarget(this);
+
         if (this.usesInsertionDropMarker) {
-          await this.updateDropTarget(this);
           return;
         }
 
-        // Move the item according to mouse position
-        // this.worldTransform = {
-        //   x: prop.position.x - this.#dragOffsetX,
-        //   y: prop.position.y - this.#dragOffsetY,
-        // };
-
-        await this.updateDropTarget(this);
         this.#writeDraggedTransform();
       },
       { stage: "WRITE_1", queueId: `drag-${this.id}` },

@@ -1,0 +1,393 @@
+---
+title: React API
+description: Components, props, refs, and state patterns for @snap-engine/snapsort-react.
+order: 2
+project: snapsort
+projectTitle: SnapSort
+section: reference
+sectionTitle: Reference
+sectionOrder: 2
+---
+
+The React package wraps SnapSort's core objects in React components. Use this page when React owns the rendered arrays and SnapSort should provide drag, drop, ordering, and animation behavior.
+
+## Install
+
+```bash
+npm install @snap-engine/core @snap-engine/snapsort @snap-engine/snapsort-react react react-dom
+```
+
+`react` and `react-dom` are peer dependencies of `@snap-engine/snapsort-react`.
+
+## Import
+
+```tsx
+import {
+  Engine,
+  Container,
+  Item,
+  ContainerEuclidean,
+  ItemEuclidean,
+  ContainerProgressive,
+  ItemProgressive,
+  ContainerInsertion,
+  ItemInsertion,
+  Handle,
+  useSnapSortAwaitMutation,
+} from "@snap-engine/snapsort-react";
+```
+
+`Container` and `Item` are aliases for the Euclidean components.
+
+Import core types when you need typed callbacks or refs:
+
+```ts
+import type { Engine as CoreEngine } from "@snap-engine/core";
+import type {
+  ContainerBase,
+  ContainerConfig,
+  ItemBase,
+  ItemInsertEvent,
+  ItemSnapshotMetadata,
+} from "@snap-engine/snapsort";
+```
+
+## Engine
+
+`Engine` creates or uses a core `Engine`, assigns it to the rendered DOM root, installs a collision engine, and provides it through React context.
+
+```tsx
+<Engine id="tasks" style={{ minHeight: 320 }}>
+  <Container config={{ direction: "column", groupID: "tasks" }}>
+    <Item metadata={{ itemId: "task-1" }}>Task 1</Item>
+  </Container>
+</Engine>
+```
+
+### Engine Props
+
+```ts
+type EngineProps = {
+  children: ReactNode;
+  className?: string;
+  debug?: boolean;
+  engine?: CoreEngine | null;
+  id?: string;
+  style?: CSSProperties;
+};
+```
+
+| Prop | Default | Description |
+|------|---------|-------------|
+| `children` | Required | SnapSort containers and app UI. |
+| `className` | `undefined` | Extra class string applied to the engine root. |
+| `debug` | `false` | Enables the SnapEngine debug renderer while true. |
+| `engine` | `null` | Optional existing `@snap-engine/core` engine instance. |
+| `id` | `"snap-canvas"` | ID applied to the engine root element. |
+| `style` | `undefined` | Extra inline styles merged onto the engine root. |
+
+Use `useSnapSortEngine()` inside descendants when you need the current core engine.
+
+## Component Pairs
+
+Use matching container and item components inside one drag tree.
+
+| Component | Alias | Strategy | Best for |
+|-----------|-------|----------|----------|
+| `Container` + `Item` | Yes | Euclidean | Lists, boards, and general reordering. |
+| `ContainerEuclidean` + `ItemEuclidean` | No | Euclidean | Explicit Euclidean usage. |
+| `ContainerProgressive` + `ItemProgressive` | No | Progressive | Sentence builders, token banks, and wrapped variable-width rows. |
+| `ContainerInsertion` + `ItemInsertion` | No | Insertion marker | Drop-marker UIs where the placeholder is a line instead of a full item. |
+
+```tsx
+<ContainerEuclidean config={{ direction: "column", groupID: "tasks" }}>
+  <ItemEuclidean metadata={{ itemId: "task-1" }}>Task 1</ItemEuclidean>
+</ContainerEuclidean>
+
+<ContainerProgressive config={{ direction: "row", groupID: "sentence" }}>
+  <ItemProgressive metadata={{ itemId: "word-1" }}>hello</ItemProgressive>
+</ContainerProgressive>
+
+<ContainerInsertion config={{ direction: "column", groupID: "outline" }}>
+  <ItemInsertion metadata={{ itemId: "section-1" }}>Section 1</ItemInsertion>
+</ContainerInsertion>
+```
+
+## State Backed Lists
+
+When React owns the item arrays, update state from `callbacks.onItemInsert`. The React adapter wraps mutation callbacks in `flushSync` and supplies an `awaitMutation` callback by default, so SnapSort can read committed DOM after React updates.
+
+```tsx
+import { useCallback, useState } from "react";
+import { Engine, Container, Item } from "@snap-engine/snapsort-react";
+import type { ItemInsertEvent } from "@snap-engine/snapsort";
+
+type Task = { id: string; label: string };
+type Column = { id: string; label: string; tasks: Task[] };
+
+const initialColumns: Column[] = [
+  {
+    id: "todo",
+    label: "To Do",
+    tasks: [
+      { id: "task-1", label: "Sketch layout" },
+      { id: "task-2", label: "Wire behavior" },
+    ],
+  },
+  {
+    id: "done",
+    label: "Done",
+    tasks: [{ id: "task-3", label: "Create branch" }],
+  },
+];
+
+export function TaskBoard() {
+  const [columns, setColumns] = useState(initialColumns);
+
+  const moveTask = useCallback((taskId: string, columnId: string, index: number) => {
+    setColumns((currentColumns) => {
+      let movedTask: Task | null = null;
+
+      const withoutTask = currentColumns.map((column) => {
+        const sourceIndex = column.tasks.findIndex((task) => task.id === taskId);
+        if (sourceIndex === -1) return column;
+
+        const nextTasks = column.tasks.slice();
+        [movedTask] = nextTasks.splice(sourceIndex, 1);
+        return { ...column, tasks: nextTasks };
+      });
+
+      if (!movedTask) return currentColumns;
+
+      return withoutTask.map((column) => {
+        if (column.id !== columnId) return column;
+
+        const nextTasks = column.tasks.slice();
+        nextTasks.splice(Math.max(0, Math.min(index, nextTasks.length)), 0, movedTask);
+        return { ...column, tasks: nextTasks };
+      });
+    });
+  }, []);
+
+  const handleItemInsert = useCallback(
+    (event: ItemInsertEvent) => {
+      const itemId = event.itemMetadata.itemId;
+      const columnId = event.containerMetadata.columnId;
+
+      if (typeof itemId !== "string" || typeof columnId !== "string") return;
+      moveTask(itemId, columnId, event.index);
+    },
+    [moveTask],
+  );
+
+  return (
+    <Engine id="task-board">
+      <Container config={{ direction: "row", name: "board-root", noDrop: true }}>
+        {columns.map((column) => (
+          <Container
+            key={column.id}
+            metadata={{ columnId: column.id }}
+            config={{
+              direction: "column",
+              groupID: "tasks",
+              callbacks: {
+                onItemInsert: handleItemInsert,
+              },
+            }}
+          >
+            <h2>{column.label}</h2>
+
+            {column.tasks.map((task) => (
+              <Item key={task.id} metadata={{ itemId: task.id }}>
+                <article>{task.label}</article>
+              </Item>
+            ))}
+          </Container>
+        ))}
+      </Container>
+    </Engine>
+  );
+}
+```
+
+Use `callbacks.onItemRemove` when `container.removeItem(id)` or your own controls should also remove data from React state. Drag moves and `moveItem()` are driven by `onItemInsert`.
+
+## Mutation Timing
+
+The React adapter handles the framework boundary for component callbacks:
+
+- `onItemInsert`, `onItemRemove`, `onGhostInsert`, and `onGhostRemove` are wrapped in `flushSync`.
+- `callbacks.awaitMutation` defaults to `useSnapSortAwaitMutation()`.
+- State updates in SnapSort callbacks should be normal synchronous `setState` calls.
+
+Do not put SnapSort-driven state updates behind `startTransition`, timers, animation frames, or async promise chains. SnapSort needs the DOM committed before it continues from framework mutation into layout reads.
+
+`useSnapSortAwaitMutation()` is exported for advanced cases where you wire core objects directly or want to pass an explicit `awaitMutation` callback:
+
+```tsx
+const awaitMutation = useSnapSortAwaitMutation();
+
+<Container
+  config={{
+    direction: "column",
+    groupID: "tasks",
+    callbacks: {
+      onItemInsert: handleItemInsert,
+      awaitMutation,
+    },
+  }}
+/>
+```
+
+## Imperative Moves
+
+Container components forward refs to their core container object. Call `moveItem(itemId, targetContainer, index)` with the same ID used in `metadata.itemId`.
+
+```tsx
+import { useRef } from "react";
+import { Engine, Container, Item } from "@snap-engine/snapsort-react";
+import type { ContainerBase } from "@snap-engine/snapsort";
+
+export function ClickMove() {
+  const source = useRef<ContainerBase>(null);
+  const target = useRef<ContainerBase>(null);
+
+  function moveToTarget(id: string) {
+    if (!source.current || !target.current) return;
+    source.current.moveItem(id, target.current, target.current.numberOfItems);
+  }
+
+  return (
+    <Engine id="click-move">
+      <Container ref={source} config={{ direction: "column", groupID: "cards" }}>
+        <Item metadata={{ itemId: "card-1" }}>
+          <button type="button" onClick={() => moveToTarget("card-1")}>
+            Move card
+          </button>
+        </Item>
+      </Container>
+
+      <Container ref={target} config={{ direction: "column", groupID: "cards" }} />
+    </Engine>
+  );
+}
+```
+
+When your list is backed by React state, keep the same `onItemInsert` callback on the relevant containers so imperative moves and drag moves update the rendered arrays the same way.
+
+## Container Components
+
+| Component | Core object | Strategy |
+|-----------|-------------|----------|
+| `Container` | `ContainerEuclidean` | Euclidean |
+| `ContainerEuclidean` | `ContainerEuclidean` | Euclidean |
+| `ContainerProgressive` | `ContainerProgressive` | Progressive |
+| `ContainerInsertion` | `ContainerInsertion` | Insertion marker |
+
+### Props
+
+```ts
+type ContainerProps = {
+  children?: ReactNode;
+  className?: string;
+  config: ContainerConfig;
+  containerObject?: ContainerBase | null;
+  locked?: boolean;
+  metadata?: Record<string, unknown>;
+  style?: CSSProperties;
+};
+```
+
+| Prop | Default | Description |
+|------|---------|-------------|
+| `children` | `undefined` | Item and nested container content. |
+| `className` | `""` | Extra class string applied to the rendered element. |
+| `config` | Required | SnapSort container configuration. |
+| `containerObject` | `null` | Optional existing core container object. When provided, the component does not own creation. |
+| `locked` | `true` | Keeps the container itself from being dragged when nested. Set to `false` for draggable nested containers. |
+| `metadata` | `{}` | Metadata assigned to the container object and exposed in callback events. |
+| `style` | `undefined` | Extra inline styles merged onto the rendered container element. |
+
+Container components render a `div` with `snapsort-container` plus a strategy-specific class: `snapsort-container-euclidean`, `snapsort-container-progressive`, or `snapsort-container-insertion`.
+
+### Config
+
+| Option | Default | Description |
+|--------|---------|-------------|
+| `direction` | `"column"` | Main layout direction: `"column"` or `"row"`. |
+| `groupID` | `"default-group"` | Containers with the same group can exchange items. |
+| `mainAxisAlign` | `"start"` | Main-axis alignment for virtual placement. Supports `"start"` and `"center"`. |
+| `name` | Generated | Human-readable container name. |
+| `animation` | Default 100ms animations | Reorder, drop, and click-move animation settings. Set to `null` to disable configured animations. |
+| `disableFlip` | `false` | Disables FLIP movement animation. |
+| `noDrop` | `false` | Prevents the container from being a drop target. Useful for root layout containers. |
+| `dropArea` | `false` | Treats the container as an explicit drop area for collision filtering. |
+| `callbacks` | Default DOM callbacks | Hooks for DOM, framework state, and custom ghost behavior. |
+
+## Item Components
+
+| Component | Core object | Strategy |
+|-----------|-------------|----------|
+| `Item` | `ItemEuclidean` | Euclidean |
+| `ItemEuclidean` | `ItemEuclidean` | Euclidean |
+| `ItemProgressive` | `ItemProgressive` | Progressive |
+| `ItemInsertion` | `ItemInsertion` | Insertion marker |
+
+### Props
+
+```ts
+type ItemProps = {
+  children: ReactNode;
+  className?: string;
+  itemObject?: ItemBase | null;
+  metadata?: ItemSnapshotMetadata;
+  style?: CSSProperties;
+};
+```
+
+| Prop | Default | Description |
+|------|---------|-------------|
+| `children` | Required | Rendered item content. |
+| `className` | `""` | Extra class string applied to the rendered element. |
+| `itemObject` | `null` | Optional existing core item object. When provided, the component does not destroy it on unmount. |
+| `metadata` | `{}` | Metadata assigned to the item object. Use `metadata.itemId` for stable keyed state. |
+| `style` | `undefined` | Extra inline styles merged onto the rendered item element. |
+
+Item components forward refs to their core item object and render a `div` with `snapsort-item` plus a strategy-specific class: `snapsort-item-euclidean`, `snapsort-item-progressive`, or `snapsort-item-insertion`.
+
+## Handle
+
+`Handle` registers a child element as an input alias for the nearest item.
+
+```tsx
+<Item metadata={{ itemId: "task-1" }}>
+  <article>
+    <Handle className="drag-handle">Drag</Handle>
+    <span>Task 1</span>
+  </article>
+</Item>
+```
+
+### Props
+
+```ts
+type HandleProps = {
+  children: ReactNode;
+  className?: string;
+  style?: CSSProperties;
+};
+```
+
+`Handle` forwards a ref to the rendered `HTMLDivElement` and renders a `div` with `snapsort-handle` plus the supplied `className`.
+
+## Subpath Exports
+
+The package exports the full API from `@snap-engine/snapsort-react`, plus these subpaths:
+
+| Import path | Exports |
+|-------------|---------|
+| `@snap-engine/snapsort-react/Engine` | `Engine`, `SnapSortEngine`, `EngineContext`, `useSnapSortEngine` |
+| `@snap-engine/snapsort-react/Container` | Container components and `ContainerObjectContext` |
+| `@snap-engine/snapsort-react/Item` | Item components and `ItemObjectContext` |
+| `@snap-engine/snapsort-react/Handle` | `Handle` |
+| `@snap-engine/snapsort-react/useSnapSortAwaitMutation` | `useSnapSortAwaitMutation` |

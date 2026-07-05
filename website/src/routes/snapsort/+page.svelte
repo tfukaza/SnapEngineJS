@@ -1,6 +1,6 @@
 <script lang="ts">
   import { Engine } from "@snap-engine/asset-base-svelte";
-  import type { Engine as SnapEngine } from "@snap-engine/core";
+  import type { DomProperty, Engine as SnapEngine } from "@snap-engine/core";
   import {
     Container,
     ContainerInsertion,
@@ -10,7 +10,14 @@
     ItemInsertion,
     ItemProgressive,
   } from "@snap-engine/snapsort-svelte";
-  import type { ContainerConfig, ContainerEuclidean, ItemInsertEvent } from "@snap-engine/snapsort";
+  import type {
+    ContainerBase,
+    ContainerConfig,
+    ContainerEuclidean,
+    ItemBase,
+    ItemInsertEvent,
+    ItemSnapshot,
+  } from "@snap-engine/snapsort";
   import SnapSortContextBoundary from "./SnapSortContextBoundary.svelte";
 
   type MultiContainerItem = {
@@ -60,11 +67,27 @@
     active?: boolean;
   };
 
+  type DebugRectKind = "snapshot" | "content" | "live";
+
+  type DebugOverlayRect = {
+    id: string;
+    kind: DebugRectKind;
+    label: string;
+    x: number;
+    y: number;
+    width: number;
+    height: number;
+    depth: number;
+    isContainer: boolean;
+  };
+
   let heroEngine: SnapEngine | null = $state(null);
   let examplesEngine: SnapEngine | null = $state(null);
   let sidewaysSolved = $state(false);
   let customizableScrollScene: HTMLElement | undefined = $state();
   let customizableProgress = $state(0);
+  let debugLayout = $state(false);
+  let debugRects: DebugOverlayRect[] = $state([]);
 
   function configureInput(engine: SnapEngine | null) {
     if (engine) {
@@ -77,12 +100,197 @@
     configureInput(examplesEngine);
   });
 
+  $effect(() => {
+    if (!debugLayout || typeof requestAnimationFrame === "undefined") {
+      debugRects = [];
+      return;
+    }
+
+    let frameId = 0;
+    const updateDebugOverlay = () => {
+      debugRects = collectDebugRects([
+        { engine: heroEngine, id: "hero" },
+        { engine: examplesEngine, id: "examples" },
+      ]);
+      frameId = requestAnimationFrame(updateDebugOverlay);
+    };
+
+    frameId = requestAnimationFrame(updateDebugOverlay);
+
+    return () => {
+      cancelAnimationFrame(frameId);
+      debugRects = [];
+    };
+  });
+
+  function toggleDebugLayout() {
+    debugLayout = !debugLayout;
+  }
+
   function goToDocs() {
     window.location.href = "/docs/snapsort/introduction";
   }
 
   function goToGallery() {
     window.location.href = "/snapsort/gallery";
+  }
+
+  function isFiniteRect(rect: Pick<DebugOverlayRect, "x" | "y" | "width" | "height">) {
+    return (
+      Number.isFinite(rect.x) &&
+      Number.isFinite(rect.y) &&
+      Number.isFinite(rect.width) &&
+      Number.isFinite(rect.height) &&
+      rect.width > 0 &&
+      rect.height > 0
+    );
+  }
+
+  function boxToViewportRect(box: DomProperty) {
+    return {
+      x: box.screenX,
+      y: box.screenY,
+      width: box.width,
+      height: box.height,
+    };
+  }
+
+  function contentViewportRect(box: DomProperty) {
+    return {
+      x: box.screenX + box.border.left + box.padding.left,
+      y: box.screenY + box.border.top + box.padding.top,
+      width: Math.max(
+        0,
+        box.width - box.border.left - box.border.right - box.padding.left - box.padding.right,
+      ),
+      height: Math.max(
+        0,
+        box.height - box.border.top - box.border.bottom - box.padding.top - box.padding.bottom,
+      ),
+    };
+  }
+
+  function liveViewportRect(element: HTMLElement | null) {
+    if (!element) return null;
+
+    const rect = element.getBoundingClientRect();
+    return {
+      x: rect.left,
+      y: rect.top,
+      width: rect.width,
+      height: rect.height,
+    };
+  }
+
+  function debugLabel(item: ItemBase, snapshot: ItemSnapshot<ItemBase> | null) {
+    const itemId = snapshot?.metadata.itemId;
+    const containerId = snapshot?.metadata.containerId;
+    const configuredName =
+      "name" in item && typeof item.name === "string" ? item.name : null;
+
+    if (typeof itemId === "string") return itemId;
+    if (typeof containerId === "string") return containerId;
+    return configuredName ?? snapshot?.key ?? item.id;
+  }
+
+  function addDebugRect(
+    rects: DebugOverlayRect[],
+    rect: Omit<DebugOverlayRect, "id">,
+    id: string,
+  ) {
+    if (!isFiniteRect(rect)) return;
+    rects.push({ ...rect, id });
+  }
+
+  function snapSortRootsFor(engine: SnapEngine | null) {
+    const containers = engine?.global?.data?.dragAndDropContainers;
+    if (!Array.isArray(containers)) return [];
+
+    return containers.filter(
+      (container): container is ContainerBase =>
+        container?.engine === engine &&
+        container?.element instanceof HTMLElement &&
+        container.rootContainer === container,
+    );
+  }
+
+  function collectDebugRects(
+    entries: Array<{ engine: SnapEngine | null; id: string }>,
+  ): DebugOverlayRect[] {
+    const rects: DebugOverlayRect[] = [];
+    const visited = new Set<ItemBase>();
+
+    for (const entry of entries) {
+      for (const root of snapSortRootsFor(entry.engine)) {
+        if (!root.dragSnapshot) continue;
+        collectItemDebugRects(root, entry.id, rects, visited, 0);
+      }
+    }
+
+    return rects;
+  }
+
+  function collectItemDebugRects(
+    item: ItemBase,
+    engineId: string,
+    rects: DebugOverlayRect[],
+    visited: Set<ItemBase>,
+    depth: number,
+  ) {
+    if (visited.has(item)) return;
+    visited.add(item);
+
+    const snapshot = item.dragSnapshot;
+    const isContainer = "configuration" in item;
+    const label = debugLabel(item, snapshot);
+
+    if (snapshot) {
+      addDebugRect(
+        rects,
+        {
+          ...boxToViewportRect(snapshot.box),
+          kind: "snapshot",
+          label,
+          depth,
+          isContainer,
+        },
+        `${engineId}-${item.id}-snapshot`,
+      );
+
+      if (isContainer) {
+        addDebugRect(
+          rects,
+          {
+            ...contentViewportRect(snapshot.box),
+            kind: "content",
+            label,
+            depth,
+            isContainer: true,
+          },
+          `${engineId}-${item.id}-content`,
+        );
+      }
+    }
+
+    const liveRect = liveViewportRect(item.element);
+    if (liveRect) {
+      addDebugRect(
+        rects,
+        {
+          ...liveRect,
+          kind: "live",
+          label,
+          depth,
+          isContainer,
+        },
+        `${engineId}-${item.id}-live`,
+      );
+    }
+
+    const children = snapshot?.children.map((child) => child.value) ?? item.itemOrderedList;
+    for (const child of children) {
+      collectItemDebugRects(child, engineId, rects, visited, depth + 1);
+    }
   }
 
   function clamp(value: number, min: number, max: number) {
@@ -182,8 +390,8 @@
     label,
   }));
   const customizableMockupThemes: CustomizableMockupTheme[] = [
-    { id: "default", label: "SnapDesign", demoOrder: ["list", "words", "tasks", "nested", "editor", "files"] },
     { id: "retro", label: "Retro", demoOrder: ["editor", "list", "files", "words", "nested", "tasks"] },
+    { id: "default", label: "SnapDesign", demoOrder: ["list", "words", "tasks", "nested", "editor", "files"] },
     { id: "terminal", label: "Terminal", demoOrder: ["files", "tasks", "nested", "list", "editor", "words"] },
     { id: "elegant", label: "Elegant", demoOrder: ["words", "nested", "editor", "tasks", "files", "list"] },
   ];
@@ -311,8 +519,48 @@
 
 <svelte:window onscroll={updateCustomizableProgress} onresize={updateCustomizableProgress} />
 
+<div class="debug-layout-toolbar">
+  <button
+    class:enabled={debugLayout}
+    type="button"
+    role="switch"
+    aria-checked={debugLayout}
+    onclick={toggleDebugLayout}
+  >
+    <span class="debug-layout-switch" aria-hidden="true">
+      <span></span>
+    </span>
+    <span>Debug layout</span>
+  </button>
+
+  {#if debugLayout}
+    <div class="debug-layout-legend" aria-hidden="true">
+      <span><i class="snapshot"></i>Engine</span>
+      <span><i class="content"></i>Content</span>
+      <span><i class="live"></i>DOM</span>
+      <span><i class="candidate"></i>Top 3</span>
+      <span><i class="distance"></i>Distance</span>
+    </div>
+  {/if}
+</div>
+
+{#if debugLayout}
+  <div class="debug-layout-overlay" aria-hidden="true">
+    {#each debugRects as rect (rect.id)}
+      <div
+        class={`debug-layout-rect ${rect.kind} ${rect.isContainer ? "container" : "item"}`}
+        style={`left: ${rect.x}px; top: ${rect.y}px; width: ${rect.width}px; height: ${rect.height}px; --depth: ${rect.depth};`}
+      >
+        {#if rect.kind !== "live"}
+          <span>{rect.label}</span>
+        {/if}
+      </div>
+    {/each}
+  </div>
+{/if}
+
 <section id="landing">
-  <Engine id="snapsort-canvas" bind:engine={heroEngine}>
+  <Engine id="snapsort-canvas" bind:engine={heroEngine} debug={debugLayout}>
     <div class="hero-section">
       <div class="hero-frame">
         <div class="hero-slot slot">
@@ -399,7 +647,7 @@
     </p>
   </div>
 
-  <Engine id="snapsort-core-demos" bind:engine={examplesEngine}>
+  <Engine id="snapsort-core-demos" bind:engine={examplesEngine} debug={debugLayout}>
     <div class="core-demo-grid">
       <article class="core-demo-card">
         <h3>Sortable list</h3>
@@ -419,7 +667,7 @@
         </div>
       </article>
 
-      <article class="core-demo-card">
+      <article class="core-demo-card sideways-demo-card">
         <h3>Sideways list</h3>
         <div class="core-demo-surface sideways-demo-surface card">
           <Container
@@ -625,7 +873,7 @@
           >
             <div class="feature-card-copy">
               <div class="feature-card-copy-text">
-                <h3>Customizable</h3>
+                <h2>Customizable</h2>
                 <p class="large">
                   SnapSort components are styleless by default. Use our default theme or
                   apply your own, including Tailwind. Configuration parameters allow
@@ -638,6 +886,7 @@
               class="customizable-demo card shallow"
               style={`--customizable-progress: ${customizableProgress};`}
             >
+              <div class="customizable-demo-scale">
               <div class="customizable-theme-rail">
                 {#each customizableMockupThemes as theme, themeIndex (theme.id)}
                   <div class="customizable-surface" data-theme={theme.id}>
@@ -649,7 +898,7 @@
                     <div class="customizable-mockup-title">{theme.label}</div>
 
                     <div
-                      class="customizable-mockup-card"
+                      class="customizable-mockup-card shallow"
                       class:card={theme.id === "default"}
                       style={`order: ${theme.demoOrder.indexOf("list")};`}
                     >
@@ -686,7 +935,7 @@
                     </div>
 
                     <div
-                      class="customizable-mockup-card"
+                      class="customizable-mockup-card shallow"
                       class:card={theme.id === "default"}
                       style={`order: ${theme.demoOrder.indexOf("words")};`}
                     >
@@ -713,7 +962,7 @@
                     </div>
 
                     <div
-                      class="customizable-mockup-card"
+                      class="customizable-mockup-card shallow"
                       class:card={theme.id === "default"}
                       style={`order: ${theme.demoOrder.indexOf("tasks")};`}
                     >
@@ -755,7 +1004,7 @@
                     </div>
 
                     <div
-                      class="customizable-mockup-card"
+                      class="customizable-mockup-card shallow"
                       class:card={theme.id === "default"}
                       style={`order: ${theme.demoOrder.indexOf("nested")};`}
                     >
@@ -818,7 +1067,7 @@
                     </div>
 
                     <div
-                      class="customizable-mockup-card"
+                      class="customizable-mockup-card shallow"
                       class:card={theme.id === "default"}
                       style={`order: ${theme.demoOrder.indexOf("editor")};`}
                     >
@@ -885,7 +1134,7 @@
                     </div>
 
                     <div
-                      class="customizable-mockup-card"
+                      class="customizable-mockup-card shallow"
                       class:card={theme.id === "default"}
                       style={`order: ${theme.demoOrder.indexOf("files")};`}
                     >
@@ -960,24 +1209,18 @@
                   </div>
                 {/each}
               </div>
+              </div>
             </div>
           </article>
           </div>
 
-          <article class="feature-card">
-            <div class="framework-icons" aria-label="JavaScript, React, and Svelte">
-              <span class="framework-icon javascript-icon">JS</span>
-              <span class="framework-icon react-icon" aria-hidden="true">⚛</span>
-              <span class="framework-icon svelte-icon" aria-hidden="true">S</span>
-            </div>
+          <section class="docs-link-section" aria-label="SnapSort documentation">
             <div>
-              <h3>Framework Agnostic</h3>
-              <p>
-                The core library is pure TypeScript. Adapters are provided for popular
-                frameworks, giving you freedom over the tech stack.
-              </p>
+              <h3>Build with SnapSort</h3>
+              <p>Read the docs for setup, APIs, and drag-and-drop patterns.</p>
             </div>
-          </article>
+            <a href="/docs/snapsort/introduction">Open docs</a>
+          </section>
         </div>
       </div>
     </div>
@@ -988,6 +1231,193 @@
   @use "../../lib/landing/landing.scss";
   @import url("https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Playfair+Display:wght@600;700&display=swap");
   @import url("https://fonts.googleapis.com/css2?family=VT323&display=swap");
+
+  .debug-layout-toolbar {
+    position: fixed;
+    top: var(--size-16);
+    right: var(--size-16);
+    z-index: 2147483000;
+    display: flex;
+    align-items: center;
+    flex-wrap: wrap;
+    justify-content: flex-end;
+    gap: var(--size-8);
+    max-width: calc(100vw - var(--size-32));
+    padding: 0.38rem;
+    border: 1px solid rgb(31 41 55 / 14%);
+    border-radius: 999px;
+    background: rgb(255 255 255 / 88%);
+    box-shadow: 0 10px 28px rgb(15 23 42 / 12%);
+    backdrop-filter: blur(14px);
+  }
+
+  .debug-layout-toolbar button {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.48rem;
+    min-height: 2rem;
+    padding: 0.28rem 0.62rem 0.28rem 0.34rem;
+    border: 0;
+    border-radius: 999px;
+    background: transparent;
+    color: #111827;
+    font-family: "Geist Mono", monospace;
+    font-size: 0.74rem;
+    font-weight: 700;
+    line-height: 1;
+    white-space: nowrap;
+    cursor: pointer;
+  }
+
+  .debug-layout-toolbar button:hover,
+  .debug-layout-toolbar button:focus-visible {
+    background: rgb(15 23 42 / 7%);
+    outline: 0;
+  }
+
+  .debug-layout-toolbar button.enabled {
+    color: #0f172a;
+  }
+
+  .debug-layout-switch {
+    position: relative;
+    display: inline-flex;
+    flex: 0 0 auto;
+    width: 2rem;
+    height: 1.12rem;
+    border: 1px solid rgb(15 23 42 / 24%);
+    border-radius: 999px;
+    background: #e5e7eb;
+    box-sizing: border-box;
+  }
+
+  .debug-layout-switch span {
+    position: absolute;
+    top: 0.13rem;
+    left: 0.13rem;
+    width: 0.74rem;
+    height: 0.74rem;
+    border-radius: 50%;
+    background: #ffffff;
+    box-shadow: 0 1px 3px rgb(15 23 42 / 22%);
+    transition: transform 120ms ease, background 120ms ease;
+  }
+
+  .debug-layout-toolbar button.enabled .debug-layout-switch {
+    border-color: rgb(14 116 144 / 58%);
+    background: #0891b2;
+  }
+
+  .debug-layout-toolbar button.enabled .debug-layout-switch span {
+    transform: translateX(0.88rem);
+  }
+
+  .debug-layout-legend {
+    display: inline-flex;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: 0.5rem;
+    padding: 0 0.58rem 0 0.1rem;
+    color: #334155;
+    font-family: "Geist Mono", monospace;
+    font-size: 0.68rem;
+    font-weight: 700;
+    line-height: 1;
+  }
+
+  .debug-layout-legend span {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.24rem;
+    white-space: nowrap;
+  }
+
+  .debug-layout-legend i {
+    display: block;
+    width: 0.72rem;
+    height: 0.72rem;
+    border: 2px solid currentColor;
+    box-sizing: border-box;
+  }
+
+  .debug-layout-legend .snapshot {
+    color: #0284c7;
+  }
+
+  .debug-layout-legend .content {
+    color: #16a34a;
+    border-style: dotted;
+  }
+
+  .debug-layout-legend .live {
+    color: #f97316;
+    border-style: dashed;
+  }
+
+  .debug-layout-legend .candidate {
+    color: #eab308;
+    border-width: 2.5px;
+  }
+
+  .debug-layout-legend .distance {
+    width: 1rem;
+    height: 0;
+    color: #eab308;
+    border-width: 0;
+    border-top: 2px solid currentColor;
+  }
+
+  .debug-layout-overlay {
+    position: fixed;
+    inset: 0;
+    z-index: 2147482999;
+    pointer-events: none;
+    contain: layout paint;
+  }
+
+  .debug-layout-rect {
+    position: absolute;
+    box-sizing: border-box;
+    pointer-events: none;
+  }
+
+  .debug-layout-rect.snapshot {
+    border: 2px solid rgb(2 132 199 / 86%);
+    background: rgb(14 165 233 / 7%);
+  }
+
+  .debug-layout-rect.content {
+    border: 2px dotted rgb(22 163 74 / 84%);
+    background: rgb(34 197 94 / 5%);
+  }
+
+  .debug-layout-rect.live {
+    border: 1.5px dashed rgb(249 115 22 / 82%);
+    background: rgb(249 115 22 / 4%);
+  }
+
+  .debug-layout-rect.container.snapshot {
+    border-width: 2.5px;
+  }
+
+  .debug-layout-rect span {
+    position: absolute;
+    top: -1.1rem;
+    left: 0;
+    max-width: min(12rem, 80vw);
+    padding: 0.12rem 0.28rem;
+    overflow: hidden;
+    border-radius: 4px;
+    background: rgb(15 23 42 / 86%);
+    color: #ffffff;
+    font-family: "Geist Mono", monospace;
+    font-size: 0.62rem;
+    font-weight: 700;
+    line-height: 1.1;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    transform: translateY(calc(var(--depth, 0) * -0.08rem));
+  }
 
   #landing,
   .core-showcase {
@@ -1229,20 +1659,36 @@
   }
 
   .core-demo-card {
-    grid-column: span 4;
+    grid-column: span 6;
+    position: relative;
     display: flex;
     flex-direction: column;
     gap: var(--size-20);
-    height: 400px;
-    padding: var(--size-24);
-    background: var(--color-background-tint);
+    padding: clamp(var(--size-32), 4vw, var(--size-64));
+    background:
+        radial-gradient(
+        circle at 7% 6%, rgb(255 191 139 / 6%),
+        rgba(255, 166, 94, 0.018) 24%,
+        transparent 50%),
+        var(--color-background-tint);
     border-radius: 16px;
     box-sizing: border-box;
+    isolation: isolate;
+    overflow: hidden;
     user-select: none;
+  }
+
+  .core-demo-card > * {
+    position: relative;
+    z-index: 1;
   }
 
   .core-demo-card h3 {
     margin: 0 0 var(--size-16);
+  }
+
+  .sideways-demo-card h3 {
+    text-align: center;
   }
 
   .core-demo-surface {
@@ -1301,10 +1747,10 @@
   }
 
   .customizable-feature-card {
-    display: grid;
+    display: flex;
+    flex-direction: column;
     grid-column: 1 / -1;
-    grid-template-columns: minmax(0, 1fr) minmax(0, 2fr);
-    gap: 0;
+    gap: var(--size-32);
     align-items: stretch;
   }
 
@@ -1317,18 +1763,19 @@
   }
 
   .customizable-feature-card .feature-card-copy {
-    display: grid;
-    grid-template-rows: minmax(0, 1fr) auto minmax(0, 1fr);
-    align-self: stretch;
-    padding-right: clamp(3rem, 6vw, 5rem);
+    align-self: center;
+    max-width: 720px;
+    padding-right: 0;
+    text-align: center;
     box-sizing: border-box;
   }
 
   .feature-card-copy-text {
-    grid-row: 2;
+    grid-row: auto;
   }
 
   .feature-card h3,
+  .customizable-feature-card h2,
   .customizable-feature-card h3 {
     margin: 0 0 var(--size-16);
   }
@@ -1339,11 +1786,42 @@
     margin: 0;
   }
 
+  .customizable-feature-card p {
+    margin: 0 auto;
+  }
+
+  .docs-link-section {
+    grid-column: 1 / -1;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: var(--size-24);
+    padding: var(--size-24) 0 0;
+  }
+
+  .docs-link-section h3 {
+    margin: 0 0 var(--size-8);
+  }
+
+  .docs-link-section p {
+    margin: 0;
+    color: var(--color-text-muted);
+  }
+
+  .docs-link-section a {
+    flex: 0 0 auto;
+    color: var(--color-text);
+    font-weight: 700;
+    text-decoration: underline;
+    text-underline-offset: 0.22em;
+  }
+
   .customizable-demo {
     position: relative;
     display: block;
     min-width: 0;
-    height: 500px;
+    width: 100%;
+    height: 50vh;
     min-height: 500px;
     padding: 0;
     --card-color: var(--color-background-tint);
@@ -1354,11 +1832,17 @@
     user-select: none;
   }
 
+  .customizable-demo-scale {
+    display: block;
+    width: 100%;
+    height: 100%;
+  }
+
   .customizable-theme-rail {
     display: flex;
-    width: 250%;
+    width: calc(400% / 3);
     height: 100%;
-    transform: translateX(calc(var(--customizable-progress, 0) * -60%));
+    transform: translateX(calc(var(--customizable-progress, 0) * -25%));
     transition: transform 80ms linear;
     will-change: transform;
   }
@@ -1383,6 +1867,7 @@
     flex: 0 0 25%;
     overflow: hidden;
     padding: 0.76rem 3rem;
+    background: var(--color-background-tint);
     box-sizing: border-box;
   }
 
@@ -1402,10 +1887,6 @@
     margin: 0;
   }
 
-  .customizable-surface[data-theme="default"] {
-    background: var(--color-background-tint);
-  }
-
   .customizable-surface[data-theme="retro"] {
     --retro-font: "VT323", "Geist Mono", monospace;
     --mockup-bg: lightgray;
@@ -1415,8 +1896,6 @@
     --mockup-card: lightgray;
     --mockup-chip: #e6e6e6;
     --mockup-accent: #000080;
-
-    background: #008080;
   }
 
   .customizable-surface[data-theme="retro"] .customizable-motion-frame {
@@ -1431,8 +1910,6 @@
     --mockup-card: #181a1d;
     --mockup-chip: #222628;
     --mockup-accent: #57f287;
-
-    background: #181a1d;
   }
 
   .customizable-surface[data-theme="terminal"],
@@ -1528,7 +2005,6 @@
     --mockup-chip: #f4f1ea;
     --mockup-accent: #214432;
 
-    background: #f7f2ec;
     backdrop-filter: blur(14px);
   }
 
@@ -1722,8 +2198,7 @@
   }
 
   :global(.customizable-mini-nested-child) {
-    width: calc(100% - 0.75rem);
-    margin-left: 0.75rem;
+    width: 100%;
     padding-left: 0.4rem;
     border-left: 1px solid var(--mockup-border);
     box-sizing: border-box;
@@ -2605,47 +3080,6 @@
     border-radius: 16px;
   }
 
-  .framework-icons {
-    display: flex;
-    align-items: center;
-    gap: clamp(1.5rem, 3vw, 2.5rem);
-    margin-bottom: clamp(3.5rem, 8vw, 5rem);
-  }
-
-  .framework-icon {
-    display: inline-flex;
-    align-items: center;
-    justify-content: center;
-    width: clamp(3.25rem, 5vw, 4.5rem);
-    height: clamp(3.25rem, 5vw, 4.5rem);
-    margin: 0;
-    font-family: "Geist", sans-serif;
-    font-size: clamp(2.1rem, 3.6vw, 3rem);
-    font-weight: 800;
-    line-height: 1;
-  }
-
-  .javascript-icon {
-    align-items: flex-end;
-    justify-content: flex-end;
-    padding: 0 0.2rem 0.18rem 0;
-    background: #f6df3f;
-    color: #24262c;
-    box-sizing: border-box;
-  }
-
-  .react-icon {
-    color: #61dafb;
-    font-size: clamp(4.1rem, 6.8vw, 5.9rem);
-    font-weight: 400;
-  }
-
-  .svelte-icon {
-    color: #ff3e00;
-    font-size: clamp(3rem, 5vw, 4.3rem);
-    font-weight: 900;
-  }
-
   .core-demo-card :global(.snapsort-container) {
     gap: 0.35rem;
   }
@@ -2921,9 +3355,8 @@
   }
 
   :global(.nested-list) {
-    width: calc(100% - 2rem);
-    max-width: calc(100% - 2rem);
-    margin-left: 2rem;
+    width: 100%;
+    max-width: 100%;
     padding: var(--size-12);
     padding-left: calc(var(--size-12) + 1.85rem);
     box-sizing: border-box;
@@ -2976,8 +3409,9 @@
     border-radius: 4px;
   }
 
-  :global(.multi-container-board) {
+  .core-demo-card :global(.multi-container-board) {
     align-items: stretch;
+    gap: var(--size-48) !important;
   }
 
   :global(
@@ -3017,7 +3451,7 @@
     }
 
     .feature-card-grid {
-      grid-template-columns: 1fr;
+      grid-template-columns: minmax(0, 1fr);
       gap: var(--size-24);
     }
 
@@ -3026,7 +3460,6 @@
     }
 
     .customizable-feature-card {
-      grid-template-columns: 1fr;
       gap: var(--size-24);
     }
 
@@ -3058,8 +3491,15 @@
       min-width: 8.5rem;
     }
 
+    .core-showcase {
+      /* .col-12's 32px gap x 11 gutters (352px) doesn't shrink and overflows
+         viewports narrower than ~390px; shrink it so the 12-column grid can
+         actually collapse down to the container width. */
+      gap: var(--size-16);
+    }
+
     .core-demo-grid {
-      grid-template-columns: 1fr;
+      grid-template-columns: minmax(0, 1fr);
     }
 
     .feature-card {
@@ -3067,8 +3507,43 @@
       padding: var(--size-24);
     }
 
-    .framework-icons {
-      margin-bottom: var(--size-48);
+    .customizable-demo {
+      height: 260px;
+      min-height: 260px;
+      /* Decorative preview only on mobile: the drag-and-drop demos inside
+         aren't usable at this size, so pointer input is disabled while the
+         scroll-driven rail/theme animations (transform-based) keep playing. */
+      pointer-events: none;
+    }
+
+    .customizable-demo-scale {
+      /* Give each theme column a fixed, legible design width instead of
+         shrinking it to a fraction of the mobile viewport, then scale the
+         whole (now-wider-than-the-phone) row down with a transform so it
+         still fits — the row gets smaller, the design inside it doesn't
+         get cramped. */
+      --mobile-demo-scale: 0.52;
+      width: max-content;
+      height: 500px;
+      transform: scale(var(--mobile-demo-scale));
+      transform-origin: top left;
+    }
+
+    .customizable-theme-rail {
+      /* Percentage width no longer applies: the wrapper now shrinks to fit
+         these fixed-width columns, so the rail must size to match rather
+         than resolving its calc(%) against an undefined parent size. */
+      width: max-content;
+      /* Tilt all 4 columns together as a single plane instead of rotating
+         each column individually. The scroll-driven slide (translateX) and
+         the tilt live on the same element, so both are combined into one
+         transform. */
+      transform: translateY(40px) translateX(calc(var(--customizable-progress, 0) * -25%)) rotate(30deg);
+    }
+
+    .customizable-surface {
+      flex: 0 0 400px;
+      width: 400px;
     }
   }
 </style>
