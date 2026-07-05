@@ -2,8 +2,13 @@ import type { AnimationObject } from "@snap-engine/core/animation";
 import type { dragStartProp, dragProp } from "@snap-engine/core";
 import type { Container } from "../container";
 import type { Item } from "../item";
-import type { DropCandidate } from "../algorithm";
-import type { DragLocation, GhostRect } from "../events";
+import { findHoveredItem, type DropCandidate } from "../algorithm";
+import type { DragLocation, DropEffect, GhostRect, GhostRole } from "../events";
+import {
+  fireDragItemEnter,
+  fireDragItemLeave,
+  fireDragItemMove,
+} from "../mutation";
 import type { SortStrategy } from "./drop-strategy";
 
 export type DragSessionStatus = "pending" | "active" | "dropping" | "ended";
@@ -30,16 +35,46 @@ export class DragSession {
   readonly strategy: SortStrategy;
   status: DragSessionStatus = "pending";
 
+  /**
+   * What committing this drag should do to source data. Defaults to `"move"`.
+   * Consumers set this from `onDragStart` / `onDropTargetChange` to opt into
+   * copy or no-op (e.g. trash-bin) semantics; the core never infers it.
+   */
+  dropEffect: DropEffect = "move";
+
   start: { x: number; y: number };
   pointer: { x: number; y: number };
   offset: { x: number; y: number } = { x: 0, y: 0 };
 
-  /** The live ghost/marker Item instance for this drag, if one has been created. */
-  ghostItem: Item | null = null;
+  /**
+   * Ghosts currently live for this drag, keyed by role. Most lifecycles only
+   * ever populate `"target"` (the placeholder tracking the prospective drop
+   * slot); `"source"` and `"pointer"` are used by copy/swap semantics to hold
+   * a slot open or represent the pointer-following visual without disturbing
+   * the target ghost. Ghosts can be added, moved, or removed independently at
+   * any point during a drag.
+   */
+  readonly ghosts: Map<GhostRole, Item> = new Map();
+
+  /** Convenience accessor for the `"target"` ghost — the placeholder most lifecycles track. */
+  get ghostItem(): Item | null {
+    return this.ghosts.get("target") ?? null;
+  }
+
+  set ghostItem(value: Item | null) {
+    if (value) {
+      this.ghosts.set("target", value);
+    } else {
+      this.ghosts.delete("target");
+    }
+  }
+
   /** The ghost placement most recently requested by the lifecycle strategy. */
   pendingGhostTarget: GhostTarget | null = null;
   /** Last drop candidate resolved by the drop-target strategy (raw, snapshot-space index). */
   dropTarget: DropCandidate | null = null;
+  /** The item whose hitbox the pointer is currently over, if any — drives `onDragItemEnter`/`Move`/`Leave`. */
+  hoveredItem: Item | null = null;
 
   /** @internal FLIP/positioning bookkeeping used only by the flow-ghost lifecycle. */
   dragCoordinateParent: Item | null = null;
@@ -142,17 +177,30 @@ export class DragSession {
       return;
     }
 
+    const lifecycle = this.strategy.lifecycle;
     const target = this.strategy.dropTarget.resolve(item, root, this);
     if (!target) {
+      // No valid candidate anywhere (e.g. the pointer left every drop-eligible
+      // container). The target ghost should not linger over a target that no
+      // longer exists — clear it and report the loss, same as any other
+      // drop-target change.
+      const previousGhostLocation = lifecycle.currentGhostLocation(this);
+      if (previousGhostLocation || this.dropTarget) {
+        this.dropTarget = null;
+        await lifecycle.removeGhost(this, "target");
+        this.fireDropTargetChange(previousGhostLocation, null);
+      }
+      this.updateHoveredItem(null);
       return;
     }
     this.dropTarget = target;
 
-    const lifecycle = this.strategy.lifecycle;
     const ghostSource = lifecycle.currentGhostLocation(this);
     const targetIndex =
       target.container != null ? lifecycle.translateTargetIndex(this, target) : -1;
     const targetContainer = target.container as unknown as Container;
+
+    this.updateHoveredItem(targetContainer);
 
     if (targetContainer && ghostSource) {
       const changed =
@@ -208,5 +256,51 @@ export class DragSession {
       previous: toLocation(previous),
       current: toLocation(current),
     });
+  }
+
+  /**
+   * Fire a final `onDragItemLeave` if a hover was active when the drag ends,
+   * so hover-driven UI (highlights, previews) doesn't get stuck. Lifecycle
+   * `drop()` implementations call this before firing `onDragEnd`.
+   */
+  clearHoveredItem(): void {
+    const previousHovered = this.hoveredItem;
+    this.hoveredItem = null;
+    if (!previousHovered?.parent) return;
+    fireDragItemLeave(
+      previousHovered.container,
+      this.primaryItem,
+      previousHovered,
+      this,
+    );
+  }
+
+  /**
+   * Hit-test the pointer against `container`'s children (or clear the hover
+   * when `container` is null, e.g. no valid drop target) and fire
+   * enter/move/leave accordingly. Independent of drop-target resolution —
+   * this tracks hovering over an *item*, not the resolved slot/gap.
+   */
+  private updateHoveredItem(container: Container | null): void {
+    const item = this.primaryItem;
+    const nextHovered = container
+      ? findHoveredItem(item, container, this)
+      : null;
+    const previousHovered = this.hoveredItem;
+
+    if (previousHovered === nextHovered) {
+      if (nextHovered && container) {
+        fireDragItemMove(container, item, nextHovered, this);
+      }
+      return;
+    }
+
+    if (previousHovered?.parent) {
+      fireDragItemLeave(previousHovered.container, item, previousHovered, this);
+    }
+    this.hoveredItem = nextHovered;
+    if (nextHovered && container) {
+      fireDragItemEnter(container, item, nextHovered, this);
+    }
   }
 }

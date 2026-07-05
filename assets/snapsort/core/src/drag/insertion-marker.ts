@@ -1,8 +1,13 @@
 import type { Container } from "../container";
 import type { Item } from "../item";
 import { resetDropSnapshotDebugDump, type DropCandidate } from "../algorithm";
-import type { DragLocation, GhostRect } from "../events";
-import { fireAwaitMutation, fireGhostInsert, fireGhostRemove } from "../mutation";
+import type { DragLocation, GhostRect, GhostRole } from "../events";
+import {
+  fireAwaitMutation,
+  fireGhostInsert,
+  fireGhostRemove,
+  fireItemCopy,
+} from "../mutation";
 import type { DragLifecycleStrategy } from "./lifecycle";
 import type { DragSession } from "./session";
 
@@ -99,15 +104,20 @@ async function moveGhost(
   );
 }
 
-async function removeGhost(session: DragSession): Promise<void> {
+async function removeGhost(
+  session: DragSession,
+  role: GhostRole = "target",
+): Promise<void> {
   const item = session.primaryItem;
-  const ghostItem = session.ghostItem;
-  const previousTarget = session.pendingGhostTarget;
-  session.pendingGhostTarget = null;
+  const ghostItem = session.ghosts.get(role);
+  const previousTarget = role === "target" ? session.pendingGhostTarget : null;
+  if (role === "target") {
+    session.pendingGhostTarget = null;
+  }
   if (!ghostItem) return;
 
   if (previousTarget?.container) {
-    fireGhostRemove(previousTarget.container, item, ghostItem, session, "marker");
+    fireGhostRemove(previousTarget.container, item, ghostItem, session, "marker", role);
     await fireAwaitMutation(previousTarget.container);
   } else {
     // No known container to route onGhostRemove through (e.g. drag ended
@@ -115,7 +125,7 @@ async function removeGhost(session: DragSession): Promise<void> {
     ghostItem.element?.remove();
   }
   ghostItem.destroy();
-  session.ghostItem = null;
+  session.ghosts.delete(role);
 }
 
 function drop(session: DragSession): void {
@@ -139,20 +149,44 @@ function drop(session: DragSession): void {
 
       let destination: DragLocation | null = null;
       if (pendingGhostTarget?.container) {
+        const destinationContainer = pendingGhostTarget.container;
         destination = {
-          container: pendingGhostTarget.container,
-          containerMetadata: pendingGhostTarget.container.metadata,
+          container: destinationContainer,
+          containerMetadata: destinationContainer.metadata,
           index: pendingGhostTarget.index,
         };
-        item.moveItemToContainer(
-          pendingGhostTarget.container,
-          item,
-          pendingGhostTarget.index,
-          session,
-        );
-        await fireAwaitMutation(pendingGhostTarget.container);
+
+        if (session.dropEffect === "move") {
+          item.moveItemToContainer(
+            destinationContainer,
+            item,
+            pendingGhostTarget.index,
+            session,
+          );
+          await fireAwaitMutation(destinationContainer);
+        } else if (session.dropEffect === "copy") {
+          // The original never leaves its source slot in insertion mode
+          // (unlike flow mode, it's never detached), so "copy" needs no
+          // return-to-source bookkeeping — just report the destination so
+          // the consumer can materialize a clone there.
+          const beforeElement =
+            pendingGhostTarget.index >= destinationContainer.itemOrderedList.length
+              ? null
+              : (destinationContainer.itemOrderedList[pendingGhostTarget.index]
+                  ?.element ?? null);
+          fireItemCopy(
+            destinationContainer,
+            item,
+            pendingGhostTarget.index,
+            beforeElement,
+            session,
+          );
+          await fireAwaitMutation(destinationContainer);
+        }
+        // "none": no mutation events — the item already sits where it always was.
       }
 
+      session.clearHoveredItem();
       root.clearDragSnapshotTree();
       resetDropSnapshotDebugDump(item);
       session.status = "ended";
@@ -203,8 +237,11 @@ export class InsertionMarkerLifecycle implements DragLifecycleStrategy {
     await moveGhost(session, container, index, ghostRect);
   }
 
-  async removeGhost(session: DragSession): Promise<void> {
-    await removeGhost(session);
+  async removeGhost(
+    session: DragSession,
+    role: GhostRole = "target",
+  ): Promise<void> {
+    await removeGhost(session, role);
   }
 
   afterSyncDropTarget(_session: DragSession): void {

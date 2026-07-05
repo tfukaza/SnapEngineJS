@@ -1,5 +1,10 @@
 import type { DomProperty } from "@snap-engine/core";
-import { CollisionEngine, RectCollider } from "@snap-engine/core/collision";
+import {
+  CollisionEngine,
+  CircleCollider,
+  PointCollider,
+  RectCollider,
+} from "@snap-engine/core/collision";
 import type { Item as ItemBase } from "./item";
 import {
   childRelativeOffset,
@@ -235,6 +240,102 @@ function filterCandidatesByDropArea(
   return candidates.filter((candidate) =>
     allowedContainers.has(candidate.container),
   );
+}
+
+const itemHoverCollisionEngine = new CollisionEngine();
+
+function itemHitboxInsets(item: ItemBase): {
+  top: number;
+  right: number;
+  bottom: number;
+  left: number;
+} {
+  const metadata = item.dragSnapshot?.metadata ?? item.metadata;
+  return {
+    top: typeof metadata?.hitboxInsetTop === "number" ? metadata.hitboxInsetTop : 0,
+    right:
+      typeof metadata?.hitboxInsetRight === "number" ? metadata.hitboxInsetRight : 0,
+    bottom:
+      typeof metadata?.hitboxInsetBottom === "number"
+        ? metadata.hitboxInsetBottom
+        : 0,
+    left:
+      typeof metadata?.hitboxInsetLeft === "number" ? metadata.hitboxInsetLeft : 0,
+  };
+}
+
+function itemHitboxShape(item: ItemBase): "rect" | "ellipse" {
+  const metadata = item.dragSnapshot?.metadata ?? item.metadata;
+  return metadata?.hitboxShape === "ellipse" ? "ellipse" : "rect";
+}
+
+function hitboxColliderForItem(item: ItemBase): RectCollider | CircleCollider | null {
+  const box = item.dragSnapshot?.box;
+  if (!box) return null;
+  const insets = itemHitboxInsets(item);
+  const x = box.x + insets.left;
+  const y = box.y + insets.top;
+  const width = Math.max(0, box.width - insets.left - insets.right);
+  const height = Math.max(0, box.height - insets.top - insets.bottom);
+
+  if (itemHitboxShape(item) === "ellipse") {
+    const collider = new CircleCollider(
+      item.engine,
+      item,
+      0,
+      0,
+      Math.min(width, height) / 2,
+    );
+    collider.worldTransform = { x: x + width / 2, y: y + height / 2 };
+    return collider;
+  }
+
+  const collider = new RectCollider(item.engine, item, 0, 0, width, height);
+  collider.worldTransform = { x, y };
+  return collider;
+}
+
+/**
+ * Find which of `container`'s direct children (excluding `draggedItem` and
+ * ghosts) the drag pointer's hitbox currently matches, if any. Distinct from
+ * drop-target resolution (`determine*DropTarget`): this answers "which item
+ * is the pointer over," not "where would a move/insert land." Ties (nested
+ * or overlapping hitboxes) favor the smallest-area item as the most specific
+ * match. Used to drive `onDragItemEnter`/`Move`/`Leave` and swap mode.
+ */
+export function findHoveredItem(
+  draggedItem: ItemBase,
+  container: ItemBase,
+  session: DragSession,
+): ItemBase | null {
+  if (!container.dragSnapshot) return null;
+
+  const pointerCollider = new PointCollider(draggedItem.engine, draggedItem, 0, 0);
+  pointerCollider.worldTransform = { x: session.pointer.x, y: session.pointer.y };
+
+  let best: { item: ItemBase; area: number } | null = null;
+  try {
+    for (const child of dragSnapshotItems(container)) {
+      if (child === draggedItem || child.isGhost) continue;
+      const collider = hitboxColliderForItem(child);
+      if (!collider) continue;
+      try {
+        if (!itemHoverCollisionEngine.isIntersecting(pointerCollider, collider)) {
+          continue;
+        }
+        const box = child.dragSnapshot!.box;
+        const area = box.width * box.height;
+        if (!best || area < best.area) {
+          best = { item: child, area };
+        }
+      } finally {
+        collider.destroy();
+      }
+    }
+  } finally {
+    pointerCollider.destroy();
+  }
+  return best?.item ?? null;
 }
 
 function createLayoutSnapshot(root: ItemBase): {
@@ -1193,6 +1294,83 @@ export function determineInsertionDropTarget(
   drawCandidateDebug(root, item, allowed, best);
   debugDropTargetTree(root, item);
   return best;
+}
+
+/**
+ * Resolve swap mode's drop target: unlike the other modes, this doesn't
+ * resolve a gap — it resolves whichever *item* the pointer's hitbox
+ * currently matches (via `findHoveredItem`), anywhere in the tree reachable
+ * from `root` under the dragged item's group. `index` is that item's live
+ * position in its own container, meaning "swap with whatever is here."
+ */
+export function determineSwapDropTarget(
+  item: ItemBase,
+  root: ItemBase,
+  session: DragSession | null = null,
+): DropCandidate | null {
+  const sourceParent = "parent" in item ? (item as any).parent : null;
+  const sourceGroupID = sourceParent ? groupIDOf(sourceParent) : undefined;
+
+  let best: DropCandidate | null = null;
+  let bestArea = Infinity;
+
+  const visit = (container: ItemBase) => {
+    if (container === item) return;
+
+    if (session && compatibleInsertionContainer(container, sourceGroupID)) {
+      const hovered = findHoveredItem(item, container, session);
+      const index = hovered ? container.itemOrderedList.indexOf(hovered) : -1;
+      if (hovered && index !== -1) {
+        const box = requireDragSnapshotBox(hovered);
+        const area = box.width * box.height;
+        if (area < bestArea) {
+          bestArea = area;
+          const centerX = box.x + box.width / 2;
+          const centerY = box.y + box.height / 2;
+          best = {
+            container,
+            index,
+            ghostCenterX: centerX,
+            ghostCenterY: centerY,
+            distance: euclidean(
+              centerX,
+              centerY,
+              session.pointer.x,
+              session.pointer.y,
+            ),
+            priority: 0,
+            lineIndex: 0,
+            dragLineIndex: 0,
+            lineDistance: 0,
+            treeDepth: 0,
+            prevPosition: null,
+            nextPosition: null,
+            placementRect: box,
+            placementDistance: distanceToRect(
+              box,
+              session.pointer.x,
+              session.pointer.y,
+            ),
+            placementContainsDragCenter: containsPoint(
+              box,
+              session.pointer.x,
+              session.pointer.y,
+            ),
+          };
+        }
+      }
+    }
+
+    for (const child of dragSnapshotItems(container)) {
+      if (isContainerObject(child)) {
+        visit(child);
+      }
+    }
+  };
+
+  visit(root);
+  const allowed = best ? filterCandidatesByCanDrop([best], item, session) : [];
+  return allowed[0] ?? null;
 }
 
 export function debugDropTargetTree(node: ItemBase, draggedItem: ItemBase) {

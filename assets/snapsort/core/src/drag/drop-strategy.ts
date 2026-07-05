@@ -4,14 +4,16 @@ import {
   determineDropTarget,
   determineInsertionDropTarget,
   determineProgressiveDropTarget,
+  determineSwapDropTarget,
   type DropCandidate,
 } from "../algorithm";
 import type { DragLifecycleStrategy } from "./lifecycle";
 import type { DragSession } from "./session";
 import { FlowGhostLifecycle } from "./flow-ghost";
 import { InsertionMarkerLifecycle } from "./insertion-marker";
+import { SwapLifecycle } from "./swap";
 
-export type SortMode = "euclidean" | "progressive" | "insertion";
+export type SortMode = "euclidean" | "progressive" | "insertion" | "swap";
 
 /** Picks a drop candidate (container + index) given the dragged item's current position. */
 export interface DropTargetStrategy {
@@ -43,8 +45,13 @@ export const insertionDropTarget: DropTargetStrategy = {
     determineInsertionDropTarget(item, root, session),
 };
 
+export const swapDropTarget: DropTargetStrategy = {
+  resolve: (item, root, session) => determineSwapDropTarget(item, root, session),
+};
+
 const flowGhostLifecycle = new FlowGhostLifecycle();
 const insertionMarkerLifecycle = new InsertionMarkerLifecycle();
+const swapLifecycle = new SwapLifecycle();
 
 export const builtinStrategies: Record<SortMode, SortStrategy> = {
   euclidean: {
@@ -61,6 +68,11 @@ export const builtinStrategies: Record<SortMode, SortStrategy> = {
     mode: "insertion",
     dropTarget: insertionDropTarget,
     lifecycle: insertionMarkerLifecycle,
+  },
+  swap: {
+    mode: "swap",
+    dropTarget: swapDropTarget,
+    lifecycle: swapLifecycle,
   },
 };
 

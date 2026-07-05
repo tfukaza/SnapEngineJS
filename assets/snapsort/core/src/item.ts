@@ -15,11 +15,21 @@ import type {
   GhostCreateEvent,
   GhostKind,
   GhostRect,
+  GhostRole,
 } from "./events";
-import { fireAwaitMutation, fireCreateGhost, fireGhostInsert, fireGhostRemove, fireItemInsert, fireItemMove, fireItemRemove } from "./mutation";
+import {
+  fireAwaitMutation,
+  fireCreateGhost,
+  fireGhostInsert,
+  fireGhostRemove,
+  fireItemInsert,
+  fireItemMove,
+  fireItemRemove,
+} from "./mutation";
 import { resolveSortStrategy } from "./drag/drop-strategy";
 import { DragSession } from "./drag/session";
 
+// The minimum distance threshold for triggering FLIP animations
 const MIN_FLIP_DISTANCE = 0.5;
 
 interface FlipAnimationState {
@@ -53,23 +63,16 @@ export class Item extends ElementObject {
   #rootContainer: Container | null = null;
   #metadata: ItemSnapshotMetadata = {};
   #locked: boolean = false;
-  noDrop: boolean = false;
-
   #dragSnapshot: ItemSnapshot<Item> | null = null;
-
   #itemOrderedList: Item[] = [];
-
   #isGhost: boolean = false;
-  /** @internal True when a framework (not core) owns the ghost's DOM element. */
-  frameworkManagedGhostElement: boolean = false;
   #depth: number = 0;
   #visualAnimationOffset: TransformOffset = { x: 0, y: 0 };
 
-  constructor(
-    engine: any,
-    parent: Container | null,
-    isGhost: boolean = false,
-  ) {
+  frameworkManagedGhostElement: boolean = false;
+  noDrop: boolean = false;
+
+  constructor(engine: any, parent: Container | null, isGhost: boolean = false) {
     super(engine, parent);
     this.#isGhost = isGhost;
     this.event.input.dragStart = this.dragStart;
@@ -97,18 +100,24 @@ export class Item extends ElementObject {
     kind: GhostKind,
     container: Container,
     ghostRect?: GhostRect | null,
+    role: GhostRole = "target",
   ): Item | null {
     const ghostItem = new Item(this.engine, null, true);
     ghostItem.metadata = { ...this.metadata };
     const createEvent: GhostCreateEvent = {
       session,
       kind,
+      role,
       container,
       original: this,
       originalMetadata: this.metadata,
       ghostItem,
       ghostRect,
     };
+
+    // If the items are NOT managed by a framework,
+    // the callback should return an HTMLElement.
+    // Otherwise, the callback returns null and the framework creates the DOM element.
     const ghostElement = fireCreateGhost(createEvent);
     if (ghostElement instanceof HTMLElement) {
       ghostItem.element = ghostElement;
@@ -126,7 +135,6 @@ export class Item extends ElementObject {
    * @param item
    */
   addItem(item: Item) {
-    console.debug("Adding item", this.itemKey(item));
     if (
       this.children.includes(item) &&
       this.#itemOrderedList.find((i) => i === item)
@@ -182,13 +190,8 @@ export class Item extends ElementObject {
    * @internal
    */
   findItemByKey(id: ItemId): Item | null {
-    // Ghosts can share the original's id. They must never be matched here —
-    // otherwise callers like moveItem() can grab a ghost that is destroyed
-    // before a deferred move() runs against it.
     const directItem =
-      this.#itemOrderedList.find(
-        (item) => !item.isGhost && this.itemKey(item) === id,
-      ) ??
+      this.#itemOrderedList.find((item) => this.itemKey(item) === id) ??
       this.children.find(
         (item): item is Item =>
           item instanceof Item && !item.isGhost && this.itemKey(item) === id,
@@ -332,6 +335,7 @@ export class Item extends ElementObject {
 
   /**
    * Returns the dragged item's top-left position in world coordinates.
+   * @note This does not account for containers being animated.
    */
   get dragPositionX(): number {
     const session = this.rootContainer.dragSession;
@@ -341,6 +345,7 @@ export class Item extends ElementObject {
 
   /**
    * Returns the dragged item's top-left position in world coordinates.
+   * @note This does not account for containers being animated.
    */
   get dragPositionY(): number {
     const session = this.rootContainer.dragSession;
@@ -365,7 +370,7 @@ export class Item extends ElementObject {
    * or any of its ancestors?"
    *
    * @param parent The starting ancestor item.
-   * @returns
+   * @returns The aggregated visual offset as a TransformOffset object.
    */
   #ancestorVisualOffset(parent: Item | null): TransformOffset {
     const offset = { x: 0, y: 0 };
@@ -387,11 +392,6 @@ export class Item extends ElementObject {
 
   #clearVisualAnimationOffset() {
     this.#visualAnimationOffset = { x: 0, y: 0 };
-  }
-
-  // TODO: replace with writeTransform
-  #translateTransform(x: number, y: number) {
-    return `translate3d(${x}px, ${y}px, 0px)`;
   }
 
   /**
@@ -430,9 +430,7 @@ export class Item extends ElementObject {
    * Draw a debug circle at the center of every item in the hierarchy,
    * color-coded by parent container.
    */
-  debugAllItems(
-    node: Item = (this.#rootContainer as unknown as Item) ?? this,
-  ) {
+  debugAllItems(node: Item = (this.#rootContainer as unknown as Item) ?? this) {
     const color = Item.#colorForContainer(node.id);
     for (const child of node.children) {
       if (!(child instanceof Item)) continue;
@@ -666,10 +664,7 @@ export class Item extends ElementObject {
    * @param exclude Item that should not be animated.
    * @returns Items with current visual rectangles captured as first positions.
    */
-  #captureFlipSnapshot(
-    root: Item,
-    exclude: Item | null,
-  ): FlipAnimationState[] {
+  #captureFlipSnapshot(root: Item, exclude: Item | null): FlipAnimationState[] {
     return root.#collectFlipItems(root, exclude).map((item) => {
       const parentItem = item.#parentItem();
       return {
@@ -1024,7 +1019,18 @@ export class Item extends ElementObject {
     targetElement.style.transform = this.#translateTransform(x, y);
   }
 
-  /** @internal */
+  /**
+   * @note This is used for animation purposes only.
+   * To move items in the DOM, use `writeTransform`
+   */
+  #translateTransform(x: number, y: number) {
+    return `translate3d(${x}px, ${y}px, 0px)`;
+  }
+
+  /**
+   * Play a drop animation for this item.
+   * @internal
+   */
   playDropAnimation(
     first: DOMRect | null,
     last: DOMRect | null,
@@ -1057,10 +1063,10 @@ export class Item extends ElementObject {
   ) {
     const animationConfig = this.reorderAnimationConfig(container);
     const targetRoot = container
-      ? ((container as unknown as Item).#rootContainer as unknown as Item | null)
+      ? ((container as unknown as Item)
+          .#rootContainer as unknown as Item | null)
       : null;
-    const root =
-      targetRoot ?? (this.#rootContainer as unknown as Item) ?? this;
+    const root = targetRoot ?? (this.#rootContainer as unknown as Item) ?? this;
 
     if (!animationConfig) {
       mutate();
@@ -1126,13 +1132,16 @@ export class Item extends ElementObject {
     this.scheduleWriteDrag();
   }
 
-  /** @internal */
+  /**
+   * Schedule the write of the dragged item's transform.
+   * @internal
+   */
   scheduleWriteDrag() {
     const session = this.rootContainer.dragSession;
     const parentItem = session?.dragCoordinateParent ?? null;
     // There are some scenarios where the parent container
     // is moving. To account for this, we need to check the
-    // latest positions of the dragged item and its ancestor,
+    // latest positions of the dragged item and its ancestors,
     // and apply necessary correction so the item remains
     // at the intended position.
     this.schedule(
@@ -1247,7 +1256,10 @@ export class Item extends ElementObject {
     this.withReorderAnimation(container, null, move);
   }
 
-  /** @internal */
+  /**
+   * Attach an item to a container at a specific index.
+   * @internal
+   */
   attachItemToContainer(container: Container, item: Item, index: number) {
     (container as unknown as Item).appendChild(item);
     if (index >= container.itemOrderedList.length) {
@@ -1278,6 +1290,7 @@ export class Item extends ElementObject {
     ghostRect: GhostRect | null | undefined,
     session: DragSession,
     kind: GhostKind,
+    role: GhostRole,
   ) {
     const itemAfterIndex =
       index >= container.itemOrderedList.length - 1
@@ -1292,6 +1305,7 @@ export class Item extends ElementObject {
       ghostRect,
       session,
       kind,
+      role,
     );
   }
 
@@ -1315,6 +1329,9 @@ export class Item extends ElementObject {
   /**
    * Attach an item at a specific index and fire the semantic `onItemMove`
    * event (falling back to `onItemInsert` when no `onItemMove` is registered).
+   *
+   * @note This function assumes the item is not in the target container.
+   * Make sure to call `detachItemFromContainer` before calling this method.
    * @internal
    */
   moveItemAt(
@@ -1346,6 +1363,7 @@ export class Item extends ElementObject {
     ghostRect: GhostRect | null | undefined,
     session: DragSession,
     kind: GhostKind,
+    role: GhostRole = "target",
   ) {
     this.attachItemToContainer(container, ghostItem, index);
     this.#insertGhostElement(
@@ -1356,6 +1374,7 @@ export class Item extends ElementObject {
       ghostRect,
       session,
       kind,
+      role,
     );
   }
 
@@ -1395,9 +1414,10 @@ export class Item extends ElementObject {
     ghostItem: Item,
     session: DragSession,
     kind: GhostKind,
+    role: GhostRole = "target",
   ) {
     this.detachItemFromContainer(container, ghostItem);
-    fireGhostRemove(container, original, ghostItem, session, kind);
+    fireGhostRemove(container, original, ghostItem, session, kind, role);
   }
 
   /**
@@ -1421,7 +1441,10 @@ export class Item extends ElementObject {
     }
 
     const root = this.rootContainer;
-    const strategy = resolveSortStrategy(root.config.mode, root.config.strategy);
+    const strategy = resolveSortStrategy(
+      root.config.mode,
+      root.config.strategy,
+    );
     const source: DragLocation = {
       container: currentContainer,
       containerMetadata: currentContainer.metadata,

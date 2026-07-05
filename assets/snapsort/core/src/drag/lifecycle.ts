@@ -1,6 +1,6 @@
 import type { Container } from "../container";
 import type { DropCandidate } from "../algorithm";
-import type { GhostKind, GhostRect } from "../events";
+import type { GhostKind, GhostRect, GhostRole } from "../events";
 import type { DragSession } from "./session";
 
 /**
@@ -14,18 +14,21 @@ import type { DragSession } from "./session";
 export interface DragLifecycleStrategy {
   readonly ghostKind: GhostKind;
 
-  /** WRITE_1 work specific to starting a drag (ghost creation, detaching the item, styling). */
+  /** WRITE_1 work specific to starting a drag
+   * (ghost creation, detaching the item, styling). */
   dragStart(session: DragSession): void | Promise<void>;
 
-  /** WRITE_1 work specific to a pointer move, after the drop target has already been synced. */
+  /** WRITE_1 work specific to a pointer move. */
   dragMove(session: DragSession): void | Promise<void>;
 
-  /** Current container/index the ghost logically occupies, or null when there is none yet. */
+  /** Current container/index the ghost logically occupies,
+   * or null when there is none yet. */
   currentGhostLocation(
     session: DragSession,
   ): { container: Container; index: number } | null;
 
-  /** Translate a resolved drop candidate into an index meaningful for this lifecycle's ghost representation. */
+  /** Translate a resolved drop candidate into an
+   * index meaningful for this lifecycle's ghost representation. */
   translateTargetIndex(session: DragSession, target: DropCandidate): number;
 
   /** Move (or create) the ghost/marker to the given container/index. */
@@ -36,9 +39,19 @@ export interface DragLifecycleStrategy {
     ghostRect: GhostRect | null | undefined,
   ): Promise<void>;
 
-  /** Called after the ghost has been synced to the (possibly unchanged) drop target. */
+  /** Called after the ghost has been synced to
+   * the (possibly unchanged) drop target. */
   afterSyncDropTarget(session: DragSession): void;
 
-  /** WRITE_1 work for dropping: remove the ghost/marker and move the item to its final position. */
+  /**
+   * Remove the ghost/marker for the given role, if one currently exists.
+   * Safe to call at any point during a drag (e.g. when the pointer leaves
+   * every valid drop target, or when a drop effect change no longer needs a
+   * source-role ghost) — ghosts can be added, moved, or removed independently.
+   */
+  removeGhost(session: DragSession, role: GhostRole): Promise<void>;
+
+  /** WRITE_1 work for dropping: remove the ghost/marker
+   * and move the item to its final position. */
   drop(session: DragSession): void;
 }

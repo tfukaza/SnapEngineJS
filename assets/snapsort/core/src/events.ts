@@ -13,6 +13,24 @@ export interface DragLocation {
   index: number;
 }
 
+/**
+ * What committing the current drag should do to source data. Writable by
+ * consumers (from `onDragStart` / `onDropTargetChange`) via `session.dropEffect`;
+ * the core never infers this itself.
+ *
+ * - `"move"` (default): today's behavior — the original item is relocated.
+ * - `"copy"`: the original returns to its source slot; `onItemInsert` fires at
+ *   the destination with the original's metadata so the consumer can insert a
+ *   clone in their own state.
+ * - `"none"`: no mutation events fire; the original returns to its source slot.
+ *   `onDragEnd` still reports the resolved destination (e.g. for a trash-bin
+ *   drop, where the consumer removes the item themselves in `onDragEnd`).
+ */
+export type DropEffect = "move" | "copy" | "none";
+
+/** Which role a ghost plays during a drag. See `DragSession.ghosts`. */
+export type GhostRole = "target" | "source" | "pointer";
+
 export interface ItemRemoveEvent {
   session: DragSession | null;
   item: Item;
@@ -29,6 +47,50 @@ export interface ItemInsertEvent {
   containerMetadata: Record<string, unknown>;
   index: number;
   beforeElement: HTMLElement | null;
+}
+
+/**
+ * Fired once, at the destination, when a `"copy"`-effect drag commits. The
+ * original `item` never leaves its source location — only its metadata is
+ * meaningful here, as a template for the consumer to materialize a clone in
+ * their own state (and DOM, if not framework-managed). There is no default
+ * DOM implementation: unlike move/insert, SnapSort has no generically-correct
+ * way to fabricate a cloned element, so a container that ever sets
+ * `session.dropEffect = "copy"` must provide `onItemCopy`.
+ */
+export interface ItemCopyEvent {
+  session: DragSession | null;
+  item: Item;
+  itemMetadata: ItemSnapshotMetadata;
+  container: Container;
+  containerMetadata: Record<string, unknown>;
+  index: number;
+  beforeElement: HTMLElement | null;
+}
+
+export interface ItemSwapParticipant {
+  item: Item;
+  itemMetadata: ItemSnapshotMetadata;
+  container: Container;
+  containerMetadata: Record<string, unknown>;
+  /** This item's slot before the swap — after committing, `b`'s item occupies this slot (and vice versa). */
+  index: number;
+}
+
+/**
+ * Fired when `"swap"` mode commits: the occupants of `a`'s and `b`'s slots
+ * trade places. No default: falls back to two `onItemMove` calls (further
+ * falling back to `onItemInsert`) when unregistered, which is a correct
+ * substitute for adjacent-in-the-same-container or cross-container swaps,
+ * but reads as "each item independently moved" — not a strict pairwise
+ * swap — for non-adjacent same-container slots, since `onItemMove` has no
+ * way to say "leave everything in between untouched." Provide `onItemSwap`
+ * for state models that need that distinction.
+ */
+export interface ItemSwapEvent {
+  session: DragSession | null;
+  a: ItemSwapParticipant;
+  b: ItemSwapParticipant;
 }
 
 /**
@@ -61,6 +123,8 @@ export type GhostKind = "flow" | "marker";
 export interface GhostCreateEvent {
   session: DragSession;
   kind: GhostKind;
+  /** Which role this ghost plays in the current drag; see `GhostRole`. */
+  role: GhostRole;
   container: Container;
   original: Item;
   originalMetadata: ItemSnapshotMetadata;
@@ -71,6 +135,7 @@ export interface GhostCreateEvent {
 export interface GhostInsertEvent {
   session: DragSession;
   kind: GhostKind;
+  role: GhostRole;
   original: Item;
   originalMetadata: ItemSnapshotMetadata;
   ghostItem: Item;
@@ -85,6 +150,7 @@ export interface GhostInsertEvent {
 export interface GhostRemoveEvent {
   session: DragSession;
   kind: GhostKind;
+  role: GhostRole;
   original: Item;
   originalMetadata: ItemSnapshotMetadata;
   ghostItem: Item;
@@ -144,6 +210,26 @@ export interface CanDropEvent {
   index: number;
 }
 
+/**
+ * Fired while dragging as the pointer's hitbox test starts, continues, or
+ * stops matching another item's hitbox. Distinct from `onDropTargetChange`,
+ * which tracks the resolved drop slot/gap — this tracks hovering over an
+ * *item*, independent of any sort algorithm. `overItem`'s hitbox is
+ * adjustable via `hitboxInset*`/`hitboxShape` metadata (see
+ * `ItemSnapshotMetadata`). Used directly by swap mode; also available
+ * generally for hover-driven UI (highlight-on-hover, previews, etc.).
+ */
+export interface DragItemHoverEvent {
+  session: DragSession;
+  item: Item;
+  itemMetadata: ItemSnapshotMetadata;
+  overItem: Item;
+  overItemMetadata: ItemSnapshotMetadata;
+  container: Container;
+  containerMetadata: Record<string, unknown>;
+  pointer: { x: number; y: number };
+}
+
 export interface ContainerCallbacks {
   /** Preferred by state-backed frameworks: one semantic event per move. */
   onItemMove?: (event: ItemMoveEvent) => void;
@@ -152,12 +238,31 @@ export interface ContainerCallbacks {
   onItemInsert?: (event: ItemInsertEvent) => void;
   onItemRemove?: (event: ItemRemoveEvent) => void;
 
+  /**
+   * Fired when `"swap"` mode commits. No default: falls back to two
+   * `onItemMove` calls when unregistered (see `ItemSwapEvent`).
+   */
+  onItemSwap?: (event: ItemSwapEvent) => void;
+
+  /**
+   * Fired when a `"copy"`-effect drag commits (see `DragSession.dropEffect`).
+   * No default: required on any container that ever sets `dropEffect = "copy"`.
+   */
+  onItemCopy?: (event: ItemCopyEvent) => void;
+
   /** Fired on the source container. Returning `false` vetoes the drag before any state changes. */
   onDragStart?: (event: DragStartEvent) => void | false;
   onDragEnd?: (event: DragEndEvent) => void;
 
   /** Fired only when the prospective drop container/index actually changes. */
   onDropTargetChange?: (event: DropTargetChangeEvent) => void;
+
+  /** Fired on the container owning `overItem`, once per hovered item, when the pointer's hitbox first matches it. */
+  onDragItemEnter?: (event: DragItemHoverEvent) => void;
+  /** Fired on the container owning `overItem` on every pointer move while its hitbox still matches. */
+  onDragItemMove?: (event: DragItemHoverEvent) => void;
+  /** Fired on the container owning `overItem` when the pointer's hitbox stops matching it. */
+  onDragItemLeave?: (event: DragItemHoverEvent) => void;
 
   /** Consulted while resolving candidates for `container`; return false to reject it for this drag. */
   canDrop?: (event: CanDropEvent) => boolean;
