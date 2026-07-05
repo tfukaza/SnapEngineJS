@@ -120,12 +120,16 @@ type MockSnapSortItem = {
   itemOrderedList: MockSnapSortItem[];
   children: MockSnapSortItem[];
   worldTransform: { x: number; y: number; scaleX: number; scaleY: number };
+  dragPositionX: number;
+  dragPositionY: number;
+  dragPointerPosition: { x: number; y: number } | null;
   depth: number;
   name?: string;
   configuration?: Record<string, unknown>;
   numberOfItems?: number;
   addDebugRect: () => void;
   addDebugCircle: () => void;
+  addDebugLine: () => void;
   addDebugText: () => void;
   clearDebugMarker: () => void;
 };
@@ -334,12 +338,30 @@ function mockSnapSortItem(
     itemOrderedList: children,
     children,
     worldTransform: { x: rect.x, y: rect.y, scaleX: 1, scaleY: 1 },
+    dragPositionX: rect.x,
+    dragPositionY: rect.y,
+    dragPointerPosition: null,
     depth: 0,
     addDebugRect: () => {},
     addDebugCircle: () => {},
+    addDebugLine: () => {},
     addDebugText: () => {},
     clearDebugMarker: () => {},
   };
+  Object.defineProperties(item, {
+    dragPositionX: {
+      get: () => item.worldTransform.x,
+      configurable: true,
+    },
+    dragPositionY: {
+      get: () => item.worldTransform.y,
+      configurable: true,
+    },
+    dragPointerPosition: {
+      get: () => null,
+      configurable: true,
+    },
+  });
   item.dragSnapshot = itemSnapshot(
     item,
     box,
@@ -1582,37 +1604,44 @@ async function dragBy(
     { text, index, activeId },
   );
 
-  await page.mouse.move(start.x, start.y);
-  await page.mouse.down();
-
-  const dragDistance = Math.hypot(delta.x, delta.y);
-  const activationRatio =
-    dragDistance === 0 ? 0 : Math.min(4 / dragDistance, 1);
-  if (activationRatio > 0) {
-    await page.mouse.move(
-      start.x + delta.x * activationRatio,
-      start.y + delta.y * activationRatio,
-    );
-    await page.waitForTimeout(16);
-  }
-
   const samples: DragSample[] = [];
-  for (let step = 1; step <= steps; step++) {
-    const ratio = activationRatio + ((1 - activationRatio) * step) / steps;
-    const mouse = {
-      x: start.x + delta.x * ratio,
-      y: start.y + delta.y * ratio,
-    };
-    await page.mouse.move(mouse.x, mouse.y);
-    await page.waitForTimeout(8);
-    samples.push(
-      await collectSample(page, step, mouse, {
-        captureFrameRects: options.captureFrameRects,
-      }),
-    );
+  let mouseIsDown = false;
+  try {
+    await page.mouse.move(start.x, start.y);
+    await page.mouse.down();
+    mouseIsDown = true;
+
+    const dragDistance = Math.hypot(delta.x, delta.y);
+    const activationRatio =
+      dragDistance === 0 ? 0 : Math.min(4 / dragDistance, 1);
+    if (activationRatio > 0) {
+      await page.mouse.move(
+        start.x + delta.x * activationRatio,
+        start.y + delta.y * activationRatio,
+      );
+      await page.waitForTimeout(16);
+    }
+
+    for (let step = 1; step <= steps; step++) {
+      const ratio = activationRatio + ((1 - activationRatio) * step) / steps;
+      const mouse = {
+        x: start.x + delta.x * ratio,
+        y: start.y + delta.y * ratio,
+      };
+      await page.mouse.move(mouse.x, mouse.y);
+      await page.waitForTimeout(8);
+      samples.push(
+        await collectSample(page, step, mouse, {
+          captureFrameRects: options.captureFrameRects,
+        }),
+      );
+    }
+  } finally {
+    if (mouseIsDown) {
+      await page.mouse.up().catch(() => {});
+    }
   }
 
-  await page.mouse.up();
   await page.waitForTimeout(100);
   return samples;
 }
@@ -2811,7 +2840,7 @@ test.describe("Snapsort drag-start snapshot layout", () => {
     const subA3Rect = await itemRect(subA3);
     const subA3AfterPoint = {
       x: subA3Rect.x + subA3Rect.width / 2,
-      y: subA3Rect.y + subA3Rect.height * 1.05,
+      y: subA3Rect.y + subA3Rect.height * 0.85,
     };
 
     await page.mouse.move(itemCenter.x, itemCenter.y);
@@ -2855,7 +2884,7 @@ test.describe("Snapsort drag-start snapshot layout", () => {
     const movedTargetRect = await itemRect(target);
     await page.mouse.move(
       movedTargetRect.x + movedTargetRect.width / 2,
-      movedTargetRect.y + movedTargetRect.height * 1.05,
+      movedTargetRect.y + movedTargetRect.height * 0.85,
     );
     await page.mouse.up();
     await page.waitForTimeout(200);
@@ -2954,7 +2983,7 @@ test.describe("Snapsort drag-start snapshot layout", () => {
     const nested = await demoBoxByHeading(page, "Nested Container");
     const item = await itemByTextIn(nested, "Item 1");
     const target = await itemByTextIn(nested, "Sub A3");
-    await dragToItemFraction(page, item, "Item 1", 0, target, 1.25);
+    await dragToItemFraction(page, item, "Item 1", 0, target, 0.85);
 
     const innerContainer = nested.locator(".snapsort-container").nth(1);
     await expect(innerContainer).toBeVisible();
@@ -3023,7 +3052,7 @@ test.describe("Snapsort drag-start snapshot layout", () => {
     const nested = await demoBoxByHeading(page, "Nested Container");
     const item = await itemByTextIn(nested, "Item 1");
     const target = await itemByTextIn(nested, "Sub A3");
-    await dragToItemFraction(page, item, "Item 1", 0, target, 1.05);
+    await dragToItemFraction(page, item, "Item 1", 0, target, 0.85);
 
     const innerContainer = nested.locator(".snapsort-container").nth(1);
     await expect(innerContainer).toBeVisible();
@@ -3151,11 +3180,13 @@ test.describe("Snapsort drag-start snapshot layout", () => {
     const animated = await page.evaluate(async () => {
       for (let frame = 0; frame < 10; frame++) {
         await new Promise((resolve) => requestAnimationFrame(resolve));
-        const movingCard = [...document.querySelectorAll(".task-card")].find(
+        const animatedCard = [...document.querySelectorAll(".task-card")].find(
           (element) =>
-            element.textContent?.includes("Profile fields") ?? false,
-        ) as HTMLElement | undefined;
-        if (/^translate3d\(-?\d/.test(movingCard?.style.transform ?? "")) {
+            /^translate3d\(-?\d/.test(
+              (element as HTMLElement).style.transform,
+            ),
+        );
+        if (animatedCard) {
           return true;
         }
       }

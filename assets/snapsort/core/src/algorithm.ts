@@ -688,7 +688,9 @@ function virtualLayoutRecursiveFromSnapshot(
       ghostCenterX,
       ghostCenterY,
       distance: euclidean(ghostCenterX, ghostCenterY, dragCenterX, dragCenterY),
-      groupDistance: groupCandidateDistance(session, rect, isColumn),
+      groupDistance: session
+        ? groupCandidateDistance(session, rect, isColumn)
+        : euclidean(ghostCenterX, ghostCenterY, dragCenterX, dragCenterY),
       priority: 0,
       lineIndex,
       dragLineIndex,
