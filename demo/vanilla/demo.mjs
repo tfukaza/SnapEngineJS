@@ -1,11 +1,6 @@
 import { Engine } from "@snap-engine/core";
 import { CollisionEngine } from "@snap-engine/core/collision";
-import {
-  ContainerEuclidean,
-  ContainerInsertion,
-  ItemEuclidean,
-  ItemInsertion,
-} from "@snap-engine/snapsort";
+import { Container, Item } from "@snap-engine/snapsort";
 
 const snapSortAnimation = {
   duration: 180,
@@ -178,8 +173,8 @@ function createColumn(column) {
   const columnElement = document.createElement("section");
   columnElement.className =
     column.id === "backlog"
-      ? "snapsort-container snapsort-container-euclidean list-panel array-list"
-      : "snapsort-container snapsort-container-euclidean list-panel";
+      ? "snapsort-container snapsort-mode-euclidean list-panel array-list"
+      : "snapsort-container snapsort-mode-euclidean list-panel";
   columnElement.dataset.columnId = column.id;
   columnElement.style.flexDirection = "column";
   columnElement.style.justifyContent = "flex-start";
@@ -222,7 +217,7 @@ function createColumn(column) {
 }
 
 function createContainer(element, parent, config, metadata) {
-  const container = new ContainerEuclidean(engine, null, config);
+  const container = new Container(engine, null, config);
   container.locked = true;
   container.metadata = metadata;
   container.element = element;
@@ -258,7 +253,10 @@ function buildFileTree() {
 }
 
 function createInsertionContainer(element, parent, config, metadata, locked) {
-  const container = new ContainerInsertion(fileTreeEngine, null, config);
+  const container = new Container(fileTreeEngine, null, {
+    ...config,
+    mode: "insertion",
+  });
   container.locked = locked;
   container.metadata = metadata;
   container.element = element;
@@ -279,7 +277,7 @@ function createFileTreeNode(node, depth, parentContainer) {
 
 function createFileTreeFolder(node, depth, parentContainer) {
   const folderElement = document.createElement("div");
-  folderElement.className = `snapsort-container snapsort-container-insertion tree-node tree-folder depth-${depth}${node.active ? " active" : ""}`;
+  folderElement.className = `snapsort-container snapsort-mode-insertion tree-node tree-folder depth-${depth}${node.active ? " active" : ""}`;
   folderElement.style.flexDirection = "column";
   folderElement.style.justifyContent = "flex-start";
 
@@ -313,10 +311,10 @@ function createFileTreeFolder(node, depth, parentContainer) {
 
 function createFileTreeFile(node, depth, parentContainer) {
   const itemElement = createTreeRow(node, depth, false);
-  itemElement.classList.add("snapsort-item", "snapsort-item-insertion");
+  itemElement.classList.add("snapsort-item");
   parentContainer.element.append(itemElement);
 
-  const itemObject = new ItemInsertion(fileTreeEngine, null);
+  const itemObject = new Item(fileTreeEngine, null);
   itemObject.metadata = { itemId: node.id };
   itemObject.element = itemElement;
   parentContainer.addItem(itemObject);
@@ -357,8 +355,7 @@ function createItem(item, container) {
   itemData.set(item.id, item);
 
   const itemElement = document.createElement("article");
-  itemElement.className =
-    "snapsort-item snapsort-item-euclidean task-card";
+  itemElement.className = "snapsort-item task-card";
   itemIdByElement.set(itemElement, item.id);
 
   const content = document.createElement("div");
@@ -393,7 +390,7 @@ function createItem(item, container) {
   itemElement.append(content);
   container.element.append(itemElement);
 
-  const itemObject = new ItemEuclidean(engine, null);
+  const itemObject = new Item(engine, null);
   itemObject.metadata = { itemId: item.id };
   itemObject.element = itemElement;
   container.addItem(itemObject);
@@ -525,8 +522,7 @@ function createBoardElement() {
   const boardFrame = canvasElement.querySelector(".board-frame");
   const nextBoardElement = document.createElement("div");
   nextBoardElement.id = "vanilla-board";
-  nextBoardElement.className =
-    "snapsort-container snapsort-container-euclidean board";
+  nextBoardElement.className = "snapsort-container snapsort-mode-euclidean board";
   nextBoardElement.ariaLabel = "SnapSort vanilla Kanban board";
   boardFrame.append(nextBoardElement);
   return nextBoardElement;

@@ -1,10 +1,10 @@
 <script lang="ts">
   import { Engine } from "@snap-engine/asset-base-svelte";
-  import { ContainerInsertion } from "@snap-engine/snapsort-svelte";
+  import { Container } from "@snap-engine/snapsort-svelte";
   import type {
     ContainerCallbacks,
     GhostCreateEvent,
-    ItemInsertEvent,
+    ItemMoveEvent,
   } from "@snap-engine/snapsort";
   import { tick } from "svelte";
   import FileTreeNode from "./FileTreeNode.svelte";
@@ -161,9 +161,9 @@
     treeRenderVersion += 1;
   }
 
-  function handleInsert(event: ItemInsertEvent) {
+  function handleMove(event: ItemMoveEvent) {
     if (event.item.isGhost) {
-      event.container.element?.insertBefore(
+      event.to.container.element?.insertBefore(
         event.item.element!,
         event.beforeElement,
       );
@@ -171,14 +171,14 @@
     }
 
     const nodeId = event.itemMetadata.itemId;
-    const containerId = event.containerMetadata.containerId;
+    const containerId = event.to.containerMetadata.containerId;
     if (typeof nodeId !== "string" || typeof containerId !== "string") return;
 
     const extracted = extractNode(tree, nodeId);
     if (!extracted.node) return;
     if (containsNode(extracted.node, containerId)) return;
 
-    tree = insertNode(extracted.nodes, containerId, event.index, extracted.node);
+    tree = insertNode(extracted.nodes, containerId, event.to.index, extracted.node);
     treeRenderVersion += 1;
   }
 
@@ -224,8 +224,8 @@
   }
 
   const callbacks: ContainerCallbacks = {
-    onItemInsert: handleInsert,
-    createItemGhost: createFileTreeGhost,
+    onItemMove: handleMove,
+    createGhost: createFileTreeGhost,
     awaitMutation: tick,
   };
 </script>
@@ -246,9 +246,10 @@
     </div>
 
     <Engine id="snapsort-file-tree-demo-canvas">
-      <ContainerInsertion
+      <Container
         className="code-tree"
         config={{
+          mode: "insertion",
           direction: "column",
           groupID: "code-file-tree-demo",
             name: "code-file-tree-root",
@@ -272,7 +273,7 @@
             <FileTreeNode {node} depth={0} {callbacks} onToggleFolder={toggleFolderOpen} />
           {/each}
         {/key}
-      </ContainerInsertion>
+      </Container>
     </Engine>
   </aside>
 </div>

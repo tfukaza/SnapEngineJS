@@ -10,41 +10,50 @@ import {
   type ReactNode,
 } from "react";
 import {
-  ContainerEuclidean as ContainerEuclideanObject,
-  ContainerInsertion as ContainerInsertionObject,
-  ContainerProgressive as ContainerProgressiveObject,
-  type ContainerBase,
+  Container as ContainerObject,
   type ContainerCallbacks,
   type ContainerConfig,
-  type ItemBase,
+  type Item,
 } from "@snap-engine/snapsort";
 import { flushSync } from "react-dom";
 import { useSnapSortEngine } from "./Engine";
 import { useSnapSortAwaitMutation } from "./useSnapSortAwaitMutation";
 
-type ContainerObjectClass =
-  | typeof ContainerEuclideanObject
-  | typeof ContainerInsertionObject
-  | typeof ContainerProgressiveObject;
-
-export const ContainerObjectContext = createContext<ContainerBase | null>(null);
+export const ContainerObjectContext = createContext<ContainerObject | null>(
+  null,
+);
 
 export interface ContainerProps {
   children?: ReactNode;
   className?: string;
   config: ContainerConfig;
-  containerObject?: ContainerBase | null;
+  containerObject?: ContainerObject | null;
   locked?: boolean;
   metadata?: Record<string, unknown>;
   style?: CSSProperties;
 }
 
+/**
+ * Wrap the callbacks whose only job is to notify/mutate (no synchronous
+ * return value the caller depends on) in flushSync, so a consumer's React
+ * state update is committed before SnapSort reads DOM geometry for FLIP.
+ * `onDragStart` (can veto by returning `false`), `canDrop` (returns a
+ * boolean), and `createGhost` (returns an element) all need their return
+ * value read synchronously and are deliberately left unwrapped — and are
+ * called far more often per drag, so forcing a React flush on every call
+ * would be wasteful.
+ */
 function wrapReactMutationCallbacks(
   callbacks: ContainerCallbacks | undefined,
 ): ContainerCallbacks {
   if (!callbacks) return {};
 
   const wrappedCallbacks: ContainerCallbacks = { ...callbacks };
+  if (callbacks.onItemMove) {
+    wrappedCallbacks.onItemMove = (event) => {
+      flushSync(() => callbacks.onItemMove?.(event));
+    };
+  }
   if (callbacks.onItemInsert) {
     wrappedCallbacks.onItemInsert = (event) => {
       flushSync(() => callbacks.onItemInsert?.(event));
@@ -65,14 +74,21 @@ function wrapReactMutationCallbacks(
       flushSync(() => callbacks.onGhostRemove?.(event));
     };
   }
+  if (callbacks.onDragEnd) {
+    wrappedCallbacks.onDragEnd = (event) => {
+      flushSync(() => callbacks.onDragEnd?.(event));
+    };
+  }
+  if (callbacks.onDropTargetChange) {
+    wrappedCallbacks.onDropTargetChange = (event) => {
+      flushSync(() => callbacks.onDropTargetChange?.(event));
+    };
+  }
   return wrappedCallbacks;
 }
 
-function createContainerComponent(
-  ContainerClass: ContainerObjectClass,
-  algorithmClassName: string,
-) {
-  return forwardRef<ContainerBase, ContainerProps>(function SnapSortContainer(
+export const Container = forwardRef<ContainerObject, ContainerProps>(
+  function SnapSortContainer(
     {
       children,
       className = "",
@@ -88,9 +104,9 @@ function createContainerComponent(
     const parentContainer = useContext(ContainerObjectContext);
     const containerDomRef = useRef<HTMLDivElement>(null);
     const ownsContainerRef = useRef(containerObject == null);
-    const containerRef = useRef<ContainerBase | null>(containerObject);
+    const containerRef = useRef<ContainerObject | null>(containerObject);
     if (!containerRef.current) {
-      containerRef.current = new ContainerClass(engine, null, { ...config });
+      containerRef.current = new ContainerObject(engine, null, { ...config });
     }
     const container = containerRef.current;
     const direction = config.direction ?? "column";
@@ -98,6 +114,8 @@ function createContainerComponent(
     const defaultAwaitMutation = useSnapSortAwaitMutation();
     container.locked = locked;
     container.metadata = metadata;
+    container.config.mode = config.mode ?? container.config.mode;
+    container.config.strategy = config.strategy ?? container.config.strategy;
     container.config.groupID = config.groupID ?? container.config.groupID;
     container.config.name = config.name ?? container.config.name;
     container.config.animation = config.animation ?? container.config.animation;
@@ -126,7 +144,7 @@ function createContainerComponent(
     );
 
     useEffect(() => {
-      parentContainer?.addItem(container as unknown as ItemBase);
+      parentContainer?.addItem(container as unknown as Item);
       return () => {
         if (ownsContainerRef.current) {
           container.destroy();
@@ -138,7 +156,7 @@ function createContainerComponent(
       <ContainerObjectContext.Provider value={container}>
         <div
           ref={setContainerElement}
-          className={`snapsort-container ${algorithmClassName} ${className}`.trim()}
+          className={`snapsort-container snapsort-mode-${container.mode} ${className}`.trim()}
           style={{
             alignItems: "flex-start",
             display: "flex",
@@ -154,22 +172,5 @@ function createContainerComponent(
         </div>
       </ContainerObjectContext.Provider>
     );
-  });
-}
-
-export const ContainerEuclidean = createContainerComponent(
-  ContainerEuclideanObject,
-  "snapsort-container-euclidean",
+  },
 );
-
-export const ContainerProgressive = createContainerComponent(
-  ContainerProgressiveObject,
-  "snapsort-container-progressive",
-);
-
-export const ContainerInsertion = createContainerComponent(
-  ContainerInsertionObject,
-  "snapsort-container-insertion",
-);
-
-export const Container = ContainerEuclidean;

@@ -11,8 +11,8 @@
 
 <script lang="ts">
   import {
-    ContainerInsertion,
-    ItemInsertion,
+    Container,
+    Item,
   } from "@snap-engine/snapsort-svelte";
   import type { ContainerCallbacks } from "@snap-engine/snapsort";
   import FileExplorerNode from "./FileExplorerNode.svelte";
@@ -47,9 +47,10 @@
 </script>
 
 {#if node.kind === "folder"}
-  <ContainerInsertion
+  <Container
     className={`tree-node tree-folder depth-${depth}${node.active ? " active" : ""}`}
     config={{
+      mode: "insertion",
       direction: "column",
       groupID: "website-file-explorer",
       name: `website-file-explorer-${node.id}`,
@@ -88,9 +89,9 @@
         <FileExplorerNode node={child} depth={depth + 1} {callbacks} {onToggleFolder} />
       {/each}
     {/if}
-  </ContainerInsertion>
+  </Container>
 {:else}
-  <ItemInsertion
+  <Item
     className={`tree-row file-row depth-${depth}${node.active ? " active" : ""}`}
     metadata={{ itemId: node.id }}
     style={`--depth: ${depth}`}
@@ -99,5 +100,5 @@
     <span class="chevron-spacer" aria-hidden="true"></span>
     <span class="file-icon" aria-hidden="true"></span>
     <span class="row-name">{node.name}</span>
-  </ItemInsertion>
+  </Item>
 {/if}

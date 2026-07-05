@@ -1,7 +1,7 @@
 <script lang="ts">
   import { Engine } from "@snap-engine/asset-base-svelte";
   import { Container, Handle, Item } from "@snap-engine/snapsort-svelte";
-  import type { ContainerEuclidean, ItemInsertEvent } from "@snap-engine/snapsort";
+  import type { Container as ContainerType, ItemInsertEvent, ItemMoveEvent } from "@snap-engine/snapsort";
 
   type MultiContainerItem = {
     id: string;
@@ -13,7 +13,7 @@
     title: string;
     direction: "left" | "right";
     items: MultiContainerItem[];
-    container?: ContainerEuclidean;
+    container?: ContainerType;
   };
 
   const logoSliceCount = 6;
@@ -97,12 +97,12 @@
     });
   }
 
-  function handleMultiContainerInsert(event: ItemInsertEvent) {
+  function handleMultiContainerMove(event: ItemMoveEvent) {
     const itemId = event.itemMetadata.itemId;
-    const targetColumnId = event.containerMetadata.columnId;
+    const targetColumnId = event.to.containerMetadata.columnId;
     if (typeof itemId !== "string" || typeof targetColumnId !== "string") return;
 
-    moveMultiContainerState(itemId, targetColumnId, event.index);
+    moveMultiContainerState(itemId, targetColumnId, event.to.index);
   }
 
   function moveItemToOppositeColumn(itemId: string) {
@@ -240,7 +240,7 @@
                     direction: "column",
                     groupID: "core-multi-container",
                     name: column.id,
-                    callbacks: { onItemInsert: handleMultiContainerInsert },
+                    callbacks: { onItemMove: handleMultiContainerMove },
                   }}
                   locked={true}
                 >

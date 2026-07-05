@@ -1,14 +1,8 @@
 import {
   Container,
-  ContainerEuclidean,
-  ContainerInsertion,
-  ContainerProgressive,
   Engine,
   Handle,
   Item,
-  ItemEuclidean,
-  ItemInsertion,
-  ItemProgressive,
   useSnapSortAwaitMutation,
 } from "@snap-engine/snapsort-react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
@@ -169,15 +163,15 @@ export function SnapSortWebsiteCoreDemo() {
     [],
   );
 
-  const handleMultiContainerInsert = useCallback(
+  const handleMultiContainerMove = useCallback(
     (event) => {
       const itemId = event.itemMetadata.itemId;
-      const targetColumnId = event.containerMetadata.columnId;
+      const targetColumnId = event.to.containerMetadata.columnId;
       if (typeof itemId !== "string" || typeof targetColumnId !== "string") {
         return;
       }
 
-      moveMultiContainerState(itemId, targetColumnId, event.index);
+      moveMultiContainerState(itemId, targetColumnId, event.to.index);
     },
     [moveMultiContainerState],
   );
@@ -317,7 +311,7 @@ export function SnapSortWebsiteCoreDemo() {
                         groupID: "core-multi-container",
                         name: column.id,
                         callbacks: {
-                          onItemInsert: handleMultiContainerInsert,
+                          onItemMove: handleMultiContainerMove,
                         },
                       }}
                       key={column.id}
@@ -600,9 +594,9 @@ export function SnapSortComponentsDemo() {
     );
   }, []);
 
-  const handleInsert = useCallback((event) => {
+  const handleMove = useCallback((event) => {
     const itemId = event.itemMetadata.itemId;
-    const targetColumnId = event.containerMetadata.columnId;
+    const targetColumnId = event.to.containerMetadata.columnId;
     if (typeof itemId !== "string" || typeof targetColumnId !== "string") return;
 
     setColumns((current) => {
@@ -628,7 +622,7 @@ export function SnapSortComponentsDemo() {
         if (column.id !== targetColumnId) return column;
         const nextItems = column.items.slice();
         nextItems.splice(
-          Math.max(0, Math.min(event.index, nextItems.length)),
+          Math.max(0, Math.min(event.to.index, nextItems.length)),
           0,
           movedItem,
         );
@@ -668,18 +662,18 @@ export function SnapSortComponentsDemo() {
 
   const callbacks = useMemo(
     () => ({
-      onItemInsert: handleInsert,
+      onItemMove: handleMove,
       onItemRemove: handleRemove,
       onGhostInsert: handleGhostInsert,
       onGhostRemove: handleGhostRemove,
-      createItemGhost: () => undefined,
+      createGhost: () => undefined,
       awaitMutation,
     }),
     [
       awaitMutation,
       handleGhostInsert,
       handleGhostRemove,
-      handleInsert,
+      handleMove,
       handleRemove,
     ],
   );
@@ -819,14 +813,14 @@ export function SnapSortComponentsDemo() {
           <div className="engine-area" key={boardVersion}>
             <Engine id="snapsort-components-demo-canvas">
               <div className="board-frame">
-                <ContainerEuclidean
+                <Container
                   className="board"
                   config={{ direction: "row", name: "component-kanban-root", noDrop: true }}
                   locked
                   metadata={{ boardId: "component-kanban" }}
                 >
                   {columns.map((column) => (
-                    <ContainerEuclidean
+                    <Container
                       className={column.id === "backlog" ? "list-panel array-list" : "list-panel"}
                       config={{
                         direction: "column",
@@ -851,15 +845,15 @@ export function SnapSortComponentsDemo() {
                       </div>
                       {renderedColumnItems(column).map((entry) =>
                         entry.isGhost ? (
-                          <ItemEuclidean
+                          <Item
                             className="task-card ghost task-ghost"
                             itemObject={entry.ghostItem}
                             key={entry.id}
                           >
                             <TaskContent label={entry.label} detail={entry.detail} />
-                          </ItemEuclidean>
+                          </Item>
                         ) : (
-                          <ItemEuclidean
+                          <Item
                             className="task-card"
                             key={entry.item.id}
                             metadata={{
@@ -903,12 +897,12 @@ export function SnapSortComponentsDemo() {
                               handle
                               label={entry.item.label}
                             />
-                          </ItemEuclidean>
+                          </Item>
                         ),
                       )}
-                    </ContainerEuclidean>
+                    </Container>
                   ))}
-                </ContainerEuclidean>
+                </Container>
               </div>
             </Engine>
           </div>
@@ -922,25 +916,26 @@ export function SnapSortComponentsDemo() {
             <p>Sentence-builder layouts using varied tile widths and wrapping rows.</p>
           </div>
           <Engine id="snapsort-progressive-components-demo-canvas">
-            <ContainerProgressive
+            <Container
               className="progressive-root"
-              config={{ direction: "column", name: "progressive-components-root", noDrop: true }}
+              config={{ direction: "column", mode: "progressive", name: "progressive-components-root", noDrop: true }}
               locked
               metadata={{ boardId: "progressive-components" }}
             >
               {progressiveExamples.map((example) => (
-                <ContainerProgressive
+                <Container
                   className="progressive-example"
-                  config={{ direction: "column", name: `progressive-example-${example.id}`, noDrop: true }}
+                  config={{ direction: "column", mode: "progressive", name: `progressive-example-${example.id}`, noDrop: true }}
                   key={example.id}
                   locked
                   metadata={{ exampleId: example.id }}
                 >
                   <div className="progressive-prompt"><span>{example.prompt}</span></div>
-                  <ContainerProgressive
+                  <Container
                     className="sentence-answer-line"
                     config={{
                       direction: "row",
+                      mode: "progressive",
                       name: `progressive-answer-${example.id}`,
                       groupID: `progressive-${example.id}`,
                       dropArea: true,
@@ -950,15 +945,16 @@ export function SnapSortComponentsDemo() {
                     metadata={{ zone: "answer", exampleId: example.id }}
                   >
                     {example.answerTiles.map((tile) => (
-                      <ItemProgressive className="sentence-tile-wrapper" key={tile.id} metadata={{ itemId: tile.id }}>
+                      <Item className="sentence-tile-wrapper" key={tile.id} metadata={{ itemId: tile.id }}>
                         <button className="sentence-tile" type="button">{tile.text}</button>
-                      </ItemProgressive>
+                      </Item>
                     ))}
-                  </ContainerProgressive>
-                  <ContainerProgressive
+                  </Container>
+                  <Container
                     className="sentence-bank-line"
                     config={{
                       direction: "row",
+                      mode: "progressive",
                       name: `progressive-bank-${example.id}`,
                       groupID: `progressive-${example.id}`,
                       dropArea: true,
@@ -968,14 +964,14 @@ export function SnapSortComponentsDemo() {
                     metadata={{ zone: "bank", exampleId: example.id }}
                   >
                     {example.bankTiles.map((tile) => (
-                      <ItemProgressive className="sentence-tile-wrapper" key={tile.id} metadata={{ itemId: tile.id }}>
+                      <Item className="sentence-tile-wrapper" key={tile.id} metadata={{ itemId: tile.id }}>
                         <button className="sentence-tile muted" type="button">{tile.text}</button>
-                      </ItemProgressive>
+                      </Item>
                     ))}
-                  </ContainerProgressive>
-                </ContainerProgressive>
+                  </Container>
+                </Container>
               ))}
-            </ContainerProgressive>
+            </Container>
           </Engine>
         </section>
         <section className="algorithm-panel">
@@ -1094,16 +1090,16 @@ export function SnapSortDuolingoDemo({ embedded = false }) {
     [answerTiles, bankTiles, containerForZone, updateTileZone],
   );
 
-  const handleInsert = useCallback((event) => {
+  const handleMove = useCallback((event) => {
     const itemId = event.itemMetadata.itemId;
-    const targetZone = event.containerMetadata.zone;
+    const targetZone = event.to.containerMetadata.zone;
     if (
       typeof itemId !== "string" ||
       (targetZone !== "answer" && targetZone !== "bank")
     ) {
       return;
     }
-    updateTileZone(itemId, targetZone, event.index);
+    updateTileZone(itemId, targetZone, event.to.index);
   }, [updateTileZone]);
 
   const handleRemove = useCallback((event) => {
@@ -1150,18 +1146,18 @@ export function SnapSortDuolingoDemo({ embedded = false }) {
 
   const callbacks = useMemo(
     () => ({
-      onItemInsert: handleInsert,
+      onItemMove: handleMove,
       onItemRemove: handleRemove,
       onGhostInsert: handleGhostInsert,
       onGhostRemove: handleGhostRemove,
-      createItemGhost: () => undefined,
+      createGhost: () => undefined,
       awaitMutation,
     }),
     [
       awaitMutation,
       handleGhostInsert,
       handleGhostRemove,
-      handleInsert,
+      handleMove,
       handleRemove,
     ],
   );
@@ -1254,16 +1250,17 @@ export function SnapSortDuolingoDemo({ embedded = false }) {
         </section>
         <div className="snapsort-engine" data-lang="ja">
           <Engine id="sentence-builder-snapsort-demo">
-            <ContainerProgressive
+            <Container
               className="sentence-builder-root"
-              config={{ direction: "column", name: "sentence-builder-root", noDrop: true }}
+              config={{ direction: "column", mode: "progressive", name: "sentence-builder-root", noDrop: true }}
               locked
               metadata={{ purpose: "sentence-builder" }}
             >
-              <ContainerProgressive
+              <Container
                 className="answer-area answer-box"
                 config={{
                   direction: "row",
+                  mode: "progressive",
                   name: "sentence-answer",
                   groupID: "sentence-builder",
                   dropArea: true,
@@ -1280,25 +1277,26 @@ export function SnapSortDuolingoDemo({ embedded = false }) {
               >
                 {renderedTiles("answer").map((entry) =>
                   entry.isGhost ? (
-                    <ItemProgressive className="tile-wrapper ghost tile-ghost" itemObject={entry.ghostItem} key={entry.id}>
+                    <Item className="tile-wrapper ghost tile-ghost" itemObject={entry.ghostItem} key={entry.id}>
                       <button className="tile selected" tabIndex={-1} type="button">{entry.text}</button>
-                    </ItemProgressive>
+                    </Item>
                   ) : (
-                    <ItemProgressive className="tile-wrapper" key={entry.tile.id} metadata={{ itemId: entry.tile.id }}>
+                    <Item className="tile-wrapper" key={entry.tile.id} metadata={{ itemId: entry.tile.id }}>
                       <button {...tileButtonProps(entry, "bank", true)}>{entry.tile.text}</button>
-                    </ItemProgressive>
+                    </Item>
                   ),
                 )}
                 {answerTiles.length === 0 && ghostEntry?.zone !== "answer" ? (
                   <span className="placeholder">Drag tiles here or click to add</span>
                 ) : null}
-              </ContainerProgressive>
+              </Container>
 
-              <ContainerProgressive
+              <Container
                 className="tile-bank-container tile-bank"
                 config={{
                   direction: "row",
                   mainAxisAlign: "center",
+                  mode: "progressive",
                   name: "sentence-bank",
                   groupID: "sentence-builder",
                   dropArea: true,
@@ -1315,17 +1313,17 @@ export function SnapSortDuolingoDemo({ embedded = false }) {
               >
                 {renderedTiles("bank").map((entry) =>
                   entry.isGhost ? (
-                    <ItemProgressive className="tile-wrapper ghost tile-ghost" itemObject={entry.ghostItem} key={entry.id}>
+                    <Item className="tile-wrapper ghost tile-ghost" itemObject={entry.ghostItem} key={entry.id}>
                       <button className="tile" tabIndex={-1} type="button">{entry.text}</button>
-                    </ItemProgressive>
+                    </Item>
                   ) : (
-                    <ItemProgressive className="tile-wrapper" key={entry.tile.id} metadata={{ itemId: entry.tile.id }}>
+                    <Item className="tile-wrapper" key={entry.tile.id} metadata={{ itemId: entry.tile.id }}>
                       <button {...tileButtonProps(entry, "answer")}>{entry.tile.text}</button>
-                    </ItemProgressive>
+                    </Item>
                   ),
                 )}
-              </ContainerProgressive>
-            </ContainerProgressive>
+              </Container>
+            </Container>
           </Engine>
         </div>
         <section className="actions">
@@ -1408,9 +1406,9 @@ export function SnapSortInsertionDemo() {
 
   const callbacks = useMemo(
     () => ({
-      onItemInsert: (event) => {
+      onItemMove: (event) => {
         const itemId = event.itemMetadata.itemId;
-        const targetColumnId = event.containerMetadata.columnId;
+        const targetColumnId = event.to.containerMetadata.columnId;
         if (typeof itemId !== "string" || typeof targetColumnId !== "string") return;
         setColumns((current) => {
           let removed = pendingRemovedItem.current;
@@ -1425,7 +1423,7 @@ export function SnapSortInsertionDemo() {
           return columnsWithoutItem.map((column) => {
             if (column.id !== targetColumnId) return column;
             const nextItems = column.items.slice();
-            nextItems.splice(Math.max(0, Math.min(event.index, nextItems.length)), 0, removed);
+            nextItems.splice(Math.max(0, Math.min(event.to.index, nextItems.length)), 0, removed);
             return { ...column, items: nextItems };
           });
         });
@@ -1483,18 +1481,19 @@ export function SnapSortInsertionDemo() {
         </div>
       </header>
       <Engine id="snapsort-insertion-demo-canvas">
-        <ContainerInsertion
+        <Container
           className="insertion-board"
-          config={{ direction: "row", name: "insertion-board-root", noDrop: true }}
+          config={{ direction: "row", mode: "insertion", name: "insertion-board-root", noDrop: true }}
           locked
           metadata={{ boardId: "insertion-demo" }}
         >
           {columns.map((column) => (
-            <ContainerInsertion
+            <Container
               className="insertion-list"
               config={{
                 direction: "column",
                 groupID: "insertion-demo",
+                mode: "insertion",
                 name: `insertion-${column.id}`,
                 callbacks,
               }}
@@ -1507,7 +1506,7 @@ export function SnapSortInsertionDemo() {
                 <span>{column.items.length}</span>
               </div>
               {column.items.map((item) => (
-                <ItemInsertion className="insertion-card" key={item.id} metadata={{ itemId: item.id }}>
+                <Item className="insertion-card" key={item.id} metadata={{ itemId: item.id }}>
                   <span className={`file-icon ${item.kind === "folder" ? "folder-icon" : ""}`} aria-hidden="true">
                     {item.kind === "folder" ? "folder" : "description"}
                   </span>
@@ -1515,11 +1514,11 @@ export function SnapSortInsertionDemo() {
                     <strong>{item.title}</strong>
                     <span>{item.detail}</span>
                   </div>
-                </ItemInsertion>
+                </Item>
               ))}
-            </ContainerInsertion>
+            </Container>
           ))}
-        </ContainerInsertion>
+        </Container>
       </Engine>
     </div>
   );

@@ -2,8 +2,9 @@
 
 React components for SnapEngine drag-and-drop interactions.
 
-`Container` and `Item` are aliases for the Euclidean components. The explicit
-component pairs are available as Euclidean, Progressive, and Insertion variants.
+`Container` and `Item` are the only components — every container picks its
+drag behavior with a `mode` config field (`"euclidean"` default,
+`"progressive"`, or `"insertion"`). `Item` never needs a mode.
 
 ## Install
 
@@ -13,16 +14,11 @@ npm install @snap-engine/snapsort-react @snap-engine/snapsort
 
 ## Includes
 
-- `ContainerEuclidean`
-- `ItemEuclidean`
-- `ContainerProgressive`
-- `ItemProgressive`
-- `ContainerInsertion`
-- `ItemInsertion`
-- `Handle`
-- `useSnapSortAwaitMutation`
 - `Container`
 - `Item`
+- `Engine` / `SnapSortEngine`
+- `Handle`
+- `useSnapSortAwaitMutation`
 
 ## React Mutation Callbacks
 

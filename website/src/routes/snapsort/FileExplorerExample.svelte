@@ -1,10 +1,11 @@
 <script lang="ts">
   import { tick } from "svelte";
-  import { ContainerInsertion } from "@snap-engine/snapsort-svelte";
+  import { Container } from "@snap-engine/snapsort-svelte";
   import type {
+    CanDropEvent,
     ContainerCallbacks,
     GhostCreateEvent,
-    ItemInsertEvent,
+    ItemMoveEvent,
   } from "@snap-engine/snapsort";
   import FileExplorerNode from "./FileExplorerNode.svelte";
   import type { FileExplorerNodeData } from "./FileExplorerNode.svelte";
@@ -90,6 +91,18 @@
     return node.children?.some((child) => containsNode(child, nodeId)) ?? false;
   }
 
+  function findNode(
+    nodes: FileExplorerNodeData[],
+    nodeId: string,
+  ): FileExplorerNodeData | null {
+    for (const node of nodes) {
+      if (node.id === nodeId) return node;
+      const found = node.children ? findNode(node.children, nodeId) : null;
+      if (found) return found;
+    }
+    return null;
+  }
+
   function insertNode(
     nodes: FileExplorerNodeData[],
     containerId: string,
@@ -139,17 +152,29 @@
     treeRenderVersion += 1;
   }
 
-  function handleInsert(event: ItemInsertEvent) {
+  function handleMove(event: ItemMoveEvent) {
     const itemId = event.itemMetadata.itemId;
-    const containerId = event.containerMetadata.containerId;
+    const containerId = event.to.containerMetadata.containerId;
     if (typeof itemId !== "string" || typeof containerId !== "string") return;
 
     const extracted = extractNode(tree, itemId);
     if (!extracted.node) return;
     if (containsNode(extracted.node, containerId)) return;
 
-    tree = insertNode(extracted.nodes, containerId, event.index, extracted.node);
+    tree = insertNode(extracted.nodes, containerId, event.to.index, extracted.node);
     treeRenderVersion += 1;
+  }
+
+  /** Block dropping a folder into its own descendant (or itself). */
+  function canDropInFolder(event: CanDropEvent): boolean {
+    const itemId = event.itemMetadata.itemId;
+    const containerId = event.containerMetadata.containerId;
+    if (typeof itemId !== "string" || typeof containerId !== "string") {
+      return true;
+    }
+    const draggedNode = findNode(tree, itemId);
+    if (!draggedNode) return true;
+    return !containsNode(draggedNode, containerId);
   }
 
   function createFileTreeGhost(event: GhostCreateEvent): HTMLElement {
@@ -174,8 +199,9 @@
   }
 
   const callbacks: ContainerCallbacks = {
-    onItemInsert: handleInsert,
-    createItemGhost: createFileTreeGhost,
+    onItemMove: handleMove,
+    canDrop: canDropInFolder,
+    createGhost: createFileTreeGhost,
     awaitMutation: tick,
   };
 </script>
@@ -188,9 +214,10 @@
       <span></span>
     </div>
     {#key treeRenderVersion}
-      <ContainerInsertion
+      <Container
         className="code-tree"
         config={{
+          mode: "insertion",
           direction: "column",
           groupID: "website-file-explorer",
           name: "website-file-explorer-root",
@@ -211,7 +238,7 @@
         {#each tree as node (node.id)}
           <FileExplorerNode {node} {callbacks} onToggleFolder={toggleFolderOpen} />
         {/each}
-      </ContainerInsertion>
+      </Container>
     {/key}
   </div>
 </div>

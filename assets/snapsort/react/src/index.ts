@@ -1,10 +1,4 @@
-export {
-  Container,
-  ContainerEuclidean,
-  ContainerInsertion,
-  ContainerObjectContext,
-  ContainerProgressive,
-} from "./Container";
+export { Container, ContainerObjectContext } from "./Container";
 export type { ContainerProps } from "./Container";
 export {
   Engine,
@@ -15,12 +9,6 @@ export {
 export type { EngineProps } from "./Engine";
 export { Handle } from "./Handle";
 export type { HandleProps } from "./Handle";
-export {
-  Item,
-  ItemEuclidean,
-  ItemInsertion,
-  ItemObjectContext,
-  ItemProgressive,
-} from "./Item";
+export { Item, ItemObjectContext } from "./Item";
 export type { ItemProps } from "./Item";
 export { useSnapSortAwaitMutation } from "./useSnapSortAwaitMutation";

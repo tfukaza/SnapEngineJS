@@ -4,20 +4,18 @@
   import type { Engine as SnapEngine } from "@snap-engine/core";
   import {
     Container,
-    ContainerProgressive,
     Handle,
     Item,
-    ItemProgressive,
   } from "@snap-engine/snapsort-svelte";
   import SnapSortContextBoundary from "../SnapSortContextBoundary.svelte";
   import FileExplorerExample from "../FileExplorerExample.svelte";
   import type {
-    ContainerBase as SortContainer,
+    Container as SortContainer,
     GhostCreateEvent,
     GhostInsertEvent,
     GhostRemoveEvent,
-    ItemBase,
-    ItemInsertEvent,
+    Item as SortItem,
+    ItemMoveEvent,
     ItemRemoveEvent,
   } from "@snap-engine/snapsort";
 
@@ -40,7 +38,7 @@
     zone: SentenceZone;
     index: number;
     originalItemId: string | null;
-    ghostItem: ItemBase;
+    ghostItem: SortItem;
     text: string;
   };
 
@@ -462,17 +460,17 @@
     });
   }
 
-  function handleEditorOptionInsert(event: ItemInsertEvent) {
+  function handleEditorOptionMove(event: ItemMoveEvent) {
     if (event.item.isGhost) {
-      event.container.element?.insertBefore(event.item.element!, event.beforeElement);
+      event.to.container.element?.insertBefore(event.item.element!, event.beforeElement);
       return;
     }
 
-    const fieldId = event.containerMetadata.fieldId;
+    const fieldId = event.to.containerMetadata.fieldId;
     const optionId = event.itemMetadata.itemId;
     if (typeof fieldId !== "string" || typeof optionId !== "string") return;
 
-    reorderEditorOption(fieldId, optionId, event.index);
+    reorderEditorOption(fieldId, optionId, event.to.index);
   }
 
   function handleEditorOptionRemove(event: ItemRemoveEvent) {
@@ -511,14 +509,14 @@
     sentenceResult = "";
   }
 
-  function handleSentenceInsert(event: ItemInsertEvent) {
+  function handleSentenceMove(event: ItemMoveEvent) {
     const itemId = event.itemMetadata.itemId;
     if (typeof itemId !== "string") return;
 
-    const targetZone = event.containerMetadata.zone;
+    const targetZone = event.to.containerMetadata.zone;
     if (targetZone !== "answer" && targetZone !== "bank") return;
 
-    updateSentenceTileZone(itemId, targetZone, event.index);
+    updateSentenceTileZone(itemId, targetZone, event.to.index);
   }
 
   function handleSentenceRemove(event: ItemRemoveEvent) {
@@ -909,15 +907,16 @@
             </div>
           </div>
           <div class="sentence-container-area">
-            <ContainerProgressive
+            <Container
               className="sentence-workspace-root"
-              config={{ direction: "column", name: "sentence-root", noDrop: true }}
+              config={{ mode: "progressive", direction: "column", name: "sentence-root", noDrop: true }}
               locked={true}
             >
-              <ContainerProgressive
+              <Container
                 className="sentence-drop-zone"
                 bind:container={sentenceAnswerContainer}
                 config={{
+                  mode: "progressive",
                   direction: "row",
                   groupID: "sentence",
                   name: "sentence-target",
@@ -928,11 +927,11 @@
                     clickMove: sentenceAnimation,
                   },
                   callbacks: {
-                    onItemInsert: handleSentenceInsert,
+                    onItemMove: handleSentenceMove,
                     onItemRemove: handleSentenceRemove,
                     onGhostInsert: handleSentenceGhostInsert,
                     onGhostRemove: handleSentenceGhostRemove,
-                    createItemGhost: createSentenceGhost,
+                    createGhost: createSentenceGhost,
                     awaitMutation: tick,
                   },
                 }}
@@ -941,14 +940,14 @@
               >
                 {#each renderedSentenceTiles("answer") as entry (entry.isGhost ? entry.id : entry.tile.id)}
                   {#if entry.isGhost}
-                    <ItemProgressive
+                    <Item
                       className="sentence-tile-wrapper ghost sentence-tile-ghost"
                       itemObject={entry.ghostItem}
                     >
                       <button type="button" class="word-card sentence-word selected" tabindex="-1">{entry.text}</button>
-                    </ItemProgressive>
+                    </Item>
                   {:else}
-                    <ItemProgressive className="sentence-tile-wrapper" metadata={{ itemId: entry.tile.id }}>
+                    <Item className="sentence-tile-wrapper" metadata={{ itemId: entry.tile.id }}>
                       <button
                         type="button"
                         class="word-card sentence-word selected"
@@ -959,14 +958,15 @@
                       >
                         {entry.tile.text}
                       </button>
-                    </ItemProgressive>
+                    </Item>
                   {/if}
                 {/each}
-              </ContainerProgressive>
-              <ContainerProgressive
+              </Container>
+              <Container
                 className="sentence-source-zone"
                 bind:container={sentenceBankContainer}
                 config={{
+                  mode: "progressive",
                   direction: "row",
                   mainAxisAlign: "center",
                   groupID: "sentence",
@@ -978,11 +978,11 @@
                     clickMove: sentenceAnimation,
                   },
                   callbacks: {
-                    onItemInsert: handleSentenceInsert,
+                    onItemMove: handleSentenceMove,
                     onItemRemove: handleSentenceRemove,
                     onGhostInsert: handleSentenceGhostInsert,
                     onGhostRemove: handleSentenceGhostRemove,
-                    createItemGhost: createSentenceGhost,
+                    createGhost: createSentenceGhost,
                     awaitMutation: tick,
                   },
                 }}
@@ -991,14 +991,14 @@
               >
                 {#each renderedSentenceTiles("bank") as entry (entry.isGhost ? entry.id : entry.tile.id)}
                   {#if entry.isGhost}
-                    <ItemProgressive
+                    <Item
                       className="sentence-tile-wrapper ghost sentence-tile-ghost"
                       itemObject={entry.ghostItem}
                     >
                       <button type="button" class="word-card sentence-word" tabindex="-1">{entry.text}</button>
-                    </ItemProgressive>
+                    </Item>
                   {:else}
-                    <ItemProgressive className="sentence-tile-wrapper" metadata={{ itemId: entry.tile.id }}>
+                    <Item className="sentence-tile-wrapper" metadata={{ itemId: entry.tile.id }}>
                       <button
                         type="button"
                         class="word-card sentence-word"
@@ -1009,11 +1009,11 @@
                       >
                         {entry.tile.text}
                       </button>
-                    </ItemProgressive>
+                    </Item>
                   {/if}
                 {/each}
-              </ContainerProgressive>
-            </ContainerProgressive>
+              </Container>
+            </Container>
           </div>
           <div class="controls">
             <button
@@ -1085,14 +1085,15 @@
                         <textarea id={field.id} rows="3" readonly tabindex="-1">Long answer response</textarea>
                       {:else if field.type === "multipleChoice"}
                         <SnapSortContextBoundary>
-                          <ContainerProgressive
+                          <Container
                             className="editor-option-stack"
                             config={{
+                              mode: "progressive",
                               direction: "column",
                               groupID: `editor-options-${field.id}`,
                               name: `editor-options-${field.id}`,
                               callbacks: {
-                                onItemInsert: handleEditorOptionInsert,
+                                onItemMove: handleEditorOptionMove,
                                 onItemRemove: handleEditorOptionRemove,
                                 awaitMutation: tick,
                               },
@@ -1101,7 +1102,7 @@
                             metadata={{ fieldId: field.id }}
                           >
                             {#each field.options ?? [] as option (option.id)}
-                              <ItemProgressive className="editor-option-item" metadata={{ itemId: option.id }}>
+                              <Item className="editor-option-item" metadata={{ itemId: option.id }}>
                                 <div class="editor-option-row">
                                   <Handle className="editor-option-handle">
                                     <i class="material-symbols-rounded editor-option-grip" aria-hidden="true">drag_indicator</i>
@@ -1134,9 +1135,9 @@
                                     <i class="material-symbols-rounded" aria-hidden="true">delete</i>
                                   </button>
                                 </div>
-                              </ItemProgressive>
+                              </Item>
                             {/each}
-                          </ContainerProgressive>
+                          </Container>
                         </SnapSortContextBoundary>
                         <button
                           class="editor-add-option"
@@ -1152,14 +1153,15 @@
                         </button>
                       {:else if field.type === "checkboxes"}
                         <SnapSortContextBoundary>
-                          <ContainerProgressive
+                          <Container
                             className="editor-option-stack"
                             config={{
+                              mode: "progressive",
                               direction: "column",
                               groupID: `editor-options-${field.id}`,
                               name: `editor-options-${field.id}`,
                               callbacks: {
-                                onItemInsert: handleEditorOptionInsert,
+                                onItemMove: handleEditorOptionMove,
                                 onItemRemove: handleEditorOptionRemove,
                                 awaitMutation: tick,
                               },
@@ -1168,7 +1170,7 @@
                             metadata={{ fieldId: field.id }}
                           >
                             {#each field.options ?? [] as option (option.id)}
-                              <ItemProgressive className="editor-option-item" metadata={{ itemId: option.id }}>
+                              <Item className="editor-option-item" metadata={{ itemId: option.id }}>
                                 <div class="editor-option-row">
                                   <Handle className="editor-option-handle">
                                     <i class="material-symbols-rounded editor-option-grip" aria-hidden="true">drag_indicator</i>
@@ -1201,9 +1203,9 @@
                                     <i class="material-symbols-rounded" aria-hidden="true">delete</i>
                                   </button>
                                 </div>
-                              </ItemProgressive>
+                              </Item>
                             {/each}
-                          </ContainerProgressive>
+                          </Container>
                         </SnapSortContextBoundary>
                         <button
                           class="editor-add-option"
@@ -1219,14 +1221,15 @@
                         </button>
                       {:else if field.type === "dropdown"}
                         <SnapSortContextBoundary>
-                          <ContainerProgressive
+                          <Container
                             className="editor-option-stack"
                             config={{
+                              mode: "progressive",
                               direction: "column",
                               groupID: `editor-options-${field.id}`,
                               name: `editor-options-${field.id}`,
                               callbacks: {
-                                onItemInsert: handleEditorOptionInsert,
+                                onItemMove: handleEditorOptionMove,
                                 onItemRemove: handleEditorOptionRemove,
                                 awaitMutation: tick,
                               },
@@ -1235,7 +1238,7 @@
                             metadata={{ fieldId: field.id }}
                           >
                             {#each field.options ?? [] as option (option.id)}
-                              <ItemProgressive className="editor-option-item" metadata={{ itemId: option.id }}>
+                              <Item className="editor-option-item" metadata={{ itemId: option.id }}>
                                 <div class="editor-option-row">
                                   <Handle className="editor-option-handle">
                                     <i class="material-symbols-rounded editor-option-grip" aria-hidden="true">drag_indicator</i>
@@ -1265,9 +1268,9 @@
                                     <i class="material-symbols-rounded" aria-hidden="true">delete</i>
                                   </button>
                                 </div>
-                              </ItemProgressive>
+                              </Item>
                             {/each}
-                          </ContainerProgressive>
+                          </Container>
                         </SnapSortContextBoundary>
                         <button
                           class="editor-add-option"

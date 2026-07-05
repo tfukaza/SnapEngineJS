@@ -1,21 +1,12 @@
 <script lang="ts">
   import { Engine } from "@snap-engine/asset-base-svelte";
   import type { DomProperty, Engine as SnapEngine } from "@snap-engine/core";
-  import {
-    Container,
-    ContainerInsertion,
-    ContainerProgressive,
-    Handle,
-    Item,
-    ItemInsertion,
-    ItemProgressive,
-  } from "@snap-engine/snapsort-svelte";
+  import { Container, Handle, Item } from "@snap-engine/snapsort-svelte";
   import type {
-    ContainerBase,
+    Container as ContainerType,
     ContainerConfig,
-    ContainerEuclidean,
-    ItemBase,
-    ItemInsertEvent,
+    Item as ItemType,
+    ItemMoveEvent,
     ItemSnapshot,
   } from "@snap-engine/snapsort";
   import SnapSortContextBoundary from "./SnapSortContextBoundary.svelte";
@@ -30,7 +21,7 @@
     title: string;
     direction: "left" | "right";
     items: MultiContainerItem[];
-    container?: ContainerEuclidean;
+    container?: ContainerType;
   };
 
   type CustomizableMockupTheme = {
@@ -182,7 +173,7 @@
     };
   }
 
-  function debugLabel(item: ItemBase, snapshot: ItemSnapshot<ItemBase> | null) {
+  function debugLabel(item: ItemType, snapshot: ItemSnapshot<ItemType> | null) {
     const itemId = snapshot?.metadata.itemId;
     const containerId = snapshot?.metadata.containerId;
     const configuredName =
@@ -207,7 +198,7 @@
     if (!Array.isArray(containers)) return [];
 
     return containers.filter(
-      (container): container is ContainerBase =>
+      (container): container is ContainerType =>
         container?.engine === engine &&
         container?.element instanceof HTMLElement &&
         container.rootContainer === container,
@@ -218,7 +209,7 @@
     entries: Array<{ engine: SnapEngine | null; id: string }>,
   ): DebugOverlayRect[] {
     const rects: DebugOverlayRect[] = [];
-    const visited = new Set<ItemBase>();
+    const visited = new Set<ItemType>();
 
     for (const entry of entries) {
       for (const root of snapSortRootsFor(entry.engine)) {
@@ -231,10 +222,10 @@
   }
 
   function collectItemDebugRects(
-    item: ItemBase,
+    item: ItemType,
     engineId: string,
     rects: DebugOverlayRect[],
-    visited: Set<ItemBase>,
+    visited: Set<ItemType>,
     depth: number,
   ) {
     if (visited.has(item)) return;
@@ -362,9 +353,9 @@
       order.every((slice, index) => slice === index);
   }
 
-  function handleSidewaysInsert(event: ItemInsertEvent) {
-    event.container.element?.insertBefore(event.item.element!, event.beforeElement);
-    requestAnimationFrame(() => updateSidewaysSolved(event.container.element));
+  function handleSidewaysMove(event: ItemMoveEvent) {
+    event.to.container.element?.insertBefore(event.item.element!, event.beforeElement);
+    requestAnimationFrame(() => updateSidewaysSolved(event.to.container.element));
   }
   const nestedItems = ["Item 1", "Item 2", "Item 3"];
   const nestedChildren = ["Item 4", "Item 5", "Item 6"];
@@ -484,12 +475,12 @@
     });
   }
 
-  function handleMultiContainerInsert(event: ItemInsertEvent) {
+  function handleMultiContainerMove(event: ItemMoveEvent) {
     const itemId = event.itemMetadata.itemId;
-    const targetColumnId = event.containerMetadata.columnId;
+    const targetColumnId = event.to.containerMetadata.columnId;
     if (typeof itemId !== "string" || typeof targetColumnId !== "string") return;
 
-    moveMultiContainerState(itemId, targetColumnId, event.index);
+    moveMultiContainerState(itemId, targetColumnId, event.to.index);
   }
 
   function moveItemToOppositeColumn(itemId: string) {
@@ -676,7 +667,7 @@
               direction: "row",
               groupID: "core-sideways",
               mainAxisAlign: "center",
-              callbacks: { onItemInsert: handleSidewaysInsert },
+              callbacks: { onItemMove: handleSidewaysMove },
             }}
           >
             {#each sidewaysItems as item (item.id)}
@@ -742,11 +733,11 @@
       <article class="core-demo-card">
         <h3>Insert mode</h3>
         <div class="core-demo-surface card">
-          <ContainerInsertion
+          <Container
             className="basic-list insertion-list bounded-demo-list"
-            config={{ direction: "column", groupID: "core-insert" }}
+            config={{ direction: "column", groupID: "core-insert", mode: "insertion" }}
           >
-            <ItemInsertion>
+            <Item>
               <div class="basic-row handle-row">
                 <Handle className="demo-row-handle">
                   <span class="demo-grip" aria-hidden="true">
@@ -755,10 +746,10 @@
                 </Handle>
                 <span>{insertItems[0]}</span>
               </div>
-            </ItemInsertion>
-            <ContainerInsertion
+            </Item>
+            <Container
               className="nested-list nested-insertion-list insertion-list bounded-demo-list card shallow"
-              config={{ direction: "column", groupID: "core-insert" }}
+              config={{ direction: "column", groupID: "core-insert", mode: "insertion" }}
               locked={false}
             >
               <Handle className="demo-container-handle">
@@ -767,7 +758,7 @@
                 </span>
               </Handle>
               {#each insertNestedItems as item (item)}
-                <ItemInsertion>
+                <Item>
                   <div class="basic-row nested-row handle-row">
                     <Handle className="demo-row-handle">
                       <span class="demo-grip" aria-hidden="true">
@@ -776,11 +767,11 @@
                     </Handle>
                     <span>{item}</span>
                   </div>
-                </ItemInsertion>
+                </Item>
               {/each}
-            </ContainerInsertion>
+            </Container>
             {#each insertItems.slice(1) as item (item)}
-              <ItemInsertion>
+              <Item>
                 <div class="basic-row handle-row">
                   <Handle className="demo-row-handle">
                     <span class="demo-grip" aria-hidden="true">
@@ -789,27 +780,27 @@
                   </Handle>
                   <span>{item}</span>
                 </div>
-              </ItemInsertion>
+              </Item>
             {/each}
-          </ContainerInsertion>
+          </Container>
         </div>
       </article>
 
       <article class="core-demo-card">
         <h3>Multiple rows</h3>
         <div class="core-demo-surface card">
-          <ContainerProgressive
+          <Container
             className="multi-row-list"
-            config={{ direction: "row", groupID: "core-multi-row" }}
+            config={{ direction: "row", groupID: "core-multi-row", mode: "progressive" }}
           >
             {#each multiRowItems as item (item.id)}
-              <ItemProgressive>
+              <Item>
                 <div class="basic-token">
                   <span>{item.label}</span>
                 </div>
-              </ItemProgressive>
+              </Item>
             {/each}
-          </ContainerProgressive>
+          </Container>
         </div>
       </article>
 
@@ -830,7 +821,7 @@
                   direction: "column",
                   groupID: "core-multi-container",
                   name: column.id,
-                  callbacks: { onItemInsert: handleMultiContainerInsert },
+                  callbacks: { onItemMove: handleMultiContainerMove },
                 }}
                 locked={true}
               >
@@ -945,20 +936,21 @@
                           <i></i>
                         </div>
                       {/if}
-                      <ContainerProgressive
+                      <Container
                         className="customizable-mini-words"
                         config={{
                           direction: "row",
                           groupID: `customizable-${theme.id}-words`,
+                          mode: "progressive",
                           ...getCustomizableThemeConfig(theme.id),
                         }}
                       >
                         {#each customizableMockupWords as word (word)}
-                          <ItemProgressive>
+                          <Item>
                             <span class="customizable-mini-word">{word}</span>
-                          </ItemProgressive>
+                          </Item>
                         {/each}
-                      </ContainerProgressive>
+                      </Container>
                     </div>
 
                     <div
@@ -1100,16 +1092,17 @@
                                     <span>{field.type === "radio" ? "Multiple choice" : "Checkboxes"}</span>
                                   </div>
                                   <SnapSortContextBoundary>
-                                    <ContainerProgressive
+                                    <Container
                                       className="customizable-mini-options"
                                       config={{
                                         direction: "column",
                                         groupID: `customizable-${theme.id}-editor-${field.label}`,
+                                        mode: "progressive",
                                         ...getCustomizableThemeConfig(theme.id),
                                       }}
                                     >
                                       {#each field.options as option (option)}
-                                        <ItemProgressive>
+                                        <Item>
                                           <span class="customizable-mini-option" class:checkbox={field.type === "checkbox"}>
                                             <Handle className="customizable-mini-option-handle">
                                               <span class="customizable-mini-option-grip" aria-hidden="true"></span>
@@ -1118,9 +1111,9 @@
                                             <span>{option}</span>
                                             <button type="button" tabindex="-1" aria-label="Remove option">x</button>
                                           </span>
-                                        </ItemProgressive>
+                                        </Item>
                                       {/each}
-                                    </ContainerProgressive>
+                                    </Container>
                                   </SnapSortContextBoundary>
                                   <button class="customizable-mini-add-option" type="button" tabindex="-1">
                                     + Add option
@@ -1144,7 +1137,7 @@
                           <i></i>
                         </div>
                       {/if}
-                      <ContainerInsertion
+                      <Container
                         className="customizable-mini-files"
                         locked={true}
                         metadata={{
@@ -1157,12 +1150,13 @@
                           direction: "column",
                           groupID: `customizable-${theme.id}-files`,
                           name: `customizable-${theme.id}-files-root`,
+                          mode: "insertion",
                           ...getCustomizableThemeConfig(theme.id),
                         }}
                       >
                         {#each customizableMockupFiles as file (file.id)}
                           {#if file.kind === "folder"}
-                            <ContainerInsertion
+                            <Container
                               className={`customizable-mini-tree-folder depth-${file.depth}${file.active ? " active" : ""}`}
                               locked={false}
                               metadata={{
@@ -1176,6 +1170,7 @@
                                 direction: "column",
                                 groupID: `customizable-${theme.id}-files`,
                                 name: `customizable-${theme.id}-files-${file.id}`,
+                                mode: "insertion",
                                 ...getCustomizableThemeConfig(theme.id),
                               }}
                             >
@@ -1188,9 +1183,9 @@
                                 <span class="customizable-mini-tree-icon folder" aria-hidden="true"></span>
                                 <strong>{file.label}</strong>
                               </div>
-                            </ContainerInsertion>
+                            </Container>
                           {:else}
-                            <ItemInsertion
+                            <Item
                               className={`customizable-mini-tree-row file depth-${file.depth}${file.active ? " active" : ""}`}
                               metadata={{ itemId: file.id }}
                               style={`--depth: ${file.depth};`}
@@ -1199,10 +1194,10 @@
                               <span class="customizable-mini-chevron-spacer" aria-hidden="true"></span>
                               <span class="customizable-mini-tree-icon file" aria-hidden="true"></span>
                               <strong>{file.label}</strong>
-                            </ItemInsertion>
+                            </Item>
                           {/if}
                         {/each}
-                      </ContainerInsertion>
+                      </Container>
                     </div>
                       </div>
                     </div>
@@ -3462,7 +3457,6 @@
     .customizable-feature-card {
       gap: var(--size-24);
     }
-
   }
 
   @media (max-width: 640px) {

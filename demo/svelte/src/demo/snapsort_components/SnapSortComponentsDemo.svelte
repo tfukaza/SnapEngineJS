@@ -2,20 +2,14 @@
   import { Engine } from "@snap-engine/asset-base-svelte";
   import { tick } from "svelte";
   import SnapSortDuolingoDemo from "../snapsort_duolingo/SnapSortDuolingoDemo.svelte";
-  import {
-    ContainerEuclidean,
-    ContainerProgressive,
-    Handle,
-    ItemEuclidean,
-    ItemProgressive,
-  } from "@snap-engine/snapsort-svelte";
+  import { Container, Handle, Item } from "@snap-engine/snapsort-svelte";
   import type {
-    ContainerBase as SortContainer,
+    Container as SortContainer,
     GhostCreateEvent,
     GhostInsertEvent,
     GhostRemoveEvent,
-    ItemBase,
-    ItemInsertEvent,
+    Item as ItemType,
+    ItemMoveEvent,
     ItemRemoveEvent,
   } from "@snap-engine/snapsort";
 
@@ -38,7 +32,7 @@
     columnId: string;
     index: number;
     originalItemId: string | null;
-    ghostItem: ItemBase;
+    ghostItem: ItemType;
     label: string;
     detail: string;
   };
@@ -276,10 +270,10 @@
     return renderedItems;
   }
 
-  function handleSnapSortDomInsert(event: ItemInsertEvent) {
+  function handleSnapSortDomMove(event: ItemMoveEvent) {
     const itemId = event.itemMetadata.itemId;
     if (typeof itemId !== "string") return;
-    const targetColumnId = event.containerMetadata.columnId;
+    const targetColumnId = event.to.containerMetadata.columnId;
     if (typeof targetColumnId !== "string") return;
 
     let movedItem: DemoItem | null = null;
@@ -306,7 +300,7 @@
       const nextItems = column.items.slice();
       const destinationIndex = Math.max(
         0,
-        Math.min(event.index, nextItems.length),
+        Math.min(event.to.index, nextItems.length),
       );
       nextItems.splice(destinationIndex, 0, movedItem);
       return { ...column, items: nextItems };
@@ -408,7 +402,7 @@
         {#key boardVersion}
           <Engine id="snapsort-components-demo-canvas">
             <div class="board-frame">
-              <ContainerEuclidean
+              <Container
                 className="board"
                 config={{
                   direction: "row",
@@ -419,7 +413,7 @@
                 metadata={{ boardId: "component-kanban" }}
               >
                 {#each columns as column (column.id)}
-                  <ContainerEuclidean
+                  <Container
                     className={column.id === "backlog" ? "list-panel array-list" : "list-panel"}
                     bind:container={column.container}
                     config={{
@@ -431,11 +425,11 @@
                         clickMove: snapSortCubicAnimation,
                       },
                       callbacks: {
-                        onItemInsert: handleSnapSortDomInsert,
+                        onItemMove: handleSnapSortDomMove,
                         onItemRemove: handleSnapSortDomRemove,
                         onGhostInsert: handleSnapSortGhostInsert,
                         onGhostRemove: handleSnapSortGhostRemove,
-                        createItemGhost: createFrameworkGhost,
+                        createGhost: createFrameworkGhost,
                         awaitMutation: tick,
                       },
                     }}
@@ -449,7 +443,7 @@
 
                     {#each renderedColumnItems(column) as entry (entry.isGhost ? entry.id : entry.item.id)}
                       {#if entry.isGhost}
-                        <ItemEuclidean
+                        <Item
                           className="task-card ghost task-ghost"
                           itemObject={entry.ghostItem}
                         >
@@ -459,9 +453,9 @@
                               <span>{entry.detail}</span>
                             </div>
                           </div>
-                        </ItemEuclidean>
+                        </Item>
                       {:else}
-                        <ItemEuclidean
+                        <Item
                           className="task-card"
                           metadata={{
                             itemId: entry.item.id,
@@ -497,12 +491,12 @@
                               ><span class="material-symbols-outlined" aria-hidden="true">arrow_right_alt</span></button>
                             </div>
                           </div>
-                        </ItemEuclidean>
+                        </Item>
                       {/if}
                     {/each}
-                  </ContainerEuclidean>
+                  </Container>
                 {/each}
-              </ContainerEuclidean>
+              </Container>
             </div>
           </Engine>
         {/key}
@@ -518,9 +512,10 @@
       </div>
 
       <Engine id="snapsort-progressive-components-demo-canvas">
-        <ContainerProgressive
+        <Container
           className="progressive-root"
           config={{
+            mode: "progressive",
             direction: "column",
             name: "progressive-components-root",
             noDrop: true,
@@ -529,9 +524,10 @@
           metadata={{ boardId: "progressive-components" }}
         >
           {#each progressiveExamples as example (example.id)}
-            <ContainerProgressive
+            <Container
               className="progressive-example"
               config={{
+                mode: "progressive",
                 direction: "column",
                 name: `progressive-example-${example.id}`,
                 noDrop: true,
@@ -543,9 +539,10 @@
                 <span>{example.prompt}</span>
               </div>
 
-              <ContainerProgressive
+              <Container
                 className="sentence-answer-line"
                 config={{
+                  mode: "progressive",
                   direction: "row",
                   name: `progressive-answer-${example.id}`,
                   groupID: `progressive-${example.id}`,
@@ -560,18 +557,19 @@
                 metadata={{ zone: "answer", exampleId: example.id }}
               >
                 {#each example.answerTiles as tile (tile.id)}
-                  <ItemProgressive
+                  <Item
                     className="sentence-tile-wrapper"
                     metadata={{ itemId: tile.id }}
                   >
                     <button type="button" class="sentence-tile">{tile.text}</button>
-                  </ItemProgressive>
+                  </Item>
                 {/each}
-              </ContainerProgressive>
+              </Container>
 
-              <ContainerProgressive
+              <Container
                 className="sentence-bank-line"
                 config={{
+                  mode: "progressive",
                   direction: "row",
                   name: `progressive-bank-${example.id}`,
                   groupID: `progressive-${example.id}`,
@@ -586,17 +584,17 @@
                 metadata={{ zone: "bank", exampleId: example.id }}
               >
                 {#each example.bankTiles as tile (tile.id)}
-                  <ItemProgressive
+                  <Item
                     className="sentence-tile-wrapper"
                     metadata={{ itemId: tile.id }}
                   >
                     <button type="button" class="sentence-tile muted">{tile.text}</button>
-                  </ItemProgressive>
+                  </Item>
                 {/each}
-              </ContainerProgressive>
-            </ContainerProgressive>
+              </Container>
+            </Container>
           {/each}
-        </ContainerProgressive>
+        </Container>
       </Engine>
     </section>
 

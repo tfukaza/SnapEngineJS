@@ -1,6 +1,6 @@
 import type { DomProperty } from "@snap-engine/core";
 import { CollisionEngine, RectCollider } from "@snap-engine/core/collision";
-import type { ItemBase } from "./item";
+import type { Item as ItemBase } from "./item";
 import {
   childRelativeOffset,
   contentBoxOrigin,
@@ -15,6 +15,7 @@ import {
   type VirtualInsertion,
 } from "./layout";
 import type { ItemSnapshot } from "./snapshot";
+import type { DragSession } from "./drag/session";
 
 const TAG_COLLISIONS = "drop-collisions";
 const TAG_CANDIDATES = "drop-candidates";
@@ -1105,16 +1106,56 @@ function chooseInsertionCandidate(
   return best;
 }
 
+/**
+ * Filter out candidates whose container's `canDrop` callback rejects this
+ * drag. Evaluated once per distinct container (not once per candidate slot)
+ * so a container with many open gaps only pays for one callback invocation
+ * per drop-target resolution; `canDrop` must be cheap/pure.
+ */
+function filterCandidatesByCanDrop(
+  candidates: DropCandidate[],
+  item: ItemBase,
+  session: DragSession | null,
+): DropCandidate[] {
+  if (candidates.length === 0) return candidates;
+  const cache = new Map<ItemBase, boolean>();
+  const isAllowed = (candidate: DropCandidate): boolean => {
+    const container = candidate.container;
+    let allowed = cache.get(container);
+    if (allowed === undefined) {
+      const canDrop =
+        "callbacks" in container
+          ? (container as any).callbacks?.canDrop
+          : undefined;
+      allowed = canDrop
+        ? canDrop({
+            session,
+            item,
+            itemMetadata: item.metadata,
+            container,
+            containerMetadata: (container as any).metadata,
+            index: candidate.index,
+          }) !== false
+        : true;
+      cache.set(container, allowed);
+    }
+    return allowed;
+  };
+  return candidates.filter(isAllowed);
+}
+
 export function determineDropTarget(
   item: ItemBase,
   root: ItemBase,
+  session: DragSession | null = null,
 ): DropCandidate | null {
   const { candidates, dragCenterX, dragCenterY } = collectDropCandidates(
     item,
     root,
   );
-  const best = chooseEuclideanCandidate(candidates);
-  drawCandidateDebug(root, item, candidates, best, {
+  const allowed = filterCandidatesByCanDrop(candidates, item, session);
+  const best = chooseEuclideanCandidate(allowed);
+  drawCandidateDebug(root, item, allowed, best, {
     topCandidates: true,
     distanceOrigin: { x: dragCenterX, y: dragCenterY },
   });
@@ -1125,13 +1166,15 @@ export function determineDropTarget(
 export function determineProgressiveDropTarget(
   item: ItemBase,
   root: ItemBase,
+  session: DragSession | null = null,
 ): DropCandidate | null {
   const { candidates, dragCenterX, dragCenterY } = collectDropCandidates(
     item,
     root,
   );
-  const best = chooseProgressiveCandidate(candidates, dragCenterX, dragCenterY);
-  drawCandidateDebug(root, item, candidates, best);
+  const allowed = filterCandidatesByCanDrop(candidates, item, session);
+  const best = chooseProgressiveCandidate(allowed, dragCenterX, dragCenterY);
+  drawCandidateDebug(root, item, allowed, best);
   debugDropTargetTree(root, item);
   return best;
 }
@@ -1139,13 +1182,15 @@ export function determineProgressiveDropTarget(
 export function determineInsertionDropTarget(
   item: ItemBase,
   root: ItemBase,
+  session: DragSession | null = null,
 ): DropCandidate | null {
   const { candidates, pointerX, pointerY } = collectInsertionCandidates(
     item,
     root,
   );
-  const best = chooseInsertionCandidate(candidates, pointerX, pointerY);
-  drawCandidateDebug(root, item, candidates, best);
+  const allowed = filterCandidatesByCanDrop(candidates, item, session);
+  const best = chooseInsertionCandidate(allowed, pointerX, pointerY);
+  drawCandidateDebug(root, item, allowed, best);
   debugDropTargetTree(root, item);
   return best;
 }

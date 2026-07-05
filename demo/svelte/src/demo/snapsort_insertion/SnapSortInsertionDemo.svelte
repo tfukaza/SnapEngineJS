@@ -1,12 +1,9 @@
 <script lang="ts">
   import { Engine } from "@snap-engine/asset-base-svelte";
-  import {
-    ContainerInsertion,
-    ItemInsertion,
-  } from "@snap-engine/snapsort-svelte";
+  import { Container, Item } from "@snap-engine/snapsort-svelte";
   import type {
-    ContainerBase as SortContainer,
-    ItemInsertEvent,
+    Container as SortContainer,
+    ItemMoveEvent,
     ItemRemoveEvent,
   } from "@snap-engine/snapsort";
   import { tick } from "svelte";
@@ -99,9 +96,9 @@
     return removedItem;
   }
 
-  function handleInsert(event: ItemInsertEvent) {
+  function handleMove(event: ItemMoveEvent) {
     const itemId = event.itemMetadata.itemId;
-    const targetColumnId = event.containerMetadata.columnId;
+    const targetColumnId = event.to.containerMetadata.columnId;
     if (typeof itemId !== "string" || typeof targetColumnId !== "string") {
       return;
     }
@@ -114,7 +111,7 @@
       if (column.id !== targetColumnId) return column;
 
       const nextItems = column.items.slice();
-      nextItems.splice(Math.max(0, Math.min(event.index, nextItems.length)), 0, movedItem);
+      nextItems.splice(Math.max(0, Math.min(event.to.index, nextItems.length)), 0, movedItem);
       return { ...column, items: nextItems };
     });
   }
@@ -152,9 +149,10 @@
   </header>
 
   <Engine id="snapsort-insertion-demo-canvas">
-    <ContainerInsertion
+    <Container
       className="insertion-board"
       config={{
+        mode: "insertion",
         direction: "row",
         name: "insertion-board-root",
         noDrop: true,
@@ -163,15 +161,16 @@
       metadata={{ boardId: "insertion-demo" }}
     >
       {#each columns as column (column.id)}
-        <ContainerInsertion
+        <Container
           className="insertion-list"
           bind:container={column.container}
           config={{
+            mode: "insertion",
             direction: "column",
             groupID: "insertion-demo",
             name: `insertion-${column.id}`,
             callbacks: {
-              onItemInsert: handleInsert,
+              onItemMove: handleMove,
               onItemRemove: handleRemove,
               awaitMutation: tick,
             },
@@ -185,7 +184,7 @@
           </div>
 
           {#each column.items as item (item.id)}
-            <ItemInsertion className="insertion-card" metadata={{ itemId: item.id }}>
+            <Item className="insertion-card" metadata={{ itemId: item.id }}>
               <span
                 class="material-symbols-outlined file-icon"
                 class:folder-icon={item.kind === "folder"}
@@ -195,11 +194,11 @@
                 <strong>{item.title}</strong>
                 <span>{item.detail}</span>
               </div>
-            </ItemInsertion>
+            </Item>
           {/each}
-        </ContainerInsertion>
+        </Container>
       {/each}
-    </ContainerInsertion>
+    </Container>
   </Engine>
 </div>
 

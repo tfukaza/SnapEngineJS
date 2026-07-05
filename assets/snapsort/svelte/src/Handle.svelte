@@ -1,7 +1,7 @@
 <script lang="ts">
   import { getContext, onDestroy, onMount } from "svelte";
   import type {
-    ItemBase,
+    Item,
   } from "@snap-engine/snapsort";
 
   let {
@@ -14,7 +14,7 @@
     className?: string;
   } = $props();
 
-  const itemObject: ItemBase | null = getContext("item");
+  const itemObject: Item | null = getContext("item");
   let handleElement: HTMLElement | null = null;
 
   onMount(() => {

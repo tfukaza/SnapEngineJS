@@ -1,0 +1,217 @@
+import type { Container } from "../container";
+import type { Item } from "../item";
+import { resetDropSnapshotDebugDump, type DropCandidate } from "../algorithm";
+import type { DragLocation, GhostRect } from "../events";
+import { fireAwaitMutation, fireGhostInsert, fireGhostRemove } from "../mutation";
+import type { DragLifecycleStrategy } from "./lifecycle";
+import type { DragSession } from "./session";
+
+/**
+ * Floating insertion marker: insertion mode. Unlike the flow ghost, the
+ * marker is never attached to a container's item-ordered list — its logical
+ * position lives solely in `DragSession.pendingGhostTarget`, and its DOM
+ * element is absolutely positioned from the algorithm's computed rect. The
+ * dragged item itself never leaves its original DOM position during the drag.
+ */
+
+function updateInsertionGhostStyle(
+  container: Container,
+  ghostRect: GhostRect | null | undefined,
+  ghostItem: Item,
+) {
+  const ghostElement = ghostItem.element;
+  if (!ghostRect || !ghostElement) return;
+
+  const containerProp =
+    (container as unknown as Item).dragSnapshot?.box ??
+    container.currentDomProperty;
+  const markerInsetLeft = ghostRect.insetLeft ?? 0;
+  const markerInsetRight = ghostRect.insetRight ?? 0;
+  const left = ghostRect.x - containerProp.x + markerInsetLeft;
+  const top = ghostRect.y - containerProp.y;
+  const width = Math.max(
+    0,
+    ghostRect.width - markerInsetLeft - markerInsetRight,
+  );
+
+  ghostElement.dataset.snapsortGhost = "insertion";
+  ghostElement.style.position = "absolute";
+  ghostElement.style.left = `${left}px`;
+  ghostElement.style.top = `${top}px`;
+  ghostElement.style.width = `${width}px`;
+  ghostElement.style.height = "0px";
+  ghostElement.style.margin = "0";
+  ghostElement.style.borderRadius = "999px";
+  ghostElement.style.borderTop = "3px solid currentColor";
+  ghostElement.style.background = "currentColor";
+  ghostElement.style.color = "rgb(37, 99, 235)";
+  ghostElement.style.pointerEvents = "none";
+  ghostElement.style.boxSizing = "border-box";
+  ghostElement.style.zIndex = "999";
+}
+
+async function moveGhost(
+  session: DragSession,
+  container: Container,
+  index: number,
+  ghostRect: GhostRect | null | undefined,
+): Promise<void> {
+  const item = session.primaryItem;
+  let ghostItem = session.ghostItem;
+  if (!ghostRect || !container.element) return;
+
+  const firstRect = ghostItem?.element?.isConnected
+    ? ghostItem.element.getBoundingClientRect()
+    : null;
+
+  if (!ghostItem) {
+    ghostItem = item.createGhostItem(session, "marker", container, ghostRect);
+    if (!ghostItem) return;
+  }
+  session.ghostItem = ghostItem;
+  session.pendingGhostTarget = { ghostItem, container, index, ghostRect };
+
+  if (!ghostItem.element && !ghostItem.frameworkManagedGhostElement) {
+    return;
+  }
+
+  // The marker is intentionally never attached to the container's item list
+  // (see module doc); it always "appends" from the DOM's perspective.
+  fireGhostInsert(container, item, ghostItem, index, null, ghostRect, session, "marker");
+  await fireAwaitMutation(container);
+
+  // Core-created markers own their DOM element and are positioned/animated
+  // directly; framework-managed markers get geometry solely via `ghostRect`
+  // on the onGhostInsert event above.
+  const ghostElement = ghostItem.element;
+  if (!ghostElement || ghostItem.frameworkManagedGhostElement) return;
+
+  updateInsertionGhostStyle(container, ghostRect, ghostItem);
+  const lastRect = ghostElement.getBoundingClientRect();
+  item.playElementRectAnimation(
+    ghostItem,
+    firstRect,
+    lastRect,
+    ghostElement,
+    item.reorderAnimationConfig(container),
+    ghostItem,
+    { coordinateParent: container },
+  );
+}
+
+async function removeGhost(session: DragSession): Promise<void> {
+  const item = session.primaryItem;
+  const ghostItem = session.ghostItem;
+  const previousTarget = session.pendingGhostTarget;
+  session.pendingGhostTarget = null;
+  if (!ghostItem) return;
+
+  if (previousTarget?.container) {
+    fireGhostRemove(previousTarget.container, item, ghostItem, session, "marker");
+    await fireAwaitMutation(previousTarget.container);
+  } else {
+    // No known container to route onGhostRemove through (e.g. drag ended
+    // before a target was ever resolved) — fall back to a direct removal.
+    ghostItem.element?.remove();
+  }
+  ghostItem.destroy();
+  session.ghostItem = null;
+}
+
+function drop(session: DragSession): void {
+  const item = session.primaryItem;
+  const root = session.root;
+
+  item.schedule(
+    async () => {
+      const ghostItem = session.ghostItem;
+      const pendingGhostTarget =
+        session.pendingGhostTarget?.ghostItem === ghostItem
+          ? session.pendingGhostTarget
+          : null;
+
+      if (item.element) {
+        delete item.element.dataset.snapsortDragging;
+      }
+      item.writeTransform();
+
+      await removeGhost(session);
+
+      let destination: DragLocation | null = null;
+      if (pendingGhostTarget?.container) {
+        destination = {
+          container: pendingGhostTarget.container,
+          containerMetadata: pendingGhostTarget.container.metadata,
+          index: pendingGhostTarget.index,
+        };
+        item.moveItemToContainer(
+          pendingGhostTarget.container,
+          item,
+          pendingGhostTarget.index,
+          session,
+        );
+        await fireAwaitMutation(pendingGhostTarget.container);
+      }
+
+      root.clearDragSnapshotTree();
+      resetDropSnapshotDebugDump(item);
+      session.status = "ended";
+      root.dragSession = null;
+      root.callbacks?.onDragEnd?.({
+        session,
+        item,
+        itemMetadata: item.metadata,
+        element: item.element,
+        source: session.sources[0],
+        destination,
+      });
+    },
+    { stage: "WRITE_1", queueId: `drag-end-insertion-${item.id}` },
+  );
+}
+
+export class InsertionMarkerLifecycle implements DragLifecycleStrategy {
+  readonly ghostKind = "marker" as const;
+
+  async dragStart(session: DragSession): Promise<void> {
+    await session.updateDropTarget();
+  }
+
+  dragMove(_session: DragSession): void {
+    // The marker never moves the dragged item's own transform.
+  }
+
+  currentGhostLocation(
+    session: DragSession,
+  ): { container: Container; index: number } | null {
+    const ghostItem = session.ghostItem;
+    const pending = session.pendingGhostTarget;
+    if (!pending || pending.ghostItem !== ghostItem) return null;
+    return { container: pending.container, index: pending.index };
+  }
+
+  translateTargetIndex(_session: DragSession, target: DropCandidate): number {
+    return target.index;
+  }
+
+  async moveGhost(
+    session: DragSession,
+    container: Container,
+    index: number,
+    ghostRect: GhostRect | null | undefined,
+  ): Promise<void> {
+    await moveGhost(session, container, index, ghostRect);
+  }
+
+  async removeGhost(session: DragSession): Promise<void> {
+    await removeGhost(session);
+  }
+
+  afterSyncDropTarget(_session: DragSession): void {
+    // The marker never repositions the dragged item itself.
+  }
+
+  drop(session: DragSession): void {
+    drop(session);
+  }
+}

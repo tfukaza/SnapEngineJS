@@ -1,17 +1,14 @@
 <script lang="ts">
   import { tick } from "svelte";
   import { Engine } from "@snap-engine/asset-base-svelte";
-  import {
-    ContainerProgressive,
-    ItemProgressive,
-  } from "@snap-engine/snapsort-svelte";
+  import { Container, Item } from "@snap-engine/snapsort-svelte";
   import type {
-    ContainerBase as SortContainer,
+    Container as SortContainer,
     GhostCreateEvent,
     GhostInsertEvent,
     GhostRemoveEvent,
-    ItemBase,
-    ItemInsertEvent,
+    Item as ItemType,
+    ItemMoveEvent,
     ItemRemoveEvent,
   } from "@snap-engine/snapsort";
 
@@ -35,7 +32,7 @@
     zone: TileZone;
     index: number;
     originalItemId: string | null;
-    ghostItem: ItemBase;
+    ghostItem: ItemType;
     text: string;
   };
 
@@ -98,14 +95,14 @@
     result = null;
   }
 
-  function handleSnapSortDomInsert(event: ItemInsertEvent) {
+  function handleSnapSortDomMove(event: ItemMoveEvent) {
     const itemId = event.itemMetadata.itemId;
     if (typeof itemId !== "string") return;
 
-    const targetZone = event.containerMetadata.zone;
+    const targetZone = event.to.containerMetadata.zone;
     if (targetZone !== "answer" && targetZone !== "bank") return;
 
-    updateTileZone(itemId, targetZone, event.index);
+    updateTileZone(itemId, targetZone, event.to.index);
   }
 
   function handleSnapSortGhostInsert(event: GhostInsertEvent) {
@@ -265,16 +262,17 @@
 
     <div class="snapsort-engine" data-lang="ja">
       <Engine id="sentence-builder-snapsort-demo">
-        <ContainerProgressive
+        <Container
           className="sentence-builder-root"
-          config={{ direction: "column", name: "sentence-builder-root", noDrop: true }}
+          config={{ mode: "progressive", direction: "column", name: "sentence-builder-root", noDrop: true }}
           locked={true}
           metadata={{ purpose: "sentence-builder" }}
         >
-          <ContainerProgressive
+          <Container
             className="answer-area answer-box"
             bind:container={answerContainer}
             config={{
+              mode: "progressive",
               direction: "row",
               name: "sentence-answer",
               groupID: "sentence-builder",
@@ -285,11 +283,11 @@
                 clickMove: snapSortAnimation,
               },
               callbacks: {
-                onItemInsert: handleSnapSortDomInsert,
+                onItemMove: handleSnapSortDomMove,
                 onItemRemove: handleSnapSortDomRemove,
                 onGhostInsert: handleSnapSortGhostInsert,
                 onGhostRemove: handleSnapSortGhostRemove,
-                createItemGhost: createFrameworkGhost,
+                createGhost: createFrameworkGhost,
                 awaitMutation: tick,
               },
             }}
@@ -298,14 +296,14 @@
           >
             {#each renderedTiles("answer") as entry (entry.isGhost ? entry.id : entry.tile.id)}
               {#if entry.isGhost}
-                <ItemProgressive
+                <Item
                   className="tile-wrapper ghost tile-ghost"
                   itemObject={entry.ghostItem}
                 >
                   <button type="button" class="tile selected" tabindex="-1">{entry.text}</button>
-                </ItemProgressive>
+                </Item>
               {:else}
-                <ItemProgressive className="tile-wrapper" metadata={{ itemId: entry.tile.id }}>
+                <Item className="tile-wrapper" metadata={{ itemId: entry.tile.id }}>
                   <button
                     type="button"
                     class="tile selected"
@@ -319,18 +317,19 @@
                   >
                     {entry.tile.text}
                   </button>
-                </ItemProgressive>
+                </Item>
               {/if}
             {/each}
             {#if answerTiles.length === 0 && ghostEntry?.zone !== "answer"}
               <span class="placeholder">Drag tiles here or click to add</span>
             {/if}
-          </ContainerProgressive>
+          </Container>
 
-          <ContainerProgressive
+          <Container
             className="tile-bank-container tile-bank"
             bind:container={bankContainer}
             config={{
+              mode: "progressive",
               direction: "row",
               mainAxisAlign: "center",
               name: "sentence-bank",
@@ -342,11 +341,11 @@
                 clickMove: snapSortAnimation,
               },
               callbacks: {
-                onItemInsert: handleSnapSortDomInsert,
+                onItemMove: handleSnapSortDomMove,
                 onItemRemove: handleSnapSortDomRemove,
                 onGhostInsert: handleSnapSortGhostInsert,
                 onGhostRemove: handleSnapSortGhostRemove,
-                createItemGhost: createFrameworkGhost,
+                createGhost: createFrameworkGhost,
                 awaitMutation: tick,
               },
             }}
@@ -355,14 +354,14 @@
           >
             {#each renderedTiles("bank") as entry (entry.isGhost ? entry.id : entry.tile.id)}
               {#if entry.isGhost}
-                <ItemProgressive
+                <Item
                   className="tile-wrapper ghost tile-ghost"
                   itemObject={entry.ghostItem}
                 >
                   <button type="button" class="tile" tabindex="-1">{entry.text}</button>
-                </ItemProgressive>
+                </Item>
               {:else}
-                <ItemProgressive className="tile-wrapper" metadata={{ itemId: entry.tile.id }}>
+                <Item className="tile-wrapper" metadata={{ itemId: entry.tile.id }}>
                   <button
                     type="button"
                     class="tile"
@@ -376,11 +375,11 @@
                   >
                     {entry.tile.text}
                   </button>
-                </ItemProgressive>
+                </Item>
               {/if}
             {/each}
-          </ContainerProgressive>
-        </ContainerProgressive>
+          </Container>
+        </Container>
       </Engine>
     </div>
 

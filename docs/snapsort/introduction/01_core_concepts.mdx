@@ -18,7 +18,7 @@ A SnapSort surface has three parts:
 
 Each container has a direction and a group. Direction controls the layout flow. Group controls which containers can exchange items.
 
-`Container` and `Item` are aliases for the default Euclidean strategy. Use the Progressive variants for ordered token layouts where wrapped reading order matters.
+`Container` and `Item` are the only classes/components you need — every container picks its drag behavior with a `mode` config field instead of a separate class. `Item` never needs to know the mode; the same `Item` works under a container of any mode.
 
 ## Groups
 
@@ -37,16 +37,22 @@ Set `direction` to control the main flow:
 
 ## Sections
 
-- [Drag and Drop Strategies](/docs/snapsort/introduction/01_drag_drop_strategies)
 - [Svelte API](/docs/snapsort/reference/svelte)
 - [React API](/docs/snapsort/reference/react)
 
+## Drag and Drop Modes
 
-SnapSort treats drag and drop as a set of placement strategies. A strategy decides how the dragged item leaves normal layout, how the preview ghost is placed, and which container/index wins when the user drops.
+SnapSort treats drag and drop as a set of placement modes, selected per container with `config.mode`. A mode decides how the dragged item leaves normal layout, how the preview ghost is placed, and which container/index wins when the user drops.
+
+```ts
+new Container(engine, parent, { mode: "euclidean" | "progressive" | "insertion" });
+```
+
+`mode` defaults to `"euclidean"`, so it can be omitted for the common case.
 
 ## Euclidean
 
-Euclidean placement is the default strategy. During a drag, SnapSort creates a full-size ghost and evaluates valid insertion positions. The position whose final ghost center is closest to the dragged item wins.
+Euclidean placement is the default mode (`mode: "euclidean"`, or omit `mode` entirely). During a drag, SnapSort creates a full-size ghost and evaluates valid insertion positions. The position whose final ghost center is closest to the dragged item wins.
 
 Use Euclidean placement for general reorderable UI:
 
@@ -59,7 +65,7 @@ Euclidean placement is simple and direct, and the visible ghost usually matches 
 
 ## Progressive
 
-Progressive placement is designed for ordered, variable-size items. Instead of choosing the closest final ghost center, it treats the layout as a progression of placement regions and chooses the region occupied by the dragged item's center.
+Progressive placement (`mode: "progressive"`) is designed for ordered, variable-size items. Instead of choosing the closest final ghost center, it treats the layout as a progression of placement regions and chooses the region occupied by the dragged item's center.
 
 Use Progressive placement when users think in reading order:
 
@@ -70,11 +76,22 @@ Use Progressive placement when users think in reading order:
 
 Progressive placement is a better fit when the user's intent is "insert here in the sequence" rather than "move toward the nearest final box."
 
-## Choosing a Strategy
+## Insertion
 
-| Strategy | Best for | Class names |
-|----------|----------|-------------|
-| Euclidean | General list and board reordering. | `Container`, `Item`, `ContainerEuclidean`, `ItemEuclidean` |
-| Progressive | Ordered token layouts and wrapped sentence builders. | `ContainerProgressive`, `ItemProgressive` |
+Insertion placement (`mode: "insertion"`) replaces the full-size ghost with a thin floating marker line that shows exactly where the item will land, without reflowing the surrounding layout during the drag. The dragged item itself stays in its original DOM position until drop.
 
-Both strategies can be used in the same application. Keep a single drag tree on one strategy so the container and item behavior stay predictable.
+Use Insertion placement for line-marker UIs:
+
+- file/folder trees and outlines
+- nested, collapsible structures
+- any list where a full-size ghost reflowing sibling items would be visually noisy
+
+## Choosing a Mode
+
+| Mode | Best for | Ghost behavior |
+|------|----------|-----------------|
+| `"euclidean"` (default) | General list and board reordering. | Full-size flow-layout spacer, FLIP-animated. |
+| `"progressive"` | Ordered token layouts and wrapped sentence builders. | Full-size flow-layout spacer, FLIP-animated. |
+| `"insertion"` | File trees, outlines, and other line-marker UIs. | Thin floating marker line, absolutely positioned. |
+
+Mode is a property of the whole drag tree, resolved from the root container when a drag starts. Nest containers of the same mode; mixing modes within one tree is not supported.

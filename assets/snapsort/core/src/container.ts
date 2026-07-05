@@ -1,19 +1,9 @@
-import { BaseObject } from "@snap-engine/core";
-import {
-  ItemBase,
-  ItemEuclidean,
-  ItemInsertion,
-  ItemProgressive,
-  type ItemBaseConstructor,
-} from "./item";
-import type { ItemSnapshotMetadata } from "./snapshot";
-import {
-  determineDropTarget,
-  determineInsertionDropTarget,
-  determineProgressiveDropTarget,
-  type DropCandidate,
-} from "./algorithm";
+import { Item } from "./item";
+import type { ContainerCallbacks } from "./events";
+import { defaultCallbacks } from "./mutation";
 import type { LayoutMainAxisAlign } from "./layout";
+import type { SortMode, SortStrategy } from "./drag/drop-strategy";
+import type { DragSession } from "./drag/session";
 
 export interface AnimationConfig {
   timing_function?: string;
@@ -26,77 +16,11 @@ export interface ContainerAnimations {
   clickMove?: AnimationConfig | null;
 }
 
-export interface ItemRemoveEvent {
-  item: ItemBase;
-  itemMetadata: ItemSnapshotMetadata;
-  container: ContainerBase;
-  containerMetadata: Record<string, unknown>;
-}
-
-export interface ItemInsertEvent {
-  item: ItemBase;
-  itemMetadata: ItemSnapshotMetadata;
-  container: ContainerBase;
-  containerMetadata: Record<string, unknown>;
-  index: number;
-  beforeElement: HTMLElement | null;
-}
-
-export interface GhostInsertEvent {
-  original: ItemBase;
-  originalMetadata: ItemSnapshotMetadata;
-  ghostItem: ItemBase;
-  ghostMetadata: ItemSnapshotMetadata;
-  container: ContainerBase;
-  containerMetadata: Record<string, unknown>;
-  index: number;
-  beforeElement: HTMLElement | null;
-  ghostRect?: GhostRect | null;
-}
-
-export interface GhostRemoveEvent {
-  original: ItemBase;
-  originalMetadata: ItemSnapshotMetadata;
-  ghostItem: ItemBase;
-  ghostMetadata: ItemSnapshotMetadata;
-  container: ContainerBase;
-  containerMetadata: Record<string, unknown>;
-}
-
-export interface GhostRect {
-  x: number;
-  y: number;
-  width: number;
-  height: number;
-  insetLeft?: number;
-  insetRight?: number;
-}
-
-export interface GhostUpdateEvent {
-  original: ItemBase;
-  container: ContainerBase | null;
-  index: number;
-  ghostRect?: GhostRect | null;
-}
-
-export interface GhostCreateEvent {
-  container: ContainerBase;
-  original: ItemBase;
-  originalMetadata: ItemSnapshotMetadata;
-  ghostItem: ItemBase;
-  ghostRect?: GhostRect | null;
-}
-
-export interface ContainerCallbacks {
-  onItemInsert?: (event: ItemInsertEvent) => void;
-  onItemRemove?: (event: ItemRemoveEvent) => void;
-  onGhostInsert?: (event: GhostInsertEvent) => void;
-  onGhostRemove?: (event: GhostRemoveEvent) => void;
-  createItemGhost?: (event: GhostCreateEvent) => HTMLElement | void | null;
-  awaitMutation?: () => void | Promise<void>;
-}
-
 export interface ContainerConfig {
+  /** Which built-in drop-target/lifecycle strategy pair to use for this tree. Default `"euclidean"`. */
+  mode?: SortMode;
+  /** Advanced: a custom strategy pair, overriding `mode`. Lets consumers plug in their own drop-target resolution and/or drag lifecycle. */
+  strategy?: SortStrategy;
   groupID?: string;
   direction?: "column" | "row";
   mainAxisAlign?: LayoutMainAxisAlign;
@@ -108,81 +32,8 @@ export interface ContainerConfig {
   callbacks?: ContainerCallbacks;
 }
 
-function insertItemAt(event: ItemInsertEvent) {
-  event.container.element?.insertBefore(
-    event.item.element!,
-    event.beforeElement,
-  );
-}
-
-function removeItem(event: ItemRemoveEvent): void {
-  event.item.element?.remove();
-}
-
-function insertGhost(event: GhostInsertEvent) {
-  event.container.element?.insertBefore(
-    event.ghostItem.element!,
-    event.beforeElement,
-  );
-}
-
-function removeGhost(event: GhostRemoveEvent): void {
-  event.ghostItem.element?.remove();
-}
-
-function createItemGhost(event: GhostCreateEvent): HTMLElement {
-  const ghostElement = document.createElement("div");
-  ghostElement.id = "spacer";
-
-  // if (event.ghostRect) {
-  //   ghostElement.dataset.snapsortGhost = "insertion";
-  //   ghostElement.style.position = "absolute";
-  //   ghostElement.style.width = event.ghostRect.width + "px";
-  //   ghostElement.style.height = event.ghostRect.height + "px";
-  //   ghostElement.style.borderRadius = "999px";
-  //   ghostElement.style.background = "currentColor";
-  //   ghostElement.style.color = "rgb(37, 99, 235)";
-  //   ghostElement.style.pointerEvents = "none";
-  //   ghostElement.style.boxSizing = "border-box";
-  //   return ghostElement;
-  // }
-
-  const origProp =
-    event.original.dragSnapshot?.box ?? event.original.currentDomProperty;
-  ghostElement.style.width = origProp.width + "px";
-  ghostElement.style.height = origProp.height + "px";
-  ghostElement.style.margin = `${origProp.margin.top}px ${origProp.margin.right}px ${origProp.margin.bottom}px ${origProp.margin.left}px`;
-  ghostElement.style.boxSizing = "border-box";
-  ghostElement.classList.add("ghost");
-
-  return ghostElement;
-}
-
-function createInsertItemGhost(event: GhostCreateEvent): HTMLElement {
-  const ghostElement = document.createElement("div");
-  ghostElement.id = "spacer";
-  const { ghostRect } = event;
-  const insetLeft = ghostRect?.insetLeft ?? 0;
-  const insetRight = ghostRect?.insetRight ?? 0;
-  const width = ghostRect
-    ? Math.max(0, ghostRect.width - insetLeft - insetRight)
-    : 0;
-
-  ghostElement.dataset.snapsortGhost = "insertion";
-  ghostElement.style.position = "absolute";
-  ghostElement.style.width = `${width}px`;
-  ghostElement.style.height = "0px";
-  ghostElement.style.borderRadius = "999px";
-  ghostElement.style.borderTop = "3px solid currentColor";
-  ghostElement.style.background = "currentColor";
-  ghostElement.style.color = "rgb(37, 99, 235)";
-  ghostElement.style.pointerEvents = "none";
-  ghostElement.style.boxSizing = "border-box";
-
-  return ghostElement;
-}
-
 const defaultConfig: ContainerConfig = {
+  mode: "euclidean",
   groupID: "default-group",
   direction: "column",
   animation: {
@@ -191,36 +42,18 @@ const defaultConfig: ContainerConfig = {
     clickMove: { duration: 100, timing_function: "ease-out" },
   },
   noDrop: false,
-  callbacks: {
-    onItemInsert: insertItemAt,
-    onItemRemove: removeItem,
-    onGhostInsert: insertGhost,
-    onGhostRemove: removeGhost,
-    createItemGhost,
-  },
+  callbacks: defaultCallbacks,
 };
 
-// interface PendingMove {
-//   item: ItemBase;
-//   key: string;
-//   first: DOMRect | null;
-//   last: DOMRect | null;
-// }
-
-export class ContainerBase extends ItemBase {
-  #itemList: ItemBase[] = [];
+export class Container extends Item {
   #config: ContainerConfig;
   #depth: number = 0;
+  #itemList: Item[] = [];
 
-  // #rootContainer: ContainerBase | null = null;
+  /** The in-progress drag session for this tree, or null when nothing is being dragged. Only meaningful on the root container. */
+  dragSession: DragSession | null = null;
 
-  // #pendingMove: Array<PendingMove> = [];
-
-  constructor(
-    engine: any,
-    parent: ContainerBase | null,
-    config?: ContainerConfig,
-  ) {
+  constructor(engine: any, parent: Container | null, config?: ContainerConfig) {
     super(engine, parent);
     this.locked = true;
     this.#config = {
@@ -247,10 +80,6 @@ export class ContainerBase extends ItemBase {
       this.global.data["dragAndDropContainers"] = [];
     }
     this.global.data["dragAndDropContainers"].push(this);
-
-    // Until a parent is set, it is assumed that their
-    // current container is the root container.
-    // super.rootContainer = this;
   }
 
   get groupID() {
@@ -285,6 +114,14 @@ export class ContainerBase extends ItemBase {
     this.#config.dropArea = value;
   }
 
+  get mode(): SortMode {
+    return this.#config.mode ?? "euclidean";
+  }
+
+  set mode(value: SortMode) {
+    this.#config.mode = value;
+  }
+
   get configuration() {
     return this.#config;
   }
@@ -309,91 +146,12 @@ export class ContainerBase extends ItemBase {
     return this.#config;
   }
 
-  // setAllDepth(depth: number) {
-  //   this.#depth = depth;
-  //   // const effectiveRoot = depth === 0 ? this : root;
-  //   // this.setRootContainer(effectiveRoot);
-  //   for (const item of this.#itemList) {
-  //     if (item instanceof ContainerBase) {
-  //       item.setAllDepth(depth + 1);
-  //     }
-  //     // else {
-  //     //   item.setRootContainer(effectiveRoot);
-  //     // }
-  //   }
-  // }
-
   destroy() {
     if (this.global.data["dragAndDropContainers"]) {
       this.global.data["dragAndDropContainers"] = this.global.data[
         "dragAndDropContainers"
-      ].filter((c: ContainerBase) => c !== this);
+      ].filter((c: Container) => c !== this);
     }
     super.destroy();
-  }
-}
-
-export class ContainerEuclidean extends ContainerBase {
-  protected get dragDropEnabled(): boolean {
-    return true;
-  }
-
-  protected get ghostItemConstructor(): ItemBaseConstructor {
-    return ItemEuclidean;
-  }
-
-  protected resolveDropTarget(
-    item: ItemBase,
-    root: ItemBase,
-  ): DropCandidate | null {
-    return determineDropTarget(item, root);
-  }
-}
-
-export class ContainerProgressive extends ContainerBase {
-  protected get dragDropEnabled(): boolean {
-    return true;
-  }
-
-  protected get ghostItemConstructor(): ItemBaseConstructor {
-    return ItemProgressive;
-  }
-
-  protected resolveDropTarget(
-    item: ItemBase,
-    root: ItemBase,
-  ): DropCandidate | null {
-    return determineProgressiveDropTarget(item, root);
-  }
-}
-
-export class ContainerInsertion extends ContainerBase {
-  constructor(
-    engine: any,
-    parent: BaseObject | null,
-    config?: ContainerConfig,
-  ) {
-    super(engine, parent, config);
-    if (!config?.callbacks?.createItemGhost) {
-      this.config.callbacks!.createItemGhost = createInsertItemGhost;
-    }
-  }
-  protected get dragDropEnabled(): boolean {
-    return true;
-  }
-
-  protected get usesInsertionDropMarker(): boolean {
-    return true;
-  }
-
-  protected get ghostItemConstructor(): ItemBaseConstructor {
-    return ItemInsertion;
-  }
-
-  protected resolveDropTarget(
-    item: ItemBase,
-    root: ItemBase,
-  ): DropCandidate | null {
-    return determineInsertionDropTarget(item, root);
   }
 }
