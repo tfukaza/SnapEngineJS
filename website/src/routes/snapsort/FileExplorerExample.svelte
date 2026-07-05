@@ -50,6 +50,8 @@
 
   let tree = $state<FileExplorerNodeData[]>(structuredClone(initialTree));
   let treeRenderVersion = $state(0);
+  let selectedIds = $state<Set<string>>(new Set());
+  let lastClickedId: string | null = null;
 
   function cloneNode(node: FileExplorerNodeData): FileExplorerNodeData {
     return {
@@ -152,29 +154,90 @@
     treeRenderVersion += 1;
   }
 
+  /** Visible node ids in on-screen order (collapsed folders' children excluded), for shift-click range selection. */
+  function flattenVisibleIds(nodes: FileExplorerNodeData[]): string[] {
+    const ids: string[] = [];
+    for (const node of nodes) {
+      ids.push(node.id);
+      if (node.kind === "folder" && node.open !== false && node.children) {
+        ids.push(...flattenVisibleIds(node.children));
+      }
+    }
+    return ids;
+  }
+
+  function handleSelectNode(nodeId: string, event: MouseEvent) {
+    if (event.shiftKey && lastClickedId) {
+      const order = flattenVisibleIds(tree);
+      const anchorIndex = order.indexOf(lastClickedId);
+      const targetIndex = order.indexOf(nodeId);
+      if (anchorIndex !== -1 && targetIndex !== -1) {
+        const [start, end] =
+          anchorIndex < targetIndex ? [anchorIndex, targetIndex] : [targetIndex, anchorIndex];
+        selectedIds = new Set(order.slice(start, end + 1));
+      }
+      return;
+    }
+
+    if (event.metaKey || event.ctrlKey) {
+      const next = new Set(selectedIds);
+      if (next.has(nodeId)) {
+        next.delete(nodeId);
+      } else {
+        next.add(nodeId);
+      }
+      selectedIds = next;
+      lastClickedId = nodeId;
+      return;
+    }
+
+    selectedIds = new Set([nodeId]);
+    lastClickedId = nodeId;
+  }
+
+  /**
+   * Multi-item move: `event.items`/`event.itemsMetadata` carry the whole
+   * dragged run (ordered, length 1 for a single-item drag). Extract every
+   * dragged node from wherever it currently lives first, then insert the
+   * whole run as one contiguous block at `event.to.index` — matching how
+   * SnapSort computes that index (post-removal of the moved items).
+   */
   function handleMove(event: ItemMoveEvent) {
-    const itemId = event.itemMetadata.itemId;
     const containerId = event.to.containerMetadata.containerId;
-    if (typeof itemId !== "string" || typeof containerId !== "string") return;
+    if (typeof containerId !== "string") return;
 
-    const extracted = extractNode(tree, itemId);
-    if (!extracted.node) return;
-    if (containsNode(extracted.node, containerId)) return;
+    let nextTree = tree;
+    const extractedNodes: FileExplorerNodeData[] = [];
+    for (const itemMetadata of event.itemsMetadata) {
+      const itemId = itemMetadata.itemId;
+      if (typeof itemId !== "string") continue;
+      const extracted = extractNode(nextTree, itemId);
+      if (!extracted.node) continue;
+      nextTree = extracted.nodes;
+      extractedNodes.push(extracted.node);
+    }
+    if (extractedNodes.length === 0) return;
+    if (extractedNodes.some((node) => containsNode(node, containerId))) return;
 
-    tree = insertNode(extracted.nodes, containerId, event.to.index, extracted.node);
+    extractedNodes.forEach((node, i) => {
+      nextTree = insertNode(nextTree, containerId, event.to.index + i, node);
+    });
+    tree = nextTree;
     treeRenderVersion += 1;
   }
 
-  /** Block dropping a folder into its own descendant (or itself). */
+  /** Block dropping a folder into its own descendant (or itself), for every dragged item. */
   function canDropInFolder(event: CanDropEvent): boolean {
-    const itemId = event.itemMetadata.itemId;
     const containerId = event.containerMetadata.containerId;
-    if (typeof itemId !== "string" || typeof containerId !== "string") {
-      return true;
+    if (typeof containerId !== "string") return true;
+
+    for (const itemMetadata of event.itemsMetadata) {
+      const itemId = itemMetadata.itemId;
+      if (typeof itemId !== "string") continue;
+      const draggedNode = findNode(tree, itemId);
+      if (draggedNode && containsNode(draggedNode, containerId)) return false;
     }
-    const draggedNode = findNode(tree, itemId);
-    if (!draggedNode) return true;
-    return !containsNode(draggedNode, containerId);
+    return true;
   }
 
   function createFileTreeGhost(event: GhostCreateEvent): HTMLElement {
@@ -236,7 +299,13 @@
         }}
       >
         {#each tree as node (node.id)}
-          <FileExplorerNode {node} {callbacks} onToggleFolder={toggleFolderOpen} />
+          <FileExplorerNode
+            {node}
+            {callbacks}
+            onToggleFolder={toggleFolderOpen}
+            {selectedIds}
+            onSelectNode={handleSelectNode}
+          />
         {/each}
       </Container>
     {/key}
@@ -343,6 +412,12 @@
   :global(.tree-folder.active > .tree-row) {
     background: #dbeafe;
     color: #0f172a;
+  }
+
+  :global(.snapsort-item.tree-row.selected),
+  :global(.tree-row.folder-row.selected) {
+    background: #e0e7ff;
+    box-shadow: inset 0 0 0 1px #818cf8;
   }
 
   :global(.snapsort-item.tree-row[data-snapsort-dragging="true"]),

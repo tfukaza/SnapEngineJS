@@ -23,11 +23,13 @@ export interface ItemProps {
   className?: string;
   itemObject?: ItemObject | null;
   metadata?: ItemSnapshotMetadata;
+  /** Consumer-owned selection flag — see `Item.selected` in `@snap-engine/snapsort`. */
+  selected?: boolean;
   style?: CSSProperties;
 }
 
 export const Item = forwardRef<ItemObject, ItemProps>(function SnapSortItem(
-  { children, className = "", itemObject = null, metadata = {}, style },
+  { children, className = "", itemObject = null, metadata = {}, selected = false, style },
   ref,
 ) {
   const engine = useSnapSortEngine();
@@ -40,6 +42,7 @@ export const Item = forwardRef<ItemObject, ItemProps>(function SnapSortItem(
   }
   const item = itemRef.current;
   item.metadata = metadata;
+  item.selected = selected;
 
   useImperativeHandle(ref, () => item, [item]);
 

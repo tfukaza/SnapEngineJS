@@ -23,7 +23,7 @@ import type {
 
 export function fireItemInsert(
   container: Container,
-  item: Item,
+  items: Item[],
   index: number,
   beforeElement: HTMLElement | null,
   session: DragSession | null,
@@ -34,8 +34,10 @@ export function fireItemInsert(
   }
   const event: ItemInsertEvent = {
     session,
-    item,
-    itemMetadata: item.metadata,
+    item: items[0],
+    itemMetadata: items[0].metadata,
+    items,
+    itemsMetadata: items.map((item) => item.metadata),
     container,
     containerMetadata: container.metadata,
     index,
@@ -51,7 +53,7 @@ export function fireItemInsert(
  */
 export function fireItemCopy(
   container: Container,
-  item: Item,
+  items: Item[],
   index: number,
   beforeElement: HTMLElement | null,
   session: DragSession | null,
@@ -64,8 +66,10 @@ export function fireItemCopy(
   }
   const event: ItemCopyEvent = {
     session,
-    item,
-    itemMetadata: item.metadata,
+    item: items[0],
+    itemMetadata: items[0].metadata,
+    items,
+    itemsMetadata: items.map((item) => item.metadata),
     container,
     containerMetadata: container.metadata,
     index,
@@ -76,7 +80,7 @@ export function fireItemCopy(
 
 export function fireItemRemove(
   container: Container,
-  item: Item,
+  items: Item[],
   session: DragSession | null,
 ): void {
   const onRemove = container.callbacks?.onItemRemove;
@@ -85,8 +89,10 @@ export function fireItemRemove(
   }
   const event: ItemRemoveEvent = {
     session,
-    item,
-    itemMetadata: item.metadata,
+    item: items[0],
+    itemMetadata: items[0].metadata,
+    items,
+    itemsMetadata: items.map((item) => item.metadata),
     container,
     containerMetadata: container.metadata,
   };
@@ -94,15 +100,16 @@ export function fireItemRemove(
 }
 
 /**
- * Fire the semantic move event on the destination container. Falls back to
- * the insert-only primitive path when no `onItemMove` is registered, which
- * matches the pre-refactor behavior (a DOM `insertBefore` inherently moves
- * the node, so no explicit remove is needed on the source).
+ * Fire the semantic move event on the destination container for the whole
+ * dragged run in one call. Falls back to the insert-only primitive path when
+ * no `onItemMove` is registered, which matches the pre-refactor behavior (a
+ * DOM `insertBefore` inherently moves the node, so no explicit remove is
+ * needed on the source).
  */
 export function fireItemMove(
-  from: DragLocation,
+  froms: DragLocation[],
   to: DragLocation,
-  item: Item,
+  items: Item[],
   beforeElement: HTMLElement | null,
   session: DragSession | null,
 ): void {
@@ -110,16 +117,19 @@ export function fireItemMove(
   if (onMove) {
     const event: ItemMoveEvent = {
       session,
-      item,
-      itemMetadata: item.metadata,
-      from,
+      item: items[0],
+      itemMetadata: items[0].metadata,
+      items,
+      itemsMetadata: items.map((item) => item.metadata),
+      from: froms[0],
       to,
+      froms,
       beforeElement,
     };
     onMove(event);
     return;
   }
-  fireItemInsert(to.container, item, to.index, beforeElement, session);
+  fireItemInsert(to.container, items, to.index, beforeElement, session);
 }
 
 /**
@@ -169,32 +179,36 @@ export function fireItemSwap(
       : (container.itemOrderedList[index + 1]?.element ?? null);
 
   fireItemMove(
-    {
-      container: a.container,
-      containerMetadata: a.container.metadata,
-      index: a.index,
-    },
+    [
+      {
+        container: a.container,
+        containerMetadata: a.container.metadata,
+        index: a.index,
+      },
+    ],
     {
       container: b.container,
       containerMetadata: b.container.metadata,
       index: b.index,
     },
-    a.item,
+    [a.item],
     beforeElementFor(b.container, b.index),
     session,
   );
   fireItemMove(
-    {
-      container: b.container,
-      containerMetadata: b.container.metadata,
-      index: b.index,
-    },
+    [
+      {
+        container: b.container,
+        containerMetadata: b.container.metadata,
+        index: b.index,
+      },
+    ],
     {
       container: a.container,
       containerMetadata: a.container.metadata,
       index: a.index,
     },
-    b.item,
+    [b.item],
     beforeElementFor(a.container, a.index),
     session,
   );
@@ -324,14 +338,18 @@ export async function fireAwaitMutation(
 // --- Default DOM implementations, merged with user config in Container's constructor. ---
 
 function defaultInsertItem(event: ItemInsertEvent) {
-  event.container.element?.insertBefore(
-    event.item.element!,
-    event.beforeElement,
-  );
+  // Insert every item before the same anchor, in run order: each item lands
+  // immediately before the anchor and after whichever run member was just
+  // inserted, so the DOM ends up in `items` order.
+  for (const item of event.items) {
+    event.container.element?.insertBefore(item.element!, event.beforeElement);
+  }
 }
 
 function defaultRemoveItem(event: ItemRemoveEvent): void {
-  event.item.element?.remove();
+  for (const item of event.items) {
+    item.element?.remove();
+  }
 }
 
 function defaultInsertGhost(event: GhostInsertEvent) {
@@ -351,8 +369,13 @@ function defaultCreateFlowGhost(event: GhostCreateEvent): HTMLElement {
 
   const origProp =
     event.original.dragSnapshot?.box ?? event.original.currentDomProperty;
-  ghostElement.style.width = origProp.width + "px";
-  ghostElement.style.height = origProp.height + "px";
+  // `ghostRect`, when present, is the whole dragged group's size (see
+  // DragSession.groupDims) — a single item's snapshot box for `items.length
+  // === 1`, so this degenerates to the original behavior in that case.
+  const width = event.ghostRect?.width ?? origProp.width;
+  const height = event.ghostRect?.height ?? origProp.height;
+  ghostElement.style.width = width + "px";
+  ghostElement.style.height = height + "px";
   ghostElement.style.margin = `${origProp.margin.top}px ${origProp.margin.right}px ${origProp.margin.bottom}px ${origProp.margin.left}px`;
   ghostElement.style.boxSizing = "border-box";
   ghostElement.classList.add("ghost");

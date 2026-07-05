@@ -29,6 +29,8 @@ export interface ContainerProps {
   config: ContainerConfig;
   containerObject?: ContainerObject | null;
   locked?: boolean;
+  /** Consumer-owned selection flag — see `Item.selected` in `@snap-engine/snapsort`. Only meaningful when `locked` is `false`. */
+  selected?: boolean;
   metadata?: Record<string, unknown>;
   style?: CSSProperties;
 }
@@ -95,6 +97,7 @@ export const Container = forwardRef<ContainerObject, ContainerProps>(
       config,
       containerObject = null,
       locked = true,
+      selected = false,
       metadata = {},
       style,
     },
@@ -113,6 +116,7 @@ export const Container = forwardRef<ContainerObject, ContainerProps>(
     const mainAxisAlign = config.mainAxisAlign ?? "start";
     const defaultAwaitMutation = useSnapSortAwaitMutation();
     container.locked = locked;
+    container.selected = selected;
     container.metadata = metadata;
     container.config.mode = config.mode ?? container.config.mode;
     container.config.strategy = config.strategy ?? container.config.strategy;

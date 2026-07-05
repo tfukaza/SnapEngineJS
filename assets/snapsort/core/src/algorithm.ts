@@ -50,6 +50,15 @@ export interface DropCandidate {
   ghostCenterX: number;
   ghostCenterY: number;
   distance: number;
+  /**
+   * Sum of euclidean distances between each dragged member's own current
+   * drag position and its projected slot center within this candidate's
+   * (possibly group-sized) placement rect. Used by euclidean mode's chooser
+   * so a multi-item drag picks the candidate that's the best fit for the
+   * *whole* run, not just the pressed item. Equal to `distance` when only
+   * one item is being dragged.
+   */
+  groupDistance: number;
   priority: number;
   lineIndex: number;
   dragLineIndex: number;
@@ -75,6 +84,58 @@ function getDirection(node: ItemBase): "column" | "row" {
 
 function euclidean(x1: number, y1: number, x2: number, y2: number): number {
   return Math.sqrt((x1 - x2) ** 2 + (y1 - y2) ** 2);
+}
+
+/**
+ * Sum of euclidean distances between each dragged member's own tracked drag
+ * position (its original box translated by the shared pointer delta — see
+ * `Item.dragPositionX/Y`) and its projected slot center within `rect`
+ * (stacked in `session.items` order along the candidate container's main
+ * axis). Degenerates to the single-item ghost-center distance when there's
+ * only one dragged item, so euclidean mode's scoring is unchanged for
+ * single-item drags.
+ */
+function groupCandidateDistance(
+  session: DragSession | null,
+  rect: Rect,
+  isColumn: boolean,
+): number {
+  const only = session?.primaryItem;
+  if (!session || session.items.length <= 1) {
+    const cx = rect.x + rect.width / 2;
+    const cy = rect.y + rect.height / 2;
+    if (!only) return 0;
+    const box = only.dragSnapshot?.box;
+    const w = box?.width ?? rect.width;
+    const h = box?.height ?? rect.height;
+    const dcx = only.dragPositionX + w / 2;
+    const dcy = only.dragPositionY + h / 2;
+    return euclidean(cx, cy, dcx, dcy);
+  }
+
+  let cumulative = 0;
+  let sum = 0;
+  for (const member of session.items) {
+    const box = member.dragSnapshot?.box;
+    const w = box?.width ?? 0;
+    const h = box?.height ?? 0;
+    const slotCenterX = isColumn
+      ? rect.x + rect.width / 2
+      : rect.x + cumulative + w / 2;
+    const slotCenterY = isColumn
+      ? rect.y + cumulative + h / 2
+      : rect.y + rect.height / 2;
+    const memberDragCenterX = member.dragPositionX + w / 2;
+    const memberDragCenterY = member.dragPositionY + h / 2;
+    sum += euclidean(
+      slotCenterX,
+      slotCenterY,
+      memberDragCenterX,
+      memberDragCenterY,
+    );
+    cumulative += isColumn ? h : w;
+  }
+  return sum;
 }
 
 function containsPoint(rect: Rect, x: number, y: number): boolean {
@@ -316,7 +377,7 @@ export function findHoveredItem(
   let best: { item: ItemBase; area: number } | null = null;
   try {
     for (const child of dragSnapshotItems(container)) {
-      if (child === draggedItem || child.isGhost) continue;
+      if (session.itemSet.has(child) || child.isGhost) continue;
       const collider = hitboxColliderForItem(child);
       if (!collider) continue;
       try {
@@ -478,6 +539,7 @@ export function virtualLayoutRecursive(
   dragGhostH: number,
   dragCenterX: number,
   dragCenterY: number,
+  session: DragSession | null = null,
 ): { candidates: DropCandidate[]; endX: number; endY: number } {
   const snapshot = createLayoutSnapshot(container);
   const draggedBox = requireDragSnapshotBox(draggedItem);
@@ -494,11 +556,12 @@ export function virtualLayoutRecursive(
     width: dragGhostW,
     height: dragGhostH,
   };
+  const excludeValues = session ? session.itemSet : new Set([draggedItem]);
   return virtualLayoutRecursiveFromSnapshot(
     snapshot.root,
     startX,
     startY,
-    { excludeValues: new Set([draggedItem]) },
+    { excludeValues },
     draggedBox,
     dragGhostW,
     dragGhostH,
@@ -507,6 +570,7 @@ export function virtualLayoutRecursive(
     dragRect,
     activeInsertion ? [activeInsertion] : [],
     0,
+    session,
   );
 }
 
@@ -523,6 +587,7 @@ function virtualLayoutRecursiveFromSnapshot(
   dragRect: Rect,
   baseInsertions: VirtualInsertion<ItemBase>[] = [],
   treeDepth = 0,
+  session: DragSession | null = null,
 ): { candidates: DropCandidate[]; endX: number; endY: number } {
   const container = containerSnapshot.value;
   const axes = flowAxesForDirection(containerSnapshot.direction);
@@ -565,6 +630,25 @@ function virtualLayoutRecursiveFromSnapshot(
     TAG_LAYOUT,
   );
 
+  // When dragging a group, the virtual box reserved in the layout simulation
+  // (and thus the candidate's placement rect) should be the whole group's
+  // direction-aware size for this container, not just the pressed item's —
+  // the collapsed run occupies one contiguous group-sized slot. Degenerates
+  // to the plain drag ghost size for a single-item drag.
+  const groupDims = session?.groupDims;
+  const entryWidth =
+    groupDims && session && session.items.length > 1
+      ? isColumn
+        ? groupDims.maxW
+        : groupDims.sumW
+      : dragGhostW;
+  const entryHeight =
+    groupDims && session && session.items.length > 1
+      ? isColumn
+        ? groupDims.sumH
+        : groupDims.maxH
+      : dragGhostH;
+
   const makeCandidate = (
     index: number,
     fallbackPosition: { x: number; y: number },
@@ -573,8 +657,8 @@ function virtualLayoutRecursiveFromSnapshot(
       container: containerSnapshot,
       index,
       entry: {
-        width: dragGhostW,
-        height: dragGhostH,
+        width: entryWidth,
+        height: entryHeight,
         margin: draggedBox.margin,
       },
     };
@@ -587,8 +671,8 @@ function virtualLayoutRecursiveFromSnapshot(
     });
     const rect = layout.virtualRects.get(insertion) ?? {
       ...fallbackPosition,
-      width: dragGhostW,
-      height: dragGhostH,
+      width: entryWidth,
+      height: entryHeight,
     };
     const placementRect = rect;
     const ghostCenterX = rect.x + rect.width / 2;
@@ -604,6 +688,7 @@ function virtualLayoutRecursiveFromSnapshot(
       ghostCenterX,
       ghostCenterY,
       distance: euclidean(ghostCenterX, ghostCenterY, dragCenterX, dragCenterY),
+      groupDistance: groupCandidateDistance(session, rect, isColumn),
       priority: 0,
       lineIndex,
       dragLineIndex,
@@ -685,6 +770,7 @@ function virtualLayoutRecursiveFromSnapshot(
           dragRect,
           baseInsertions,
           treeDepth + 1,
+          session,
         );
         candidates.push(...childResult.candidates);
       }
@@ -714,6 +800,7 @@ function virtualLayoutRecursiveFromSnapshot(
 function collectDropCandidates(
   item: ItemBase,
   root: ItemBase,
+  session: DragSession | null = null,
 ): {
   candidates: DropCandidate[];
   dragCenterX: number;
@@ -738,6 +825,7 @@ function collectDropCandidates(
     dragGhostH,
     dragCenterX,
     dragCenterY,
+    session,
   );
 
   const dragRect = {
@@ -755,12 +843,17 @@ function collectDropCandidates(
   return { candidates, dragCenterX, dragCenterY, dragGhostW, dragGhostH };
 }
 
+/**
+ * Choose the candidate with the least *sum* of per-member distances (see
+ * `groupCandidateDistance`) — for a single dragged item this is identical to
+ * choosing by `distance`.
+ */
 function chooseEuclideanCandidate(
   candidates: DropCandidate[],
 ): DropCandidate | null {
   let best: DropCandidate | null = null;
   for (const candidate of candidates) {
-    if (!best || candidate.distance < best.distance) {
+    if (!best || candidate.groupDistance < best.groupDistance) {
       best = candidate;
     }
   }
@@ -1100,6 +1193,7 @@ function insertionMarkerRect(
 function collectInsertionCandidates(
   item: ItemBase,
   root: ItemBase,
+  session: DragSession | null = null,
 ): {
   candidates: DropCandidate[];
   pointerX: number;
@@ -1112,14 +1206,15 @@ function collectInsertionCandidates(
   const pointerY = pointer?.y ?? item.dragPositionY + dragProp.height / 2;
   const sourceParent = "parent" in item ? (item as any).parent : null;
   const sourceGroupID = sourceParent ? groupIDOf(sourceParent) : undefined;
+  const excludeSet = session ? session.itemSet : new Set([item]);
   const candidates: DropCandidate[] = [];
 
   const visit = (container: ItemBase, treeDepth = 0) => {
-    if (container === item) return;
+    if (excludeSet.has(container)) return;
 
     const snapshotOrderedList = dragSnapshotItems(container);
     const children = snapshotOrderedList.filter(
-      (child) => child !== item && !child.isGhost,
+      (child) => !excludeSet.has(child) && !child.isGhost,
     );
     const snapshotChildren = snapshotOrderedList.filter(
       (child) => !child.isGhost,
@@ -1149,6 +1244,7 @@ function collectInsertionCandidates(
           ghostCenterX,
           ghostCenterY,
           distance: distanceToRect(ghostRect, pointerX, pointerY),
+          groupDistance: distanceToRect(ghostRect, pointerX, pointerY),
           priority: 0,
           lineIndex: index,
           dragLineIndex: index,
@@ -1228,11 +1324,14 @@ function filterCandidatesByCanDrop(
         "callbacks" in container
           ? (container as any).callbacks?.canDrop
           : undefined;
+      const groupItems = session?.items ?? [item];
       allowed = canDrop
         ? canDrop({
             session,
             item,
             itemMetadata: item.metadata,
+            items: groupItems,
+            itemsMetadata: groupItems.map((member) => member.metadata),
             container,
             containerMetadata: (container as any).metadata,
             index: candidate.index,
@@ -1253,6 +1352,7 @@ export function determineDropTarget(
   const { candidates, dragCenterX, dragCenterY } = collectDropCandidates(
     item,
     root,
+    session,
   );
   const allowed = filterCandidatesByCanDrop(candidates, item, session);
   const best = chooseEuclideanCandidate(allowed);
@@ -1272,6 +1372,7 @@ export function determineProgressiveDropTarget(
   const { candidates, dragCenterX, dragCenterY } = collectDropCandidates(
     item,
     root,
+    session,
   );
   const allowed = filterCandidatesByCanDrop(candidates, item, session);
   const best = chooseProgressiveCandidate(allowed, dragCenterX, dragCenterY);
@@ -1288,6 +1389,7 @@ export function determineInsertionDropTarget(
   const { candidates, pointerX, pointerY } = collectInsertionCandidates(
     item,
     root,
+    session,
   );
   const allowed = filterCandidatesByCanDrop(candidates, item, session);
   const best = chooseInsertionCandidate(allowed, pointerX, pointerY);
@@ -1333,6 +1435,12 @@ export function determineSwapDropTarget(
             ghostCenterX: centerX,
             ghostCenterY: centerY,
             distance: euclidean(
+              centerX,
+              centerY,
+              session.pointer.x,
+              session.pointer.y,
+            ),
+            groupDistance: euclidean(
               centerX,
               centerY,
               session.pointer.x,

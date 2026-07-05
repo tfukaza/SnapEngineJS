@@ -12,12 +12,16 @@
     style = "",
     className = "",
     metadata = {},
+    selected = false,
+    onclick,
     itemObject: providedItemObject = null,
   }: {
     children: any;
     style?: string;
     className?: string;
     metadata?: ItemSnapshotMetadata;
+    selected?: boolean;
+    onclick?: (event: MouseEvent) => void;
     itemObject?: SnapSortItem | null;
   } = $props();
 
@@ -32,6 +36,10 @@
     itemObject.metadata = metadata;
   }
 
+  $effect(() => {
+    itemObject.selected = selected;
+  });
+
   onDestroy(() => {
     if (ownsItem) {
       itemObject.destroy();
@@ -43,6 +51,7 @@
   class="snapsort-item {className}"
   bind:this={itemObject.element}
   {style}
+  {onclick}
 >
   {@render children()}
 </div>

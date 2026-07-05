@@ -35,6 +35,9 @@ export interface ItemRemoveEvent {
   session: DragSession | null;
   item: Item;
   itemMetadata: ItemSnapshotMetadata;
+  /** The full removed run, ordered. `item === items[0]` (single-item case: length 1). */
+  items: Item[];
+  itemsMetadata: ItemSnapshotMetadata[];
   container: Container;
   containerMetadata: Record<string, unknown>;
 }
@@ -43,9 +46,14 @@ export interface ItemInsertEvent {
   session: DragSession | null;
   item: Item;
   itemMetadata: ItemSnapshotMetadata;
+  /** The full inserted run, ordered. `item === items[0]` (single-item case: length 1). */
+  items: Item[];
+  itemsMetadata: ItemSnapshotMetadata[];
   container: Container;
   containerMetadata: Record<string, unknown>;
+  /** Index of the first item in the run. */
   index: number;
+  /** Element the whole run is inserted before (all items share one insertion point). */
   beforeElement: HTMLElement | null;
 }
 
@@ -62,9 +70,14 @@ export interface ItemCopyEvent {
   session: DragSession | null;
   item: Item;
   itemMetadata: ItemSnapshotMetadata;
+  /** The full copied run, ordered. `item === items[0]` (single-item case: length 1). */
+  items: Item[];
+  itemsMetadata: ItemSnapshotMetadata[];
   container: Container;
   containerMetadata: Record<string, unknown>;
+  /** Index of the first item in the run. */
   index: number;
+  /** Element the whole run is inserted before (all items share one insertion point). */
   beforeElement: HTMLElement | null;
 }
 
@@ -103,8 +116,14 @@ export interface ItemMoveEvent {
   session: DragSession | null;
   item: Item;
   itemMetadata: ItemSnapshotMetadata;
+  /** The full moved run, ordered by original (document) index. `item === items[0]` (single-item case: length 1). */
+  items: Item[];
+  itemsMetadata: ItemSnapshotMetadata[];
   from: DragLocation;
   to: DragLocation;
+  /** Each item's source location, parallel to `items`. `from === froms[0]`. */
+  froms: DragLocation[];
+  /** Element the whole run is inserted before (all items share one insertion point). */
   beforeElement: HTMLElement | null;
 }
 
@@ -128,6 +147,8 @@ export interface GhostCreateEvent {
   container: Container;
   original: Item;
   originalMetadata: ItemSnapshotMetadata;
+  /** The full dragged run this ghost represents, ordered. `original === items[0]` (single-item case: length 1). */
+  items: Item[];
   ghostItem: Item;
   ghostRect?: GhostRect | null;
 }
@@ -173,16 +194,26 @@ export interface DragStartEvent {
   session: DragSession;
   item: Item;
   itemMetadata: ItemSnapshotMetadata;
+  /** The full dragged run, ordered. `item === items[0]` (single-item case: length 1). */
+  items: Item[];
+  itemsMetadata: ItemSnapshotMetadata[];
   element: HTMLElement | null;
   source: DragLocation;
+  /** Each item's source location, parallel to `items`. `source === sources[0]`. */
+  sources: DragLocation[];
 }
 
 export interface DragEndEvent {
   session: DragSession;
   item: Item;
   itemMetadata: ItemSnapshotMetadata;
+  /** The full dragged run, ordered. `item === items[0]` (single-item case: length 1). */
+  items: Item[];
+  itemsMetadata: ItemSnapshotMetadata[];
   element: HTMLElement | null;
   source: DragLocation;
+  /** Each item's source location, parallel to `items`. `source === sources[0]`. */
+  sources: DragLocation[];
   /** Null when the item was dropped back to its source or the drag was cancelled. */
   destination: DragLocation | null;
 }
@@ -191,6 +222,9 @@ export interface DropTargetChangeEvent {
   session: DragSession;
   item: Item;
   itemMetadata: ItemSnapshotMetadata;
+  /** The full dragged run, ordered. `item === items[0]` (single-item case: length 1). */
+  items: Item[];
+  itemsMetadata: ItemSnapshotMetadata[];
   previous: DragLocation | null;
   current: DragLocation | null;
 }
@@ -199,6 +233,9 @@ export interface CanDropEvent {
   session: DragSession | null;
   item: Item;
   itemMetadata: ItemSnapshotMetadata;
+  /** The full dragged run, ordered. `item === items[0]` (single-item case: length 1). */
+  items: Item[];
+  itemsMetadata: ItemSnapshotMetadata[];
   container: Container;
   containerMetadata: Record<string, unknown>;
   /**

@@ -59,10 +59,53 @@ interface ElementRectAnimationOptions {
   initialOffset?: TransformOffset;
 }
 
+/**
+ * Gather the ordered drag group for a press on `pressed`. Walks the tree in
+ * document order (pre-order DFS = original index order) and collects every
+ * selected item; a selected item's own subtree is never recursed into, so a
+ * selected descendant of a selected container travels with its ancestor
+ * instead of being collected separately. Locked items and ghosts are never
+ * collected (matching the single-item `dragStart` guard). Pressing an
+ * unselected item always drags just that item, regardless of any ancestor's
+ * selection state.
+ */
+function collectSelectedDragGroup(root: Item, pressed: Item): Item[] {
+  if (!pressed.selected) return [pressed];
+
+  const group: Item[] = [];
+  const visit = (node: Item) => {
+    for (const child of node.itemOrderedList) {
+      if (child.isGhost || child.locked) continue;
+      if (child.selected) {
+        group.push(child);
+        continue;
+      }
+      visit(child);
+    }
+  };
+  visit(root);
+  return group.length > 0 ? group : [pressed];
+}
+
+/**
+ * Resolve the pointer-follow anchor for a drag group: `pressed` itself when
+ * it made it into the group, or its nearest ancestor that did (see
+ * `collectSelectedDragGroup`'s nested-selection rule).
+ */
+function findGroupAnchor(group: Item[], pressed: Item): Item {
+  let current: BaseObject | null = pressed;
+  while (current instanceof Item) {
+    if (group.includes(current)) return current;
+    current = current.parent;
+  }
+  return pressed;
+}
+
 export class Item extends ElementObject {
   #rootContainer: Container | null = null;
   #metadata: ItemSnapshotMetadata = {};
   #locked: boolean = false;
+  #selected: boolean = false;
   #dragSnapshot: ItemSnapshot<Item> | null = null;
   #itemOrderedList: Item[] = [];
   #isGhost: boolean = false;
@@ -111,6 +154,7 @@ export class Item extends ElementObject {
       container,
       original: this,
       originalMetadata: this.metadata,
+      items: session.items,
       ghostItem,
       ghostRect,
     };
@@ -243,6 +287,22 @@ export class Item extends ElementObject {
 
   set locked(value: boolean) {
     this.#locked = value;
+  }
+
+  /**
+   * Consumer-owned selection flag. When a drag starts on a selected item,
+   * the whole set of currently-selected items in the tree is dragged
+   * together (see `collectSelectedDragGroup`); dragging an unselected item
+   * only ever drags that one item. SnapSort has no selection UX of its own
+   * — the app is responsible for setting this (e.g. from click/cmd-click
+   * handling) before a drag begins.
+   */
+  get selected(): boolean {
+    return this.#selected;
+  }
+
+  set selected(value: boolean) {
+    this.#selected = value;
   }
 
   /**
@@ -641,11 +701,11 @@ export class Item extends ElementObject {
    */
   #collectFlipItems(
     node: Item,
-    exclude: Item | null,
+    exclude: Set<Item> | null,
     items: Item[] = [],
   ): Item[] {
     for (const child of node.#itemOrderedList) {
-      if (child !== exclude && child.element) {
+      if (!exclude?.has(child) && child.element) {
         items.push(child);
       }
       this.#collectFlipItems(child, exclude, items);
@@ -664,7 +724,7 @@ export class Item extends ElementObject {
    * @param exclude Item that should not be animated.
    * @returns Items with current visual rectangles captured as first positions.
    */
-  #captureFlipSnapshot(root: Item, exclude: Item | null): FlipAnimationState[] {
+  #captureFlipSnapshot(root: Item, exclude: Set<Item> | null): FlipAnimationState[] {
     return root.#collectFlipItems(root, exclude).map((item) => {
       const parentItem = item.#parentItem();
       return {
@@ -726,7 +786,7 @@ export class Item extends ElementObject {
     snapshot: FlipAnimationState[],
     animationConfig: AnimationConfig,
     animationOwner: Item,
-    draggedItem: Item | null = null,
+    draggedItems: Item | Item[] | null = null,
   ) {
     const duration = animationConfig.duration ?? 160;
     const easing = animationConfig.timing_function ?? "ease-out";
@@ -778,17 +838,27 @@ export class Item extends ElementObject {
       );
     }
 
-    if (!draggedItem) {
+    if (!draggedItems) {
       return;
     }
+    const draggedItemList = Array.isArray(draggedItems)
+      ? draggedItems
+      : [draggedItems];
+    if (draggedItemList.length === 0) return;
 
-    // While the FLIP animations above move the dragged item's coordinate
-    // parent, re-sync the dragged item's transform every frame so it stays
-    // under the pointer.
-    const session = draggedItem.rootContainer.dragSession;
+    // While the FLIP animations above move the dragged items' coordinate
+    // parents, re-sync every dragged item's transform each frame so the
+    // whole group stays correctly positioned relative to the pointer.
+    const session = draggedItemList[0].rootContainer.dragSession;
     if (!session) return;
 
     session.dragTransformSyncAnimation?.cancel();
+
+    const resyncDraggedItems = () => {
+      for (const draggedItem of draggedItemList) {
+        draggedItem.scheduleWriteDrag();
+      }
+    };
 
     const animation = new AnimationObject(
       null,
@@ -797,13 +867,13 @@ export class Item extends ElementObject {
         duration,
         easing,
         tick: () => {
-          draggedItem.scheduleWriteDrag();
+          resyncDraggedItems();
         },
         finish: () => {
           if (session.dragTransformSyncAnimation === animation) {
             session.dragTransformSyncAnimation = null;
           }
-          draggedItem.scheduleWriteDrag();
+          resyncDraggedItems();
         },
       },
     );
@@ -1052,13 +1122,13 @@ export class Item extends ElementObject {
    * Run a DOM mutation with optional FLIP animation for affected items.
    *
    * @param container Container whose reorder animation config controls the mutation.
-   * @param excludedItem Item that should not be animated, usually the active drag item.
+   * @param excludedItem Item(s) that should not be animated, usually the active drag group.
    * @param mutate DOM mutation to perform between first and last measurements.
    * @returns Nothing.
    */
   withReorderAnimation(
     container: Container | null,
-    excludedItem: Item | null,
+    excludedItem: Item | Item[] | null,
     mutate: () => void,
   ) {
     const animationConfig = this.reorderAnimationConfig(container);
@@ -1067,6 +1137,9 @@ export class Item extends ElementObject {
           .#rootContainer as unknown as Item | null)
       : null;
     const root = targetRoot ?? (this.#rootContainer as unknown as Item) ?? this;
+    const excludedSet: Set<Item> | null = excludedItem
+      ? new Set(Array.isArray(excludedItem) ? excludedItem : [excludedItem])
+      : null;
 
     if (!animationConfig) {
       mutate();
@@ -1077,7 +1150,7 @@ export class Item extends ElementObject {
     const queuePrefix = `snapsort-flip-${root.id}`;
     root.schedule(
       () => {
-        snapshot = this.#captureFlipSnapshot(root, excludedItem);
+        snapshot = this.#captureFlipSnapshot(root, excludedSet);
       },
       { stage: "READ_2", queueId: `${queuePrefix}-read-first` },
     );
@@ -1117,7 +1190,7 @@ export class Item extends ElementObject {
    */
   refreshDraggedItemPosition() {
     const session = this.rootContainer.dragSession;
-    const parentItem = session?.dragCoordinateParent ?? null;
+    const parentItem = session?.dragCoordinateParent.get(this) ?? null;
     if (!this.element || !parentItem?.element) return;
 
     this.transformMode = "direct";
@@ -1138,7 +1211,7 @@ export class Item extends ElementObject {
    */
   scheduleWriteDrag() {
     const session = this.rootContainer.dragSession;
-    const parentItem = session?.dragCoordinateParent ?? null;
+    const parentItem = session?.dragCoordinateParent.get(this) ?? null;
     // There are some scenarios where the parent container
     // is moving. To account for this, we need to check the
     // latest positions of the dragged item and its ancestors,
@@ -1156,10 +1229,10 @@ export class Item extends ElementObject {
         const visual = parentItem.readDom();
         const ancestorOffset = this.#ancestorVisualOffset(parentItem);
         if (session) {
-          session.dragLayoutPosition = {
+          session.dragLayoutPosition.set(this, {
             x: visual.x - ancestorOffset.x,
             y: visual.y - ancestorOffset.y,
-          };
+          });
         }
       },
       { stage: "READ_3", queueId: `dragged-read-${this.id}` },
@@ -1178,8 +1251,10 @@ export class Item extends ElementObject {
    */
   writeDraggedTransform() {
     const session = this.rootContainer.dragSession;
-    if (!session?.dragLayoutPosition) {
-      if (session?.dragCoordinateParent) return;
+    const parentItem = session?.dragCoordinateParent.get(this) ?? null;
+    const layoutPosition = session?.dragLayoutPosition.get(this) ?? null;
+    if (!session || !layoutPosition) {
+      if (parentItem) return;
       this.writeTransform();
       return;
     }
@@ -1188,20 +1263,26 @@ export class Item extends ElementObject {
     // with it, so add the offsets applied this frame back onto the layout
     // position to get where the container is actually painted. This runs
     // after the FLIP WRITE_3 task, so freshly started animations have
-    // already written their initial offsets.
-    const ancestorOffset = this.#ancestorVisualOffset(
-      session.dragCoordinateParent,
-    );
+    // already written their initial offsets. `groupOffset` is this item's
+    // constant offset from the pressed item so a multi-item drag previews
+    // as one collapsed run rather than every member stacking on the pointer.
+    const ancestorOffset = this.#ancestorVisualOffset(parentItem);
+    const groupOffset = session.groupVisualOffsets.get(this) ?? {
+      x: 0,
+      y: 0,
+    };
     this.worldTransform.x =
       session.pointer.x -
-      session.dragLayoutPosition.x -
+      layoutPosition.x -
       ancestorOffset.x -
-      session.offset.x;
+      session.offset.x +
+      groupOffset.x;
     this.worldTransform.y =
       session.pointer.y -
-      session.dragLayoutPosition.y -
+      layoutPosition.y -
       ancestorOffset.y -
-      session.offset.y;
+      session.offset.y +
+      groupOffset.y;
 
     this.writeTransform();
   }
@@ -1220,40 +1301,76 @@ export class Item extends ElementObject {
     index: number,
     session: DragSession | null,
   ) {
+    this.moveItemsToContainer(container, [item], index, session);
+  }
+
+  /**
+   * Move an ordered run of items to a different container/index in one
+   * gesture, firing exactly one batch `onItemMove` (falling back to
+   * `onItemInsert`). `items` may currently live under different source
+   * containers (a disjoint multi-select collapses into one contiguous run
+   * at the destination). `index` is target-container-live-space, as it was
+   * *before* any of `items` were removed from it.
+   *
+   * @internal
+   */
+  moveItemsToContainer(
+    container: Container,
+    items: Item[],
+    index: number,
+    session: DragSession | null,
+  ) {
+    // Adjust for members already living in the destination container: each
+    // one that currently sits before `index` will vanish from in front of
+    // the target slot once detached, shifting it left by one. Must be
+    // computed from *live* (pre-detach) indices.
+    const adjustedIndexFor = (liveItems: Item[]): number => {
+      const removedBefore = liveItems.filter(
+        (member) =>
+          member.parent === container &&
+          container.itemOrderedList.indexOf(member) < index,
+      ).length;
+      return index - removedBefore;
+    };
+    const isAlreadyInPlace = (
+      liveItems: Item[],
+      adjustedIndex: number,
+    ): boolean =>
+      liveItems.length > 0 &&
+      liveItems.every(
+        (member, i) =>
+          member.parent === container &&
+          container.itemOrderedList.indexOf(member) === adjustedIndex + i,
+      );
+
     const move = () => {
-      // The move is deferred to a later render stage; the item may have been
-      // detached in the meantime (e.g. it started a drag or was destroyed).
-      if (!item.parent) return;
-      // If the source and target container is the same, we must adjust the index
-      // to account for the removal of the item from its original position.
-      if (item.parent === container) {
-        // If the source and target index is the same, no need to move.
-        if (container.itemOrderedList.indexOf(item) === index) {
-          return;
-        }
-        const currentIndex = container.itemOrderedList.indexOf(item);
-        if (currentIndex !== -1 && currentIndex < index) {
-          index -= 1;
-        }
+      // The move is deferred to a later render stage; members may have been
+      // detached in the meantime (e.g. destroyed).
+      const liveItems = items.filter((member) => !!member.parent);
+      if (liveItems.length === 0) return;
+
+      const adjustedIndex = adjustedIndexFor(liveItems);
+      if (isAlreadyInPlace(liveItems, adjustedIndex)) return;
+
+      const froms: DragLocation[] = liveItems.map((member) => {
+        const fromContainer = member.container;
+        return {
+          container: fromContainer,
+          containerMetadata: fromContainer.metadata,
+          index: fromContainer.itemOrderedList.indexOf(member),
+        };
+      });
+      for (const member of liveItems) {
+        this.detachItemFromContainer(member.container, member);
       }
-      const fromContainer = item.container;
-      const from: DragLocation = {
-        container: fromContainer,
-        containerMetadata: fromContainer.metadata,
-        index: fromContainer.itemOrderedList.indexOf(item),
-      };
-      this.detachItemFromContainer(fromContainer, item);
-      this.moveItemAt(from, container, item, index, session);
+      this.moveItemsAt(froms, container, liveItems, adjustedIndex, session);
     };
 
-    if (
-      item.parent === container &&
-      container.itemOrderedList.indexOf(item) === index
-    ) {
+    if (isAlreadyInPlace(items, adjustedIndexFor(items))) {
       return;
     }
 
-    this.withReorderAnimation(container, null, move);
+    this.withReorderAnimation(container, items, move);
   }
 
   /**
@@ -1279,7 +1396,7 @@ export class Item extends ElementObject {
       index >= container.itemOrderedList.length - 1
         ? null
         : container.itemOrderedList[index + 1].element;
-    fireItemInsert(container, item, index, itemAfterIndex, session);
+    fireItemInsert(container, [item], index, itemAfterIndex, session);
   }
 
   #insertGhostElement(
@@ -1341,17 +1458,39 @@ export class Item extends ElementObject {
     index: number,
     session: DragSession | null,
   ) {
-    this.attachItemToContainer(container, item, index);
+    this.moveItemsAt([from], container, [item], index, session);
+  }
+
+  /**
+   * Attach an ordered run at a specific index (in run order, starting at
+   * `index`) and fire one semantic `onItemMove` event for the whole run
+   * (falling back to `onItemInsert` when no `onItemMove` is registered).
+   *
+   * @note This function assumes none of `items` are currently in the target
+   * container. Call `detachItemFromContainer` on each item first.
+   * @internal
+   */
+  moveItemsAt(
+    froms: DragLocation[],
+    container: Container,
+    items: Item[],
+    index: number,
+    session: DragSession | null,
+  ) {
+    items.forEach((member, i) => {
+      this.attachItemToContainer(container, member, index + i);
+    });
+    const runEndIndex = index + items.length;
     const itemAfterIndex =
-      index >= container.itemOrderedList.length - 1
+      runEndIndex >= container.itemOrderedList.length
         ? null
-        : container.itemOrderedList[index + 1].element;
+        : container.itemOrderedList[runEndIndex].element;
     const to: DragLocation = {
       container,
       containerMetadata: container.metadata,
       index,
     };
-    fireItemMove(from, to, item, itemAfterIndex, session);
+    fireItemMove(froms, to, items, itemAfterIndex, session);
   }
 
   /** @internal */
@@ -1404,7 +1543,7 @@ export class Item extends ElementObject {
     session: DragSession | null = null,
   ) {
     this.detachItemFromContainer(container, item);
-    fireItemRemove(container, item, session);
+    fireItemRemove(container, [item], session);
   }
 
   /** @internal */
@@ -1441,16 +1580,34 @@ export class Item extends ElementObject {
     }
 
     const root = this.rootContainer;
+    const group = collectSelectedDragGroup(root as unknown as Item, this);
+    const pressedItem = findGroupAnchor(group, this);
     const strategy = resolveSortStrategy(
       root.config.mode,
       root.config.strategy,
     );
-    const source: DragLocation = {
-      container: currentContainer,
-      containerMetadata: currentContainer.metadata,
-      index: currentIndex,
-    };
-    const session = new DragSession(root, [this], [source], strategy, prop);
+    const sources: DragLocation[] = group.map((member) => {
+      if (member === this) {
+        return {
+          container: currentContainer,
+          containerMetadata: currentContainer.metadata,
+          index: currentIndex,
+        };
+      }
+      const { index, container } = member.getIndexAndContainer();
+      if (!container) {
+        throw new Error("Item has no parent container");
+      }
+      return { container, containerMetadata: container.metadata, index };
+    });
+    const session = new DragSession(
+      root,
+      group,
+      sources,
+      strategy,
+      prop,
+      pressedItem,
+    );
     root.dragSession = session;
     session.begin(prop);
   }

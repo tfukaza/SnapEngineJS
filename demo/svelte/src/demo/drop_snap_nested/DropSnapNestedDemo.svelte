@@ -80,6 +80,24 @@
       applyTagFilter();
     }
   });
+
+  // Multi-item drag proof: cmd/ctrl-click toggles selection within a list;
+  // dragging any selected item drags the whole selected set together.
+  let selectedVertical = $state<Set<number>>(new Set());
+
+  function toggleVerticalSelection(n: number, event: MouseEvent) {
+    if (event.metaKey || event.ctrlKey) {
+      const next = new Set(selectedVertical);
+      if (next.has(n)) {
+        next.delete(n);
+      } else {
+        next.add(n);
+      }
+      selectedVertical = next;
+    } else {
+      selectedVertical = new Set([n]);
+    }
+  }
 </script>
 
 <div class="snapsort-demo dev-style">
@@ -91,11 +109,15 @@
         <div class="demo-grid">
           <article class="demo-cell wide horizontal-row-demo">
             <h2>Vertical Column</h2>
+            <p class="demo-hint">Cmd/ctrl-click to multi-select, then drag any selected item.</p>
             <Container config={{ direction: "column", groupID: "vertical-group" }}>
-              <Item className="demo-item"><p>Item 1</p></Item>
-              <Item className="demo-item"><p>Item 2</p></Item>
-              <Item className="demo-item"><p>Item 3</p></Item>
-              <Item className="demo-item"><p>Item 4</p></Item>
+              {#each [1, 2, 3, 4] as n}
+                <Item
+                  className={selectedVertical.has(n) ? "demo-item selected" : "demo-item"}
+                  selected={selectedVertical.has(n)}
+                  onclick={(e: MouseEvent) => toggleVerticalSelection(n, e)}
+                ><p>Item {n}</p></Item>
+              {/each}
             </Container>
           </article>
 
@@ -403,6 +425,18 @@
   :global(.demo-item.row-item) {
     min-width: 50px;
     text-align: center;
+  }
+
+  :global(.demo-item.selected) {
+    border-color: #6366f1;
+    box-shadow: inset 0 0 0 2px #6366f1;
+    background: #eef2ff;
+  }
+
+  .demo-hint {
+    margin: 0 0 var(--size-8);
+    font-size: 0.75rem;
+    color: #888;
   }
 
   :global(.demo-item.sub-item) {

@@ -22,17 +22,23 @@
     depth = 0,
     callbacks,
     onToggleFolder,
+    selectedIds,
+    onSelectNode,
   }: {
     node: FileExplorerNodeData;
     depth?: number;
     callbacks: ContainerCallbacks;
     onToggleFolder: (nodeId: string) => void;
+    selectedIds: Set<string>;
+    onSelectNode: (nodeId: string, event: MouseEvent) => void;
   } = $props();
 
   const fileTreeAnimation = {
     duration: 260,
     timing_function: "cubic-bezier(0.2, 0, 0, 1)",
   };
+
+  const isSelected = $derived(selectedIds.has(node.id));
 
   function handleChevronPointerDown(event: PointerEvent) {
     event.preventDefault();
@@ -43,6 +49,10 @@
     event.preventDefault();
     event.stopPropagation();
     onToggleFolder(node.id);
+  }
+
+  function handleRowClick(event: MouseEvent) {
+    onSelectNode(node.id, event);
   }
 </script>
 
@@ -62,6 +72,7 @@
       },
     }}
     locked={false}
+    selected={isSelected}
     metadata={{
       itemId: node.id,
       containerId: node.id,
@@ -70,7 +81,12 @@
       insertionMarkerInsetRight: 8,
     }}
   >
-    <div class="tree-row folder-row" style={`--depth: ${depth}`}>
+    <div
+      class="tree-row folder-row"
+      class:selected={isSelected}
+      style={`--depth: ${depth}`}
+      onclick={handleRowClick}
+    >
       <span class="indent" aria-hidden="true"></span>
       <button
         type="button"
@@ -86,14 +102,16 @@
 
     {#if node.open !== false}
       {#each node.children ?? [] as child (child.id)}
-        <FileExplorerNode node={child} depth={depth + 1} {callbacks} {onToggleFolder} />
+        <FileExplorerNode node={child} depth={depth + 1} {callbacks} {onToggleFolder} {selectedIds} {onSelectNode} />
       {/each}
     {/if}
   </Container>
 {:else}
   <Item
-    className={`tree-row file-row depth-${depth}${node.active ? " active" : ""}`}
+    className={`tree-row file-row depth-${depth}${node.active ? " active" : ""}${isSelected ? " selected" : ""}`}
     metadata={{ itemId: node.id }}
+    selected={isSelected}
+    onclick={handleRowClick}
     style={`--depth: ${depth}`}
   >
     <span class="indent" aria-hidden="true"></span>

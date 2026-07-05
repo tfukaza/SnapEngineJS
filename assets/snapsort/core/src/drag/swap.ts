@@ -148,8 +148,11 @@ function drop(session: DragSession): void {
         session,
         item,
         itemMetadata: item.metadata,
+        items: session.items,
+        itemsMetadata: session.items.map((member) => member.metadata),
         element: item.element,
         source: session.sources[0],
+        sources: session.sources,
         destination,
       });
     },

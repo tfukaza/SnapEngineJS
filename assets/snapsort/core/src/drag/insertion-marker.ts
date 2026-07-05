@@ -130,9 +130,10 @@ async function removeGhost(
 
 function drop(session: DragSession): void {
   const item = session.primaryItem;
+  const items = session.items;
   const root = session.root;
 
-  item.schedule(
+  session.pressedItem.schedule(
     async () => {
       const ghostItem = session.ghostItem;
       const pendingGhostTarget =
@@ -140,10 +141,12 @@ function drop(session: DragSession): void {
           ? session.pendingGhostTarget
           : null;
 
-      if (item.element) {
-        delete item.element.dataset.snapsortDragging;
+      for (const member of items) {
+        if (member.element) {
+          delete member.element.dataset.snapsortDragging;
+        }
+        member.writeTransform();
       }
-      item.writeTransform();
 
       await removeGhost(session);
 
@@ -157,18 +160,18 @@ function drop(session: DragSession): void {
         };
 
         if (session.dropEffect === "move") {
-          item.moveItemToContainer(
+          item.moveItemsToContainer(
             destinationContainer,
-            item,
+            items,
             pendingGhostTarget.index,
             session,
           );
           await fireAwaitMutation(destinationContainer);
         } else if (session.dropEffect === "copy") {
-          // The original never leaves its source slot in insertion mode
-          // (unlike flow mode, it's never detached), so "copy" needs no
+          // The originals never leave their source slots in insertion mode
+          // (unlike flow mode, they're never detached), so "copy" needs no
           // return-to-source bookkeeping — just report the destination so
-          // the consumer can materialize a clone there.
+          // the consumer can materialize clones there.
           const beforeElement =
             pendingGhostTarget.index >= destinationContainer.itemOrderedList.length
               ? null
@@ -176,31 +179,36 @@ function drop(session: DragSession): void {
                   ?.element ?? null);
           fireItemCopy(
             destinationContainer,
-            item,
+            items,
             pendingGhostTarget.index,
             beforeElement,
             session,
           );
           await fireAwaitMutation(destinationContainer);
         }
-        // "none": no mutation events — the item already sits where it always was.
+        // "none": no mutation events — the items already sit where they always were.
       }
 
       session.clearHoveredItem();
       root.clearDragSnapshotTree();
-      resetDropSnapshotDebugDump(item);
+      for (const member of items) {
+        resetDropSnapshotDebugDump(member);
+      }
       session.status = "ended";
       root.dragSession = null;
       root.callbacks?.onDragEnd?.({
         session,
         item,
         itemMetadata: item.metadata,
+        items,
+        itemsMetadata: items.map((member) => member.metadata),
         element: item.element,
         source: session.sources[0],
+        sources: session.sources,
         destination,
       });
     },
-    { stage: "WRITE_1", queueId: `drag-end-insertion-${item.id}` },
+    { stage: "WRITE_1", queueId: `drag-end-insertion-${session.pressedItem.id}` },
   );
 }
 
