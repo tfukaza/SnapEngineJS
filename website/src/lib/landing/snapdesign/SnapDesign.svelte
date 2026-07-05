@@ -26,7 +26,7 @@
 <div class="css-showcase" data-showcase-style={showcaseStyle}>
     <section class="showcase-section showcase-header col-12">
       <div class="showcase-hero-copy">
-        <h1 class="showcase-title">Style<br />Guide</h1>
+        <h1 class="showcase-title">Snap<br />Design</h1>
         <p class="large">
           A working inventory of SnapDesign type, color, cards, controls, and interface states.
         </p>
