@@ -5,8 +5,8 @@ import {
   ItemInsertion,
   ItemProgressive,
   type ItemBaseConstructor,
-  type ItemMetadata,
 } from "./item";
+import type { ItemSnapshotMetadata } from "./snapshot";
 import {
   determineDropTarget,
   determineInsertionDropTarget,
@@ -28,14 +28,14 @@ export interface ContainerAnimations {
 
 export interface ItemRemoveEvent {
   item: ItemBase;
-  itemMetadata: ItemMetadata;
+  itemMetadata: ItemSnapshotMetadata;
   container: ContainerBase;
   containerMetadata: Record<string, unknown>;
 }
 
 export interface ItemInsertEvent {
   item: ItemBase;
-  itemMetadata: ItemMetadata;
+  itemMetadata: ItemSnapshotMetadata;
   container: ContainerBase;
   containerMetadata: Record<string, unknown>;
   index: number;
@@ -44,20 +44,21 @@ export interface ItemInsertEvent {
 
 export interface GhostInsertEvent {
   original: ItemBase;
-  originalMetadata: ItemMetadata;
+  originalMetadata: ItemSnapshotMetadata;
   ghostItem: ItemBase;
-  ghostMetadata: ItemMetadata;
+  ghostMetadata: ItemSnapshotMetadata;
   container: ContainerBase;
   containerMetadata: Record<string, unknown>;
   index: number;
   beforeElement: HTMLElement | null;
+  ghostRect?: GhostRect | null;
 }
 
 export interface GhostRemoveEvent {
   original: ItemBase;
-  originalMetadata: ItemMetadata;
+  originalMetadata: ItemSnapshotMetadata;
   ghostItem: ItemBase;
-  ghostMetadata: ItemMetadata;
+  ghostMetadata: ItemSnapshotMetadata;
   container: ContainerBase;
   containerMetadata: Record<string, unknown>;
 }
@@ -81,7 +82,7 @@ export interface GhostUpdateEvent {
 export interface GhostCreateEvent {
   container: ContainerBase;
   original: ItemBase;
-  originalMetadata: ItemMetadata;
+  originalMetadata: ItemSnapshotMetadata;
   ghostItem: ItemBase;
   ghostRect?: GhostRect | null;
 }
@@ -147,7 +148,7 @@ function createItemGhost(event: GhostCreateEvent): HTMLElement {
   // }
 
   const origProp =
-    event.original.dragSnapshot ?? event.original.currentDomProperty;
+    event.original.dragSnapshot?.box ?? event.original.currentDomProperty;
   ghostElement.style.width = origProp.width + "px";
   ghostElement.style.height = origProp.height + "px";
   ghostElement.style.margin = `${origProp.margin.top}px ${origProp.margin.right}px ${origProp.margin.bottom}px ${origProp.margin.left}px`;
@@ -211,11 +212,13 @@ export class ContainerBase extends ItemBase {
   #config: ContainerConfig;
   #depth: number = 0;
 
+  // #rootContainer: ContainerBase | null = null;
+
   // #pendingMove: Array<PendingMove> = [];
 
   constructor(
     engine: any,
-    parent: BaseObject | null,
+    parent: ContainerBase | null,
     config?: ContainerConfig,
   ) {
     super(engine, parent);
@@ -244,6 +247,10 @@ export class ContainerBase extends ItemBase {
       this.global.data["dragAndDropContainers"] = [];
     }
     this.global.data["dragAndDropContainers"].push(this);
+
+    // Until a parent is set, it is assumed that their
+    // current container is the root container.
+    // super.rootContainer = this;
   }
 
   get groupID() {
@@ -302,18 +309,19 @@ export class ContainerBase extends ItemBase {
     return this.#config;
   }
 
-  setAllDepth(depth: number, root: ContainerBase | null = null) {
-    this.#depth = depth;
-    const effectiveRoot = depth === 0 ? this : root;
-    this.setRootContainer(effectiveRoot);
-    for (const item of this.#itemList) {
-      if (item instanceof ContainerBase) {
-        item.setAllDepth(depth + 1, effectiveRoot);
-      } else {
-        item.setRootContainer(effectiveRoot);
-      }
-    }
-  }
+  // setAllDepth(depth: number) {
+  //   this.#depth = depth;
+  //   // const effectiveRoot = depth === 0 ? this : root;
+  //   // this.setRootContainer(effectiveRoot);
+  //   for (const item of this.#itemList) {
+  //     if (item instanceof ContainerBase) {
+  //       item.setAllDepth(depth + 1);
+  //     }
+  //     // else {
+  //     //   item.setRootContainer(effectiveRoot);
+  //     // }
+  //   }
+  // }
 
   destroy() {
     if (this.global.data["dragAndDropContainers"]) {

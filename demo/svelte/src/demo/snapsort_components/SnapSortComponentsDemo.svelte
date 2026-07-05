@@ -141,6 +141,7 @@
   let nextItemNumber = $state(7);
   let columns = $state<DemoColumn[]>(structuredClone(initialColumns));
   let ghostEntry = $state<DemoGhostEntry | null>(null);
+  let boardVersion = $state(0);
   let itemCount = $derived(
     columns.reduce((total, column) => total + column.items.length, 0),
   );
@@ -237,6 +238,7 @@
     nextItemNumber = 7;
     ghostEntry = null;
     columns = cloneInitialColumns();
+    boardVersion += 1;
   }
 
   function createFrameworkGhost(_event: GhostCreateEvent): void {
@@ -291,7 +293,12 @@
       return { ...column, items: nextItems };
     });
 
-    if (!movedItem) return;
+    if (!movedItem) {
+      const label = event.itemMetadata.label;
+      const detail = event.itemMetadata.detail;
+      if (typeof label !== "string" || typeof detail !== "string") return;
+      movedItem = { id: itemId, label, detail };
+    }
 
     columns = withoutMovedItem.map((column) => {
       if (column.id !== targetColumnId) return column;
@@ -398,98 +405,107 @@
       </div>
 
       <div class="engine-area">
-        <Engine id="snapsort-components-demo-canvas">
-          <div class="board-frame">
-            <ContainerEuclidean
-              className="board"
-              config={{
-                direction: "row",
-                name: "component-kanban-root",
-                noDrop: true,
-              }}
-              locked={true}
-              metadata={{ boardId: "component-kanban" }}
-            >
-              {#each columns as column (column.id)}
-                <ContainerEuclidean
-                  className={column.id === "backlog" ? "list-panel array-list" : "list-panel"}
-                  bind:container={column.container}
-                  config={{
-                    direction: "column",
-                    name: `component-${column.id}`,
-                    animation: {
-                      reorder: snapSortCubicAnimation,
-                      drop: snapSortCubicAnimation,
-                      clickMove: snapSortCubicAnimation,
-                    },
-                    callbacks: {
-                      onItemInsert: handleSnapSortDomInsert,
-                      onItemRemove: handleSnapSortDomRemove,
-                      onGhostInsert: handleSnapSortGhostInsert,
-                      onGhostRemove: handleSnapSortGhostRemove,
-                      createItemGhost: createFrameworkGhost,
-                      awaitMutation: tick,
-                    },
-                  }}
-                  locked={true}
-                  metadata={{ columnId: column.id }}
-                >
-                  <div class="list-header">
-                    <h2>{column.title}</h2>
-                    <span>{column.items.length}</span>
-                  </div>
+        {#key boardVersion}
+          <Engine id="snapsort-components-demo-canvas">
+            <div class="board-frame">
+              <ContainerEuclidean
+                className="board"
+                config={{
+                  direction: "row",
+                  name: "component-kanban-root",
+                  noDrop: true,
+                }}
+                locked={true}
+                metadata={{ boardId: "component-kanban" }}
+              >
+                {#each columns as column (column.id)}
+                  <ContainerEuclidean
+                    className={column.id === "backlog" ? "list-panel array-list" : "list-panel"}
+                    bind:container={column.container}
+                    config={{
+                      direction: "column",
+                      name: `component-${column.id}`,
+                      animation: {
+                        reorder: snapSortCubicAnimation,
+                        drop: snapSortCubicAnimation,
+                        clickMove: snapSortCubicAnimation,
+                      },
+                      callbacks: {
+                        onItemInsert: handleSnapSortDomInsert,
+                        onItemRemove: handleSnapSortDomRemove,
+                        onGhostInsert: handleSnapSortGhostInsert,
+                        onGhostRemove: handleSnapSortGhostRemove,
+                        createItemGhost: createFrameworkGhost,
+                        awaitMutation: tick,
+                      },
+                    }}
+                    locked={true}
+                    metadata={{ columnId: column.id }}
+                  >
+                    <div class="list-header">
+                      <h2>{column.title}</h2>
+                      <span>{column.items.length}</span>
+                    </div>
 
-                  {#each renderedColumnItems(column) as entry (entry.isGhost ? entry.id : entry.item.id)}
-                    {#if entry.isGhost}
-                      <ItemEuclidean
-                        className="task-card ghost task-ghost"
-                        itemObject={entry.ghostItem}
-                      >
-                        <div class="task-content">
-                          <div class="task-main">
-                            <strong>{entry.label}</strong>
-                            <span>{entry.detail}</span>
+                    {#each renderedColumnItems(column) as entry (entry.isGhost ? entry.id : entry.item.id)}
+                      {#if entry.isGhost}
+                        <ItemEuclidean
+                          className="task-card ghost task-ghost"
+                          itemObject={entry.ghostItem}
+                        >
+                          <div class="task-content">
+                            <div class="task-main">
+                              <strong>{entry.label}</strong>
+                              <span>{entry.detail}</span>
+                            </div>
                           </div>
-                        </div>
-                      </ItemEuclidean>
-                    {:else}
-                      <ItemEuclidean className="task-card" metadata={{ itemId: entry.item.id }}>
-                        <div class="task-content">
-                          <Handle className="task-drag-handle">
-                            <span class="material-symbols-outlined" aria-hidden="true">drag_indicator</span>
-                          </Handle>
-                          <div class="task-main">
-                            <strong>{entry.item.label}</strong>
-                            <span>{entry.item.detail}</span>
+                        </ItemEuclidean>
+                      {:else}
+                        <ItemEuclidean
+                          className="task-card"
+                          metadata={{
+                            itemId: entry.item.id,
+                            label: entry.item.label,
+                            detail: entry.item.detail,
+                          }}
+                        >
+                          <div class="task-content">
+                            <Handle className="task-drag-handle">
+                              <span class="material-symbols-outlined" aria-hidden="true">drag_indicator</span>
+                            </Handle>
+                            <div class="task-main">
+                              <strong>{entry.item.label}</strong>
+                              <span>{entry.item.detail}</span>
+                            </div>
+                            <div class="card-actions">
+                              <button
+                                class="icon-button"
+                                aria-label={`Delete ${entry.item.label}`}
+                                use:controlButton={() => deleteItem(entry.item.id)}
+                              ><span class="material-symbols-outlined" aria-hidden="true">delete</span></button>
+                              <button
+                                class="icon-button"
+                                aria-label={`Move ${entry.item.label} left`}
+                                disabled={columns.findIndex((candidate) => candidate.id === column.id) === 0}
+                                use:controlButton={() => moveItemAcrossColumns(entry.item.id, -1)}
+                              ><span class="material-symbols-outlined" aria-hidden="true">arrow_left_alt</span></button>
+                              <button
+                                class="icon-button"
+                                aria-label={`Move ${entry.item.label} right`}
+                                disabled={columns.findIndex((candidate) => candidate.id === column.id) === columns.length - 1}
+                                use:controlButton={() => moveItemAcrossColumns(entry.item.id, 1)}
+                              ><span class="material-symbols-outlined" aria-hidden="true">arrow_right_alt</span></button>
+                            </div>
                           </div>
-                          <div class="card-actions">
-                            <button
-                              class="icon-button"
-                              aria-label={`Delete ${entry.item.label}`}
-                              use:controlButton={() => deleteItem(entry.item.id)}
-                            ><span class="material-symbols-outlined" aria-hidden="true">delete</span></button>
-                            <button
-                              class="icon-button"
-                              aria-label={`Move ${entry.item.label} left`}
-                              disabled={columns.findIndex((candidate) => candidate.id === column.id) === 0}
-                              use:controlButton={() => moveItemAcrossColumns(entry.item.id, -1)}
-                            ><span class="material-symbols-outlined" aria-hidden="true">arrow_left_alt</span></button>
-                            <button
-                              class="icon-button"
-                              aria-label={`Move ${entry.item.label} right`}
-                              disabled={columns.findIndex((candidate) => candidate.id === column.id) === columns.length - 1}
-                              use:controlButton={() => moveItemAcrossColumns(entry.item.id, 1)}
-                            ><span class="material-symbols-outlined" aria-hidden="true">arrow_right_alt</span></button>
-                          </div>
-                        </div>
-                      </ItemEuclidean>
-                    {/if}
-                  {/each}
-                </ContainerEuclidean>
-              {/each}
-            </ContainerEuclidean>
-          </div>
-        </Engine>
+                        </ItemEuclidean>
+                      {/if}
+                    {/each}
+                  </ContainerEuclidean>
+                {/each}
+              </ContainerEuclidean>
+            </div>
+          </Engine>
+        {/key}
       </div>
     </div>
   </section>

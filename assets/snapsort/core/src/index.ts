@@ -26,4 +26,4 @@ export {
   ItemEuclidean,
   ItemEuclidean as Item,
 } from "./item";
-export type { ItemId, ItemMetadata } from "./item";
+export type { ItemId, ItemSnapshot, ItemSnapshotMetadata } from "./snapshot";

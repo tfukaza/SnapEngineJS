@@ -1,7 +1,10 @@
 import type { DomProperty } from "@snap-engine/core";
+import type {
+  ItemSnapshot,
+  LayoutDirection,
+} from "./snapshot";
 
-export type LayoutDirection = "column" | "row";
-export type LayoutMainAxisAlign = "start" | "center";
+export type { LayoutDirection, LayoutMainAxisAlign } from "./snapshot";
 type AxisName = "x" | "y";
 type SizeName = "width" | "height";
 const LAYOUT_EPSILON = 1e-6;
@@ -21,19 +24,20 @@ interface FlowMetrics {
   crossGap: number;
   lineCrossSize: number;
   lineCount: number;
-}
-
-export interface LayoutNode<T> {
-  value: T;
-  direction: LayoutDirection;
-  mainAxisAlign: LayoutMainAxisAlign;
-  locked: boolean;
-  box: DomProperty;
-  children: LayoutNode<T>[];
+  /**
+   * Largest measured main-axis extent (content-relative, including the line's
+   * trailing margin) that the browser actually placed on a single line. Proves
+   * a lower bound on the container's true content capacity: box-model values
+   * parsed from computed style are specified values (e.g. `0.35rem` → 5.6px)
+   * while the browser lays out on a snapped grid (5.59375px), so a capacity
+   * derived purely from parsed values can be fractionally smaller than what
+   * the DOM demonstrably fits — wrapping lines the browser kept whole.
+   */
+  measuredMainExtent: number;
 }
 
 export interface LayoutFilter<T> {
-  excludeNodes?: Set<LayoutNode<T>>;
+  excludeSnapshots?: Set<ItemSnapshot<T>>;
   excludeValues?: Set<T>;
 }
 
@@ -44,7 +48,7 @@ export interface VirtualLayoutEntry {
 }
 
 export interface VirtualInsertion<T> {
-  container: LayoutNode<T>;
+  container: ItemSnapshot<T>;
   index: number;
   entry: VirtualLayoutEntry;
 }
@@ -55,7 +59,7 @@ export interface VirtualDimensions {
 }
 
 export interface FlowPositionResult<T> {
-  itemPositions: Map<LayoutNode<T>, { x: number; y: number }>;
+  itemPositions: Map<ItemSnapshot<T>, { x: number; y: number }>;
   virtualPositions: Map<VirtualInsertion<T>, { x: number; y: number }>;
   virtualRects: Map<
     VirtualInsertion<T>,
@@ -64,7 +68,7 @@ export interface FlowPositionResult<T> {
 }
 
 type FlowEntry<T> =
-  | { kind: "item"; item: LayoutNode<T>; width: number; height: number }
+  | { kind: "item"; item: ItemSnapshot<T>; width: number; height: number }
   | { kind: "virtual"; insertion: VirtualInsertion<T>; width: number; height: number };
 
 interface FlowLine<T> {
@@ -153,12 +157,13 @@ export function childRelativeOffset(
 }
 
 export function layoutItems<T>(
-  container: LayoutNode<T>,
+  container: ItemSnapshot<T>,
   filter: LayoutFilter<T> = {},
-): LayoutNode<T>[] {
+): ItemSnapshot<T>[] {
   return container.children.filter(
     (item) =>
-      !filter.excludeNodes?.has(item) && !filter.excludeValues?.has(item.value),
+      !filter.excludeSnapshots?.has(item) &&
+      !filter.excludeValues?.has(item.value),
   );
 }
 
@@ -172,7 +177,7 @@ function median(values: number[]): number {
 }
 
 export function inferFlowLayoutMetrics<T>(
-  container: LayoutNode<T>,
+  container: ItemSnapshot<T>,
   axes: FlowAxes,
 ): FlowMetrics {
   const ordered = container.children;
@@ -184,6 +189,7 @@ export function inferFlowLayoutMetrics<T>(
       crossGap: 0,
       lineCrossSize: 0,
       lineCount: 0,
+      measuredMainExtent: 0,
     };
   }
 
@@ -192,6 +198,7 @@ export function inferFlowLayoutMetrics<T>(
   const lines: Array<{ cross: number; crossSize: number }> = [];
   let currentLine: { cross: number; crossSize: number } | null = null;
   let previousOffset: { x: number; y: number } | null = null;
+  let measuredMainExtent = 0;
 
   for (let i = 0; i < ordered.length; i++) {
     const item = ordered[i];
@@ -211,6 +218,13 @@ export function inferFlowLayoutMetrics<T>(
         item.box[axes.crossSize],
       );
     }
+
+    const trailingMargin =
+      axes.main === "x" ? item.box.margin.right : item.box.margin.bottom;
+    measuredMainExtent = Math.max(
+      measuredMainExtent,
+      offset[axes.main] + item.box[axes.mainSize] + trailingMargin,
+    );
 
     const next = ordered[i + 1];
     if (next) {
@@ -238,11 +252,12 @@ export function inferFlowLayoutMetrics<T>(
     crossGap: median(crossGaps),
     lineCrossSize: median(lines.map((line) => line.crossSize)),
     lineCount: lines.length,
+    measuredMainExtent,
   };
 }
 
 export function flowLayoutPositions<T>(
-  container: LayoutNode<T>,
+  container: ItemSnapshot<T>,
   startX: number,
   startY: number,
   options: {
@@ -280,7 +295,7 @@ export function flowLayoutPositions<T>(
     }
   }
 
-  const itemPositions = new Map<LayoutNode<T>, { x: number; y: number }>();
+  const itemPositions = new Map<ItemSnapshot<T>, { x: number; y: number }>();
   const virtualPositions = new Map<VirtualInsertion<T>, { x: number; y: number }>();
   const virtualRects = new Map<
     VirtualInsertion<T>,
@@ -299,6 +314,17 @@ export function flowLayoutPositions<T>(
     }
   };
 
+  // Calibrate the wrap capacity against what the browser demonstrably placed
+  // on a single line. The parsed content size can be fractionally smaller
+  // than the true layout capacity (specified vs snapped box values), which
+  // would wrap lines the DOM keeps whole. Raising capacity to the measured
+  // extent is always safe: it never exceeds the browser's real capacity, so
+  // genuine overflow introduced by an inserted ghost still wraps.
+  const mainCapacity = Math.max(
+    contentSize[axes.mainSize],
+    metrics.measuredMainExtent,
+  );
+
   for (const entry of entries) {
     const entryMainSize = entry[axes.mainSize];
     const entryCrossSize = entry[axes.crossSize];
@@ -311,7 +337,7 @@ export function flowLayoutPositions<T>(
         metrics.mainGap +
         entryMainSize +
         entryTrailingMainMargin >
-        contentSize[axes.mainSize] + LAYOUT_EPSILON
+        mainCapacity + LAYOUT_EPSILON
     ) {
       pushCurrentLine();
     }
@@ -336,14 +362,7 @@ export function flowLayoutPositions<T>(
 
     for (const entry of line.entries) {
       const entryMainSize = entry[axes.mainSize];
-
-      let position = pointFromAxes(axes, cursorMain, cursorCross);
-      if (entry.kind === "item" && entry.item.locked) {
-        const rel = childRelativeOffset(container.box, entry.item.box);
-        position = { x: startX + rel.x, y: startY + rel.y };
-        cursorMain = position[axes.main];
-        cursorCross = position[axes.cross];
-      }
+      const position = pointFromAxes(axes, cursorMain, cursorCross);
 
       if (entry.kind === "virtual") {
         virtualPositions.set(entry.insertion, position);
@@ -366,7 +385,7 @@ export function flowLayoutPositions<T>(
 }
 
 export function virtualDimensions<T>(
-  container: LayoutNode<T>,
+  container: ItemSnapshot<T>,
   options: {
     filter?: LayoutFilter<T>;
     insertions?: VirtualInsertion<T>[];

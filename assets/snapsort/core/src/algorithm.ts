@@ -12,10 +12,9 @@ import {
   pointFromAxes,
   virtualDimensions as layoutVirtualDimensions,
   type LayoutFilter,
-  type LayoutMainAxisAlign,
-  type LayoutNode,
   type VirtualInsertion,
 } from "./layout";
+import type { ItemSnapshot } from "./snapshot";
 
 const TAG_COLLISIONS = "drop-collisions";
 const TAG_CANDIDATES = "drop-candidates";
@@ -48,6 +47,7 @@ export interface DropCandidate {
   lineIndex: number;
   dragLineIndex: number;
   lineDistance: number;
+  treeDepth: number;
   prevPosition: { x: number; y: number } | null;
   nextPosition: { x: number; y: number } | null;
   placementRect: Rect;
@@ -66,12 +66,6 @@ function getDirection(node: ItemBase): "column" | "row" {
     : "column";
 }
 
-function getMainAxisAlign(node: ItemBase): LayoutMainAxisAlign {
-  return "mainAxisAlign" in node && (node as any).mainAxisAlign === "center"
-    ? "center"
-    : "start";
-}
-
 function euclidean(x1: number, y1: number, x2: number, y2: number): number {
   return Math.sqrt((x1 - x2) ** 2 + (y1 - y2) ** 2);
 }
@@ -85,7 +79,7 @@ function containsPoint(rect: Rect, x: number, y: number): boolean {
   );
 }
 
-function intersectsRect(a: Rect, b: Rect): boolean {
+function rectsIntersect(a: Rect, b: Rect): boolean {
   return (
     a.x <= b.x + b.width &&
     a.x + a.width >= b.x &&
@@ -115,7 +109,7 @@ function distanceToNearestContentEdge(rect: Rect, x: number, y: number): number 
   return distanceToRect(rect, x, y);
 }
 
-function requireDragSnapshot(item: ItemBase): DomProperty {
+function requireDragSnapshot(item: ItemBase): ItemSnapshot<ItemBase> {
   const snapshot = item.dragSnapshot;
   if (!snapshot) {
     const message = `[drop-snapshot] Missing drag snapshot for item ${item.id}. Drop prediction must run after dragStart captures snapshots.`;
@@ -123,6 +117,14 @@ function requireDragSnapshot(item: ItemBase): DomProperty {
     throw new Error(message);
   }
   return snapshot;
+}
+
+function requireDragSnapshotBox(item: ItemBase): DomProperty {
+  return requireDragSnapshot(item).box;
+}
+
+function dragSnapshotItems(item: ItemBase): ItemBase[] {
+  return requireDragSnapshot(item).children.map((snapshot) => snapshot.value);
 }
 
 function isContainerObject(item: ItemBase) {
@@ -134,10 +136,18 @@ function isContainerObject(item: ItemBase) {
   );
 }
 
+function isNoDropContainer(item: ItemBase) {
+  const configNoDrop =
+    "configuration" in item &&
+    (item as { configuration?: { noDrop?: boolean } }).configuration?.noDrop === true;
+
+  return item.noDrop || configNoDrop;
+}
+
 function isDropAreaContainer(item: ItemBase) {
   return (
     isContainerObject(item) &&
-    !item.noDrop &&
+    !isNoDropContainer(item) &&
     "dropArea" in item &&
     (item as any).dropArea === true
   );
@@ -184,7 +194,7 @@ function filterCandidatesByDropArea(
   const collidingContainers: ItemBase[] = [];
   try {
     for (const container of dropAreaContainers) {
-      const prop = requireDragSnapshot(container);
+      const prop = requireDragSnapshotBox(container);
       const containerCollider = rectColliderForWorldRect(container, prop);
       const isColliding =
         !!containerCollider &&
@@ -225,58 +235,25 @@ function filterCandidatesByDropArea(
   );
 }
 
-function filterCandidatesByDeepestContentHit(
-  candidates: DropCandidate[],
-  dragRect: Rect,
-  dragCenterX: number,
-  dragCenterY: number,
-) {
-  const hitContainers = Array.from(
-    new Set(candidates.map((candidate) => candidate.container)),
-  ).filter((container) => {
-    const rect = containerContentRect(container);
-    return (
-      containsPoint(rect, dragCenterX, dragCenterY) ||
-      intersectsRect(rect, dragRect)
-    );
-  });
-  if (hitContainers.length === 0) return candidates;
-
-  const deepestDepth = Math.max(
-    ...hitContainers.map((container) => container.depth),
-  );
-  const allowedContainers = new Set(
-    hitContainers.filter((container) => container.depth === deepestDepth),
-  );
-  return candidates.filter((candidate) =>
-    allowedContainers.has(candidate.container),
-  );
-}
-
 function createLayoutSnapshot(root: ItemBase): {
-  root: LayoutNode<ItemBase>;
-  byItem: Map<ItemBase, LayoutNode<ItemBase>>;
+  root: ItemSnapshot<ItemBase>;
+  byItem: Map<ItemBase, ItemSnapshot<ItemBase>>;
 } {
-  const byItem = new Map<ItemBase, LayoutNode<ItemBase>>();
-  const visit = (item: ItemBase): LayoutNode<ItemBase> => {
-    const node: LayoutNode<ItemBase> = {
-      value: item,
-      direction: getDirection(item),
-      mainAxisAlign: getMainAxisAlign(item),
-      locked: item.locked,
-      box: requireDragSnapshot(item),
-      children: [],
-    };
-    byItem.set(item, node);
-    node.children = item.dragSnapshotOrderedList.map(visit);
-    return node;
+  const byItem = new Map<ItemBase, ItemSnapshot<ItemBase>>();
+  const visit = (snapshot: ItemSnapshot<ItemBase>) => {
+    byItem.set(snapshot.value, snapshot);
+    for (const child of snapshot.children) {
+      visit(child);
+    }
   };
+  const rootSnapshot = requireDragSnapshot(root);
+  visit(rootSnapshot);
 
-  return { root: visit(root), byItem };
+  return { root: rootSnapshot, byItem };
 }
 
 function layoutInsertionFromGhost(
-  byItem: Map<ItemBase, LayoutNode<ItemBase>>,
+  byItem: Map<ItemBase, ItemSnapshot<ItemBase>>,
   ghost?: VirtualGhost,
 ): VirtualInsertion<ItemBase> | undefined {
   if (!ghost) return undefined;
@@ -288,16 +265,72 @@ function layoutInsertionFromGhost(
     entry: {
       width: ghost.width,
       height: ghost.height,
-      margin: requireDragSnapshot(ghost.container).margin,
+      margin: requireDragSnapshotBox(ghost.container).margin,
+    },
+  };
+}
+
+function activeGhostInsertionFromPendingTarget(
+  byItem: Map<ItemBase, ItemSnapshot<ItemBase>>,
+  root: ItemBase,
+  draggedBox: DomProperty,
+  dragGhostW: number,
+  dragGhostH: number,
+): VirtualInsertion<ItemBase> | undefined {
+  const pendingTarget = (
+    root as unknown as {
+      pendingGhostTarget?: {
+        container: ItemBase | null;
+        index: number;
+      } | null;
+    }
+  ).pendingGhostTarget;
+  if (!pendingTarget?.container) return undefined;
+
+  const container = byItem.get(pendingTarget.container);
+  if (!container) return undefined;
+
+  return {
+    container,
+    index: pendingTarget.index,
+    entry: {
+      width: dragGhostW,
+      height: dragGhostH,
+      margin: draggedBox.margin,
     },
   };
 }
 
 function containerContentRect(container: ItemBase): Rect {
-  const prop = requireDragSnapshot(container);
+  const prop = requireDragSnapshotBox(container);
   const origin = contentBoxOrigin(prop);
   const size = contentBoxSize(prop);
   return { ...origin, ...size };
+}
+
+function expandedChildHitRect(
+  rect: Rect,
+  axes: ReturnType<typeof flowAxesForDirection>,
+  dragGhostW: number,
+  dragGhostH: number,
+): Rect {
+  const mainExpansion =
+    (axes.direction === "column" ? dragGhostH : dragGhostW) * 2;
+  if (axes.main === "y") {
+    return {
+      x: rect.x,
+      y: rect.y - mainExpansion,
+      width: rect.width,
+      height: rect.height + mainExpansion * 2,
+    };
+  }
+
+  return {
+    x: rect.x - mainExpansion,
+    y: rect.y,
+    width: rect.width + mainExpansion * 2,
+    height: rect.height,
+  };
 }
 
 function chooseByContentBox(
@@ -344,21 +377,38 @@ export function virtualLayoutRecursive(
   dragCenterY: number,
 ): { candidates: DropCandidate[]; endX: number; endY: number } {
   const snapshot = createLayoutSnapshot(container);
-  return virtualLayoutRecursiveFromNode(
+  const draggedBox = requireDragSnapshotBox(draggedItem);
+  const activeInsertion = activeGhostInsertionFromPendingTarget(
+    snapshot.byItem,
+    container,
+    draggedBox,
+    dragGhostW,
+    dragGhostH,
+  );
+  const dragRect: Rect = {
+    x: draggedItem.dragPositionX,
+    y: draggedItem.dragPositionY,
+    width: dragGhostW,
+    height: dragGhostH,
+  };
+  return virtualLayoutRecursiveFromSnapshot(
     snapshot.root,
     startX,
     startY,
     { excludeValues: new Set([draggedItem]) },
-    requireDragSnapshot(draggedItem),
+    draggedBox,
     dragGhostW,
     dragGhostH,
     dragCenterX,
     dragCenterY,
+    dragRect,
+    activeInsertion ? [activeInsertion] : [],
+    0,
   );
 }
 
-function virtualLayoutRecursiveFromNode(
-  containerNode: LayoutNode<ItemBase>,
+function virtualLayoutRecursiveFromSnapshot(
+  containerSnapshot: ItemSnapshot<ItemBase>,
   startX: number,
   startY: number,
   filter: LayoutFilter<ItemBase>,
@@ -367,16 +417,23 @@ function virtualLayoutRecursiveFromNode(
   dragGhostH: number,
   dragCenterX: number,
   dragCenterY: number,
+  dragRect: Rect,
+  baseInsertions: VirtualInsertion<ItemBase>[] = [],
+  treeDepth = 0,
 ): { candidates: DropCandidate[]; endX: number; endY: number } {
-  const container = containerNode.value;
-  const axes = flowAxesForDirection(containerNode.direction);
+  const container = containerSnapshot.value;
+  const axes = flowAxesForDirection(containerSnapshot.direction);
   const isColumn = axes.direction === "column";
-  const containerProp = containerNode.box;
+  const containerProp = containerSnapshot.box;
   const contentSize = contentBoxSize(containerProp);
-  const itemNodes = layoutItems(containerNode, filter);
-  const metrics = inferFlowLayoutMetrics(containerNode, axes);
-  const flowPositions = flowLayoutPositions(containerNode, startX, startY, {
+  const itemSnapshots = layoutItems(containerSnapshot, filter);
+  const metrics = inferFlowLayoutMetrics(containerSnapshot, axes);
+  const descendantBaseInsertions = baseInsertions.filter(
+    (baseInsertion) => baseInsertion.container !== containerSnapshot,
+  );
+  const flowPositions = flowLayoutPositions(containerSnapshot, startX, startY, {
     filter,
+    insertions: descendantBaseInsertions,
   }).itemPositions;
   const candidates: DropCandidate[] = [];
   const lineCrossStart =
@@ -410,7 +467,7 @@ function virtualLayoutRecursiveFromNode(
     fallbackPosition: { x: number; y: number },
   ): DropCandidate => {
     const insertion: VirtualInsertion<ItemBase> = {
-      container: containerNode,
+      container: containerSnapshot,
       index,
       entry: {
         width: dragGhostW,
@@ -418,9 +475,12 @@ function virtualLayoutRecursiveFromNode(
         margin: draggedBox.margin,
       },
     };
-    const layout = flowLayoutPositions(containerNode, startX, startY, {
+    const layout = flowLayoutPositions(containerSnapshot, startX, startY, {
       filter,
-      insertions: [insertion],
+      insertions: [
+        ...descendantBaseInsertions,
+        insertion,
+      ],
     });
     const rect = layout.virtualRects.get(insertion) ?? {
       ...fallbackPosition,
@@ -445,6 +505,7 @@ function virtualLayoutRecursiveFromNode(
       lineIndex,
       dragLineIndex,
       lineDistance: Math.abs(lineIndex - dragLineIndex),
+      treeDepth,
       prevPosition: null,
       nextPosition,
       placementRect,
@@ -462,24 +523,25 @@ function virtualLayoutRecursiveFromNode(
   };
 
   if (
-    itemNodes.length === 0 &&
+    itemSnapshots.length === 0 &&
     isContainerObject(container) &&
-    !container.noDrop
+    !isNoDropContainer(container)
   ) {
     candidates.push(makeCandidate(0, { x: startX, y: startY }));
   }
 
-  for (let index = 0; index < itemNodes.length; index++) {
-    const itemNode = itemNodes[index];
-    const item = itemNode.value;
-    const prop = itemNode.box;
+  for (let index = 0; index < itemSnapshots.length; index++) {
+    const itemSnapshot = itemSnapshots[index];
+    const item = itemSnapshot.value;
+    const prop = itemSnapshot.box;
     const isContainer =
-      itemNode.children.length > 0 || isContainerObject(item);
+      itemSnapshot.children.length > 0 || isContainerObject(item);
     const rel = childRelativeOffset(containerProp, prop);
     const measuredPosition = { x: startX + rel.x, y: startY + rel.y };
-    const simulatedPosition = flowPositions.get(itemNode) ?? measuredPosition;
+    const simulatedPosition =
+      flowPositions.get(itemSnapshot) ?? measuredPosition;
 
-    if (!itemNode.locked) {
+    if (!itemSnapshot.locked || isContainer) {
       candidates.push(makeCandidate(index, simulatedPosition));
     }
 
@@ -488,21 +550,44 @@ function virtualLayoutRecursiveFromNode(
         x: simulatedPosition.x + prop.border.left + prop.padding.left,
         y: simulatedPosition.y + prop.border.top + prop.padding.top,
       };
-      const childResult = virtualLayoutRecursiveFromNode(
-        itemNode,
-        childOrigin.x,
-        childOrigin.y,
-        filter,
-        draggedBox,
+      const childContentSize = contentBoxSize(prop);
+      const childContentRect = {
+        ...childOrigin,
+        ...childContentSize,
+      };
+      const childHitRect = expandedChildHitRect(
+        childContentRect,
+        flowAxesForDirection(itemSnapshot.direction),
         dragGhostW,
         dragGhostH,
-        dragCenterX,
-        dragCenterY,
       );
-      candidates.push(...childResult.candidates);
+      // Broad-phase cull only: generate the child's candidates whenever the
+      // dragged rect overlaps its expanded hit rect. Parent-vs-child conflicts
+      // are resolved by candidate selection (closest predicted ghost position
+      // plus cross-container hysteresis), not by dropping candidates here.
+      // Gating on the bare drag center loses reachable child slots when the
+      // grab point (e.g. an edge handle) skews the center outside an inset
+      // child container.
+      if (rectsIntersect(childHitRect, dragRect)) {
+        const childResult = virtualLayoutRecursiveFromSnapshot(
+          itemSnapshot,
+          childOrigin.x,
+          childOrigin.y,
+          filter,
+          draggedBox,
+          dragGhostW,
+          dragGhostH,
+          dragCenterX,
+          dragCenterY,
+          dragRect,
+          baseInsertions,
+          treeDepth + 1,
+        );
+        candidates.push(...childResult.candidates);
+      }
     }
 
-    if (!itemNode.locked) {
+    if (!itemSnapshot.locked || isContainer) {
       const fallbackMain = simulatedPosition[axes.main] + prop[axes.mainSize];
       const fallbackCross = simulatedPosition[axes.cross];
       candidates.push(
@@ -515,7 +600,7 @@ function virtualLayoutRecursiveFromNode(
   }
 
   return {
-    candidates: container.noDrop
+    candidates: isNoDropContainer(container)
       ? candidates.filter((candidate) => candidate.container !== container)
       : candidates,
     endX: startX + contentSize.width,
@@ -533,12 +618,12 @@ function collectDropCandidates(
   dragGhostW: number;
   dragGhostH: number;
 } {
-  const rootProp = requireDragSnapshot(root);
-  const dragProp = requireDragSnapshot(item);
+  const rootProp = requireDragSnapshotBox(root);
+  const dragProp = requireDragSnapshotBox(item);
   const dragGhostW = dragProp.width;
   const dragGhostH = dragProp.height;
-  const dragCenterX = item.worldTransform.x + dragProp.width / 2;
-  const dragCenterY = item.worldTransform.y + dragProp.height / 2;
+  const dragCenterX = item.dragPositionX + dragProp.width / 2;
+  const dragCenterY = item.dragPositionY + dragProp.height / 2;
   const layoutOrigin = contentBoxOrigin(rootProp);
 
   const { candidates: virtualCandidates } = virtualLayoutRecursive(
@@ -553,21 +638,15 @@ function collectDropCandidates(
   );
 
   const dragRect = {
-    x: item.worldTransform.x,
-    y: item.worldTransform.y,
+    x: item.dragPositionX,
+    y: item.dragPositionY,
     width: dragGhostW,
     height: dragGhostH,
   };
-  const dropAreaCandidates = filterCandidatesByDropArea(
+  const candidates = filterCandidatesByDropArea(
     virtualCandidates,
     item,
     dragRect,
-  );
-  const candidates = filterCandidatesByDeepestContentHit(
-    dropAreaCandidates,
-    dragRect,
-    dragCenterX,
-    dragCenterY,
   );
 
   return { candidates, dragCenterX, dragCenterY, dragGhostW, dragGhostH };
@@ -575,21 +654,10 @@ function collectDropCandidates(
 
 function chooseEuclideanCandidate(
   candidates: DropCandidate[],
-  dragCenterX: number,
-  dragCenterY: number,
 ): DropCandidate | null {
   let best: DropCandidate | null = null;
   for (const candidate of candidates) {
-    if (!best) {
-      best = candidate;
-      continue;
-    }
-    if (
-      Math.abs(candidate.distance - best.distance) <= 1 &&
-      candidate.container.id !== best.container.id
-    ) {
-      best = chooseByContentBox(best, candidate, dragCenterX, dragCenterY);
-    } else if (candidate.distance < best.distance) {
+    if (!best || candidate.distance < best.distance) {
       best = candidate;
     }
   }
@@ -680,8 +748,8 @@ function drawCandidateDebug(
 
   if (best) {
     item.addDebugText(
-      item.worldTransform.x,
-      item.worldTransform.y - 20,
+      item.dragPositionX,
+      item.dragPositionY - 20,
       `DROP: container=${best.container.id} idx=${best.index} dist=${Math.round(best.distance)}`,
       "rgba(250, 204, 21, 0.9)",
       true,
@@ -702,7 +770,7 @@ function compatibleInsertionContainer(
   sourceGroupID: string | undefined,
 ): boolean {
   if (!isContainerObject(container)) return false;
-  if (container.noDrop) return false;
+  if (isNoDropContainer(container)) return false;
   const targetGroupID = groupIDOf(container);
   return !sourceGroupID || !targetGroupID || sourceGroupID === targetGroupID;
 }
@@ -779,8 +847,8 @@ function insertionMarkerRect(
         ? snapshotItems[snapshotItems.length - 1]
         : items[index - 1];
     const next = index === 0 ? snapshotItems[0] : items[index];
-    const previousRect = previous ? requireDragSnapshot(previous) : null;
-    const nextRect = next ? requireDragSnapshot(next) : null;
+    const previousRect = previous ? requireDragSnapshotBox(previous) : null;
+    const nextRect = next ? requireDragSnapshotBox(next) : null;
     const markerCenter = previousRect
       ? nextRect
         ? (previousRect.x + previousRect.width + nextRect.x) / 2
@@ -800,8 +868,8 @@ function insertionMarkerRect(
       ? snapshotItems[snapshotItems.length - 1]
       : items[index - 1];
   const next = index === 0 ? snapshotItems[0] : items[index];
-  const previousRect = previous ? requireDragSnapshot(previous) : null;
-  const nextRect = next ? requireDragSnapshot(next) : null;
+  const previousRect = previous ? requireDragSnapshotBox(previous) : null;
+  const nextRect = next ? requireDragSnapshotBox(next) : null;
   const markerCenter = previousRect
     ? nextRect
       ? (previousRect.y + previousRect.height + nextRect.y) / 2
@@ -826,27 +894,28 @@ function collectInsertionCandidates(
 } {
   const pointer =
     "dragPointerPosition" in item ? item.dragPointerPosition : null;
-  const dragProp = requireDragSnapshot(item);
-  const pointerX = pointer?.x ?? item.worldTransform.x + dragProp.width / 2;
-  const pointerY = pointer?.y ?? item.worldTransform.y + dragProp.height / 2;
+  const dragProp = requireDragSnapshotBox(item);
+  const pointerX = pointer?.x ?? item.dragPositionX + dragProp.width / 2;
+  const pointerY = pointer?.y ?? item.dragPositionY + dragProp.height / 2;
   const sourceParent = "parent" in item ? (item as any).parent : null;
   const sourceGroupID = sourceParent ? groupIDOf(sourceParent) : undefined;
   const candidates: DropCandidate[] = [];
 
-  const visit = (container: ItemBase) => {
+  const visit = (container: ItemBase, treeDepth = 0) => {
     if (container === item) return;
 
-    const children = container.dragSnapshotOrderedList.filter(
+    const snapshotOrderedList = dragSnapshotItems(container);
+    const children = snapshotOrderedList.filter(
       (child) => child !== item && !child.isGhost,
     );
-    const snapshotChildren = container.dragSnapshotOrderedList.filter(
+    const snapshotChildren = snapshotOrderedList.filter(
       (child) => !child.isGhost,
     );
     const indexForGap = (index: number) => {
       const nextItem = children[index] ?? null;
-      if (!nextItem) return container.dragSnapshotOrderedList.length;
+      if (!nextItem) return snapshotOrderedList.length;
 
-      const snapshotIndex = container.dragSnapshotOrderedList.indexOf(nextItem);
+      const snapshotIndex = snapshotOrderedList.indexOf(nextItem);
       return snapshotIndex === -1 ? index : snapshotIndex;
     };
 
@@ -871,6 +940,7 @@ function collectInsertionCandidates(
           lineIndex: index,
           dragLineIndex: index,
           lineDistance: 0,
+          treeDepth,
           prevPosition: null,
           nextPosition: null,
           placementRect: ghostRect,
@@ -887,7 +957,7 @@ function collectInsertionCandidates(
 
     for (const child of children) {
       if (isContainerObject(child)) {
-        visit(child);
+        visit(child, treeDepth + 1);
       }
     }
   };
@@ -928,11 +998,8 @@ export function determineDropTarget(
   item: ItemBase,
   root: ItemBase,
 ): DropCandidate | null {
-  const { candidates, dragCenterX, dragCenterY } = collectDropCandidates(
-    item,
-    root,
-  );
-  const best = chooseEuclideanCandidate(candidates, dragCenterX, dragCenterY);
+  const { candidates } = collectDropCandidates(item, root);
+  const best = chooseEuclideanCandidate(candidates);
   drawCandidateDebug(root, item, candidates, best);
   debugDropTargetTree(root, item);
   return best;
@@ -972,7 +1039,7 @@ export function debugDropTargetTree(node: ItemBase, draggedItem: ItemBase) {
   );
 
   for (const item of items) {
-    const prop = item.dragSnapshot ?? item.currentDomProperty;
+    const prop = item.dragSnapshot?.box ?? item.currentDomProperty;
     if (!prop) continue;
 
     item.addDebugRect(

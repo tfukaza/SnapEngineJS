@@ -121,6 +121,12 @@ ol {
   }
 }
 
+p.large {
+  font-size: 1.3rem;
+  font-weight: 400;
+  line-height: 1.4;
+}
+
 pre,
 code {
   font-family: "Geist Mono", monospace;
@@ -223,6 +229,12 @@ section {
     display: grid;
     grid-template-columns: repeat(6, 1fr);
   }
+
+  &.col-12 {
+    display: grid;
+    grid-template-columns: repeat(12, minmax(0, 1fr));
+    gap: var(--size-32);
+  }
 }
 
 .disk {
@@ -261,9 +273,10 @@ section {
 .card {
   --card-border: 1px;
   --card-color: var(--color-background);
+  --card-radius: var(--size-16);
 
   padding: var(--size-16);
-  border-radius: var(--ui-radius);
+  border-radius: var(--card-radius);
   background-color: var(--card-color);
   box-shadow:
     6px 6px 4px -2px rgba(52, 54, 76, 0.15),
@@ -281,7 +294,7 @@ section {
     left: 0;
     width: 100%;
     height: 100%;
-    border-radius: var(--ui-radius);
+    border-radius: var(--card-radius);
     box-sizing: border-box;
     box-shadow:
       1px 1px 1px 0px rgba(9, 21, 39, 0.059) inset,
@@ -296,7 +309,7 @@ section {
     left: 0.5px;
     width: calc(100% - 1px);
     height: calc(100% - 1px);
-    border-radius: calc(var(--ui-radius) - 0.5px);
+    border-radius: calc(var(--card-radius) - 0.5px);
     box-sizing: border-box;
     border-style: inset;
     border: var(--card-border) solid rgb(255, 255, 255);
@@ -316,6 +329,14 @@ section {
     box-shadow:
       0px 23px 27.8px -11px rgba(61, 52, 76, 0.28),
       0px 0px 20.4px -3px rgba(82, 60, 67, 0.13);
+  }
+
+  &.shallow {
+    box-shadow:
+      2px 2px 3px -1px rgba(52, 54, 76, 0.1),
+      4px 4px 7px -3px rgba(55, 52, 76, 0.1),
+      7px 7px 12px -6px rgba(31, 30, 41, 0.1),
+      -2px -2px 8px -4px hsla(from var(--card-color) h s calc(l + 15) / 0.16);
   }
 }
 

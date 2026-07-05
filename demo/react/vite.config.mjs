@@ -6,6 +6,8 @@ const root = path.resolve(__dirname, "../..");
 
 export default defineConfig(({ command, mode }) => {
   return {
+    cacheDir: path.resolve(root, "node_modules/.vite-demo-react"),
+    publicDir: path.resolve(__dirname, "../../website/static"),
     plugins: [react()],
     resolve: {
       alias: {

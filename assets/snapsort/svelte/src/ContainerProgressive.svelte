@@ -19,7 +19,12 @@
 
   onMount(() => {
     container = itemContainer;
-    parent?.addItem(itemContainer);
+    // parent?.addItem(itemContainer);
+    if (parent) {
+      // parent.addItem(itemContainer);
+    } else {
+      itemContainer.takeRootSnapshot();
+    }
   });
 
   onDestroy(() => {

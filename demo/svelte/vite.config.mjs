@@ -6,6 +6,7 @@ const root = path.resolve(__dirname, "../..");
 
 export default defineConfig(({ command, mode }) => {
   return {
+    cacheDir: path.resolve(root, "node_modules/.vite-demo-svelte"),
     logLevel: "info",
     resolve: {
       alias: {

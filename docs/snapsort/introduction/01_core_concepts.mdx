@@ -1,6 +1,5 @@
 ---
-title: Drag and Drop Strategies
-description: A quick introduction to SnapSort's placement strategies.
+title: Core Concepts
 order: 1
 project: snapsort
 projectTitle: SnapSort
@@ -8,6 +7,39 @@ section: introduction
 sectionTitle: Introduction
 sectionOrder: 1
 ---
+
+## Build A Sortable Surface
+
+A SnapSort surface has three parts:
+
+- An engine that owns input, layout reads, writes, and animations.
+- One or more containers that define where items can be placed.
+- Items inside those containers, each representing one draggable piece of UI.
+
+Each container has a direction and a group. Direction controls the layout flow. Group controls which containers can exchange items.
+
+`Container` and `Item` are aliases for the default Euclidean strategy. Use the Progressive variants for ordered token layouts where wrapped reading order matters.
+
+## Groups
+
+Containers with the same `groupID` can exchange items. Containers with different groups are isolated from one another.
+
+Use one group for each independent drag-and-drop area. For example, a sentence builder might use one group for all answer and word-bank containers in a single exercise, while a kanban board might use a separate group for each board.
+
+## Direction
+
+Set `direction` to control the main flow:
+
+| Value | Behavior |
+|-------|----------|
+| `"column"` | Stack items vertically. |
+| `"row"` | Arrange items horizontally and wrap when the container wraps. |
+
+## Sections
+
+- [Drag and Drop Strategies](/docs/snapsort/introduction/01_drag_drop_strategies)
+- [Svelte API](/docs/snapsort/reference/svelte)
+
 
 SnapSort treats drag and drop as a set of placement strategies. A strategy decides how the dragged item leaves normal layout, how the preview ghost is placed, and which container/index wins when the user drops.
 

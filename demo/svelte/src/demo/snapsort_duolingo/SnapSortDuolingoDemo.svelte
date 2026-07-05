@@ -221,6 +221,8 @@
     }
 
     action();
+    suppressTileClick = false;
+    tilePointerStart = null;
   }
 
   function resetTiles() {

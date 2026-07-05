@@ -4,7 +4,7 @@
   import type {
     ItemBase,
     ContainerBase,
-    ItemMetadata,
+    ItemSnapshotMetadata,
   } from "@snap-engine/snapsort";
   import type { Engine } from "@snap-engine/core";
 
@@ -18,14 +18,14 @@
     children: any;
     style?: string;
     className?: string;
-    metadata?: ItemMetadata;
+    metadata?: ItemSnapshotMetadata;
     itemObject?: ItemBase | null;
   } = $props();
 
   const engine: Engine = getContext("engine");
   const container: ContainerBase | null = getContext("container");
   const ownsItem = providedItemObject == null;
-  const itemObject: ItemBase = providedItemObject ?? new ItemInsertion(engine, null);
+  const itemObject: ItemBase = providedItemObject ?? new ItemInsertion(engine, container);
 
   setContext("item", itemObject);
 
@@ -35,7 +35,7 @@
 
   onMount(() => {
     if (ownsItem) {
-      container?.addItem(itemObject);
+      // container?.addItem(itemObject);
     }
   });
 

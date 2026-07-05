@@ -1,5 +1,7 @@
 import {
+  createContext,
   forwardRef,
+  useCallback,
   useContext,
   useEffect,
   useImperativeHandle,
@@ -9,20 +11,26 @@ import {
 } from "react";
 import {
   ItemEuclidean as ItemEuclideanObject,
+  ItemInsertion as ItemInsertionObject,
   ItemProgressive as ItemProgressiveObject,
   type ItemBase,
-  type ItemMetadata,
+  type ItemSnapshotMetadata,
 } from "@snap-engine/snapsort";
 import { useSnapSortEngine } from "./Engine";
 import { ContainerObjectContext } from "./Container";
 
-type ItemObjectClass = typeof ItemEuclideanObject | typeof ItemProgressiveObject;
+type ItemObjectClass =
+  | typeof ItemEuclideanObject
+  | typeof ItemInsertionObject
+  | typeof ItemProgressiveObject;
+
+export const ItemObjectContext = createContext<ItemBase | null>(null);
 
 export interface ItemProps {
   children: ReactNode;
   className?: string;
   itemObject?: ItemBase | null;
-  metadata?: ItemMetadata;
+  metadata?: ItemSnapshotMetadata;
   style?: CSSProperties;
 }
 
@@ -31,13 +39,7 @@ function createItemComponent(
   algorithmClassName: string,
 ) {
   return forwardRef<ItemBase, ItemProps>(function SnapSortItem(
-    {
-      children,
-      className = "",
-      itemObject = null,
-      metadata = {},
-      style,
-    },
+    { children, className = "", itemObject = null, metadata = {}, style },
     ref,
   ) {
     const engine = useSnapSortEngine();
@@ -53,10 +55,17 @@ function createItemComponent(
 
     useImperativeHandle(ref, () => item, [item]);
 
+    const setItemElement = useCallback(
+      (element: HTMLDivElement | null) => {
+        itemDomRef.current = element;
+        if (element) {
+          item.element = element;
+        }
+      },
+      [item],
+    );
+
     useEffect(() => {
-      if (itemDomRef.current) {
-        item.element = itemDomRef.current;
-      }
       container?.addItem(item);
       return () => {
         if (ownsItemRef.current) {
@@ -66,21 +75,23 @@ function createItemComponent(
     }, [container, item]);
 
     return (
-      <div
-        ref={itemDomRef}
-        className={`snapsort-item ${algorithmClassName} ${className}`.trim()}
-        style={{
-          alignItems: "center",
-          boxSizing: "border-box",
-          display: "flex",
-          flexDirection: "column",
-          justifyContent: "center",
-          padding: 4,
-          ...style,
-        }}
-      >
-        {children}
-      </div>
+      <ItemObjectContext.Provider value={item}>
+        <div
+          ref={setItemElement}
+          className={`snapsort-item ${algorithmClassName} ${className}`.trim()}
+          style={{
+            alignItems: "center",
+            boxSizing: "border-box",
+            display: "flex",
+            flexDirection: "column",
+            justifyContent: "center",
+            padding: 4,
+            ...style,
+          }}
+        >
+          {children}
+        </div>
+      </ItemObjectContext.Provider>
     );
   });
 }
@@ -93,6 +104,11 @@ export const ItemEuclidean = createItemComponent(
 export const ItemProgressive = createItemComponent(
   ItemProgressiveObject,
   "snapsort-item-progressive",
+);
+
+export const ItemInsertion = createItemComponent(
+  ItemInsertionObject,
+  "snapsort-item-insertion",
 );
 
 export const Item = ItemEuclidean;

@@ -6,12 +6,7 @@ import type {
   GhostRect,
   GhostUpdateEvent,
 } from "./container";
-import type {
-  dragStartProp,
-  dragProp,
-  dragEndProp,
-  DomProperty,
-} from "@snap-engine/core";
+import type { dragStartProp, dragProp, dragEndProp } from "@snap-engine/core";
 import {
   determineDropTarget,
   determineInsertionDropTarget,
@@ -20,23 +15,55 @@ import {
   type DropCandidate,
 } from "./algorithm";
 import { AnimationObject } from "@snap-engine/core/animation";
+import type {
+  ItemId,
+  ItemSnapshot,
+  ItemSnapshotMetadata,
+  LayoutDirection,
+  LayoutMainAxisAlign,
+} from "./snapshot";
+import { DomProperty } from "@snap-engine/core";
 
 const MIN_FLIP_DISTANCE = 0.5;
 
-interface FlipSnapshot {
+interface FlipAnimationState {
   item: ItemBase;
   key: string;
   first: DOMRect | null;
+  firstParent: DOMRect | null;
+  firstParentItem: ItemBase | null;
   last: DOMRect | null;
+  lastParent: DOMRect | null;
+  lastParentItem: ItemBase | null;
   targetElement: HTMLElement | null;
 }
 
-export type ItemId = string;
-export interface ItemMetadata extends Record<string, unknown> {
-  itemId?: ItemId;
-  insertionMarkerInsetLeft?: number;
-  insertionMarkerInsetRight?: number;
+interface TransformOffset {
+  x: number;
+  y: number;
 }
+
+interface DragLayoutPosition {
+  x: number;
+  y: number;
+}
+
+interface DragSourcePosition {
+  container: ContainerBase;
+  index: number;
+}
+
+interface ElementRectAnimationOptions {
+  coordinateParent?: ItemBase | null;
+  firstParent?: DOMRect | null;
+  firstParentItem?: ItemBase | null;
+  lastParent?: DOMRect | null;
+  lastParentItem?: ItemBase | null;
+  subtractAncestorOffset?: boolean;
+  initialOffset?: TransformOffset;
+  afterWrite?: () => void;
+}
+
 export type ItemBaseConstructor = new (
   engine: any,
   parent: BaseObject | null,
@@ -50,25 +77,9 @@ type GhostTarget = {
   ghostRect?: GhostRect | null;
 };
 
-function insertionMarkerInsetsFromMetadata(metadata: ItemMetadata): {
-  left: number;
-  right: number;
-} {
-  return {
-    left:
-      typeof metadata.insertionMarkerInsetLeft === "number"
-        ? metadata.insertionMarkerInsetLeft
-        : 0,
-    right:
-      typeof metadata.insertionMarkerInsetRight === "number"
-        ? metadata.insertionMarkerInsetRight
-        : 0,
-  };
-}
-
 export class ItemBase extends ElementObject {
   #rootContainer: ContainerBase | null = null;
-  #metadata: ItemMetadata = {};
+  #metadata: ItemSnapshotMetadata = {};
   #locked: boolean = false;
   noDrop: boolean = false;
 
@@ -76,10 +87,12 @@ export class ItemBase extends ElementObject {
   #dragOffsetY: number = 0;
   #dragPointerX: number = 0;
   #dragPointerY: number = 0;
-  #dragSnapshot: DomProperty | null = null;
-  #dragSnapshotMetadata: ItemMetadata | null = null;
-  #dragSnapshotOrderedList: ItemBase[] = [];
-  #dragPositionContextSnapshot: Map<HTMLElement, string> = new Map();
+  #dragStartX: number = 0;
+  #dragStartY: number = 0;
+
+  #dragLayoutTransform: DomProperty | null = null;
+  #dragSnapshot: ItemSnapshot<ItemBase> | null = null;
+  // #dragPositionContextSnapshot: Map<HTMLElement, string> = new Map();
 
   #itemOrderedList: ItemBase[] = [];
 
@@ -88,10 +101,14 @@ export class ItemBase extends ElementObject {
   #depth: number = 0;
   ghostItem: ItemBase | null = null;
   #pendingGhostTarget: GhostTarget | null = null;
+  #visualAnimationOffset: TransformOffset = { x: 0, y: 0 };
+  #dragCoordinateParent: ItemBase | null = null;
+  #dragLayoutPosition: DragLayoutPosition | null = null;
+  #dragSourcePosition: DragSourcePosition | null = null;
 
   constructor(
     engine: any,
-    parent: BaseObject | null,
+    parent: ContainerBase | null,
     isGhost: boolean = false,
   ) {
     super(engine, parent);
@@ -103,22 +120,44 @@ export class ItemBase extends ElementObject {
       this.writeDom();
     };
     this.transformMode = "none";
-
     this.ghostItem = null;
+
+    // If there is no parent element, assume this is the root container
+    this.rootContainer = parent
+      ? parent.rootContainer
+      : (this as unknown as ContainerBase);
+    // if (parent) {
+    //   parent.addItem(this);
+    // }
   }
 
-  protected get dragDropEnabled(): boolean {
-    return false;
-  }
+  // protected get dragDropEnabled(): boolean {
+  //   return false;
+  // }
 
+  /**
+   * Return the ItemBase class used to construct the ghost item.
+   */
   protected get ghostItemConstructor(): ItemBaseConstructor | null {
     return null;
   }
 
+  /**
+   * Returns true if this container/item is configured to use
+   * insertion mode for drag and drop.
+   */
   protected get usesInsertionDropMarker(): boolean {
     return false;
   }
 
+  /**
+   * Create and return a new instance of the ghost item.
+   * This will also invoke the createItemGhost callback,
+   * which is responsible for creating the DOM element in vanilla JS mode,
+   * or updating states if the items are managed by a frontend framework.
+   * @param event The ghost update event containing container and metadata information.
+   * @returns A new ghost item instance, or null if no constructor is defined.
+   */
   protected createGhostItem(event: GhostUpdateEvent): ItemBase | null {
     const itemConstructor = this.ghostItemConstructor;
     if (!itemConstructor) return null;
@@ -143,6 +182,15 @@ export class ItemBase extends ElementObject {
     return ghostItem;
   }
 
+  /**
+   * Returns a list of DropCandidate, i.e. a list of
+   * possible locations the item can be dropped given
+   * the current position of the dragged item and the current
+   * state of the entire tree.
+   * @param _item
+   * @param _root
+   * @returns
+   */
   protected resolveDropTarget(
     _item: ItemBase,
     _root: ItemBase,
@@ -150,48 +198,82 @@ export class ItemBase extends ElementObject {
     return null;
   }
 
+  /**
+   * Add an item to a container.
+   *
+   * @note The DOM element of the item must be set before calling this method.
+   * @param item
+   */
   addItem(item: ItemBase) {
-    if (!this.children.includes(item)) {
-      this.appendChild(item);
+    console.debug("Adding item", item.#itemID(item));
+    if (
+      this.children.includes(item) &&
+      this.#itemOrderedList.find((i) => i === item)
+    ) {
+      throw new Error("Item is already a child of this container");
     }
-    if (!this.#itemOrderedList.includes(item)) {
-      this.#itemOrderedList.push(item);
-    }
-    this.#findRootContainer();
+    item.rootContainer = this.rootContainer;
+    this.appendChild(item);
+    this.#itemOrderedList.push(item);
+    this.takeRootSnapshot();
   }
 
+  /**
+   * Remove an item from a container
+   * @param id Item ID of the item to remove
+   * @returns True if the item was found and removed, false otherwise
+   */
+  removeItem(id: ItemId) {
+    const item =
+      this.#itemOrderedList.find(
+        (item) => !item.isGhost && this.#itemID(item) === id,
+      ) ??
+      this.children.find(
+        (item): item is ItemBase =>
+          item instanceof ItemBase &&
+          !item.isGhost &&
+          this.#itemID(item) === id,
+      );
+    if (!item) return false;
+
+    this.removeItemFrom(this as unknown as ContainerBase, item);
+    return true;
+  }
+
+  /**
+   * Returns the unique identifier for an item.
+   * If a unique ID was not assigned to the item, it will fall back to
+   * the item's engine's object ID.
+   *
+   * If the item is a ghost for insertion mode, the ID is prepended with
+   * a `ghost:` to prevent conflation with the original object.
+   * @param item
+   * @returns
+   */
   #itemID(item: ItemBase) {
     const id = item.metadata.itemId ?? item.id;
     return item.isGhost && item.usesInsertionDropMarker ? `ghost:${id}` : id;
   }
 
-  // removeItem(id: ItemId) {
-  //   const item =
-  //     this.#itemOrderedList.find((item) => this.#itemID(item) === id) ??
-  //     this.children.find(
-  //       (item): item is ItemBase =>
-  //         item instanceof ItemBase && this.#itemID(item) === id,
-  //     );
-  //   if (!item) return;
-
-  //   this.removeItemFrom(this as unknown as ContainerBase, item);
-  // }
-
   /**
-   * Find a SnapSort item by its stable item metadata id within this subtree.
-   *
-   * This searches the engine-owned item tree first, which is the normal path
-   * when SnapSort still has an up-to-date object hierarchy.
+   * Find an item by its item id within this container.
    *
    * @param id Stable item id from `metadata.itemId`.
    * @returns Matching item object, or null when the tree has no matching item.
    */
   #findItemByID(id: ItemId): ItemBase | null {
+    // Ghosts can share the original's id. They must never be matched here —
+    // otherwise callers like moveItem() can grab a ghost that is destroyed
+    // before a deferred move() runs against it.
     const directItem =
-      this.#itemOrderedList.find((item) => this.#itemID(item) === id) ??
+      this.#itemOrderedList.find(
+        (item) => !item.isGhost && this.#itemID(item) === id,
+      ) ??
       this.children.find(
         (item): item is ItemBase =>
-          item instanceof ItemBase && this.#itemID(item) === id,
+          item instanceof ItemBase &&
+          !item.isGhost &&
+          this.#itemID(item) === id,
       );
     if (directItem) return directItem;
 
@@ -204,9 +286,9 @@ export class ItemBase extends ElementObject {
   }
 
   /**
-   * Move an item identified by stable metadata id into a target container.
+   * Move an item into a target container.
    *
-   * This is the imperative API used by frameworks. It accepts
+   * This is the public API used by frameworks. It accepts
    * an id instead of an `ItemBase` so callers do not need to retain engine
    * object references.
    *
@@ -216,25 +298,32 @@ export class ItemBase extends ElementObject {
    * @returns True when a matching item was found and a move was requested.
    */
   moveItem(id: ItemId, container: ContainerBase, index: number) {
-    this.#findRootContainer();
+    this.takeRootSnapshot();
     const root = this.#rootContainer as unknown as ItemBase;
     const item = root.#findItemByID(id);
     if (!item) return false;
     if (item.parent !== this && this.element?.contains(item.element)) {
-      const staleParent = item.parent as ItemBase | null;
-      staleParent?.removeChild(item);
-      if (staleParent) {
-        staleParent.#itemOrderedList = staleParent.#itemOrderedList.filter(
-          (candidate) => candidate !== item,
-        );
-      }
-      this.addItem(item);
+      // TODO: This should not happen in the first place
+      throw new Error(
+        "Faulty state: Item is not logically a child of this container, but the DOM contains it",
+      );
+      // const staleParent = item.parent as ItemBase | null;
+      // staleParent?.removeChild(item);
+      // if (staleParent) {
+      //   staleParent.#itemOrderedList = staleParent.#itemOrderedList.filter(
+      //     (candidate) => candidate !== item,
+      //   );
+      // }
+      // this.addItem(item);
     }
 
-    this.moveItemToContainer(container, item, index);
+    this.#moveItemToContainer(container, item, index);
     return true;
   }
 
+  /**
+   * If true, it means this item or container cannot be moved.
+   */
   get locked(): boolean {
     return this.#locked;
   }
@@ -243,6 +332,10 @@ export class ItemBase extends ElementObject {
     this.#locked = value;
   }
 
+  /**
+   * Returns the current container and the index within that container.
+   * @returns
+   */
   getIndexAndContainer(): { index: number; container: ContainerBase | null } {
     if (!this.parent) {
       return { index: -1, container: null };
@@ -252,11 +345,11 @@ export class ItemBase extends ElementObject {
     return { index: idx, container: parentContainer };
   }
 
-  get metadata(): ItemMetadata {
+  get metadata(): ItemSnapshotMetadata {
     return this.#metadata;
   }
 
-  set metadata(value: ItemMetadata) {
+  set metadata(value: ItemSnapshotMetadata) {
     this.#metadata = value;
   }
 
@@ -268,10 +361,17 @@ export class ItemBase extends ElementObject {
     return this.parent as unknown as ContainerBase;
   }
 
-  get rootContainer(): ContainerBase | null {
-    return this.#rootContainer;
+  get rootContainer(): ContainerBase {
+    return this.#rootContainer ?? (this as unknown as ContainerBase);
   }
 
+  set rootContainer(value: ContainerBase | null) {
+    this.#rootContainer = value;
+  }
+
+  /**
+   * Returns data for the current ghost item.
+   */
   get pendingGhostTarget(): GhostTarget | null {
     return this.#pendingGhostTarget;
   }
@@ -280,9 +380,9 @@ export class ItemBase extends ElementObject {
     this.#pendingGhostTarget = value;
   }
 
-  setRootContainer(root: ContainerBase | null) {
-    this.#rootContainer = root;
-  }
+  // setRootContainer(root: ContainerBase | null) {
+  //   this.#rootContainer = root;
+  // }
 
   get isGhost(): boolean {
     return this.#isGhost;
@@ -292,31 +392,112 @@ export class ItemBase extends ElementObject {
     return this.#depth;
   }
 
+  /**
+   * Returns the list of child items ordered by DOM position.
+   */
   get itemOrderedList(): ItemBase[] {
     return this.#itemOrderedList;
   }
 
-  get dragSnapshot(): DomProperty | null {
+  /**
+   * Returns the frozen snapshot for this item,
+   * containing information about bounding box geometry,
+   * child items, etc.
+   */
+  get dragSnapshot(): ItemSnapshot<ItemBase> | null {
     return this.#dragSnapshot;
   }
 
-  get dragSnapshotMetadata(): ItemMetadata | null {
-    return this.#dragSnapshotMetadata;
-  }
-
+  /**
+   * Returns the inset values for the insertion drop marker.
+   * TODO: generalize to use bounding rect.
+   */
   get dragSnapshotInsertionMarkerInsets(): { left: number; right: number } {
-    return insertionMarkerInsetsFromMetadata(
-      this.#dragSnapshotMetadata ?? this.#metadata,
-    );
+    const metadata = this.#dragSnapshot?.metadata ?? this.#metadata;
+    return {
+      left:
+        typeof metadata.insertionMarkerInsetLeft === "number"
+          ? metadata.insertionMarkerInsetLeft
+          : 0,
+      right:
+        typeof metadata.insertionMarkerInsetRight === "number"
+          ? metadata.insertionMarkerInsetRight
+          : 0,
+    };
   }
 
+  /**
+   * Returns the current drag pointer position in world coordinates.
+   */
   get dragPointerPosition(): { x: number; y: number } | null {
     if (!this.#dragSnapshot) return null;
     return { x: this.#dragPointerX, y: this.#dragPointerY };
   }
 
-  get dragSnapshotOrderedList(): ItemBase[] {
-    return this.#dragSnapshotOrderedList;
+  /**
+   * Returns the dragged item's top-left position in world coordinates.
+   */
+  get dragPositionX(): number {
+    if (!this.#dragSnapshot) return this.worldTransform.x;
+    return this.#dragSnapshot.box.x + this.#dragPointerX - this.#dragStartX;
+  }
+
+  /**
+   * Returns the dragged item's top-left position in world coordinates.
+   */
+  get dragPositionY(): number {
+    if (!this.#dragSnapshot) return this.worldTransform.y;
+    return this.#dragSnapshot.box.y + this.#dragPointerY - this.#dragStartY;
+  }
+
+  cancelAnimations() {
+    this.#visualAnimationOffset = { x: 0, y: 0 };
+    super.cancelAnimations();
+  }
+
+  #parentItem(): ItemBase | null {
+    return this.parent instanceof ItemBase ? this.parent : null;
+  }
+
+  /**
+   * Calculate the aggregated visual offset of all parent containers
+   * while they are being animated. In simple terms, this
+   * function answers the question "How much has this item's container
+   * drifted from its original position due to animations applied to it
+   * or any of its ancestors?"
+   *
+   * @param parent The starting ancestor item.
+   * @param overrides Optional map of visual offsets to override default values.
+   * @returns
+   */
+  #ancestorVisualOffset(
+    parent: ItemBase | null,
+    // overrides: Map<ItemBase, TransformOffset> | null = null,
+  ): TransformOffset {
+    const offset = { x: 0, y: 0 };
+    let current: BaseObject | null = parent;
+    while (current) {
+      if (current instanceof ItemBase) {
+        const currentOffset = current.#visualAnimationOffset;
+        offset.x += currentOffset.x;
+        offset.y += currentOffset.y;
+      }
+      current = current.parent;
+    }
+    return offset;
+  }
+
+  #setVisualAnimationOffset(x: number, y: number) {
+    this.#visualAnimationOffset = { x, y };
+  }
+
+  #clearVisualAnimationOffset() {
+    this.#visualAnimationOffset = { x: 0, y: 0 };
+  }
+
+  // TODO: replace with writeTransform
+  #translateTransform(x: number, y: number) {
+    return `translate3d(${x}px, ${y}px, 0px)`;
   }
 
   /**
@@ -324,7 +505,7 @@ export class ItemBase extends ElementObject {
    *
    * @returns Child objects ordered by their current element order in the DOM.
    */
-  childrenInDomOrder(): BaseObject[] {
+  #childrenInDomOrder(): BaseObject[] {
     return this.children.slice().sort((a, b) => {
       const aEl = (a as ElementObject).element;
       const bEl = (b as ElementObject).element;
@@ -337,7 +518,6 @@ export class ItemBase extends ElementObject {
   }
 
   static #containerColors = new Map<string, string>();
-
   static #colorForContainer(id: string): string {
     let color = ItemBase.#containerColors.get(id);
     if (!color) {
@@ -362,7 +542,7 @@ export class ItemBase extends ElementObject {
     const color = ItemBase.#colorForContainer(node.id);
     for (const child of node.children) {
       if (!(child instanceof ItemBase)) continue;
-      const prop = child.dragSnapshot ?? child.currentDomProperty;
+      const prop = child.dragSnapshot?.box ?? child.currentDomProperty;
       if (prop) {
         const cx = prop.x + prop.width / 2;
         const cy = prop.y + prop.height / 2;
@@ -384,19 +564,47 @@ export class ItemBase extends ElementObject {
   }
 
   /**
-   * Walk up to the root container and refresh the SnapSort tree state.
+   * Trigger root container to take snapshot of the current state.
+   * This initializes the SnapSort tree state and queues the initial DOM read
+   * into **READ_1** stage.
    *
-   * The root queues the initial DOM read used by drag-start snapshot capture.
+   * @note Frontend frameworks should invoke this once after the
+   * entire tree has been added to the DOM.
+   */
+  takeRootSnapshot() {
+    // if (this.parent == null) {
+    //
+    const root = this.#rootContainer;
+    if (!root) {
+      throw new Error("Root container not found");
+    }
+    root.#updateState();
+    root.#queueReadTree("READ_1", `snapsort-read-root-${this.id}`);
+    // } else {
+    //   const parentContainer = this.parent as unknown as ItemBase;
+    //   parentContainer.#takeRootSnapshot();
+    // }
+  }
+
+  /**
+   * Refresh root/depth metadata and live child ordering for this subtree.
    *
+   * @param root Root container that owns the active SnapSort tree.
+   * @param depth Nesting depth of this item within the root tree.
    * @returns Nothing.
    */
-  #findRootContainer() {
-    if (this.parent == null) {
-      this.#updateState(this as unknown as ContainerBase);
-      this.#queueReadTree("READ_1", `snapsort-read-root-${this.id}`);
-    } else {
-      const parentContainer = this.parent as unknown as ItemBase;
-      parentContainer.#findRootContainer();
+  #updateState(depth: number = 0) {
+    // console.debug("Updating state for", this.#itemID(this), "depth:", depth);
+    // Set root container and depth
+    // this.#rootContainer = root;
+    this.#depth = depth;
+    // Get the list of children in DOM order
+    this.#itemOrderedList = this.#childrenInDomOrder() as ItemBase[];
+    // Update all its children as well.
+    for (const child of this.children) {
+      if (child instanceof ItemBase) {
+        child.#updateState(depth + 1);
+      }
     }
   }
 
@@ -428,25 +636,20 @@ export class ItemBase extends ElementObject {
     }
   }
 
-  /**
-   * Refresh root/depth metadata and live child ordering for this subtree.
-   *
-   * @param root Root container that owns the active SnapSort tree.
-   * @param depth Nesting depth of this item within the root tree.
-   * @returns Nothing.
-   */
-  #updateState(root: ContainerBase | null, depth: number = 0) {
-    // Set root container and depth
-    this.#rootContainer = root;
-    this.#depth = depth;
-    // Get the list of children in DOM order
-    this.#itemOrderedList = this.childrenInDomOrder() as ItemBase[];
-    // Update all its children as well.
-    for (const child of this.children) {
-      if (child instanceof ItemBase) {
-        child.#updateState(root, depth + 1);
-      }
-    }
+  #snapshotDirection(): LayoutDirection {
+    return "direction" in this && typeof (this as any).direction === "string"
+      ? (this as any).direction
+      : "column";
+  }
+
+  #snapshotMainAxisAlign(): LayoutMainAxisAlign {
+    return "mainAxisAlign" in this && (this as any).mainAxisAlign === "center"
+      ? "center"
+      : "start";
+  }
+
+  #dragSnapshotItems(): ItemBase[] {
+    return this.#dragSnapshot?.children.map((snapshot) => snapshot.value) ?? [];
   }
 
   /**
@@ -457,13 +660,23 @@ export class ItemBase extends ElementObject {
    *
    * @returns Nothing.
    */
-  #captureDragSnapshotTree() {
-    this.#dragSnapshot = cloneDomProperty(this.currentDomProperty);
-    this.#dragSnapshotMetadata = { ...this.#metadata };
-    this.#dragSnapshotOrderedList = this.#itemOrderedList.slice();
-    for (const child of this.#dragSnapshotOrderedList) {
-      child.#captureDragSnapshotTree();
-    }
+  #captureDragSnapshotTree(): ItemSnapshot<ItemBase> {
+    const snapshotItems = this.#itemOrderedList.slice();
+    const snapshot: ItemSnapshot<ItemBase> = {
+      value: this,
+      key: this.#itemID(this),
+      metadata: { ...this.#metadata },
+      direction: this.#snapshotDirection(),
+      mainAxisAlign: this.#snapshotMainAxisAlign(),
+      locked: this.#locked,
+      box: cloneDomProperty(this.currentDomProperty),
+      children: [],
+    };
+    this.#dragSnapshot = snapshot;
+    snapshot.children = snapshotItems.map((child) =>
+      child.#captureDragSnapshotTree(),
+    );
+    return snapshot;
   }
 
   /**
@@ -477,12 +690,10 @@ export class ItemBase extends ElementObject {
     visited.add(this);
 
     const childrenToClear = new Set([
-      ...this.#dragSnapshotOrderedList,
+      ...this.#dragSnapshotItems(),
       ...this.#itemOrderedList,
     ]);
     this.#dragSnapshot = null;
-    this.#dragSnapshotMetadata = null;
-    this.#dragSnapshotOrderedList = [];
 
     for (const child of childrenToClear) {
       child.#clearDragSnapshotTree(visited);
@@ -505,7 +716,7 @@ export class ItemBase extends ElementObject {
 
     if (!this.#dragSnapshot) return false;
 
-    return this.#dragSnapshotOrderedList.every((child) =>
+    return this.#dragSnapshotItems().every((child) =>
       child.#hasDragSnapshotTree(visited),
     );
   }
@@ -585,14 +796,21 @@ export class ItemBase extends ElementObject {
   #captureFlipSnapshot(
     root: ItemBase,
     exclude: ItemBase | null,
-  ): FlipSnapshot[] {
-    return root.#collectFlipItems(root, exclude).map((item) => ({
-      item,
-      key: this.#itemID(item),
-      first: item.element!.getBoundingClientRect(),
-      last: null,
-      targetElement: item.element,
-    }));
+  ): FlipAnimationState[] {
+    return root.#collectFlipItems(root, exclude).map((item) => {
+      const parentItem = item.#parentItem();
+      return {
+        item,
+        key: this.#itemID(item),
+        first: item.element!.getBoundingClientRect(),
+        firstParent: parentItem?.element?.getBoundingClientRect() ?? null,
+        firstParentItem: parentItem,
+        last: null,
+        lastParent: null,
+        lastParentItem: null,
+        targetElement: item.element,
+      };
+    });
   }
 
   /**
@@ -602,7 +820,7 @@ export class ItemBase extends ElementObject {
    * @param root Root of the SnapSort tree after the DOM mutation.
    * @returns Nothing.
    */
-  #captureFlipLast(snapshot: FlipSnapshot[], root: ItemBase) {
+  #captureFlipLast(snapshot: FlipAnimationState[], root: ItemBase) {
     const currentItems = new Map(
       root
         .#collectFlipItems(root, null)
@@ -618,6 +836,9 @@ export class ItemBase extends ElementObject {
           ? entry.item.element
           : null;
       }
+      const parentItem = entry.item.#parentItem();
+      entry.lastParentItem = parentItem;
+      entry.lastParent = parentItem?.element?.getBoundingClientRect() ?? null;
       entry.last = entry.targetElement?.getBoundingClientRect() ?? null;
     }
   }
@@ -634,39 +855,42 @@ export class ItemBase extends ElementObject {
    * @returns Nothing.
    */
   #playFlipAnimations(
-    snapshot: FlipSnapshot[],
+    snapshot: FlipAnimationState[],
     animationConfig: AnimationConfig,
     animationOwner: ItemBase,
+    draggedItem: ItemBase | null = null,
   ) {
-    const movingAncestors = new Set<ItemBase>();
     const duration = animationConfig.duration ?? 160;
     const easing = animationConfig.timing_function ?? "ease-out";
+    const entriesByItem = new Map(snapshot.map((entry) => [entry.item, entry]));
 
-    for (const { item, first, last, targetElement } of snapshot) {
-      const hasMovingAncestor =
-        movingAncestors.size > 0 &&
-        (() => {
-          let parent = item.parent;
-          while (parent) {
-            if (parent instanceof ItemBase && movingAncestors.has(parent)) {
-              return true;
-            }
-            parent = parent.parent;
-          }
-          return false;
-        })();
-      if (hasMovingAncestor || !targetElement || !first || !last) continue;
+    const orderedSnapshot = snapshot.slice().sort((a, b) => {
+      if (this.#isFlipAncestor(a, b, entriesByItem)) return -1;
+      if (this.#isFlipAncestor(b, a, entriesByItem)) return 1;
+      return (
+        this.#flipAnimationDepth(a, entriesByItem) -
+        this.#flipAnimationDepth(b, entriesByItem)
+      );
+    });
+    const initialOffsets = this.#initialFlipOffsets(orderedSnapshot);
 
-      const dx = first.x - last.x;
-      const dy = first.y - last.y;
-      if (
-        Math.abs(dx) < MIN_FLIP_DISTANCE &&
-        Math.abs(dy) < MIN_FLIP_DISTANCE
-      ) {
-        continue;
-      }
+    for (const {
+      item,
+      first,
+      firstParent,
+      firstParentItem,
+      last,
+      lastParent,
+      lastParentItem,
+      targetElement,
+    } of orderedSnapshot) {
+      if (!targetElement || !first || !last) continue;
 
-      movingAncestors.add(item);
+      const syncDraggedTransform =
+        draggedItem &&
+        this.#isItemAncestor(item, draggedItem.#dragCoordinateParent)
+          ? () => draggedItem.#writeDraggedTransform()
+          : undefined;
       this.#playElementRectAnimation(
         item,
         first,
@@ -674,8 +898,118 @@ export class ItemBase extends ElementObject {
         targetElement,
         { duration, timing_function: easing },
         targetElement === item.element ? item : animationOwner,
+        {
+          coordinateParent: lastParentItem,
+          firstParent,
+          firstParentItem,
+          lastParent,
+          lastParentItem,
+          initialOffset: initialOffsets.get(item),
+          afterWrite: syncDraggedTransform,
+        },
       );
     }
+
+    if (draggedItem) {
+      draggedItem.#writeDraggedTransform();
+    }
+  }
+
+  #flipAnimationDepth(
+    entry: FlipAnimationState,
+    entriesByItem: Map<ItemBase, FlipAnimationState>,
+  ) {
+    let depth = 0;
+    let parent = entry.lastParentItem;
+    while (parent) {
+      depth += 1;
+      parent =
+        entriesByItem.get(parent)?.lastParentItem ?? parent.#parentItem();
+    }
+    return depth;
+  }
+
+  #isFlipAncestor(
+    possibleAncestor: FlipAnimationState,
+    descendant: FlipAnimationState,
+    entriesByItem: Map<ItemBase, FlipAnimationState>,
+  ) {
+    let parent = descendant.lastParentItem;
+    while (parent) {
+      if (parent === possibleAncestor.item) return true;
+      parent =
+        entriesByItem.get(parent)?.lastParentItem ?? parent.#parentItem();
+    }
+    return false;
+  }
+
+  #isItemAncestor(ancestor: ItemBase, descendant: ItemBase | null) {
+    let parent: ItemBase | null = descendant;
+    while (parent) {
+      if (parent === ancestor) return true;
+      parent = parent.#parentItem();
+    }
+    return false;
+  }
+
+  #initialFlipOffsets(snapshot: FlipAnimationState[]) {
+    const initialOffsets = new Map<ItemBase, TransformOffset>();
+    const entriesByItem = new Map(snapshot.map((entry) => [entry.item, entry]));
+    const ancestorOffsetFor = (parent: ItemBase | null): TransformOffset => {
+      const offset = { x: 0, y: 0 };
+      let current = parent;
+      while (current) {
+        const entry = entriesByItem.get(current);
+        if (entry && !initialOffsets.has(current)) {
+          compute(entry);
+        }
+        const currentOffset =
+          initialOffsets.get(current) ?? current.#visualAnimationOffset;
+        offset.x += currentOffset.x;
+        offset.y += currentOffset.y;
+        current = entry?.lastParentItem ?? current.#parentItem();
+      }
+      return offset;
+    };
+    const compute = ({
+      item,
+      first,
+      firstParent,
+      firstParentItem,
+      last,
+      lastParent,
+      lastParentItem,
+      targetElement,
+    }: FlipAnimationState) => {
+      if (initialOffsets.has(item)) return;
+      if (!targetElement || !first || !last) return;
+
+      const { dx, dy, useParentLocalDelta } = this.#rectAnimationDelta(
+        first,
+        last,
+        { firstParent, firstParentItem, lastParent, lastParentItem },
+      );
+      if (
+        Math.abs(dx) < MIN_FLIP_DISTANCE &&
+        Math.abs(dy) < MIN_FLIP_DISTANCE
+      ) {
+        return;
+      }
+
+      let x = dx;
+      let y = dy;
+      if (!useParentLocalDelta) {
+        const ancestorOffset = ancestorOffsetFor(lastParentItem);
+        x -= ancestorOffset.x;
+        y -= ancestorOffset.y;
+      }
+      initialOffsets.set(item, { x, y });
+    };
+
+    for (const entry of snapshot) {
+      compute(entry);
+    }
+    return initialOffsets;
   }
 
   #playElementRectAnimation(
@@ -685,11 +1019,15 @@ export class ItemBase extends ElementObject {
     targetElement: HTMLElement | null,
     animationConfig: AnimationConfig | null,
     animationOwner: ItemBase,
+    options: ElementRectAnimationOptions = {},
   ) {
     if (!targetElement || !first || !last || !animationConfig) return;
 
-    const dx = first.x - last.x;
-    const dy = first.y - last.y;
+    const { dx, dy, useParentLocalDelta } = this.#rectAnimationDelta(
+      first,
+      last,
+      options,
+    );
     if (Math.abs(dx) < MIN_FLIP_DISTANCE && Math.abs(dy) < MIN_FLIP_DISTANCE) {
       return;
     }
@@ -697,8 +1035,32 @@ export class ItemBase extends ElementObject {
     item.cancelAnimations();
     const duration = animationConfig.duration ?? 160;
     const easing = animationConfig.timing_function ?? "ease-out";
-    const transformAt = (t: number) =>
-      `translate3d(${dx * (1 - t)}px, ${dy * (1 - t)}px, 0px)`;
+    const coordinateParent =
+      options.coordinateParent === undefined
+        ? item.#parentItem()
+        : options.coordinateParent;
+    const subtractAncestorOffset =
+      options.subtractAncestorOffset ?? !useParentLocalDelta;
+    const writeTransformAt = (t: number) => {
+      if (t === 0 && options.initialOffset) {
+        item.#writeVisualAnimationTransform(
+          targetElement,
+          options.initialOffset.x,
+          options.initialOffset.y,
+        );
+        options.afterWrite?.();
+        return;
+      }
+      item.#writeRectAnimationTransform(
+        targetElement,
+        dx,
+        dy,
+        t,
+        coordinateParent,
+        subtractAncestorOffset,
+      );
+      options.afterWrite?.();
+    };
     const animation = new AnimationObject(
       null,
       {
@@ -708,17 +1070,65 @@ export class ItemBase extends ElementObject {
         duration,
         easing,
         tick: (vars) => {
-          targetElement.style.transform = transformAt(vars.$t);
+          writeTransformAt(vars.$t);
         },
         finish: () => {
+          item.#clearVisualAnimationOffset();
           targetElement.style.transform = "";
         },
       },
     );
 
-    targetElement.style.transform = transformAt(0);
     animationOwner.addAnimation(animation);
+    writeTransformAt(0);
     animation.play();
+  }
+
+  #rectAnimationDelta(
+    first: DOMRect,
+    last: DOMRect,
+    options: ElementRectAnimationOptions,
+  ) {
+    const useParentLocalDelta =
+      options.firstParent &&
+      options.lastParent &&
+      options.firstParentItem === options.lastParentItem;
+    return {
+      dx: useParentLocalDelta
+        ? first.x - options.firstParent!.x - (last.x - options.lastParent!.x)
+        : first.x - last.x,
+      dy: useParentLocalDelta
+        ? first.y - options.firstParent!.y - (last.y - options.lastParent!.y)
+        : first.y - last.y,
+      useParentLocalDelta,
+    };
+  }
+
+  #writeRectAnimationTransform(
+    targetElement: HTMLElement,
+    dx: number,
+    dy: number,
+    t: number,
+    coordinateParent: ItemBase | null,
+    subtractAncestorOffset: boolean,
+  ) {
+    let x = dx * (1 - t);
+    let y = dy * (1 - t);
+    if (subtractAncestorOffset) {
+      const ancestorOffset = this.#ancestorVisualOffset(coordinateParent);
+      x -= ancestorOffset.x;
+      y -= ancestorOffset.y;
+    }
+    this.#writeVisualAnimationTransform(targetElement, x, y);
+  }
+
+  #writeVisualAnimationTransform(
+    targetElement: HTMLElement,
+    x: number,
+    y: number,
+  ) {
+    this.#setVisualAnimationOffset(x, y);
+    targetElement.style.transform = this.#translateTransform(x, y);
   }
 
   #playDropAnimation(
@@ -764,7 +1174,7 @@ export class ItemBase extends ElementObject {
       return;
     }
 
-    let snapshot: FlipSnapshot[] = [];
+    let snapshot: FlipAnimationState[] = [];
     const queuePrefix = `snapsort-flip-${root.id}`;
     root.schedule(
       () => {
@@ -794,62 +1204,63 @@ export class ItemBase extends ElementObject {
 
     root.schedule(
       () => {
-        this.#playFlipAnimations(snapshot, animationConfig, root);
+        this.#playFlipAnimations(snapshot, animationConfig, root, excludedItem);
       },
       { stage: "WRITE_3", queueId: `${queuePrefix}-play` },
     );
   }
 
-  /**
-   * Apply a temporary inline `position` while remembering the previous value.
-   *
-   * @param element Element to update.
-   * @param position Temporary CSS position value.
-   * @returns Nothing.
-   */
-  #setTemporaryPosition(element: HTMLElement | null, position: string) {
-    if (!element || this.#dragPositionContextSnapshot.has(element)) return;
-    this.#dragPositionContextSnapshot.set(element, element.style.position);
-    element.style.position = position;
-  }
+  // /**
+  //  * Apply a temporary inline `position` while remembering the previous value.
+  //  *
+  //  * @param element Element to update.
+  //  * @param position Temporary CSS position value.
+  //  * @returns Nothing.
+  //  */
+  // #setTemporaryPosition(element: HTMLElement | null, position: string) {
+  //   if (!element || this.#dragPositionContextSnapshot.has(element)) return;
+  //   this.#dragPositionContextSnapshot.set(element, element.style.position);
+  //   element.style.position = position;
+  // }
+
+  // /**
+  //  * Prepare the root as a fallback absolute-positioning context.
+  //  *
+  //  * @returns Nothing.
+  //  */
+  // #applyDragPositionContext() {
+  //   const root = this.rootContainer;
+  //   if (!root?.element) return;
+
+  //   this.#dragPositionContextSnapshot.clear();
+  //   this.#setTemporaryPosition(root.element, "relative");
+  // }
+
+  // /**
+  //  * Restore inline position values changed by `#applyDragPositionContext`.
+  //  *
+  //  * @returns Nothing.
+  //  */
+  // #restoreDragPositionContext() {
+  //   for (const [element, position] of this.#dragPositionContextSnapshot) {
+  //     element.style.position = position;
+  //   }
+  //   this.#dragPositionContextSnapshot.clear();
+  // }
 
   /**
-   * Prepare the root as a fallback absolute-positioning context.
+   * Renders the dragged item.
    *
-   * @returns Nothing.
+   * @note THis function is currently called in WRTIE_1.
    */
-  #applyDragPositionContext() {
-    const root = this.#rootContainer as unknown as ItemBase | null;
-    if (!root?.element) return;
+  #refreshDraggedItemPosition() {
+    const parentItem = this.#dragCoordinateParent;
+    if (!this.element || !parentItem?.element) return;
 
-    this.#dragPositionContextSnapshot.clear();
-    this.#setTemporaryPosition(root.element, "relative");
-  }
+    // this.#setTemporaryPosition(parentItem.element, "relative");
 
-  /**
-   * Restore inline position values changed by `#applyDragPositionContext`.
-   *
-   * @returns Nothing.
-   */
-  #restoreDragPositionContext() {
-    for (const [element, position] of this.#dragPositionContextSnapshot) {
-      element.style.position = position;
-    }
-    this.#dragPositionContextSnapshot.clear();
-  }
-
-  /**
-   * Move the active dragged DOM node under the current target container.
-   *
-   * @param container Container that currently owns the ghost/drop target.
-   * @returns Nothing.
-   */
-  #moveDraggedElementToContainer(container: ContainerBase) {
-    const containerItem = container as unknown as ItemBase;
-    if (!this.element || !containerItem.element) return;
-
-    this.#setTemporaryPosition(containerItem.element, "relative");
-    this.transformMode = "relative";
+    // TODO: Skip if already in drag state?
+    this.transformMode = "direct";
     this.transformOrigin = null;
     this.style = {
       position: "absolute",
@@ -858,18 +1269,81 @@ export class ItemBase extends ElementObject {
       left: "0px",
     };
     this.writeDom();
+    // if (this.#dragLayoutPosition) {
+    //   this.#writeDraggedTransform();
+    // }
+
+    // There are some scenarios where the parent container
+    // is moving. To account for this, we need to check the
+    // latest positions of the dragged item and its ancestor,
+    // and apply necessary correction so the item remains
+    // at the intended position.
     this.schedule(
       async () => {
-        this.readDom({ unapplyTransform: true });
+        if (!this.element?.isConnected) return;
+        // Get the unaltered world position of the item's DOM.
+        // this.readDom({ unapplyTransform: true });
+        // If the parent container is being animated, we need to
+        // subtract any offsets caused by it to get the true world position of the item's DOM.
+        const ancestorOffset = this.#ancestorVisualOffset(parentItem);
+        console.log("ancestorOffset", ancestorOffset);
+        this.#dragLayoutPosition = {
+          x: this.#dragLayoutTransform!.x - ancestorOffset.x,
+          y: this.#dragLayoutTransform!.y - ancestorOffset.y,
+        };
       },
-      { stage: "READ_2", queueId: `dragged-read-${this.id}` },
+      { stage: "READ_3", queueId: `dragged-read-${this.id}` },
     );
     this.schedule(
       () => {
-        this.writeTransform();
+        this.#writeDraggedTransform();
       },
-      { stage: "WRITE_2", queueId: `dragged-transform-${this.id}` },
+      { stage: "WRITE_3", queueId: `dragged-transform-${this.id}` },
     );
+  }
+
+  /**
+   * Render the final position of the dragged item.
+   * @returns
+   */
+  #writeDraggedTransform() {
+    // if (!this.element) {
+    //   this.writeTransform();
+    //   return;
+    // }
+
+    if (!this.#dragLayoutPosition) {
+      if (this.#dragCoordinateParent) return;
+      this.writeTransform();
+      return;
+    }
+
+    // const ancestorOffset = this.#ancestorVisualOffset(
+    //   this.#dragCoordinateParent,
+    // );
+    // const x =
+    //   this.worldTransform.x - this.#dragLayoutPosition.x - ancestorOffset.x;
+    // const y =
+    //   this.worldTransform.y - this.#dragLayoutPosition.y - ancestorOffset.y;
+
+    this.worldTransform.x =
+      this.#dragPointerX - this.#dragLayoutPosition.x - this.#dragOffsetX;
+    this.worldTransform.y =
+      this.#dragPointerY - this.#dragLayoutPosition.y - this.#dragOffsetY;
+
+    // this.worldTransform.x =
+    //   this.#dragPointerX -
+    //   this.#dragLayoutTransform!.x -
+    //   this.#dragOffsetX -
+    //   ancestorOffset.x;
+    // this.worldTransform.y =
+    //   this.#dragPointerY -
+    //   this.#dragLayoutTransform!.y -
+    //   this.#dragOffsetY -
+    //   ancestorOffset.y;
+    // this.worldTransform.y = this.#dragLayoutPosition.y + ancestorOffset.y;
+    // this.element.style.transform = `${this.#translateTransform(x, y)} scale(${this.worldTransform.scaleX}, ${this.worldTransform.scaleY})`;
+    this.writeTransform();
   }
 
   /**
@@ -880,8 +1354,15 @@ export class ItemBase extends ElementObject {
    * @param index Destination index in the destination container.
    * @returns Nothing.
    */
-  moveItemToContainer(container: ContainerBase, item: ItemBase, index: number) {
+  #moveItemToContainer(
+    container: ContainerBase,
+    item: ItemBase,
+    index: number,
+  ) {
     const move = () => {
+      // The move is deferred to a later render stage; the item may have been
+      // detached in the meantime (e.g. it started a drag or was destroyed).
+      if (!item.parent) return;
       // If the source and target container is the same, we must adjust the index
       // to account for the removal of the item from its original position.
       if (item.parent === container) {
@@ -931,6 +1412,7 @@ export class ItemBase extends ElementObject {
     if (!onInsert) {
       throw new Error("Container callback onItemInsert is not defined");
     }
+
     onInsert({
       item,
       itemMetadata: item.metadata,
@@ -947,6 +1429,7 @@ export class ItemBase extends ElementObject {
     container: ContainerBase,
     ghostItem: ItemBase,
     index: number,
+    ghostRect?: GhostRect | null,
   ) {
     const itemAfterIndex =
       index >= container.#itemOrderedList.length - 1
@@ -966,6 +1449,37 @@ export class ItemBase extends ElementObject {
       containerMetadata: container.metadata,
       index,
       beforeElement: itemAfterIndex,
+      ghostRect,
+    });
+  }
+
+  /**
+   * Fire onGhostInsert for a marker-style ghost that is not tracked in the
+   * container's item-ordered list (its logical position lives solely in
+   * `#pendingGhostTarget`). Always appends (`beforeElement: null`); the
+   * marker's visual position is expressed entirely via inline style/ghostRect.
+   */
+  #insertInsertionGhostElement(
+    original: ItemBase,
+    container: ContainerBase,
+    ghostItem: ItemBase,
+    index: number,
+    ghostRect?: GhostRect | null,
+  ) {
+    const onInsert = container.callbacks?.onGhostInsert;
+    if (!onInsert) {
+      throw new Error("Container callback onGhostInsert is not defined");
+    }
+    onInsert({
+      original,
+      originalMetadata: original.metadata,
+      ghostItem,
+      ghostMetadata: ghostItem.metadata,
+      container,
+      containerMetadata: container.metadata,
+      index,
+      beforeElement: null,
+      ghostRect,
     });
   }
 
@@ -989,11 +1503,18 @@ export class ItemBase extends ElementObject {
     container: ContainerBase,
     ghostItem: ItemBase,
     index: number,
+    ghostRect?: GhostRect | null,
   ) {
     this.#attachItemToContainer(container, ghostItem, index);
-    this.#insertGhostElement(original, container, ghostItem, index);
+    this.#insertGhostElement(original, container, ghostItem, index, ghostRect);
   }
 
+  /**
+   * Remove an item from the current container.
+   * @note Overlaps with removeItem and removeGhostFrom?
+   * @param container
+   * @param item
+   */
   detachItemFromContainer(container: ContainerBase, item: ItemBase) {
     container.removeChild(item);
     container.#itemOrderedList = container.#itemOrderedList.filter(
@@ -1071,9 +1592,9 @@ export class ItemBase extends ElementObject {
     snapshotIndex: number,
     draggedItem: ItemBase,
   ): number {
-    const snapshotItems = container.#dragSnapshotOrderedList.filter(
-      (i) => i !== draggedItem && !i.isGhost,
-    );
+    const snapshotItems = container
+      .#dragSnapshotItems()
+      .filter((i) => i !== draggedItem && !i.isGhost);
     const ghostItem = this.#rootContainer?.ghostItem ?? null;
     const liveItems = container.#itemOrderedList.filter(
       (i) => i !== draggedItem && i !== ghostItem,
@@ -1113,7 +1634,7 @@ export class ItemBase extends ElementObject {
     if (!container || !ghostRect || !ghostElement) return;
 
     const containerProp =
-      (container as unknown as ItemBase).dragSnapshot ??
+      (container as unknown as ItemBase).dragSnapshot?.box ??
       container.currentDomProperty;
     const markerInsetLeft = ghostRect.insetLeft ?? 0;
     const markerInsetRight = ghostRect.insetRight ?? 0;
@@ -1147,18 +1668,30 @@ export class ItemBase extends ElementObject {
       throw new Error("Root container not found");
     }
     let ghostItem = root.ghostItem;
+    const previousTarget = root.#pendingGhostTarget;
 
     if (container === null) {
       root.#pendingGhostTarget = null;
       if (ghostItem) {
-        ghostItem.element?.remove();
+        if (previousTarget?.container) {
+          original.#removeGhostElement(
+            original,
+            previousTarget.container,
+            ghostItem,
+          );
+          await original.#awaitMutation(previousTarget.container);
+        } else {
+          // No known container to route onGhostRemove through (e.g. drag ended
+          // before a target was ever resolved) — fall back to a direct removal.
+          ghostItem.element?.remove();
+        }
         ghostItem.destroy();
         root.ghostItem = null;
       }
       return;
     }
 
-    if (!ghostRect) return;
+    if (!ghostRect || !container.element) return;
 
     const firstRect = ghostItem?.element?.isConnected
       ? ghostItem.element.getBoundingClientRect()
@@ -1171,18 +1704,24 @@ export class ItemBase extends ElementObject {
     root.ghostItem = ghostItem;
     root.#pendingGhostTarget = { ghostItem, container, index, ghostRect };
 
-    const ghostElement = ghostItem.element;
-    if (
-      (!ghostElement && !ghostItem.#frameworkManagedGhostElement) ||
-      !container.element
-    ) {
+    if (!ghostItem.element && !ghostItem.#frameworkManagedGhostElement) {
       return;
     }
-    if (!ghostElement) return;
 
-    if (ghostElement.parentElement !== container.element) {
-      container.element.appendChild(ghostElement);
-    }
+    original.#insertInsertionGhostElement(
+      original,
+      container,
+      ghostItem,
+      index,
+      ghostRect,
+    );
+    await original.#awaitMutation(container);
+
+    // Core-created markers own their DOM element and are positioned/animated
+    // directly; framework-managed markers get geometry solely via `ghostRect`
+    // on the onGhostInsert event above.
+    const ghostElement = ghostItem.element;
+    if (!ghostElement || ghostItem.#frameworkManagedGhostElement) return;
 
     original.#updateInsertionGhostStyle(event, ghostItem);
     const lastRect = ghostElement.getBoundingClientRect();
@@ -1193,12 +1732,16 @@ export class ItemBase extends ElementObject {
       ghostElement,
       original.#reorderAnimationConfig(container),
       ghostItem,
+      { coordinateParent: container as unknown as ItemBase },
     );
   }
 
   /**
    * Create or remove a ghost element at the specified container and index.
    * A null container means the ghost element should be removed.
+   *
+   * TODO: Since the code is so different, the insert classes should
+   * just overwrite this function.
    *
    * @param original The original item being dragged.
    * @param container The container to place the ghost element in, or null to remove it.
@@ -1258,7 +1801,13 @@ export class ItemBase extends ElementObject {
       if (ghostItem.parent) {
         container.detachItemFromContainer(ghostItem.container, ghostItem);
       }
-      container.insertGhostAt(original, container, ghostItem, index);
+      container.insertGhostAt(
+        original,
+        container,
+        ghostItem,
+        index,
+        pendingTarget.ghostRect,
+      );
     };
 
     if (ghostItem.parent) {
@@ -1323,9 +1872,7 @@ export class ItemBase extends ElementObject {
         });
       }
       if (!item.usesInsertionDropMarker) {
-        this.#moveDraggedElementToContainer(
-          targetContainer as unknown as ContainerBase,
-        );
+        item.#refreshDraggedItemPosition();
       }
     } else if (targetContainer) {
       await item.#updateGhostElement({
@@ -1335,35 +1882,64 @@ export class ItemBase extends ElementObject {
         ghostRect: target.ghostRect,
       });
       if (!item.usesInsertionDropMarker) {
-        this.#moveDraggedElementToContainer(
-          targetContainer as unknown as ContainerBase,
-        );
+        item.#refreshDraggedItemPosition();
       }
     }
   }
 
+  /**
+   * Called when a drag operation starts.
+   * @param prop
+   * @returns
+   */
   dragStart(prop: dragStartProp) {
-    if (!this.dragDropEnabled || this.#locked) return;
-    // Set the root container for all items, and queue READ to update the state of all containers and items.
-    this.#findRootContainer();
-    const root = (this.#rootContainer as unknown as ItemBase) ?? this;
+    if (this.#locked) return;
+
+    this.#dragCoordinateParent = null;
+    this.#dragLayoutPosition = null;
+    this.#dragSourcePosition = null;
+
+    // Take a snapshot of the current state.
+    // Any DOM read for this is queued into READ_1 stage.
+    this.takeRootSnapshot();
+    const root = this.rootContainer;
+
     resetDropSnapshotDebugDump(this);
-    // Get the current index of the item in its container.
+
+    // Record the initial container and index of the item
     const { index: currentIndex, container: currentContainer } =
       this.getIndexAndContainer();
+    if (!currentContainer) {
+      throw new Error("Item has no parent container");
+    }
+    this.#dragSourcePosition = {
+      container: currentContainer as unknown as ContainerBase,
+      index: currentIndex,
+    };
+
     // Compute the drag offset in READ_1, after DOM positions are read but before any WRITE_1
-    // callbacks (including drag events).
+    // callbacks (including drag events). The engine is guaranteed to
+    // execute scheduled tasks in the order they were scheduled.
     this.schedule(
       () => {
         this.#dragPointerX = prop.start.x;
         this.#dragPointerY = prop.start.y;
+        this.#dragStartX = prop.start.x;
+        this.#dragStartY = prop.start.y;
         this.#dragOffsetX = prop.start.x - this.worldTransform.x;
         this.#dragOffsetY = prop.start.y - this.worldTransform.y;
+
+        const layoutWorldTransform = currentContainer.readDom({
+          unapplyTransform: true,
+        });
+        this.#dragLayoutTransform = layoutWorldTransform;
+        // Capture key data like the DOM element size.
         root.#captureDragSnapshotTree();
       },
       { stage: "READ_1", queueId: `drag-start-offset-${this.id}` },
     );
 
+    // Schedule WRITE_1
     this.schedule(
       async () => {
         if (this.usesInsertionDropMarker) {
@@ -1374,50 +1950,52 @@ export class ItemBase extends ElementObject {
           return;
         }
 
+        if (this.element) {
+          this.element.dataset.snapsortDragging = "true";
+        }
+
+        // Create a ghost element in the item's current location.
         await this.#updateGhostElement({
           original: this,
-          container: currentContainer as unknown as ContainerBase,
+          container: currentContainer,
           index: currentIndex,
         });
-        // Remove the dragged item from its container's orderedList and engine children.
+        // _Logically_ remove the dragged item from its container,
+        // meaning the DOM element is still in the current container
+        // but the container code does not recognize it anymore.
         // The ghost now takes its place in the layout.
-        this.detachItemFromContainer(
-          currentContainer as unknown as ContainerBase,
-          this,
-        );
+        this.detachItemFromContainer(currentContainer, this);
 
-        const rootSnapshot = root.dragSnapshot;
-        const hoistOffsetX = rootSnapshot
-          ? -(rootSnapshot.border.left + rootSnapshot.padding.left)
-          : 0;
-        const hoistOffsetY = rootSnapshot
-          ? -(rootSnapshot.border.top + rootSnapshot.padding.top)
-          : 0;
         const dragSnapshot = this.dragSnapshot;
         this.style = {
           cursor: "grabbing",
           position: "absolute",
           zIndex: "1000",
-          top: `${hoistOffsetY}px`,
-          left: `${hoistOffsetX}px`,
-          width: dragSnapshot ? `${dragSnapshot.width}px` : "",
-          height: dragSnapshot ? `${dragSnapshot.height}px` : "",
+          top: "0px",
+          left: "0px",
+          width: dragSnapshot ? `${dragSnapshot.box.width}px` : "",
+          height: dragSnapshot ? `${dragSnapshot.box.height}px` : "",
         };
-        this.#applyDragPositionContext();
-        this.transformMode = "origin";
-        this.worldTransform = {
-          x: prop.start.x - this.#dragOffsetX,
-          y: prop.start.y - this.#dragOffsetY,
-        };
-        this.#moveDraggedElementToContainer(
-          currentContainer as unknown as ContainerBase,
-        );
+        // this.#applyDragPositionContext();
+        //
+        // The dragged item's DOM element stays under its original DOM parent
+        // for the whole drag, so we maintain a logical reference to it.
+        this.#dragCoordinateParent = currentContainer;
+        // this.worldTransform = {
+        //   x: prop.start.x - this.#dragOffsetX,
+        //   y: prop.start.y - this.#dragOffsetY,
+        // };
+        this.#refreshDraggedItemPosition();
         this.debugAllItems();
       },
       { stage: "WRITE_1" },
     );
   }
 
+  /**
+   * Handle drag movement updates.
+   * @param prop Drag position property containing mouse coordinates.
+   */
   drag(prop: dragProp) {
     this.schedule(
       async () => {
@@ -1430,21 +2008,18 @@ export class ItemBase extends ElementObject {
         }
 
         // Move the item according to mouse position
-        this.worldTransform = {
-          x: prop.position.x - this.#dragOffsetX,
-          y: prop.position.y - this.#dragOffsetY,
-        };
-        this.writeTransform();
+        // this.worldTransform = {
+        //   x: prop.position.x - this.#dragOffsetX,
+        //   y: prop.position.y - this.#dragOffsetY,
+        // };
 
         await this.updateDropTarget(this);
+        this.#writeDraggedTransform();
       },
       { stage: "WRITE_1", queueId: `drag-${this.id}` },
     );
-    // Re-read positions of all items
-    const root = this.#rootContainer as unknown as ItemBase | null;
-    if (root) {
-      root.#queueReadTree("READ_2", `drag-${this.id}`);
-    }
+    // Schedule read tree for READ_2
+    this.rootContainer.#queueReadTree("READ_2", `drag-${this.id}`);
   }
 
   #dragEndInsertion() {
@@ -1470,7 +2045,7 @@ export class ItemBase extends ElementObject {
         });
 
         if (pendingGhostTarget?.container) {
-          this.moveItemToContainer(
+          this.#moveItemToContainer(
             pendingGhostTarget.container,
             this,
             pendingGhostTarget.index,
@@ -1479,6 +2054,7 @@ export class ItemBase extends ElementObject {
         }
 
         root.#clearDragSnapshotTree();
+        this.#dragSourcePosition = null;
         resetDropSnapshotDebugDump(this);
       },
       { stage: "WRITE_1", queueId: `drag-end-insertion-${this.id}` },
@@ -1524,13 +2100,36 @@ export class ItemBase extends ElementObject {
         const usePendingGhostTarget =
           !!pendingGhostTarget &&
           (!liveGhostPos?.container ||
-            liveGhostPos.container !== pendingGhostTarget.container);
-        const ghostPos = usePendingGhostTarget
+            liveGhostPos.container !== pendingGhostTarget.container ||
+            liveGhostPos.index !== pendingGhostTarget.index);
+        let ghostPos = usePendingGhostTarget
           ? {
               index: pendingGhostTarget.index,
               container: pendingGhostTarget.container as unknown as ItemBase,
             }
           : liveGhostPos;
+        if (!ghostPos) {
+          const finalTarget =
+            root.#hasDragSnapshotTree() && this.#dragSnapshot
+              ? this.resolveDropTarget(this, root)
+              : null;
+          ghostPos = finalTarget
+            ? {
+                index: this.#liveIndexFromSnapshotIndex(
+                  finalTarget.container,
+                  finalTarget.index,
+                  this,
+                ),
+                container: finalTarget.container as unknown as ItemBase,
+              }
+            : this.#dragSourcePosition
+              ? {
+                  index: this.#dragSourcePosition.index,
+                  container: this.#dragSourcePosition
+                    .container as unknown as ItemBase,
+                }
+              : undefined;
+        }
         this.style = {
           cursor: "grab",
           position: "relative",
@@ -1543,9 +2142,12 @@ export class ItemBase extends ElementObject {
         this.transformMode = "none";
         this.transformOrigin = null;
         if (this.element) {
+          delete this.element.dataset.snapsortDragging;
           this.writeDom();
           this.writeTransform();
         }
+        this.#dragCoordinateParent = null;
+        this.#dragLayoutPosition = null;
 
         // Remove the ghost first
         await this.#updateGhostElement({
@@ -1561,10 +2163,31 @@ export class ItemBase extends ElementObject {
           dropAnimationConfig = this.#dropAnimationConfig(destinationContainer);
           this.insertItemAt(destinationContainer, this, ghostPos.index);
           await this.#awaitMutation(destinationContainer);
+          if (this.element && destinationContainer.element) {
+            const expectedBefore =
+              ghostPos.index >= destinationContainer.#itemOrderedList.length - 1
+                ? null
+                : destinationContainer.#itemOrderedList[ghostPos.index + 1]
+                    .element;
+            if (
+              this.element.parentElement !== destinationContainer.element ||
+              this.element.nextElementSibling !== expectedBefore
+            ) {
+              console.warn(
+                "SnapSort: the adapter did not place the dropped element where onItemInsert specified. Check the adapter's onItemInsert/awaitMutation wiring.",
+                {
+                  item: this,
+                  container: destinationContainer,
+                  index: ghostPos.index,
+                },
+              );
+            }
+          }
         }
 
-        this.#restoreDragPositionContext();
+        // this.#restoreDragPositionContext();
         root.#clearDragSnapshotTree();
+        this.#dragSourcePosition = null;
         resetDropSnapshotDebugDump(this);
       },
       { stage: "WRITE_1", queueId: `drag-end-${this.id}` },
@@ -1611,10 +2234,6 @@ export class ItemBase extends ElementObject {
 }
 
 export class ItemEuclidean extends ItemBase {
-  protected get dragDropEnabled(): boolean {
-    return true;
-  }
-
   protected get ghostItemConstructor(): ItemBaseConstructor {
     return ItemEuclidean;
   }
@@ -1628,10 +2247,6 @@ export class ItemEuclidean extends ItemBase {
 }
 
 export class ItemProgressive extends ItemBase {
-  protected get dragDropEnabled(): boolean {
-    return true;
-  }
-
   protected get ghostItemConstructor(): ItemBaseConstructor {
     return ItemProgressive;
   }
@@ -1645,10 +2260,6 @@ export class ItemProgressive extends ItemBase {
 }
 
 export class ItemInsertion extends ItemBase {
-  protected get dragDropEnabled(): boolean {
-    return true;
-  }
-
   protected get usesInsertionDropMarker(): boolean {
     return true;
   }

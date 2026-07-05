@@ -5,6 +5,24 @@
 
   let engineInstance: EngineClass | null = $state(null);
   let debugMode = $state(false);
+  const disableNestedFlip =
+    new URLSearchParams(window.location.search).get("disableNestedFlip") === "1";
+  const slowNestedFlip =
+    new URLSearchParams(window.location.search).get("slowNestedFlip") === "1";
+  const lockNestedChild =
+    new URLSearchParams(window.location.search).get("lockNestedChild") === "1";
+  const showCompactNested =
+    new URLSearchParams(window.location.search).get("compactNested") === "1";
+  const nestedAnimationConfig = disableNestedFlip
+    ? { animation: { reorder: null, drop: null } }
+    : slowNestedFlip
+    ? {
+        animation: {
+          reorder: { duration: 800, timing_function: "linear" },
+          drop: { duration: 800, timing_function: "linear" },
+        },
+      }
+    : {};
 
   const DEBUG_TAGS = [
     { id: "grid", label: "Grid" },
@@ -132,10 +150,10 @@
 
           <article class="demo-cell">
             <h2>Nested Container</h2>
-            <Container config={{ direction: "column", groupID: "nested-group" }} locked={true}>
+            <Container config={{ direction: "column", groupID: "nested-group", ...nestedAnimationConfig }} locked={true}>
               <Item className="demo-item"><p>Item 1</p></Item>
               <Item className="demo-item"><p>Item 1.5</p></Item>
-              <Container config={{ direction: "column", groupID: "nested-group" }} locked={false}>
+              <Container config={{ direction: "column", groupID: "nested-group", ...nestedAnimationConfig }} locked={lockNestedChild}>
                 <Item className="demo-item sub-item"><p>Sub A1</p></Item>
                 <Item className="demo-item sub-item"><p>Sub A2</p></Item>
                 <Item className="demo-item sub-item"><p>Sub A3</p></Item>
@@ -144,6 +162,22 @@
               <Item className="demo-item"><p>Item 3</p></Item>
             </Container>
           </article>
+
+          {#if showCompactNested}
+            <article class="demo-cell compact-nested-demo">
+              <h2>Compact Nested List</h2>
+              <Container className="compact-basic-list" config={{ direction: "column", groupID: "compact-nested", ...nestedAnimationConfig }}>
+                <Item className="compact-item"><p>Overview</p></Item>
+                <Item className="compact-item"><p>Components</p></Item>
+                <Item className="compact-item"><p>Usage</p></Item>
+                <Container className="compact-nested-list" config={{ direction: "column", groupID: "compact-nested", ...nestedAnimationConfig }}>
+                  <Item className="compact-item"><p>Container</p></Item>
+                  <Item className="compact-item"><p>Item</p></Item>
+                  <Item className="compact-item"><p>Handle</p></Item>
+                </Container>
+              </Container>
+            </article>
+          {/if}
 
           <article class="demo-cell">
             <h2>Draggable Sub-Containers</h2>
@@ -373,6 +407,39 @@
 
   :global(.demo-item.sub-item) {
     opacity: 0.6;
+  }
+
+  .compact-nested-demo :global(.compact-basic-list) {
+    width: 336px;
+    gap: 0.35rem;
+    min-height: 0;
+    align-items: flex-start;
+  }
+
+  .compact-nested-demo :global(.snapsort-container .compact-nested-list) {
+    width: calc(100% - 2rem);
+    margin-left: 2rem;
+    padding: 0 0 0 12px;
+    border: 0;
+    border-left: 1px solid #cfd4d7;
+    gap: 0.35rem;
+    min-height: 0;
+    align-items: flex-start;
+  }
+
+  .compact-nested-demo :global(.compact-item.snapsort-item) {
+    margin: 0;
+    border: 1px solid #e5e7eb;
+    border-radius: 8px;
+    background: #fff;
+  }
+
+  .compact-nested-demo :global(.compact-item p) {
+    margin: 0;
+    padding: 4px 10px 5px;
+    font-size: 14px;
+    line-height: 20px;
+    user-select: none;
   }
 
   :global(.ghost) {
