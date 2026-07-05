@@ -7,6 +7,8 @@ export type {
 export type {
   ContainerCallbacks,
   DragLocation,
+  DropEffect,
+  GhostRole,
   GhostKind,
   GhostRect,
   GhostCreateEvent,
@@ -14,10 +16,14 @@ export type {
   GhostRemoveEvent,
   ItemInsertEvent,
   ItemRemoveEvent,
+  ItemCopyEvent,
   ItemMoveEvent,
+  ItemSwapParticipant,
+  ItemSwapEvent,
   DragStartEvent,
   DragEndEvent,
   DropTargetChangeEvent,
+  DragItemHoverEvent,
   CanDropEvent,
 } from "./events";
 export type { LayoutMainAxisAlign } from "./layout";

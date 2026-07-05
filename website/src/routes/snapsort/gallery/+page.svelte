@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { onMount, tick } from "svelte";
+  import { tick } from "svelte";
   import { Engine } from "@snap-engine/asset-base-svelte";
   import type { Engine as SnapEngine } from "@snap-engine/core";
   import {
@@ -11,19 +11,19 @@
   import FileExplorerExample from "../FileExplorerExample.svelte";
   import type {
     Container as SortContainer,
+    DragEndEvent,
+    DragItemHoverEvent,
+    DragStartEvent,
+    DropTargetChangeEvent,
     GhostCreateEvent,
     GhostInsertEvent,
     GhostRemoveEvent,
     Item as SortItem,
+    ItemCopyEvent,
     ItemMoveEvent,
     ItemRemoveEvent,
+    ItemSwapEvent,
   } from "@snap-engine/snapsort";
-
-  type TitleLinePosition = {
-    id: string;
-    left: number;
-    right: number;
-  };
 
   type SentenceZone = "answer" | "bank";
 
@@ -76,13 +76,7 @@
     options?: EditorOption[];
   };
 
-  let heroSection: HTMLElement | undefined = $state();
-  let titleSection: HTMLElement | undefined = $state();
-  let heroEngine: SnapEngine | null = $state(null);
   let examplesEngine: SnapEngine | null = $state(null);
-  let titleLetterElements: HTMLSpanElement[] = [];
-  let titleLinePositions = $state<TitleLinePosition[]>([]);
-  let titleLineCenterY = $state(0);
 
   function configureInput(engine: SnapEngine | null) {
     if (engine) {
@@ -91,75 +85,8 @@
   }
 
   $effect(() => {
-    configureInput(heroEngine);
     configureInput(examplesEngine);
   });
-
-  function cssLengthToPixels(value: string, element: HTMLElement) {
-    const amount = Number.parseFloat(value);
-    if (Number.isNaN(amount)) return 0;
-    if (value.endsWith("rem")) {
-      return amount * Number.parseFloat(getComputedStyle(document.documentElement).fontSize);
-    }
-    if (value.endsWith("em")) {
-      return amount * Number.parseFloat(getComputedStyle(element).fontSize);
-    }
-    return amount;
-  }
-
-  function updateTitleLinePositions() {
-    if (!heroSection) return;
-
-    const heroRect = heroSection.getBoundingClientRect();
-    if (titleSection) {
-      const titleRect = titleSection.getBoundingClientRect();
-      titleLineCenterY = titleRect.top - heroRect.top + titleRect.height / 2;
-    }
-
-    titleLinePositions = titleChars.flatMap(({ id }, i) => {
-      const element = titleLetterElements[i];
-      if (!element) return [];
-
-      const rect = element.getBoundingClientRect();
-      const styles = getComputedStyle(element);
-      const leftOffset = cssLengthToPixels(
-        styles.getPropertyValue("--letter-line-left-offset").trim(),
-        element,
-      );
-      const rightOffset = cssLengthToPixels(
-        styles.getPropertyValue("--letter-line-right-offset").trim(),
-        element,
-      );
-
-      return [
-        {
-          id,
-          left: rect.left - heroRect.left + leftOffset,
-          right: rect.right - heroRect.left - rightOffset,
-        },
-      ];
-    });
-  }
-
-  // Set max simultaneous drags to 1 for this demo (runs after engines are created)
-  onMount(() => {
-    let frame = 0;
-    const tick = () => {
-      updateTitleLinePositions();
-      frame = requestAnimationFrame(tick);
-    };
-    frame = requestAnimationFrame(tick);
-
-    return () => cancelAnimationFrame(frame);
-  });
-
-  const title = "SnapSort";
-  const gripDots = Array.from({ length: 6 }, (_, i) => i);
-
-  const titleChars = title.split("").map((char, i) => ({
-    char,
-    id: `snapsort-letter-${i}`,
-  }));
 
   let todoItems = $state([
     {
@@ -390,14 +317,6 @@
     if (e.key === "d" || e.key === "D") {
       toggleDebug();
     }
-  }
-
-  function goToDocs() {
-    window.location.href = "/docs/snapsort/introduction";
-  }
-
-  function goToGallery() {
-    window.location.href = "/snapsort/gallery";
   }
 
   function addEditorField(type: EditorFieldType) {
@@ -633,97 +552,227 @@
     }
   }
 
+  // --- Clone Palette: session.dropEffect = "copy" ---
+
+  type PaletteBlockType = "button" | "image" | "divider" | "spacer";
+
+  type PaletteBlockTemplate = {
+    type: PaletteBlockType;
+    label: string;
+    icon: string;
+  };
+
+  type CanvasBlock = {
+    id: string;
+    type: PaletteBlockType;
+  };
+
+  const paletteBlockTemplates: PaletteBlockTemplate[] = [
+    { type: "button", label: "Button", icon: "smart_button" },
+    { type: "image", label: "Image", icon: "image" },
+    { type: "divider", label: "Divider", icon: "horizontal_rule" },
+    { type: "spacer", label: "Spacer", icon: "space_bar" },
+  ];
+
+  const blockIcon: Record<PaletteBlockType, string> = {
+    button: "smart_button",
+    image: "image",
+    divider: "horizontal_rule",
+    spacer: "space_bar",
+  };
+
+  const blockLabel: Record<PaletteBlockType, string> = {
+    button: "Button",
+    image: "Image",
+    divider: "Divider",
+    spacer: "Spacer",
+  };
+
+  let canvasBlocks: CanvasBlock[] = $state([]);
+  let cloneBlockCount = 0;
+
+  function handleCloneDragStart(event: DragStartEvent) {
+    // Only dragging out of the palette should clone — reordering an
+    // already-placed canvas block should behave like a normal move.
+    if (event.source.container.name === "clone-palette") {
+      event.session.dropEffect = "copy";
+    }
+  }
+
+  function handleCloneCopy(event: ItemCopyEvent) {
+    const sourceType = event.itemMetadata.blockType;
+    if (typeof sourceType !== "string") return;
+    cloneBlockCount += 1;
+    const newBlock: CanvasBlock = {
+      id: `canvas-block-${cloneBlockCount}`,
+      type: sourceType as PaletteBlockType,
+    };
+    const next = canvasBlocks.slice();
+    const index = Math.max(0, Math.min(event.index, next.length));
+    next.splice(index, 0, newBlock);
+    canvasBlocks = next;
+  }
+
+  function handleCanvasMove(event: ItemMoveEvent) {
+    const blockId = event.itemMetadata.itemId;
+    if (typeof blockId !== "string") return;
+    const block = canvasBlocks.find((candidate) => candidate.id === blockId);
+    if (!block) return;
+    const next = canvasBlocks.filter((candidate) => candidate.id !== blockId);
+    const index = Math.max(0, Math.min(event.to.index, next.length));
+    next.splice(index, 0, block);
+    canvasBlocks = next;
+  }
+
+  function removeCanvasBlock(id: string) {
+    canvasBlocks = canvasBlocks.filter((block) => block.id !== id);
+  }
+
+  // --- Trash It: session.dropEffect = "none" + onDragEnd cleanup ---
+
+  type TrashTask = {
+    id: string;
+    text: string;
+  };
+
+  let trashTasks: TrashTask[] = $state([
+    { id: "trash-task-1", text: "Reply to design feedback" },
+    { id: "trash-task-2", text: "Archive last sprint's board" },
+    { id: "trash-task-3", text: "Renew the SSL certificate" },
+    { id: "trash-task-4", text: "Clean up unused feature flags" },
+    { id: "trash-task-5", text: "Update the onboarding checklist" },
+  ]);
+  let trashHovered = $state(false);
+
+  function handleTrashDropTargetChange(event: DropTargetChangeEvent) {
+    const overTrash = event.current?.containerMetadata.role === "trash";
+    event.session.dropEffect = overTrash ? "none" : "move";
+    trashHovered = overTrash;
+  }
+
+  function handleTrashListMove(event: ItemMoveEvent) {
+    const taskId = event.itemMetadata.itemId;
+    if (typeof taskId !== "string") return;
+    const task = trashTasks.find((candidate) => candidate.id === taskId);
+    if (!task) return;
+    const next = trashTasks.filter((candidate) => candidate.id !== taskId);
+    const index = Math.max(0, Math.min(event.to.index, next.length));
+    next.splice(index, 0, task);
+    trashTasks = next;
+  }
+
+  function handleTrashDragEnd(event: DragEndEvent) {
+    trashHovered = false;
+    if (event.destination?.containerMetadata.role !== "trash") return;
+    const taskId = event.itemMetadata.itemId;
+    if (typeof taskId !== "string") return;
+    trashTasks = trashTasks.filter((task) => task.id !== taskId);
+  }
+
+  // --- Swap Grid: mode: "swap" + onDragItemEnter/Leave hover highlight ---
+
+  type SwapTile = {
+    id: string;
+    label: string;
+    color: string;
+  };
+
+  let swapTiles: SwapTile[] = $state([
+    { id: "swap-1", label: "A1", color: "#ff7a59" },
+    { id: "swap-2", label: "A2", color: "#ffb703" },
+    { id: "swap-3", label: "A3", color: "#06d6a0" },
+    { id: "swap-4", label: "B1", color: "#4cc9f0" },
+    { id: "swap-5", label: "B2", color: "#4361ee" },
+    { id: "swap-6", label: "B3", color: "#7209b7" },
+    { id: "swap-7", label: "C1", color: "#f72585" },
+    { id: "swap-8", label: "C2", color: "#3a86ff" },
+    { id: "swap-9", label: "C3", color: "#8ecae6" },
+  ]);
+  let swapHoveredId: string | null = $state(null);
+
+  function handleSwapCommit(event: ItemSwapEvent) {
+    const aId = event.a.itemMetadata.itemId;
+    const bId = event.b.itemMetadata.itemId;
+    if (typeof aId !== "string" || typeof bId !== "string") return;
+    const aIndex = swapTiles.findIndex((tile) => tile.id === aId);
+    const bIndex = swapTiles.findIndex((tile) => tile.id === bId);
+    if (aIndex === -1 || bIndex === -1) return;
+    const next = swapTiles.slice();
+    [next[aIndex], next[bIndex]] = [next[bIndex], next[aIndex]];
+    swapTiles = next;
+  }
+
+  function handleSwapHoverEnter(event: DragItemHoverEvent) {
+    const id = event.overItemMetadata.itemId;
+    swapHoveredId = typeof id === "string" ? id : null;
+  }
+
+  function handleSwapHoverLeave(event: DragItemHoverEvent) {
+    const id = event.overItemMetadata.itemId;
+    if (swapHoveredId === id) {
+      swapHoveredId = null;
+    }
+  }
+
+  function createSwapGhost(event: GhostCreateEvent): HTMLElement | void {
+    if (event.role !== "pointer") return;
+    const color =
+      typeof event.originalMetadata.color === "string"
+        ? event.originalMetadata.color
+        : "#999";
+    const label =
+      typeof event.originalMetadata.label === "string"
+        ? event.originalMetadata.label
+        : "";
+    const el = document.createElement("div");
+    el.className = "swap-tile swap-tile-ghost";
+    el.style.setProperty("--tile-color", color);
+    el.textContent = label;
+    return el;
+  }
 </script>
 
 <svelte:window onkeydown={handleKeydown} />
 
-<section id="landing">
-  <Engine id="snapsort-canvas" bind:this={canvasComponent} bind:engine={heroEngine} {debug}>
-
-      <div class="hero-section" bind:this={heroSection}>
-        <div class="hero-frame">
-          <Container
-            className="hero-stack"
-            config={{ direction: "column", groupID: "snapsort-hero-content" }}
-          >
-            <Item className="hero-stack-item hero-title-item">
-              <div class="hero-row">
-                <Handle className="hero-row-handle">
-                  <span class="hero-row-grip" aria-hidden="true">
-                    {#each gripDots as dot (dot)}
-                      <i></i>
-                    {/each}
-                  </span>
-                </Handle>
-                <div class="title-section" bind:this={titleSection} aria-label="SnapSort">
-                  <SnapSortContextBoundary>
-                    <Container
-                      config={{ direction: "row", groupID: "snapsort-title" }}
-                    >
-                      {#each titleChars as { char, id }, i (id)}
-                        <Item style="padding: 0; width: auto;">
-                          <span
-                            {id}
-                            class="letter-shell"
-                            bind:this={titleLetterElements[i]}
-                          >
-                            <span class="title-glyph title-text pixel-font">
-                              {char === " " ? "\u00A0" : char}
-                            </span>
-                            <span class="letter-grip" aria-hidden="true">
-                              {#each gripDots as dot (dot)}
-                                <i class="letter-grip-dot"></i>
-                              {/each}
-                            </span>
-                          </span>
-                        </Item>
-                      {/each}
-                    </Container>
-                  </SnapSortContextBoundary>
-                </div>
-              </div>
-            </Item>
-            <Item className="hero-stack-item hero-copy-item">
-              <div class="hero-row">
-                <Handle className="hero-row-handle">
-                  <span class="hero-row-grip" aria-hidden="true">
-                    {#each gripDots as dot (dot)}
-                      <i></i>
-                    {/each}
-                  </span>
-                </Handle>
-                <p class="hero-statement">
-                  Component library for drag and drop UI. Open source and framework agnostic.
-                </p>
-              </div>
-            </Item>
-            <Item className="hero-stack-item hero-cta-item">
-              <div class="hero-row hero-row-final">
-                <Handle className="hero-row-handle">
-                  <span class="hero-row-grip" aria-hidden="true">
-                    {#each gripDots as dot (dot)}
-                      <i></i>
-                    {/each}
-                  </span>
-                </Handle>
-                <div class="hero-cta">
-                  <button class="primary" type="button" onclick={goToDocs}>Get Started</button>
-                  <button type="button" onclick={goToGallery}>Gallery</button>
-                </div>
-              </div>
-            </Item>
-          </Container>
-        </div>
-      </div>
-
-  </Engine>
+<section class="gallery-hero">
+  <div class="gallery-hero-copy">
+    <p class="gallery-hero-kicker">SnapSort</p>
+    <h1 class="gallery-hero-title">Gallery</h1>
+    <p class="large gallery-hero-lede">
+      A hands-on exhibition of interfaces built with SnapSort. Every piece is
+      live &mdash; drag, sort, and rearrange the exhibits to see the engine at work.
+    </p>
+  </div>
 </section>
-<section>
+<section class="gallery-body">
+  <aside class="gallery-sidebar" aria-label="Gallery exhibits">
+    <nav class="gallery-sidebar-nav">
+      <span class="gallery-sidebar-label">Exhibits</span>
+      <ol>
+        <li><a href="#todo-list">TODO List</a></li>
+        <li><a href="#kanban-board">Kanban Board</a></li>
+        <li><a href="#sentence-builder">Sentence Builder</a></li>
+        <li><a href="#file-explorer">File Explorer</a></li>
+        <li><a href="#clone-palette">Clone Palette</a></li>
+        <li><a href="#trash-it">Trash It</a></li>
+        <li><a href="#swap-grid">Swap Grid</a></li>
+        <li><a href="#editor">Editor</a></li>
+      </ol>
+    </nav>
+  </aside>
+
+  <div class="gallery-exhibits">
   <Engine id="snapsort-examples-canvas" bind:this={canvasComponent} bind:engine={examplesEngine} {debug}>
 
     <div class="examples-grid">
-      <div class="example-card pm-example">
-        <h3>TODO List</h3>
+      <div id="todo-list" class="example-card pm-example example-side">
+        <div class="example-placard">
+          <h3>TODO List</h3>
+          <p class="example-caption">
+            A sortable daily checklist — grab the handle to reorder tasks without
+            losing your progress.
+          </p>
+        </div>
         <div class="project-list">
           <Container config={{ direction: "column", groupID: "project-list" }}>
             {#each todoItems as todo (todo.id)}
@@ -750,8 +799,14 @@
         </div>
       </div>
 
-      <div class="example-card kanban-example">
-        <h3>Kanban Board</h3>
+      <div id="kanban-board" class="example-card kanban-example">
+        <div class="example-placard">
+          <h3>Kanban Board</h3>
+          <p class="example-caption">
+            Three linked columns sharing one drop group — drag cards between
+            stages, or click one to advance it.
+          </p>
+        </div>
         <div class="kanban-board">
           <Container
             config={{ direction: "row", name: "kanban-root", noDrop: true }}
@@ -769,9 +824,10 @@
               <h4>To Do</h4>
               {#each kanbanTodo as { id, text, desc, assignee, avatar, avatarColor, due, tag, activity } (id)}
                 <Item>
-                  <div class="kanban-card card">
+                  <div class="kanban-card">
                     <div class="kanban-header">
                       <span class="kanban-title">{text}</span>
+                      <span class="kanban-tag">{tag}</span>
                     </div>
                     <p class="kanban-desc">{desc}</p>
                     <div class="kanban-footer">
@@ -787,10 +843,6 @@
                         <span class="kanban-meta-item">
                           <i class="material-symbols-rounded" aria-hidden="true">event</i>
                           {due}
-                        </span>
-                        <span class="kanban-meta-item">
-                          <i class="material-symbols-rounded" aria-hidden="true">sell</i>
-                          {tag}
                         </span>
                         <span class="kanban-meta-item">
                           <i class="material-symbols-rounded" aria-hidden="true">forum</i>
@@ -814,9 +866,10 @@
               <h4>Review</h4>
               {#each kanbanReview as { id, text, desc, assignee, avatar, avatarColor, due, tag, activity } (id)}
                 <Item>
-                  <div class="kanban-card card">
+                  <div class="kanban-card">
                     <div class="kanban-header">
                       <span class="kanban-title">{text}</span>
+                      <span class="kanban-tag">{tag}</span>
                     </div>
                     <p class="kanban-desc">{desc}</p>
                     <div class="kanban-footer">
@@ -832,10 +885,6 @@
                         <span class="kanban-meta-item">
                           <i class="material-symbols-rounded" aria-hidden="true">event</i>
                           {due}
-                        </span>
-                        <span class="kanban-meta-item">
-                          <i class="material-symbols-rounded" aria-hidden="true">sell</i>
-                          {tag}
                         </span>
                         <span class="kanban-meta-item">
                           <i class="material-symbols-rounded" aria-hidden="true">forum</i>
@@ -859,9 +908,10 @@
               <h4>Done</h4>
               {#each kanbanDone as { id, text, desc, assignee, avatar, avatarColor, due, tag, activity } (id)}
                 <Item>
-                  <div class="kanban-card card">
+                  <div class="kanban-card">
                     <div class="kanban-header">
                       <span class="kanban-title">{text}</span>
+                      <span class="kanban-tag">{tag}</span>
                     </div>
                     <p class="kanban-desc">{desc}</p>
                     <div class="kanban-footer">
@@ -879,10 +929,6 @@
                           {due}
                         </span>
                         <span class="kanban-meta-item">
-                          <i class="material-symbols-rounded" aria-hidden="true">sell</i>
-                          {tag}
-                        </span>
-                        <span class="kanban-meta-item">
                           <i class="material-symbols-rounded" aria-hidden="true">forum</i>
                           {activity}
                         </span>
@@ -898,8 +944,14 @@
 
 
 
-      <div class="example-card sentence-example">
-        <h3>Sentence Builder</h3>
+      <div id="sentence-builder" class="example-card sentence-example example-side">
+        <div class="example-placard">
+          <h3>Sentence Builder</h3>
+          <p class="example-caption">
+            Compose a translation from word tiles. Ghost previews mark where each
+            tile will settle.
+          </p>
+        </div>
         <div class="card ground sentence-builder">
           <div class="display prompt-section">
             <div class="english-sentence">
@@ -1027,20 +1079,219 @@
         </div>
       </div>
 
-      <div class="example-card file-example">
-        <h3>File Explorer</h3>
+      <div id="file-explorer" class="example-card file-example example-side">
+        <div class="example-placard">
+          <h3>File Explorer</h3>
+          <p class="example-caption">
+            An insertion-mode tree with nested folders — drop markers trace the
+            exact depth as you drag.
+          </p>
+        </div>
         <FileExplorerExample />
       </div>
 
-      <div class="example-card widgets-example">
-        <h3>Widgets</h3>
-        <div class="widgets-placeholder">
-          <span>Coming soon</span>
+      <div id="clone-palette" class="example-card clone-example example-side">
+        <div class="example-placard">
+          <h3>Clone Palette</h3>
+          <p class="example-caption">
+            Drag a block from the palette onto the canvas to place a copy —
+            the palette item never leaves. Built on SnapSort's <code>copy</code>
+            drop effect.
+          </p>
+        </div>
+        <div class="clone-workspace">
+          <Container
+            className="clone-root"
+            config={{
+              direction: "row",
+              name: "clone-root",
+              noDrop: true,
+              callbacks: {
+                onDragStart: handleCloneDragStart,
+              },
+            }}
+            locked={true}
+          >
+            <Container
+              className="clone-palette"
+              config={{
+                direction: "column",
+                groupID: "clone-demo",
+                name: "clone-palette",
+                noDrop: true,
+                callbacks: {
+                  awaitMutation: tick,
+                },
+              }}
+              locked={true}
+            >
+              {#each paletteBlockTemplates as template (template.type)}
+                <Item metadata={{ itemId: `palette-${template.type}`, blockType: template.type }}>
+                  <div class="clone-block clone-block-{template.type} clone-palette-block">
+                    <i class="material-symbols-rounded" aria-hidden="true">{template.icon}</i>
+                    <span>{template.label}</span>
+                  </div>
+                </Item>
+              {/each}
+            </Container>
+            <Container
+              className="clone-canvas"
+              config={{
+                direction: "column",
+                groupID: "clone-demo",
+                name: "clone-canvas",
+                dropArea: true,
+                callbacks: {
+                  onItemMove: handleCanvasMove,
+                  onItemCopy: handleCloneCopy,
+                  awaitMutation: tick,
+                },
+              }}
+              locked={true}
+            >
+              {#if canvasBlocks.length === 0}
+                <p class="clone-canvas-empty">Drop blocks here</p>
+              {/if}
+              {#each canvasBlocks as block (block.id)}
+                <Item metadata={{ itemId: block.id }}>
+                  <div class="clone-block clone-block-{block.type} clone-canvas-block">
+                    <i class="material-symbols-rounded" aria-hidden="true">{blockIcon[block.type]}</i>
+                    <span>{blockLabel[block.type]}</span>
+                    <button
+                      type="button"
+                      class="clone-block-remove"
+                      aria-label={`Remove ${blockLabel[block.type]}`}
+                      onpointerdown={(event) => event.stopPropagation()}
+                      onclick={(event) => {
+                        event.stopPropagation();
+                        removeCanvasBlock(block.id);
+                      }}
+                    >
+                      <i class="material-symbols-rounded" aria-hidden="true">close</i>
+                    </button>
+                  </div>
+                </Item>
+              {/each}
+            </Container>
+          </Container>
         </div>
       </div>
 
-      <div class="example-card editor-example">
-        <h3 class="editor-title">Editor</h3>
+      <div id="trash-it" class="example-card trash-example example-side">
+        <div class="example-placard">
+          <h3>Trash It</h3>
+          <p class="example-caption">
+            Drag a task onto the trash to delete it — everywhere else still
+            reorders normally. Built on SnapSort's <code>none</code> drop
+            effect.
+          </p>
+        </div>
+        <div class="trash-workspace">
+          <Container
+            className="trash-root"
+            config={{
+              direction: "column",
+              name: "trash-root",
+              noDrop: true,
+              callbacks: {
+                onDropTargetChange: handleTrashDropTargetChange,
+                onDragEnd: handleTrashDragEnd,
+              },
+            }}
+            locked={true}
+          >
+            <Container
+              className="trash-list"
+              config={{
+                direction: "column",
+                groupID: "trash-demo",
+                name: "trash-list",
+                callbacks: {
+                  onItemMove: handleTrashListMove,
+                  awaitMutation: tick,
+                },
+              }}
+              locked={true}
+            >
+              {#each trashTasks as task (task.id)}
+                <Item metadata={{ itemId: task.id }}>
+                  <div class="trash-task">
+                    <i class="material-symbols-rounded trash-task-grip" aria-hidden="true">drag_indicator</i>
+                    <span>{task.text}</span>
+                  </div>
+                </Item>
+              {/each}
+            </Container>
+            <div class="trash-zone" class:trash-zone-active={trashHovered}>
+              <Container
+                className="trash-drop-target"
+                config={{
+                  direction: "column",
+                  groupID: "trash-demo",
+                  name: "trash-bin",
+                  dropArea: true,
+                }}
+                locked={true}
+                metadata={{ role: "trash" }}
+              >
+                <div class="trash-zone-content">
+                  <i class="material-symbols-rounded" aria-hidden="true">delete</i>
+                  <span>Drop to delete</span>
+                </div>
+              </Container>
+            </div>
+          </Container>
+        </div>
+      </div>
+
+      <div id="swap-grid" class="example-card swap-example example-side">
+        <div class="example-placard">
+          <h3>Swap Grid</h3>
+          <p class="example-caption">
+            Drag a tile onto another to trade places instantly — everything
+            else stays put. Built on SnapSort's <code>swap</code> mode.
+          </p>
+        </div>
+        <div class="swap-workspace">
+          <Container
+            className="swap-grid"
+            config={{
+              mode: "swap",
+              direction: "row",
+              name: "swap-grid",
+              callbacks: {
+                onItemSwap: handleSwapCommit,
+                onDragItemEnter: handleSwapHoverEnter,
+                onDragItemLeave: handleSwapHoverLeave,
+                createGhost: createSwapGhost,
+                awaitMutation: tick,
+              },
+            }}
+            locked={true}
+          >
+            {#each swapTiles as tile (tile.id)}
+              <Item metadata={{ itemId: tile.id, color: tile.color, label: tile.label }}>
+                <div
+                  class="swap-tile"
+                  class:swap-tile-hovered={swapHoveredId === tile.id}
+                  style={`--tile-color: ${tile.color};`}
+                >
+                  {tile.label}
+                </div>
+              </Item>
+            {/each}
+          </Container>
+        </div>
+      </div>
+
+      <div id="editor" class="example-card editor-example">
+        <div class="example-placard">
+          <h3 class="editor-title">Editor</h3>
+          <p class="example-caption">
+            A form builder with a draggable field palette and sortable option
+            lists, rendered live as you edit.
+          </p>
+        </div>
         <div class="editor-builder">
           <div class="editor-palette" aria-label="Field palette">
             {#each editorPalette as item (item.type)}
@@ -1303,17 +1554,11 @@
       </div>
     </div>
   </Engine>
+  </div>
 </section>
 
 <style lang="scss">
   @use "../../../lib/landing/landing.scss";
-
-  #landing {
-    background: var(--color-background-tint);
-    border-radius: var(--ui-radius);
-    height: min(58vh, 620px);
-    min-height: 460px;
-  }
 
   :global(.ghost) {
     background: rgba(0, 0, 0, 0.06);
@@ -1321,14 +1566,39 @@
     box-sizing: border-box;
   }
 
-  #landing :global(.ghost) {
-    background: transparent !important;
-    border: 0 !important;
-    box-shadow: none !important;
-    opacity: 0 !important;
+  .gallery-hero {
+    display: flex;
+    align-items: flex-end;
+    min-height: clamp(280px, 36vh, 400px);
+    padding: clamp(4rem, 9vw, 6.5rem) 0 clamp(4rem, 8vw, 7rem);
+    box-sizing: border-box;
   }
 
+  .gallery-hero-copy {
+    max-width: 720px;
+  }
 
+  .gallery-hero-kicker {
+    margin: 0 0 var(--size-8);
+    color: var(--color-background-dark);
+    font-family: "Bitcount Grid Single", monospace;
+    font-size: 1rem;
+    font-weight: 300;
+    letter-spacing: 0.05em;
+    text-transform: lowercase;
+  }
+
+  .gallery-hero-title {
+    margin: 0 0 var(--size-24);
+    font-size: clamp(64px, 11vw, 96px);
+    line-height: 1;
+  }
+
+  .gallery-hero-lede {
+    max-width: 560px;
+    margin: 0;
+    color: #697074;
+  }
 
   :global(#snap-canvas) {
     display: flex;
@@ -1336,306 +1606,100 @@
     align-items: center;
     justify-content: center;
   }
-  .hero-section{
-    position: relative;
-    display: flex;
-    flex-direction: column;
-    align-items: center;
-    justify-content: center;
-    width: 100%;
-    height: 100%;
-    // min-height: 80vh;
-    background-color: transparent;
-    -webkit-user-select: none;
-    user-select: none;
-
-    * {
-      -webkit-user-select: none;
-      user-select: none;
-    }
-
-    @media (max-width: 720px) {
-      width: 100%;
-      padding: 0 1rem;
-      box-sizing: border-box;
-    }
-
-    .hero-frame {
-      position: relative;
-      width: min(100%, 660px);
-      padding: 0;
-      box-sizing: border-box;
-    }
-
-    .hero-frame::before,
-    .hero-frame::after {
-      content: "";
-      position: absolute;
-      top: 0;
-      bottom: 0;
-      width: 1px;
-      background: #cfd4d7;
-      pointer-events: none;
-    }
-
-    .hero-frame::before {
-      left: 0;
-    }
-
-    .hero-frame::after {
-      right: 0;
-    }
-
-    :global(.hero-stack) {
-      align-items: center;
-      gap: 0;
-      width: 100%;
-    }
-
-    :global(.hero-stack-item) {
-      display: flex;
-      align-items: center;
-      justify-content: center;
-      width: 100%;
-      min-width: 0;
-      min-height: clamp(4.25rem, 10vw, 7.5rem);
-      padding: 0;
-      cursor: auto;
-      touch-action: none;
-    }
-
-    :global(.hero-stack-item:has(.hero-row-handle:active)) {
-      cursor: grabbing;
-    }
-
-    :global(.hero-title-item) {
-      min-height: clamp(7rem, 14vw, 11rem);
-    }
-
-    :global(.hero-copy-item) {
-      min-height: clamp(5.25rem, 8vw, 7rem);
-    }
-
-    :global(.hero-cta-item) {
-      min-height: clamp(4rem, 8vw, 6.5rem);
-    }
-
-    .hero-row {
-      position: relative;
-      display: flex;
-      align-items: center;
-      justify-content: center;
-      width: 100%;
-      min-height: inherit;
-      padding: clamp(0.85rem, 1.8vw, 1.25rem) clamp(3rem, 6vw, 4.5rem);
-      border-top: 1px solid #cfd4d7;
-      box-sizing: border-box;
-    }
-
-    .hero-row-final {
-      border-bottom: 1px solid #cfd4d7;
-    }
-
-    :global(.hero-row-handle) {
-      position: absolute;
-      left: clamp(1.1rem, 2.2vw, 1.75rem);
-      top: 50%;
-      display: flex;
-      align-items: center;
-      justify-content: center;
-      width: 1.5rem;
-      height: 1.5rem;
-      transform: translateY(-50%);
-      cursor: grab;
-      touch-action: none;
-    }
-
-    :global(.hero-row-handle:active) {
-      cursor: grabbing;
-    }
-
-    .hero-row-grip {
-      display: grid;
-      grid-template-columns: repeat(2, 0.28rem);
-      grid-template-rows: repeat(3, 0.28rem);
-      gap: 0.28rem;
-    }
-
-    .hero-row-grip i {
-      display: block;
-      width: 0.28rem;
-      height: 0.28rem;
-      border-radius: 50%;
-      background: #d6d9db;
-    }
-
-    .title-section {
-      position: relative;
-      width: fit-content;
-      box-sizing: border-box;
-      z-index: 1;
-      /* filter: drop-shadow(2px 4px 6px rgba(58, 42, 34, 0.15)); */
-      // overflow: hidden;
-    }
-
-    .title-section::after {
-      display: none;
-    }
-
-    .title-section :global(.container) {
-      filter: drop-shadow(2px 4px 6px rgba(58, 42, 34, 0.15));
-      justify-content: center;
-      width: auto;
-    }
-  }
-
-  // .word-card {
-  //   padding: 0.5rem 0.75rem;
-  //   cursor: grab;
-  // }
-
   .word-card:active {
     cursor: grabbing;
   }
 
-  .letter-shell {
-    --letter-line-left-offset: -0.06em;
-    --letter-line-right-offset: -0.06em;
-    --letter-grip-top: calc(100% + 0.06em);
-    position: relative;
-    z-index: 1;
-    display: inline-block;
-    padding: 0;
-    margin: 0;
-    line-height: 1;
-    user-select: none;
-    cursor: grab;
-    touch-action: none;
-
-
-  }
-
-  #snapsort-letter-0 {
-    --letter-line-left-offset: 0.06em;
-    --letter-line-right-offset: 0.05em;
-  }
-
-  #snapsort-letter-1 {
-    --letter-line-left-offset: 0.07em;
-    --letter-line-right-offset: 0.07em;
-  }
-
-  #snapsort-letter-2 {
-    --letter-line-left-offset: 0.06em;
-    --letter-line-right-offset: 0.06em;
-  }
-
-  #snapsort-letter-3 {
-    --letter-line-left-offset: 0.06em;
-    --letter-line-right-offset: 0.06em;
-  }
-
-  #snapsort-letter-4 {
-    --letter-line-left-offset: 0.06em;
-    --letter-line-right-offset: 0.06em;
-  }
-
-  #snapsort-letter-5 {
-    --letter-line-left-offset: 0.06em;
-    --letter-line-right-offset: 0.06em;
-  }
-
-  #snapsort-letter-6 {
-    --letter-line-left-offset: 0.06em;
-    --letter-line-right-offset: 0.06em;
-  }
-
-  #snapsort-letter-7 {
-    --letter-line-left-offset: 0.06em;
-    --letter-line-right-offset: 0.06em;
-  }
-
-  .letter-shell:active {
-    cursor: grabbing;
-  }
-
-  .title-text {
-    font-size: clamp(3rem, 6vw, 5rem);
-    line-height: 1;
-    // font-weight: 800;
-
-    @media screen and (max-width: 700px) {
-      font-size: 2.35rem;
-    }
-  }
-
-  .title-glyph {
-    display: block;
-    line-height: 1;
-  }
-
-  .letter-grip {
-    position: absolute;
-    top: var(--letter-grip-top);
-    left: 50%;
-    transform: translateX(-50%);
-    display: grid;
-    grid-template-columns: repeat(3, 0.34em);
-    grid-template-rows: repeat(2, 0.34em);
-    gap: 0.15em;
-    justify-content: center;
-    font-size: inherit;
-    opacity: 0.62;
-
-    @media screen and (max-width: 700px) {
-      display: none;
-    }
-  }
-
-  .letter-grip-dot {
-    display: block;
-    width: 0.34em;
-    height: 0.34em;
-    border-radius: 50%;
-    background: #cfd4d7;
-  }
-
-  .hero-statement {
-    max-width: 430px;
-    margin: 0 auto;
-    color: var(--color-text);
-    font-family: "Geist", sans-serif;
-    font-size: clamp(1.08rem, 1.8vw, 1.65rem);
-    font-weight: 500;
-    line-height: 1.22;
-    text-align: center;
-  }
-
-  .hero-cta {
-    display: flex;
-    flex-wrap: wrap;
-    justify-content: center;
-    gap: var(--size-12);
-  }
-
-  .hero-cta button {
-    min-width: 9.5rem;
-  }
-
   /* Examples Section */
-  .examples-grid {
+  .gallery-body {
     display: grid;
-    grid-template-columns: repeat(3, minmax(0, 1fr));
-    grid-template-rows: repeat(4, minmax(0, auto));
-    grid-template-areas:
-      "pm pm sentence"
-      "file widgets widgets"
-      "kanban kanban kanban"
-      "editor editor editor";
-    gap: var(--size-24);
+    grid-template-columns: 190px minmax(0, 1fr);
+    gap: var(--size-48);
+    align-items: start;
+    margin-bottom: 4rem;
+  }
+
+  .gallery-exhibits {
+    min-width: 0;
+  }
+
+  .gallery-sidebar {
+    position: sticky;
+    top: 5rem;
+    align-self: start;
+  }
+
+  .gallery-sidebar-nav {
+    display: flex;
+    flex-direction: column;
+    gap: var(--size-16);
+  }
+
+  .gallery-sidebar-label {
+    color: var(--color-background-dark);
+    font-family: "Bitcount Grid Single", monospace;
+    font-size: 0.95rem;
+    font-weight: 300;
+    letter-spacing: 0.05em;
+    text-transform: lowercase;
+  }
+
+  .gallery-sidebar-nav ol {
+    display: flex;
+    flex-direction: column;
+    gap: var(--size-8);
+    margin: 0;
+    padding: 0;
+    list-style: none;
+    counter-reset: exhibit;
+  }
+
+  .gallery-sidebar-nav li {
+    counter-increment: exhibit;
+  }
+
+  .gallery-sidebar-nav a {
+    display: flex;
+    align-items: baseline;
+    gap: 0.6rem;
+    color: #697074;
+    font-size: 0.9rem;
+    font-weight: 300;
+    line-height: 1.4;
+    text-decoration: none;
+  }
+
+  .gallery-sidebar-nav a::before {
+    content: counter(exhibit, decimal-leading-zero);
+    flex: 0 0 auto;
+    color: #b3b8bc;
+    font-family: "Geist Mono", monospace;
+    font-size: 0.7rem;
+  }
+
+  .gallery-sidebar-nav a:hover,
+  .gallery-sidebar-nav a:focus-visible {
+    color: var(--color-text);
+    text-decoration: underline;
+    text-underline-offset: 0.22em;
+  }
+
+  .example-caption {
+    max-width: 52ch;
+    margin: 0;
+    color: #8f9497;
+    font-family: "Geist", sans-serif;
+    font-size: 0.85rem;
+    font-weight: 300;
+    line-height: 1.5;
+  }
+
+  .examples-grid {
+    display: flex;
+    flex-direction: column;
+    gap: clamp(5rem, 10vw, 8rem);
     width: 100%;
-    max-width: 1200px;
-    margin: 7rem auto 4rem;
+    margin: 0;
   }
 
   .example-card {
@@ -1647,6 +1711,7 @@
     padding: var(--size-32);
     user-select: none;
     justify-content: center;
+    scroll-margin-top: 2rem;
   }
 
   .example-card h3 {
@@ -1658,65 +1723,318 @@
     margin: 0;
   }
 
-  .pm-example {
-    grid-area: pm;
+  .example-placard {
+    display: flex;
+    flex-direction: column;
+    gap: var(--size-12);
   }
 
-  .kanban-example {
-    grid-area: kanban;
+  /* Smaller exhibits: placard on the side, demo beside it. */
+  .example-side {
+    display: grid;
+    grid-template-columns: clamp(220px, 26%, 300px) minmax(0, 1fr);
+    column-gap: clamp(var(--size-24), 4vw, var(--size-64));
+    align-items: center;
   }
 
-  .sentence-example {
-    grid-area: sentence;
+  .example-side .example-placard {
+    align-self: start;
+    padding-top: var(--size-8);
   }
 
   .file-example {
-    grid-area: file;
     min-width: 0;
   }
 
-  .widgets-example {
-    grid-area: widgets;
-    min-height: 320px;
+  /* Exhibits don't need to fill the full column width. */
+  .file-example :global(.file-explorer-card) {
+    width: min(100%, 480px);
+    height: auto;
+    justify-self: center;
   }
 
-  .widgets-placeholder {
-    display: flex;
+  .file-example :global(.code-tree) {
+    min-height: 0;
+  }
+
+  /* Clone Palette */
+  .clone-workspace {
+    width: min(100%, 480px);
+    justify-self: center;
+  }
+
+  .clone-workspace :global(.clone-root) {
+    align-items: stretch;
+    width: 100%;
+    gap: var(--size-24);
+    flex-wrap: nowrap;
+  }
+
+  .clone-workspace :global(.clone-palette) {
+    flex: 0 0 auto;
+    align-items: stretch;
+    width: 132px;
+    gap: 0.5rem;
+    padding: 0.75rem;
+    background: #f3f5f6;
+    border-radius: var(--ui-radius);
+  }
+
+  .clone-workspace :global(.clone-palette .snapsort-item) {
+    align-items: stretch;
+    width: 100%;
+    padding: 0;
+  }
+
+  .clone-workspace :global(.clone-canvas) {
     flex: 1;
-    align-items: center;
-    justify-content: center;
+    align-items: stretch;
     min-height: 220px;
+    gap: 0.5rem;
+    padding: 0.75rem;
     border: 1px dashed #c7cccf;
     border-radius: var(--ui-radius);
     background: #ffffff;
-    color: #8f9497;
-    font-family: "Bitcount Grid Single", monospace;
-    font-size: clamp(2rem, 6vw, 4rem);
-    font-weight: 300;
-    line-height: 1;
+  }
+
+  .clone-workspace :global(.clone-canvas .snapsort-item) {
+    align-items: stretch;
+    width: 100%;
+    padding: 0;
+  }
+
+  .clone-canvas-empty {
+    margin: auto;
+    color: #b3b8bc;
+    font-size: 0.85rem;
     text-align: center;
   }
 
-  .editor-example {
-    grid-area: editor;
+  .clone-block {
     position: relative;
-    gap: 0;
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    padding: 0.6rem 0.75rem;
+    border-radius: calc(var(--ui-radius) - 2px);
+    border: 1px solid #d5d8dc;
+    background: #ffffff;
+    font-size: 0.85rem;
+    color: #232526;
+    cursor: grab;
+    touch-action: none;
+  }
+
+  .clone-palette-block:active {
+    cursor: grabbing;
+  }
+
+  .clone-canvas-block {
+    cursor: default;
+    padding-right: 2rem;
+  }
+
+  .clone-block :global(.material-symbols-rounded) {
+    font-family: "Material Symbols Rounded";
+    font-size: 1.1rem;
+    line-height: 1;
+    font-style: normal;
+    color: var(--color-primary);
+  }
+
+  .clone-block-remove {
+    position: absolute;
+    top: 50%;
+    right: 0.4rem;
+    transform: translateY(-50%);
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 1.4rem;
+    height: 1.4rem;
+    padding: 0;
+    border: 0 !important;
+    background: transparent !important;
+    box-shadow: none !important;
+    color: #8f9497;
+    cursor: pointer;
+  }
+
+  .clone-block-remove:hover {
+    color: #c7472f;
+  }
+
+  .clone-block-remove :global(.material-symbols-rounded) {
+    font-size: 1rem;
+    color: inherit;
+  }
+
+  /* Trash It */
+  .trash-workspace {
+    width: min(100%, 420px);
+    justify-self: center;
+  }
+
+  .trash-workspace :global(.trash-root) {
+    align-items: stretch;
+    width: 100%;
+    gap: 0.75rem;
+  }
+
+  .trash-workspace :global(.trash-list) {
+    align-items: stretch;
+    width: 100%;
+    gap: 0.4rem;
+  }
+
+  .trash-workspace :global(.trash-list .snapsort-item) {
+    align-items: stretch;
+    width: 100%;
+    padding: 0;
+  }
+
+  .trash-task {
+    display: flex;
+    align-items: center;
+    gap: 0.6rem;
+    padding: 0.65rem 0.85rem;
+    border-radius: calc(var(--ui-radius) - 2px);
+    border: 1px solid #d5d8dc;
+    background: #ffffff;
+    font-size: 0.85rem;
+    color: #232526;
+    cursor: grab;
+    touch-action: none;
+  }
+
+  .trash-task:active {
+    cursor: grabbing;
+  }
+
+  .trash-task-grip {
+    font-family: "Material Symbols Rounded";
+    font-size: 1.1rem;
+    color: #8f9497;
+  }
+
+  .trash-zone {
+    border-radius: var(--ui-radius);
+    border: 2px dashed #d5d8dc;
+    transition: border-color 120ms ease-out, background-color 120ms ease-out;
+  }
+
+  .trash-zone-active {
+    border-color: #c7472f;
+    background: rgba(199, 71, 47, 0.06);
+  }
+
+  .trash-workspace :global(.trash-drop-target) {
+    width: 100%;
+    min-height: 64px;
+    align-items: center;
+    justify-content: center;
+  }
+
+  .trash-zone-content {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    padding: 0.75rem;
+    color: #8f9497;
+    font-size: 0.85rem;
+  }
+
+  .trash-zone-active .trash-zone-content {
+    color: #c7472f;
+  }
+
+  .trash-zone-content :global(.material-symbols-rounded) {
+    font-family: "Material Symbols Rounded";
+    font-size: 1.2rem;
+    color: inherit;
+  }
+
+  /* Swap Grid */
+  .swap-workspace {
+    width: min(100%, 360px);
+    justify-self: center;
+  }
+
+  .swap-workspace :global(.swap-grid) {
+    width: 100%;
+    gap: 0.5rem;
+    flex-wrap: wrap;
+  }
+
+  .swap-workspace :global(.swap-grid .snapsort-item) {
+    width: calc((100% - 1rem) / 3);
+    padding: 0;
+  }
+
+  .swap-tile {
+    --tile-color: #999;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    aspect-ratio: 1;
+    width: 100%;
+    border-radius: calc(var(--ui-radius) - 2px);
+    background: var(--tile-color);
+    color: #ffffff;
+    font-family: "Bitcount Grid Single", monospace;
+    font-size: 1.1rem;
+    font-weight: 300;
+    cursor: grab;
+    touch-action: none;
+    box-shadow: 0 2px 6px -2px rgba(0, 0, 0, 0.25);
+  }
+
+  .swap-tile:active {
+    cursor: grabbing;
+  }
+
+  .swap-tile-hovered {
+    outline: 3px solid #232526;
+    outline-offset: 2px;
+  }
+
+  .swap-workspace :global(.snapsort-item[data-snapsort-dragging="true"] .swap-tile) {
+    opacity: 0.35;
+  }
+
+  .swap-tile-ghost {
+    pointer-events: none;
+  }
+
+  .editor-example {
+    position: relative;
     justify-content: stretch;
     min-height: 470px;
   }
 
-  .editor-title {
-    position: absolute;
-    top: var(--size-32);
-    left: var(--size-32);
-    z-index: 1;
+  @media (max-width: 900px) {
+    .gallery-body {
+      grid-template-columns: minmax(0, 1fr);
+    }
+
+    .gallery-sidebar {
+      display: none;
+    }
   }
 
   @media (max-width: 720px) {
     .examples-grid {
+      margin: 2rem 0;
+    }
+
+    .example-side {
       display: flex;
       flex-direction: column;
-      margin: 2rem 0;
+      align-items: stretch;
+    }
+
+    .example-side .example-placard {
+      padding-top: 0;
     }
 
     .kanban-example {
@@ -1731,7 +2049,10 @@
     flex-direction: column;
     gap: var(--size-16);
     background: white;
+    width: min(100%, 420px);
+    justify-self: center;
     min-height: 300px;
+    box-sizing: border-box;
     touch-action: none;
   }
 
@@ -2126,12 +2447,6 @@
   }
 
   @media (max-width: 720px) {
-    .editor-title {
-      position: static;
-      align-self: flex-end;
-      margin-bottom: 1rem;
-    }
-
     .editor-builder {
       grid-template-columns: 1fr;
       padding-top: 0;
@@ -2329,12 +2644,11 @@
 
   .kanban-board :global(.kanban-column) {
     flex: 1;
-    padding: 1rem;
+    padding: 0.75rem;
     min-height: 600px;
     align-items: stretch;
-    border: 1px solid #c7cccf;
-    border-radius: var(--ui-radius);
-    background: transparent;
+    border-radius: 12px;
+    background: rgb(31 30 41 / 4%);
   }
 
   .kanban-board :global(.kanban-column .snapsort-item) {
@@ -2358,6 +2672,13 @@
     flex-direction: column;
     gap: 0.5rem;
     margin-bottom: 0.5rem;
+    padding: 0.85rem 0.95rem;
+    background: var(--color-background);
+    border: 1px solid rgb(31 30 41 / 8%);
+    border-radius: 10px;
+    box-shadow:
+      0 1px 2px rgb(31 30 41 / 5%),
+      0 4px 12px -6px rgb(31 30 41 / 8%);
     cursor: grab;
     touch-action: none;
     width: 100%;
@@ -2371,20 +2692,37 @@
   .kanban-header {
     display: flex;
     align-items: center;
+    justify-content: space-between;
+    gap: 0.5rem;
   }
 
   .kanban-title {
     font-weight: 600;
-    font-size: 1.05rem;
+    font-size: 0.95rem;
+    line-height: 1.25;
     color: #232526;
     margin: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  .kanban-tag {
+    flex: 0 0 auto;
+    padding: 0.16rem 0.5rem;
+    border-radius: 999px;
+    background: color-mix(in srgb, var(--color-primary) 10%, #fff);
+    color: color-mix(in srgb, var(--color-primary) 72%, #222);
+    font-size: 0.7rem;
+    font-weight: 600;
+    line-height: 1.2;
   }
 
   .kanban-desc {
     margin: 0;
-    font-size: 0.9rem;
-    color: #232526;
-    line-height: 1.3;
+    font-size: 0.85rem;
+    color: #5f6569;
+    line-height: 1.35;
     display: -webkit-box;
     line-clamp: 2;
     -webkit-line-clamp: 2;
@@ -2402,8 +2740,8 @@
   }
 
   .kanban-avatar {
-    width: 1.85rem;
-    height: 1.85rem;
+    width: 1.6rem;
+    height: 1.6rem;
     border-radius: 50%;
     display: flex;
     align-items: center;
@@ -2419,11 +2757,11 @@
 
   .kanban-meta {
     display: grid;
-    grid-template-columns: repeat(3, max-content);
+    grid-template-columns: repeat(2, max-content);
     gap: 0.65rem;
     justify-self: end;
-    color: #232526;
-    font-size: 0.9rem;
+    color: #8f9497;
+    font-size: 0.78rem;
     line-height: 1;
   }
 
