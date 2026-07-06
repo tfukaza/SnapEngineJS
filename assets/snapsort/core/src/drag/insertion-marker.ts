@@ -6,7 +6,6 @@ import {
   fireAwaitMutation,
   fireGhostInsert,
   fireGhostRemove,
-  fireItemCopy,
 } from "../mutation";
 import type { DragLifecycleStrategy } from "./lifecycle";
 import type { DragSession } from "./session";
@@ -169,20 +168,24 @@ function drop(session: DragSession): void {
           await fireAwaitMutation(destinationContainer);
         } else if (session.dropEffect === "copy") {
           // The originals never leave their source slots in insertion mode
-          // (unlike flow mode, they're never detached), so "copy" needs no
-          // return-to-source bookkeeping — just report the destination so
-          // the consumer can materialize clones there.
-          const beforeElement =
-            pendingGhostTarget.index >= destinationContainer.itemOrderedList.length
-              ? null
-              : (destinationContainer.itemOrderedList[pendingGhostTarget.index]
-                  ?.element ?? null);
-          fireItemCopy(
+          // (unlike flow mode, they're never detached) — there's no floating
+          // instance to spawn either (rows stay put; only the marker line
+          // shows mid-drag), so unlike flow-mode spawn there is no id to
+          // assign at dragStart. Commits through the same onItemMove path a
+          // move would: `froms` null marks "not moved from anywhere",
+          // `origins[i] === items[i]` (the original IS its own provenance),
+          // and moveItemsAt's null-froms skip-attach rule leaves each
+          // original exactly where it is — the consumer mints the
+          // duplicate's id when it materializes the entry (see
+          // ItemMoveEvent's doc for the full contract, including how this
+          // is the one sanctioned asymmetry with flow-mode spawn).
+          item.moveItemsAt(
+            items.map(() => null),
             destinationContainer,
             items,
             pendingGhostTarget.index,
-            beforeElement,
             session,
+            items,
           );
           await fireAwaitMutation(destinationContainer);
         }

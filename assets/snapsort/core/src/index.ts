@@ -18,7 +18,6 @@ export type {
   GhostRemoveEvent,
   ItemInsertEvent,
   ItemRemoveEvent,
-  ItemCopyEvent,
   ItemMoveEvent,
   ItemSwapParticipant,
   ItemSwapEvent,

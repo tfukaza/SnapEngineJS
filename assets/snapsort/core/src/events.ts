@@ -18,10 +18,13 @@ export interface DragLocation {
  * consumers (from `onDragStart` / `onDropTargetChange`) via `session.dropEffect`;
  * the core never infers this itself.
  *
- * - `"move"` (default): today's behavior — the original item is relocated.
- * - `"copy"`: the original returns to its source slot; `onItemInsert` fires at
- *   the destination with the original's metadata so the consumer can insert a
- *   clone in their own state.
+ * - `"move"` (default): the original item is relocated.
+ * - `"copy"`: commits through the same `onItemMove` path a move would — see
+ *   `ItemMoveEvent`'s doc for the full contract (`from: null`, `origins`
+ *   provenance). Flow mode spawns a fresh floating item at dragStart
+ *   (`onDragClone`) whose permanent id carries through to commit; insertion
+ *   mode never lifts anything, so the commit event carries the ORIGINAL
+ *   (`items[i] === origins[i]`) and the consumer mints the duplicate's id.
  * - `"none"`: no mutation events fire; the original returns to its source slot.
  *   `onDragEnd` still reports the resolved destination (e.g. for a trash-bin
  *   drop, where the consumer removes the item themselves in `onDragEnd`).
@@ -68,30 +71,6 @@ export interface ItemInsertEvent {
   /** Element the whole run is inserted before (all items share one insertion point). */
   beforeElement: HTMLElement | null;
   phase: MutationPhase;
-}
-
-/**
- * Fired once, at the destination, when a `"copy"`-effect drag commits. The
- * original `item` never leaves its source location — only its metadata is
- * meaningful here, as a template for the consumer to materialize a clone in
- * their own state (and DOM, if not framework-managed). There is no default
- * DOM implementation: unlike move/insert, SnapSort has no generically-correct
- * way to fabricate a cloned element, so a container that ever sets
- * `session.dropEffect = "copy"` must provide `onItemCopy`.
- */
-export interface ItemCopyEvent {
-  session: DragSession | null;
-  item: Item;
-  itemMetadata: ItemSnapshotMetadata;
-  /** The full copied run, ordered. `item === items[0]` (single-item case: length 1). */
-  items: Item[];
-  itemsMetadata: ItemSnapshotMetadata[];
-  container: Container;
-  containerMetadata: Record<string, unknown>;
-  /** Index of the first item in the run. */
-  index: number;
-  /** Element the whole run is inserted before (all items share one insertion point). */
-  beforeElement: HTMLElement | null;
 }
 
 export interface ItemSwapParticipant {
@@ -361,15 +340,6 @@ export interface ContainerCallbacks {
    * at drop through the normal `onItemMove` path.
    */
   onDragClone?: (event: DragCloneEvent) => void;
-
-  /**
-   * Insertion-mode copy: fired at drop when `dropEffect === "copy"`. Unlike
-   * flow mode, the insertion marker never moves the dragged item, so the
-   * original stays put with no flicker and the clone is materialized here at
-   * the destination. Required on any insertion container that sets
-   * `dropEffect = "copy"`.
-   */
-  onItemCopy?: (event: ItemCopyEvent) => void;
 
   /** Fired on the source container. Returning `false` vetoes the drag before any state changes. */
   onDragStart?: (event: DragStartEvent) => void | false;

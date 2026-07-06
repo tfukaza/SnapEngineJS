@@ -3,6 +3,7 @@
   import { Container, Item } from "@snap-engine/snapsort-svelte";
   import type {
     Container as SortContainer,
+    DragStartEvent,
     ItemMoveEvent,
     ItemRemoveEvent,
   } from "@snap-engine/snapsort";
@@ -52,6 +53,12 @@
   let nextId = $state(8);
   let columns = $state<DemoColumn[]>(structuredClone(initialColumns));
   let pendingRemovedItem: DemoItem | null = null;
+  // Insertion-copy proof surface: rows never lift in this mode (only the
+  // marker line shows mid-drag), so there is no floating instance to spawn
+  // an id onto at dragStart -- the commit event carries the ORIGINAL
+  // (see handleMove's `event.from === null` branch) and this handler mints
+  // the duplicate's id itself.
+  let duplicateMode = $state(false);
   const itemCount = $derived(
     columns.reduce((total, column) => total + column.items.length, 0),
   );
@@ -96,6 +103,30 @@
     return removedItem;
   }
 
+  function findItemById(itemId: string): DemoItem | null {
+    for (const column of columns) {
+      const item = column.items.find((candidate) => candidate.id === itemId);
+      if (item) return item;
+    }
+    return null;
+  }
+
+  function insertAt(targetColumnId: string, index: number, item: DemoItem) {
+    columns = columns.map((column) => {
+      if (column.id !== targetColumnId) return column;
+
+      const nextItems = column.items.slice();
+      nextItems.splice(Math.max(0, Math.min(index, nextItems.length)), 0, item);
+      return { ...column, items: nextItems };
+    });
+  }
+
+  function handleDragStart(event: DragStartEvent) {
+    if (duplicateMode) {
+      event.session.dropEffect = "copy";
+    }
+  }
+
   function handleMove(event: ItemMoveEvent) {
     const itemId = event.itemMetadata.itemId;
     const targetColumnId = event.to.containerMetadata.columnId;
@@ -103,17 +134,21 @@
       return;
     }
 
+    if (event.from === null) {
+      // Copy commit: the original stays exactly where it is (insertion mode
+      // never lifts anything, so there's nothing to remove); mint a fresh
+      // id for the duplicate and insert it at the marker index.
+      const original = findItemById(itemId);
+      if (!original) return;
+      insertAt(targetColumnId, event.to.index, { ...original, id: `task-${nextId++}` });
+      return;
+    }
+
     const movedItem = pendingRemovedItem ?? removeItemById(itemId);
     pendingRemovedItem = null;
     if (!movedItem) return;
 
-    columns = columns.map((column) => {
-      if (column.id !== targetColumnId) return column;
-
-      const nextItems = column.items.slice();
-      nextItems.splice(Math.max(0, Math.min(event.to.index, nextItems.length)), 0, movedItem);
-      return { ...column, items: nextItems };
-    });
+    insertAt(targetColumnId, event.to.index, movedItem);
   }
 
   function handleRemove(event: ItemRemoveEvent) {
@@ -137,6 +172,11 @@
       <p>{itemCount} files and folders · original row stays still until drop</p>
     </div>
     <div class="toolbar">
+      <label class="duplicate-toggle">
+        <input type="checkbox" bind:checked={duplicateMode} />
+        <span></span>
+        Duplicate on drop
+      </label>
       <button onclick={addItem}>
         <span class="material-symbols-outlined" aria-hidden="true">add</span>
         Add
@@ -156,6 +196,9 @@
         direction: "row",
         name: "insertion-board-root",
         noDrop: true,
+        callbacks: {
+          onDragStart: handleDragStart,
+        },
       }}
       locked={true}
       metadata={{ boardId: "insertion-demo" }}
@@ -233,7 +276,18 @@
 
   .toolbar {
     display: flex;
+    align-items: center;
+    gap: 12px;
+  }
+
+  .duplicate-toggle {
+    display: inline-flex;
+    align-items: center;
     gap: 6px;
+    font-size: 13px;
+    color: #172033;
+    user-select: none;
+    cursor: pointer;
   }
 
   .toolbar button {

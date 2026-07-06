@@ -7,7 +7,6 @@ import type {
   GhostCreateEvent,
   GhostInsertEvent,
   GhostRemoveEvent,
-  ItemCopyEvent,
   ItemInsertEvent,
   ItemMoveEvent,
   ItemRemoveEvent,
@@ -47,38 +46,6 @@ export function fireItemInsert(
     phase,
   };
   onInsert(event);
-}
-
-/**
- * Fire the copy primitive at the destination. Requires `onItemCopy` — unlike
- * move/insert there is no generically-correct default DOM behavior for
- * fabricating a clone, so a container using `dropEffect = "copy"` must supply one.
- */
-export function fireItemCopy(
-  container: Container,
-  items: Item[],
-  index: number,
-  beforeElement: HTMLElement | null,
-  session: DragSession | null,
-): void {
-  const onCopy = container.callbacks?.onItemCopy;
-  if (!onCopy) {
-    throw new Error(
-      'Container callback onItemCopy is not defined. Any container reachable with session.dropEffect = "copy" must provide onItemCopy.',
-    );
-  }
-  const event: ItemCopyEvent = {
-    session,
-    item: items[0],
-    itemMetadata: items[0].metadata,
-    items,
-    itemsMetadata: items.map((item) => item.metadata),
-    container,
-    containerMetadata: container.metadata,
-    index,
-    beforeElement,
-  };
-  onCopy(event);
 }
 
 export function fireItemRemove(

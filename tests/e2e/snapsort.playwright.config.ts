@@ -23,6 +23,7 @@ export default defineConfig({
     "snapsort-drag-snapshot.spec.ts",
     "snapsort-duolingo.spec.ts",
     "snapsort-adapter-ghosts.spec.ts",
+    "snapsort-insertion-copy.spec.ts",
   ],
   fullyParallel: false,
   workers: 1,
