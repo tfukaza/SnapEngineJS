@@ -26,6 +26,9 @@
     char,
     id: `snapsort-letter-${i}`,
   }));
+
+  type HeroStackEntry = "title" | "copy" | "cta";
+  const heroStackEntries: HeroStackEntry[] = ["title", "copy", "cta"];
 </script>
 
 <section id="landing">
@@ -36,69 +39,78 @@
           <Container
             className="hero-stack"
             config={{ direction: "column", groupID: "snapsort-hero-content" }}
+            items={heroStackEntries}
+            getId={(kind) => kind}
           >
-            <Item className="hero-stack-item hero-title-item">
-              <div class="hero-row card">
-                <Handle className="hero-row-handle">
-                  <span class="hero-row-grip" aria-hidden="true">
-                    {#each gripDots as dot (dot)}
-                      <i></i>
-                    {/each}
-                  </span>
-                </Handle>
-                <div class="title-section" aria-label="SnapSort">
-                  <SnapSortContextBoundary>
-                    <Container config={{ direction: "row", groupID: "snapsort-title" }}>
-                      {#each titleChars as { char, id } (id)}
-                        <Item style="padding: 0; width: auto;">
-                          <span {id} class="letter-shell">
-                            <span class="title-glyph title-text pixel-font">
-                              {char === " " ? "\u00A0" : char}
+            {#snippet entry(kind)}
+              {#if kind === "title"}
+                <Item className="hero-stack-item hero-title-item">
+                  <div class="hero-row card">
+                    <Handle className="hero-row-handle">
+                      <span class="hero-row-grip" aria-hidden="true">
+                        {#each gripDots as dot (dot)}
+                          <i></i>
+                        {/each}
+                      </span>
+                    </Handle>
+                    <div class="title-section" aria-label="SnapSort">
+                      <SnapSortContextBoundary>
+                        <Container
+                          config={{ direction: "row", groupID: "snapsort-title" }}
+                          items={titleChars}
+                          getId={(t) => t.id}
+                          getStyle={() => "padding: 0; width: auto;"}
+                        >
+                          {#snippet item(t)}
+                            <span id={t.id} class="letter-shell">
+                              <span class="title-glyph title-text pixel-font">
+                                {t.char === " " ? "\u00A0" : t.char}
+                              </span>
+                              <span class="letter-grip" aria-hidden="true">
+                                {#each gripDots as dot (dot)}
+                                  <i class="letter-grip-dot"></i>
+                                {/each}
+                              </span>
                             </span>
-                            <span class="letter-grip" aria-hidden="true">
-                              {#each gripDots as dot (dot)}
-                                <i class="letter-grip-dot"></i>
-                              {/each}
-                            </span>
-                          </span>
-                        </Item>
-                      {/each}
-                    </Container>
-                  </SnapSortContextBoundary>
-                </div>
-              </div>
-            </Item>
-
-            <Item className="hero-stack-item hero-copy-item">
-              <div class="hero-row card">
-                <Handle className="hero-row-handle">
-                  <span class="hero-row-grip" aria-hidden="true">
-                    {#each gripDots as dot (dot)}
-                      <i></i>
-                    {/each}
-                  </span>
-                </Handle>
-                <p class="hero-statement large">
-                  Component library for drag and drop UI. Open source and framework agnostic.
-                </p>
-              </div>
-            </Item>
-
-            <Item className="hero-stack-item hero-cta-item">
-              <div class="hero-row hero-row-final card">
-                <Handle className="hero-row-handle">
-                  <span class="hero-row-grip" aria-hidden="true">
-                    {#each gripDots as dot (dot)}
-                      <i></i>
-                    {/each}
-                  </span>
-                </Handle>
-                <div class="hero-cta">
-                  <button class="primary" type="button" onclick={goToDocs}>Get Started</button>
-                  <button type="button" onclick={goToGallery}>Gallery</button>
-                </div>
-              </div>
-            </Item>
+                          {/snippet}
+                        </Container>
+                      </SnapSortContextBoundary>
+                    </div>
+                  </div>
+                </Item>
+              {:else if kind === "copy"}
+                <Item className="hero-stack-item hero-copy-item">
+                  <div class="hero-row card">
+                    <Handle className="hero-row-handle">
+                      <span class="hero-row-grip" aria-hidden="true">
+                        {#each gripDots as dot (dot)}
+                          <i></i>
+                        {/each}
+                      </span>
+                    </Handle>
+                    <p class="hero-statement large">
+                      Component library for drag and drop UI. Open source and framework agnostic.
+                    </p>
+                  </div>
+                </Item>
+              {:else}
+                <Item className="hero-stack-item hero-cta-item">
+                  <div class="hero-row hero-row-final card">
+                    <Handle className="hero-row-handle">
+                      <span class="hero-row-grip" aria-hidden="true">
+                        {#each gripDots as dot (dot)}
+                          <i></i>
+                        {/each}
+                      </span>
+                    </Handle>
+                    <div class="hero-cta">
+                      <button class="primary" type="button" onclick={goToDocs}>Get Started</button>
+                      <button type="button" onclick={goToGallery}>Gallery</button>
+                    </div>
+                  </div>
+                </Item>
+              {/if}
+            {/snippet}
           </Container>
         </div>
       </div>

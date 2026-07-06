@@ -28,9 +28,11 @@
     getId = (entry: T) => (entry as { id: string }).id,
     getMetadata,
     getClassName,
+    getStyle,
     getSelected,
     onItemClick,
     item: itemSnippet,
+    entry: entrySnippet,
     ghost: ghostSnippet,
     container = $bindable(),
     locked = true,
@@ -53,11 +55,24 @@
     getMetadata?: (entry: T) => Record<string, unknown>;
     /** Per-entry className for the wrapping `<Item>`, e.g. for a "selected" style. */
     getClassName?: (entry: T) => string;
+    /** Per-entry inline style for the wrapping `<Item>`. */
+    getStyle?: (entry: T) => string;
     /** Per-entry selected state for the wrapping `<Item>` (drives multi-select drag). */
     getSelected?: (entry: T) => boolean;
     /** Per-entry click handler on the wrapping `<Item>`, e.g. for toggling selection. */
     onItemClick?: (entry: T, event: MouseEvent) => void;
     item?: Snippet<[T]>;
+    /**
+     * Full element control for an entry: the consumer renders the `<Item>`
+     * (or a nested `<Container>`, for heterogeneous/recursive compositions)
+     * themselves, instead of `item`'s content-only snippet wrapped in an
+     * adapter-created `<Item>`. Each `entry` invocation must render exactly
+     * one `<Item>`/`<Container>` so the rendered sequence stays 1:1 with the
+     * engine list — ghost splicing is unaffected either way. Takes
+     * precedence over `item`/`getClassName`/`getSelected`/`onItemClick`/
+     * `getMetadata`, which only apply to the adapter-wrapped `item` tier.
+     */
+    entry?: Snippet<[T]>;
     /**
      * Custom ghost content. Optional and independent of `items`/`item` — a
      * container using the legacy `children` API can still provide `ghost` to
@@ -159,6 +174,13 @@
   // --- Items mode: the adapter owns flow-kind ghost events (ruling 7). ---
 
   const itemsMode = items !== undefined;
+
+  if (itemsMode && entrySnippet && itemSnippet) {
+    console.warn(
+      "SnapSort Container: both `entry` and `item` snippets were provided — `entry` takes " +
+        "precedence and `item` (plus getClassName/getSelected/onItemClick/getMetadata) is ignored.",
+    );
+  }
 
   if (
     itemsMode &&
@@ -359,10 +381,13 @@
         >
           {#if ghostSnippet}{@render ghostSnippet(toGhostCreateEvent(re.ghost.event))}{/if}
         </div>
+      {:else if entrySnippet}
+        {@render entrySnippet(re.entry)}
       {:else}
         <Item
           metadata={{ ...getMetadata?.(re.entry), itemId: re.id }}
           className={getClassName?.(re.entry) ?? ""}
+          style={getStyle?.(re.entry) ?? ""}
           selected={getSelected?.(re.entry) ?? false}
           onclick={onItemClick ? (event: MouseEvent) => onItemClick(re.entry, event) : undefined}
         >

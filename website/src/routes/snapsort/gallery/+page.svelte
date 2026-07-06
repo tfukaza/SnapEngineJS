@@ -1083,15 +1083,16 @@
                 },
               }}
               locked={true}
+              items={paletteBlockTemplates}
+              getId={(template) => `palette-${template.type}`}
+              getMetadata={(template) => ({ blockType: template.type })}
             >
-              {#each paletteBlockTemplates as template (template.type)}
-                <Item metadata={{ itemId: `palette-${template.type}`, blockType: template.type }}>
-                  <div class="clone-block clone-block-{template.type} clone-palette-block">
-                    <i class="material-symbols-rounded" aria-hidden="true">{template.icon}</i>
-                    <span>{template.label}</span>
-                  </div>
-                </Item>
-              {/each}
+              {#snippet item(template)}
+                <div class="clone-block clone-block-{template.type} clone-palette-block">
+                  <i class="material-symbols-rounded" aria-hidden="true">{template.icon}</i>
+                  <span>{template.label}</span>
+                </div>
+              {/snippet}
             </Container>
             <Container
               className="clone-canvas"
@@ -1107,30 +1108,12 @@
                 },
               }}
               locked={true}
+              items={canvasBlocks}
+              getId={(block) => block.id}
             >
               {#if canvasBlocks.length === 0 && !draggingClone}
                 <p class="clone-canvas-empty">Drop blocks here</p>
               {/if}
-              {#each canvasBlocks as block (block.id)}
-                <Item metadata={{ itemId: block.id }}>
-                  <div class="clone-block clone-block-{block.type} clone-canvas-block">
-                    <i class="material-symbols-rounded" aria-hidden="true">{blockIcon[block.type]}</i>
-                    <span>{blockLabel[block.type]}</span>
-                    <button
-                      type="button"
-                      class="clone-block-remove"
-                      aria-label={`Remove ${blockLabel[block.type]}`}
-                      onpointerdown={(event) => event.stopPropagation()}
-                      onclick={(event) => {
-                        event.stopPropagation();
-                        removeCanvasBlock(block.id);
-                      }}
-                    >
-                      <i class="material-symbols-rounded" aria-hidden="true">close</i>
-                    </button>
-                  </div>
-                </Item>
-              {/each}
               {#if draggingClone}
                 <Item
                   itemObject={draggingClone.item}
@@ -1142,6 +1125,24 @@
                   </div>
                 </Item>
               {/if}
+              {#snippet item(block)}
+                <div class="clone-block clone-block-{block.type} clone-canvas-block">
+                  <i class="material-symbols-rounded" aria-hidden="true">{blockIcon[block.type]}</i>
+                  <span>{blockLabel[block.type]}</span>
+                  <button
+                    type="button"
+                    class="clone-block-remove"
+                    aria-label={`Remove ${blockLabel[block.type]}`}
+                    onpointerdown={(event) => event.stopPropagation()}
+                    onclick={(event) => {
+                      event.stopPropagation();
+                      removeCanvasBlock(block.id);
+                    }}
+                  >
+                    <i class="material-symbols-rounded" aria-hidden="true">close</i>
+                  </button>
+                </div>
+              {/snippet}
             </Container>
           </Container>
         </div>
@@ -1182,15 +1183,15 @@
                 },
               }}
               locked={true}
+              items={trashTasks}
+              getId={(task) => task.id}
             >
-              {#each trashTasks as task (task.id)}
-                <Item metadata={{ itemId: task.id }}>
-                  <div class="trash-task">
-                    <i class="material-symbols-rounded trash-task-grip" aria-hidden="true">drag_indicator</i>
-                    <span>{task.text}</span>
-                  </div>
-                </Item>
-              {/each}
+              {#snippet item(task)}
+                <div class="trash-task">
+                  <i class="material-symbols-rounded trash-task-grip" aria-hidden="true">drag_indicator</i>
+                  <span>{task.text}</span>
+                </div>
+              {/snippet}
             </Container>
             <div class="trash-zone" class:trash-zone-active={trashHovered}>
               <Container
@@ -1238,26 +1239,27 @@
               },
             }}
             locked={true}
+            items={swapTiles}
+            getId={(tile) => tile.id}
+            getMetadata={(tile) => ({ color: tile.color, label: tile.label })}
           >
-            {#each swapTiles as tile (tile.id)}
-              <Item metadata={{ itemId: tile.id, color: tile.color, label: tile.label }}>
-                <div
-                  class="swap-tile card"
-                  class:swap-tile-hovered={swapHoveredId === tile.id}
-                  style={`--tile-color: ${tile.color};`}
-                >
-                  <span class="swap-tile-grip" aria-hidden="true">
-                    <i></i>
-                    <i></i>
-                    <i></i>
-                    <i></i>
-                    <i></i>
-                    <i></i>
-                  </span>
-                  <span class="swap-tile-label">{tile.label}</span>
-                </div>
-              </Item>
-            {/each}
+            {#snippet item(tile)}
+              <div
+                class="swap-tile card"
+                class:swap-tile-hovered={swapHoveredId === tile.id}
+                style={`--tile-color: ${tile.color};`}
+              >
+                <span class="swap-tile-grip" aria-hidden="true">
+                  <i></i>
+                  <i></i>
+                  <i></i>
+                  <i></i>
+                  <i></i>
+                  <i></i>
+                </span>
+                <span class="swap-tile-label">{tile.label}</span>
+              </div>
+            {/snippet}
           </Container>
         </div>
       </div>

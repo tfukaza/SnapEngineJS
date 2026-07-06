@@ -1,11 +1,12 @@
 <script lang="ts">
   import { onMount } from "svelte";
   import { Engine } from "@snap-engine/asset-base-svelte";
-  import { Container, Item } from "@snap-engine/snapsort-svelte";
+  import { Container } from "@snap-engine/snapsort-svelte";
   import * as Tone from "tone";
   import HeroToneJoystick from "./hero/HeroToneJoystick.svelte";
 
   const recessedPadIndices = new Set([5, 6, 9, 10]);
+  const padIndices = Array.from({ length: 16 }, (_, index) => index);
   const waveShapes = ["sine", "triangle8", "square8", "sawtooth8"] as const;
   type WaveShape = (typeof waveShapes)[number];
 
@@ -295,23 +296,26 @@
               {/each}
             </div>
             <div class="hero-button-grid" aria-hidden="true">
-              <Container config={{ direction: "row", groupID: "hero-synth-pads" }}>
-                {#each Array(16) as _, index}
-                  <Item className="hero-synth-item">
-                    <div
-                      class={`hero-synth-button ${padColorClasses[index]} ${activePadIndex === index ? "is-active" : ""}`}
-                      data-pad-index={index}
-                      onpointerdown={() => playPad(index)}
-                    >
-                      <span class="hero-synth-button-number" aria-hidden="true">{index + 1}</span>
-                      {#if recessedPadIndices.has(index)}
-                        <div class="hero-synth-button-indent"></div>
-                      {:else}
-                        <div class="hero-synth-button-bump"></div>
-                      {/if}
-                    </div>
-                  </Item>
-                {/each}
+              <Container
+                config={{ direction: "row", groupID: "hero-synth-pads" }}
+                items={padIndices}
+                getId={(index) => `pad-${index}`}
+                getClassName={() => "hero-synth-item"}
+              >
+                {#snippet item(index)}
+                  <div
+                    class={`hero-synth-button ${padColorClasses[index]} ${activePadIndex === index ? "is-active" : ""}`}
+                    data-pad-index={index}
+                    onpointerdown={() => playPad(index)}
+                  >
+                    <span class="hero-synth-button-number" aria-hidden="true">{index + 1}</span>
+                    {#if recessedPadIndices.has(index)}
+                      <div class="hero-synth-button-indent"></div>
+                    {:else}
+                      <div class="hero-synth-button-bump"></div>
+                    {/if}
+                  </div>
+                {/snippet}
               </Container>
             </div>
           </div>
