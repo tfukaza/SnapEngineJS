@@ -4,6 +4,7 @@ export type {
   AnimationConfig,
   ContainerAnimations,
 } from "./container";
+export { defaultCallbacks } from "./mutation";
 export type {
   ContainerCallbacks,
   DragLocation,

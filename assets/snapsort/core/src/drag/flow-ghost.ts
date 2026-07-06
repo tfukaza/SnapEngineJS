@@ -111,12 +111,30 @@ async function moveGhost(
     }
 
     // Detach every run anchor from wherever it currently sits, then reinsert
-    // the whole run contiguously at `index..index+N-1`, in run order.
-    for (const ghost of run) {
-      if (ghost.parent) {
-        container.detachItemFromContainer(ghost.container, ghost);
+    // the whole run contiguously at `index..index+N-1`, in run order. A
+    // same-container reposition stays a silent detach (no consumer-visible
+    // event — it's about to be re-inserted into the SAME container this
+    // synchronous pass). A cross-container move fires onGhostRemove on the
+    // departed container first: adapters that keep per-container ghost
+    // state (rather than one shared pool across every container, as today's
+    // hand-rolled demo consumers do) need to be told the entry left, or it
+    // leaks as a stale ghost there forever.
+    run.forEach((ghost, i) => {
+      if (!ghost.parent) return;
+      const oldContainer = ghost.container;
+      if (oldContainer === container) {
+        container.detachItemFromContainer(oldContainer, ghost);
+      } else {
+        item.removeGhostFrom(
+          session.items[i] ?? item,
+          oldContainer,
+          ghost,
+          session,
+          "flow",
+          "target",
+        );
       }
-    }
+    });
     run.forEach((ghost, i) => {
       const box = session.items[i]?.dragSnapshot?.box;
       const rect: GhostRect | null = box

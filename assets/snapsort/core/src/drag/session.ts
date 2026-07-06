@@ -87,14 +87,6 @@ export class DragSession {
   readonly ghosts: Map<GhostRole, Item> = new Map();
 
   /**
-   * `"source"`-role ghosts for `dropEffect = "copy"` in flow modes, one per
-   * vacated slot (keyed by the original item). Unlike `ghosts`, which holds
-   * at most one ghost per role, a multi-item copy needs to hold open every
-   * member's original slot simultaneously.
-   */
-  readonly sourceGhosts: Map<Item, Item> = new Map();
-
-  /**
    * Flow-mode target ghosts: one logical anchor per dragged member, ordered
    * to parallel `items`, inserted as a contiguous run at the prospective drop
    * slot. Each anchor fires its own `createGhost`/`onGhostInsert` (with the

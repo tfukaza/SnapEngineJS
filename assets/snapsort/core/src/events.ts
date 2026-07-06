@@ -203,6 +203,13 @@ export interface GhostInsertEvent {
   ghostRect?: GhostRect | null;
 }
 
+/**
+ * Fired when a ghost is removed from `container`'s list. For flow mode this
+ * includes a run anchor RELOCATING to a different container (not just the
+ * run being torn down at drop/cancel): `container` here is the one the
+ * anchor is LEAVING, so an adapter keeping per-container ghost state must
+ * treat this as "this container's ghost is gone," not only "the drag ended."
+ */
 export interface GhostRemoveEvent {
   session: DragSession;
   kind: GhostKind;
