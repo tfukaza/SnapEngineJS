@@ -104,6 +104,17 @@
       { label: "Select menu", meta: "v" },
     ],
   };
+  // Heterogeneous: the nested child Container sits as a trailing sibling
+  // among the parent's plain rows -- `entry` renders each position's
+  // Item/Container itself. The same for every theme (the mockup data isn't
+  // themed), so this is a plain constant, not a per-theme derivation.
+  type NestedShowcaseEntry =
+    | { kind: "row"; row: CustomizableMockupNestedItem }
+    | { kind: "child-group" };
+  const nestedShowcaseEntries: NestedShowcaseEntry[] = [
+    ...customizableMockupNested.parent.map((row): NestedShowcaseEntry => ({ kind: "row", row })),
+    { kind: "child-group" },
+  ];
   const customizableMockupFields: CustomizableMockupField[] = [
     {
       label: "Satisfaction",
@@ -260,22 +271,22 @@
                           groupID: `customizable-${theme.id}-list`,
                           ...getCustomizableThemeConfig(theme.id),
                         }}
+                        items={customizableMockupRows}
+                        getId={(row) => row.label}
                       >
-                        {#each customizableMockupRows as row (row.label)}
-                          <Item>
-                            <div class="customizable-mini-row">
-                              <span class="customizable-mini-handle" aria-hidden="true">
-                                <span class="customizable-mini-grip">
-                                  <i></i><i></i><i></i><i></i>
-                                </span>
+                        {#snippet item(row)}
+                          <div class="customizable-mini-row">
+                            <span class="customizable-mini-handle" aria-hidden="true">
+                              <span class="customizable-mini-grip">
+                                <i></i><i></i><i></i><i></i>
                               </span>
-                              <span class="customizable-mini-row-main">
-                                <span class="customizable-mini-row-text">{row.label}</span>
-                              </span>
-                              <span class="customizable-mini-meta">{row.meta}</span>
-                            </div>
-                          </Item>
-                        {/each}
+                            </span>
+                            <span class="customizable-mini-row-main">
+                              <span class="customizable-mini-row-text">{row.label}</span>
+                            </span>
+                            <span class="customizable-mini-meta">{row.meta}</span>
+                          </div>
+                        {/snippet}
                       </Container>
                     </div>
 
@@ -298,12 +309,12 @@
                           mode: "progressive",
                           ...getCustomizableThemeConfig(theme.id),
                         }}
+                        items={customizableMockupWords}
+                        getId={(word) => word}
                       >
-                        {#each customizableMockupWords as word (word)}
-                          <Item>
-                            <span class="customizable-mini-word">{word}</span>
-                          </Item>
-                        {/each}
+                        {#snippet item(word)}
+                          <span class="customizable-mini-word">{word}</span>
+                        {/snippet}
                       </Container>
                     </div>
 
@@ -325,27 +336,27 @@
                           groupID: `customizable-${theme.id}-tasks`,
                           ...getCustomizableThemeConfig(theme.id),
                         }}
+                        items={customizableMockupCards}
+                        getId={(card) => card.title}
                       >
-                        {#each customizableMockupCards as card (card)}
-                          <Item>
-                            <div class="customizable-mini-card">
-                              <div class="customizable-mini-card-head">
-                                <span class="customizable-mini-handle task" aria-hidden="true">
-                                  <span class="customizable-mini-grip">
-                                    <i></i><i></i><i></i><i></i>
-                                  </span>
+                        {#snippet item(card)}
+                          <div class="customizable-mini-card">
+                            <div class="customizable-mini-card-head">
+                              <span class="customizable-mini-handle task" aria-hidden="true">
+                                <span class="customizable-mini-grip">
+                                  <i></i><i></i><i></i><i></i>
                                 </span>
-                                <strong>{card.title}</strong>
-                                <span>{card.tag}</span>
-                              </div>
-                              <i style={`--progress: ${card.progress};`}></i>
-                              <div class="customizable-mini-card-foot">
-                                <span>{card.started}</span>
-                                <em>{card.progress}</em>
-                              </div>
+                              </span>
+                              <strong>{card.title}</strong>
+                              <span>{card.tag}</span>
                             </div>
-                          </Item>
-                        {/each}
+                            <i style={`--progress: ${card.progress};`}></i>
+                            <div class="customizable-mini-card-foot">
+                              <span>{card.started}</span>
+                              <em>{card.progress}</em>
+                            </div>
+                          </div>
+                        {/snippet}
                       </Container>
                     </div>
 
@@ -367,48 +378,53 @@
                           groupID: `customizable-${theme.id}-nested`,
                           ...getCustomizableThemeConfig(theme.id),
                         }}
+                        items={nestedShowcaseEntries}
+                        getId={(e) => (e.kind === "row" ? `parent-${e.row.label}` : `child-group-${theme.id}`)}
                       >
-                        {#each customizableMockupNested.parent as row (row.label)}
-                          <Item>
-                            <div class="customizable-mini-row">
-                              <Handle className="customizable-mini-handle">
-                                <span class="customizable-mini-grip" aria-hidden="true">
-                                  <i></i><i></i><i></i><i></i>
-                                </span>
-                              </Handle>
-                              <span class="customizable-mini-row-main">
-                                <span class="customizable-mini-row-text">{row.label}</span>
-                                <span class="customizable-mini-row-sub">Parent block</span>
-                              </span>
-                              <span class="customizable-mini-meta">{row.meta}</span>
-                            </div>
-                          </Item>
-                        {/each}
-                        <Container
-                          className="customizable-mini-nested-child"
-                          config={{
-                            direction: "column",
-                            groupID: `customizable-${theme.id}-nested`,
-                            ...getCustomizableThemeConfig(theme.id),
-                          }}
-                        >
-                          {#each customizableMockupNested.child as row (row.label)}
+                        {#snippet entry(e)}
+                          {#if e.kind === "row"}
                             <Item>
-                              <div class="customizable-mini-row nested">
+                              <div class="customizable-mini-row">
                                 <Handle className="customizable-mini-handle">
                                   <span class="customizable-mini-grip" aria-hidden="true">
                                     <i></i><i></i><i></i><i></i>
                                   </span>
                                 </Handle>
                                 <span class="customizable-mini-row-main">
-                                  <span class="customizable-mini-row-text">{row.label}</span>
-                                  <span class="customizable-mini-row-sub">Nested item</span>
+                                  <span class="customizable-mini-row-text">{e.row.label}</span>
+                                  <span class="customizable-mini-row-sub">Parent block</span>
                                 </span>
-                                <span class="customizable-mini-meta">{row.meta}</span>
+                                <span class="customizable-mini-meta">{e.row.meta}</span>
                               </div>
                             </Item>
-                          {/each}
-                        </Container>
+                          {:else}
+                            <Container
+                              className="customizable-mini-nested-child"
+                              config={{
+                                direction: "column",
+                                groupID: `customizable-${theme.id}-nested`,
+                                ...getCustomizableThemeConfig(theme.id),
+                              }}
+                              items={customizableMockupNested.child}
+                              getId={(row) => row.label}
+                            >
+                              {#snippet item(row)}
+                                <div class="customizable-mini-row nested">
+                                  <Handle className="customizable-mini-handle">
+                                    <span class="customizable-mini-grip" aria-hidden="true">
+                                      <i></i><i></i><i></i><i></i>
+                                    </span>
+                                  </Handle>
+                                  <span class="customizable-mini-row-main">
+                                    <span class="customizable-mini-row-text">{row.label}</span>
+                                    <span class="customizable-mini-row-sub">Nested item</span>
+                                  </span>
+                                  <span class="customizable-mini-meta">{row.meta}</span>
+                                </div>
+                              {/snippet}
+                            </Container>
+                          {/if}
+                        {/snippet}
                       </Container>
                     </div>
 
@@ -431,51 +447,51 @@
                             groupID: `customizable-${theme.id}-editor`,
                             ...getCustomizableThemeConfig(theme.id),
                           }}
+                          items={customizableMockupFields}
+                          getId={(field) => field.label}
                         >
-                          {#each customizableMockupFields as field (field.label)}
-                            <Item>
-                              <div class="customizable-mini-field">
-                                <Handle className="customizable-mini-field-handle">
-                                  <span class="customizable-mini-grip" aria-hidden="true">
-                                    <i></i><i></i><i></i><i></i>
-                                  </span>
-                                </Handle>
-                                <div class="customizable-mini-field-main">
-                                  <div class="customizable-mini-question-input">
-                                    <strong>{field.label}</strong>
-                                    <span>{field.type === "radio" ? "Multiple choice" : "Checkboxes"}</span>
-                                  </div>
-                                  <SnapSortContextBoundary>
-                                    <Container
-                                      className="customizable-mini-options"
-                                      config={{
-                                        direction: "column",
-                                        groupID: `customizable-${theme.id}-editor-${field.label}`,
-                                        mode: "progressive",
-                                        ...getCustomizableThemeConfig(theme.id),
-                                      }}
-                                    >
-                                      {#each field.options as option (option)}
-                                        <Item>
-                                          <span class="customizable-mini-option" class:checkbox={field.type === "checkbox"}>
-                                            <Handle className="customizable-mini-option-handle">
-                                              <span class="customizable-mini-option-grip" aria-hidden="true"></span>
-                                            </Handle>
-                                            <i></i>
-                                            <span>{option}</span>
-                                            <button type="button" tabindex="-1" aria-label="Remove option">x</button>
-                                          </span>
-                                        </Item>
-                                      {/each}
-                                    </Container>
-                                  </SnapSortContextBoundary>
-                                  <button class="customizable-mini-add-option" type="button" tabindex="-1">
-                                    + Add option
-                                  </button>
+                          {#snippet item(field)}
+                            <div class="customizable-mini-field">
+                              <Handle className="customizable-mini-field-handle">
+                                <span class="customizable-mini-grip" aria-hidden="true">
+                                  <i></i><i></i><i></i><i></i>
+                                </span>
+                              </Handle>
+                              <div class="customizable-mini-field-main">
+                                <div class="customizable-mini-question-input">
+                                  <strong>{field.label}</strong>
+                                  <span>{field.type === "radio" ? "Multiple choice" : "Checkboxes"}</span>
                                 </div>
+                                <SnapSortContextBoundary>
+                                  <Container
+                                    className="customizable-mini-options"
+                                    config={{
+                                      direction: "column",
+                                      groupID: `customizable-${theme.id}-editor-${field.label}`,
+                                      mode: "progressive",
+                                      ...getCustomizableThemeConfig(theme.id),
+                                    }}
+                                    items={field.options}
+                                    getId={(option) => option}
+                                  >
+                                    {#snippet item(option)}
+                                      <span class="customizable-mini-option" class:checkbox={field.type === "checkbox"}>
+                                        <Handle className="customizable-mini-option-handle">
+                                          <span class="customizable-mini-option-grip" aria-hidden="true"></span>
+                                        </Handle>
+                                        <i></i>
+                                        <span>{option}</span>
+                                        <button type="button" tabindex="-1" aria-label="Remove option">x</button>
+                                      </span>
+                                    {/snippet}
+                                  </Container>
+                                </SnapSortContextBoundary>
+                                <button class="customizable-mini-add-option" type="button" tabindex="-1">
+                                  + Add option
+                                </button>
                               </div>
-                            </Item>
-                          {/each}
+                            </div>
+                          {/snippet}
                         </Container>
                       </div>
                     </div>
@@ -507,8 +523,10 @@
                           mode: "insertion",
                           ...getCustomizableThemeConfig(theme.id),
                         }}
+                        items={customizableMockupFiles}
+                        getId={(file) => file.id}
                       >
-                        {#each customizableMockupFiles as file (file.id)}
+                        {#snippet entry(file)}
                           {#if file.kind === "folder"}
                             <Container
                               className={`customizable-mini-tree-folder depth-${file.depth}${file.active ? " active" : ""}`}
@@ -550,7 +568,7 @@
                               <strong>{file.label}</strong>
                             </Item>
                           {/if}
-                        {/each}
+                        {/snippet}
                       </Container>
                     </div>
                       </div>
@@ -589,8 +607,10 @@
                     className="gk-board"
                     config={{ direction: "row", name: "gk-root", noDrop: true }}
                     locked={true}
+                    items={galleryKanban}
+                    getId={(column) => column.id}
                   >
-                    {#each galleryKanban as column (column.id)}
+                    {#snippet entry(column)}
                       <Container
                         className="gk-column"
                         config={{
@@ -599,35 +619,35 @@
                           name: column.id,
                         }}
                         locked={true}
+                        items={column.cards}
+                        getId={(card) => card.id}
                       >
                         <div class="gk-column-head">
                           <h4>{column.title}</h4>
                           <span class="gk-count">{column.cards.length}</span>
                         </div>
-                        {#each column.cards as card (card.id)}
-                          <Item>
-                            <div class="gk-card">
-                              <div class="gk-header">
-                                <span class="gk-title">{card.text}</span>
-                                <span class="gk-tag">{card.tag}</span>
-                              </div>
-                              <p class="gk-desc">{card.desc}</p>
-                              <div class="gk-footer">
-                                <span
-                                  class="gk-avatar"
-                                  style={`--avatar-color: ${card.avatarColor};`}
-                                >
-                                  {card.avatar}
-                                </span>
-                                <span class="gk-due">
-                                  <i class="material-symbols-rounded">event</i>{card.due}
-                                </span>
-                              </div>
+                        {#snippet item(card)}
+                          <div class="gk-card">
+                            <div class="gk-header">
+                              <span class="gk-title">{card.text}</span>
+                              <span class="gk-tag">{card.tag}</span>
                             </div>
-                          </Item>
-                        {/each}
+                            <p class="gk-desc">{card.desc}</p>
+                            <div class="gk-footer">
+                              <span
+                                class="gk-avatar"
+                                style={`--avatar-color: ${card.avatarColor};`}
+                              >
+                                {card.avatar}
+                              </span>
+                              <span class="gk-due">
+                                <i class="material-symbols-rounded">event</i>{card.due}
+                              </span>
+                            </div>
+                          </div>
+                        {/snippet}
                       </Container>
-                    {/each}
+                    {/snippet}
                   </Container>
                 </div>
               </div>
