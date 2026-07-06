@@ -19,7 +19,11 @@ const browserProjects = [
 
 export default defineConfig({
   testDir: ".",
-  testMatch: ["snapsort-drag-snapshot.spec.ts", "snapsort-duolingo.spec.ts"],
+  testMatch: [
+    "snapsort-drag-snapshot.spec.ts",
+    "snapsort-duolingo.spec.ts",
+    "snapsort-adapter-ghosts.spec.ts",
+  ],
   fullyParallel: false,
   workers: 1,
   reporter: [["list"]],

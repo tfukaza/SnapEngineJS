@@ -2,6 +2,7 @@
   import { Engine } from "@snap-engine/asset-base-svelte";
   import { Container, Item } from "@snap-engine/snapsort-svelte";
   import type { Engine as EngineClass } from "@snap-engine/core";
+  import type { ItemMoveEvent } from "@snap-engine/snapsort";
 
   let engineInstance: EngineClass | null = $state(null);
   let debugMode = $state(false);
@@ -89,6 +90,52 @@
   // snippet) as the Stage 2 adapter-ergonomics proof of concept.
   const doubleRowItems = Array.from({ length: 28 }, (_, index) => index + 1);
 
+  // Cross-container items-mode surface: proves the adapter's per-container
+  // ghostEntries state doesn't leak a stale ghost into the area a run
+  // anchor left (the fix in flow-ghost.ts's moveGhost/doMove).
+  type MultiAreaItem = { id: string; label: string };
+  type MultiArea = "area1" | "area2";
+  let multiArea1Items = $state<MultiAreaItem[]>([
+    { id: "multi-a", label: "Item A" },
+    { id: "multi-b", label: "Item B" },
+    { id: "multi-c", label: "Item C" },
+  ]);
+  let multiArea2Items = $state<MultiAreaItem[]>([
+    { id: "multi-x", label: "Item X" },
+    { id: "multi-y", label: "Item Y" },
+    { id: "multi-z", label: "Item Z" },
+  ]);
+
+  function multiAreaList(area: MultiArea): MultiAreaItem[] {
+    return area === "area1" ? multiArea1Items : multiArea2Items;
+  }
+
+  function setMultiAreaList(area: MultiArea, next: MultiAreaItem[]) {
+    if (area === "area1") multiArea1Items = next;
+    else multiArea2Items = next;
+  }
+
+  function handleMultiAreaMove(event: ItemMoveEvent) {
+    const itemId = event.itemMetadata.itemId;
+    if (typeof itemId !== "string") return;
+    const targetArea = event.to.containerMetadata.area as MultiArea | undefined;
+    if (targetArea !== "area1" && targetArea !== "area2") return;
+
+    const sourceArea: MultiArea = multiArea1Items.some((i) => i.id === itemId)
+      ? "area1"
+      : "area2";
+    const moved = multiAreaList(sourceArea).find((i) => i.id === itemId);
+    if (!moved) return;
+
+    if (sourceArea !== targetArea) {
+      setMultiAreaList(sourceArea, multiAreaList(sourceArea).filter((i) => i.id !== itemId));
+    }
+    const targetList = multiAreaList(targetArea).filter((i) => i.id !== itemId);
+    const index = Math.max(0, Math.min(event.to.index, targetList.length));
+    targetList.splice(index, 0, moved);
+    setMultiAreaList(targetArea, targetList);
+  }
+
   function toggleVerticalSelection(n: number, event: MouseEvent) {
     if (event.metaKey || event.ctrlKey) {
       const next = new Set(selectedVertical);
@@ -164,17 +211,25 @@
           <article class="demo-cell">
             <h2>Multiple Drop Areas</h2>
             <Container config={{ direction: "row", name: "multi-root", noDrop: true }} locked={true}>
-              <Container config={{ direction: "column", name: "multi-area-1" }} locked={true}>
+              <Container
+                config={{ direction: "column", name: "multi-area-1", callbacks: { onItemMove: handleMultiAreaMove } }}
+                metadata={{ area: "area1" }}
+                locked={true}
+                items={multiArea1Items}
+                getClassName={() => "demo-item"}
+              >
                 <h3>Area 1</h3>
-                <Item className="demo-item"><p>Item A</p></Item>
-                <Item className="demo-item"><p>Item B</p></Item>
-                <Item className="demo-item"><p>Item C</p></Item>
+                {#snippet item(entry)}<p>{entry.label}</p>{/snippet}
               </Container>
-              <Container config={{ direction: "column", name: "multi-area-2" }} locked={true}>
+              <Container
+                config={{ direction: "column", name: "multi-area-2", callbacks: { onItemMove: handleMultiAreaMove } }}
+                metadata={{ area: "area2" }}
+                locked={true}
+                items={multiArea2Items}
+                getClassName={() => "demo-item"}
+              >
                 <h3>Area 2</h3>
-                <Item className="demo-item"><p>Item X</p></Item>
-                <Item className="demo-item"><p>Item Y</p></Item>
-                <Item className="demo-item"><p>Item Z</p></Item>
+                {#snippet item(entry)}<p>{entry.label}</p>{/snippet}
               </Container>
             </Container>
           </article>
