@@ -2186,10 +2186,12 @@ test.describe("Snapsort drag-start snapshot layout", () => {
   test("cleans up drag state when a started drag releases back inside the threshold", async ({
     page,
   }, testInfo) => {
-    test.fail(
-      true,
-      "Known repro: release cleanup is skipped when dragEnd is gated by final pointer distance instead of drag gesture state.",
-    );
+    // Regression: a drag that starts (crosses the threshold) and then returns
+    // near its origin before release must still fire dragEnd and commit/clean
+    // up. Previously dragEnd was gated on the pointer's final distance from
+    // the start, so an away-and-back "drop it in the same place" gesture was
+    // misclassified as a click and left the drag session uncommitted.
+    // Fixed in src/input.ts #finishPointer by gating on the drag gesture state.
     const consoleMessages: string[] = [];
     const pageErrors: string[] = [];
     page.on("console", (message) => consoleMessages.push(message.text()));

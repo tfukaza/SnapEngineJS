@@ -610,8 +610,16 @@ class InputControl {
 
     const gesture = this.#gestureDict[event.pointerId];
     if (gesture?.type === "drag") {
+      // Once a drag has actually started (dragStart was dispatched, so the
+      // gesture is in the "drag" state), releasing must always fire dragEnd —
+      // even if the pointer wandered back near its start point. Re-measuring
+      // the distance at release would misclassify an away-and-back gesture
+      // (e.g. dropping an item back in the same place) as a click and leave
+      // the drag session uncommitted. Only a gesture still "pending" at
+      // release (never crossed the start threshold) is a click.
+      const dragStarted = gesture.state === "drag";
       gesture.state = "release";
-      if (this.#isPastDragStartThreshold(pointer)) {
+      if (dragStarted || this.#isPastDragStartThreshold(pointer)) {
         this.#fireDragEnd(pointer, pointer.button);
       }
       delete this.#gestureDict[event.pointerId];

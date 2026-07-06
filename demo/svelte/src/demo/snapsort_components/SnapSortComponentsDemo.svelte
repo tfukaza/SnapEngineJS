@@ -782,7 +782,11 @@
     padding: var(--size-12);
     background: #fff;
     box-sizing: border-box;
-    gap: var(--size-12);
+    /* No flex gap here: the answer/bank drop containers below must sit flush
+       against each other with zero dead space between them, otherwise the
+       pointer crosses a "no valid target" strip while dragging between them
+       and the ghost gets destroyed/recreated instead of animating smoothly. */
+    gap: 0;
     pointer-events: auto;
   }
 
@@ -790,6 +794,7 @@
     width: 100%;
     border-bottom: 1px solid #000;
     padding-bottom: var(--size-8);
+    margin-bottom: var(--size-12);
     box-sizing: border-box;
   }
 
