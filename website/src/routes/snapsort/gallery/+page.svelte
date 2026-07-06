@@ -20,7 +20,6 @@
     GhostInsertEvent,
     GhostRemoveEvent,
     Item as SortItem,
-    ItemCopyEvent,
     ItemMoveEvent,
     ItemRemoveEvent,
     ItemSwapEvent,
@@ -614,7 +613,11 @@
     const type = event.itemMetadata.blockType;
     if (typeof type !== "string") return;
     cloneBlockCount += 1;
-    const id = `canvas-clone-${cloneBlockCount}`;
+    // This id is permanent — it's reused as the committed block's id below,
+    // since the dragged clone instance and the eventual permanent Item are
+    // bridged only by a stable itemId (the clone is destroyed once the
+    // {#each canvasBlocks} render below takes over rendering it for real).
+    const id = `canvas-block-${cloneBlockCount}`;
     const cloneItem = event.cloneItems[0];
     cloneItem.metadata = { itemId: id, blockType: type };
     // Materialize the clone in state; the #if below renders it inside the
@@ -623,29 +626,28 @@
     draggingClone = { id, type: type as PaletteBlockType, item: cloneItem };
   }
 
-  function handleCloneCopy(event: ItemCopyEvent) {
-    // The copy drag committed into the canvas: materialize a real, permanent
-    // block at the drop index and retire the transient floating clone (which
-    // the core destroys).
-    const type = event.itemMetadata.blockType;
-    if (typeof type !== "string") return;
-    cloneBlockCount += 1;
-    const newBlock: CanvasBlock = {
-      id: `canvas-block-${cloneBlockCount}`,
-      type: type as PaletteBlockType,
-    };
-    const next = canvasBlocks.slice();
-    const index = Math.max(0, Math.min(event.index, next.length));
-    next.splice(index, 0, newBlock);
-    canvasBlocks = next;
-    draggingClone = null;
-  }
-
   function handleCanvasMove(event: ItemMoveEvent) {
-    // Reorder of an already-placed canvas block (copy commits go through
-    // onItemCopy, not here).
     const blockId = event.itemMetadata.itemId;
     if (typeof blockId !== "string") return;
+
+    if (event.from === null) {
+      // A copy drag committing: this itemId has never been in canvasBlocks
+      // before (it's the id assigned in handleDragClone above) — handling
+      // from here is identical to a regular cross-container move landing on
+      // a container that doesn't have this item yet, it just always happens
+      // to be new. Add it, then retire the floating clone.
+      const type = event.itemMetadata.blockType;
+      if (typeof type !== "string") return;
+      const newBlock: CanvasBlock = { id: blockId, type: type as PaletteBlockType };
+      const next = canvasBlocks.slice();
+      const index = Math.max(0, Math.min(event.to.index, next.length));
+      next.splice(index, 0, newBlock);
+      canvasBlocks = next;
+      draggingClone = null;
+      return;
+    }
+
+    // Otherwise it's a plain reorder of an already-placed canvas block.
     const block = canvasBlocks.find((candidate) => candidate.id === blockId);
     if (!block) return;
     const next = canvasBlocks.filter((candidate) => candidate.id !== blockId);
@@ -654,12 +656,10 @@
     canvasBlocks = next;
   }
 
-  function handleCloneDragEnd(event: DragEndEvent) {
-    // A copy drag that didn't commit (dropped outside any drop container):
-    // discard the floating clone. If it committed, handleCloneCopy already
-    // cleared it.
-    void event;
-    if (draggingClone) {
+  function handleCanvasRemove(event: ItemRemoveEvent) {
+    // Fired only when a copy drag cancels (dropped outside any drop
+    // container): the floating clone was never a real block, so discard it.
+    if (draggingClone && event.itemMetadata.itemId === draggingClone.id) {
       draggingClone = null;
     }
   }
@@ -1149,7 +1149,6 @@
               callbacks: {
                 onDragStart: handleCloneDragStart,
                 onDragClone: handleDragClone,
-                onDragEnd: handleCloneDragEnd,
                 awaitMutation: tick,
               },
             }}
@@ -1186,7 +1185,7 @@
                 dropArea: true,
                 callbacks: {
                   onItemMove: handleCanvasMove,
-                  onItemCopy: handleCloneCopy,
+                  onItemRemove: handleCanvasRemove,
                   awaitMutation: tick,
                 },
               }}

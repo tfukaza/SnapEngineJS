@@ -1490,21 +1490,38 @@ export class Item extends ElementObject {
    * `index`) and fire one semantic `onItemMove` event for the whole run
    * (falling back to `onItemInsert` when no `onItemMove` is registered).
    *
-   * @note This function assumes none of `items` are currently in the target
-   * container. Call `detachItemFromContainer` on each item first.
+   * A `froms[i] === null` member is spawned (copy), never a member of any
+   * container's list. It is deliberately NOT attached here: the consumer's
+   * `onItemMove` handler is expected to materialize a separate, *permanent*
+   * entry for it (reusing its `itemId`, per `ItemMoveEvent`'s doc), which
+   * registers itself with `container` when the consumer's framework mounts
+   * it. Eagerly attaching the transient dragged instance here would leave a
+   * stale bookkeeping entry in `container.itemOrderedList` once that
+   * permanent instance takes over rendering — corrupting later index math.
+   *
+   * @note This function assumes none of the non-spawned `items` are
+   * currently in the target container. Call `detachItemFromContainer` on
+   * each first.
    * @internal
    */
   moveItemsAt(
-    froms: DragLocation[],
+    froms: (DragLocation | null)[],
     container: Container,
     items: Item[],
     index: number,
     session: DragSession | null,
+    origins: (Item | null)[] = items.map(() => null),
   ) {
+    let attachedCount = 0;
     items.forEach((member, i) => {
-      this.attachItemToContainer(container, member, index + i);
+      if (froms[i] === null) return;
+      this.attachItemToContainer(container, member, index + attachedCount);
+      attachedCount++;
     });
-    const runEndIndex = index + items.length;
+    // Only the attached members actually shifted the list; an all-spawned
+    // batch leaves the list untouched, so the item that should follow the
+    // (about-to-be-rendered) new content is still at `index` itself.
+    const runEndIndex = index + attachedCount;
     const itemAfterIndex =
       runEndIndex >= container.itemOrderedList.length
         ? null
@@ -1514,7 +1531,7 @@ export class Item extends ElementObject {
       containerMetadata: container.metadata,
       index,
     };
-    fireItemMove(froms, to, items, itemAfterIndex, session);
+    fireItemMove(froms, to, items, itemAfterIndex, session, "commit", origins);
   }
 
   /** @internal */

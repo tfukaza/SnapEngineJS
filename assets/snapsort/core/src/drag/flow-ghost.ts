@@ -3,7 +3,7 @@ import type { Container } from "../container";
 import { Item } from "../item";
 import { resetDropSnapshotDebugDump, type DropCandidate } from "../algorithm";
 import type { DragCloneEvent, DragLocation, GhostRect, GhostRole } from "../events";
-import { fireAwaitMutation, fireItemCopy } from "../mutation";
+import { fireAwaitMutation, fireItemRemove } from "../mutation";
 import type { DragLifecycleStrategy } from "./lifecycle";
 import type { DragSession } from "./session";
 
@@ -282,6 +282,11 @@ function drop(session: DragSession): void {
             | { index: number; container: Container | null }
             | undefined);
       const isCopy = session.dropEffect === "copy";
+      // Capture each clone's rendering container before the coordinate-parent
+      // map is cleared below — needed if this copy drag cancels (no
+      // destination), since a cancelled clone was never a real list member
+      // and must be removed from wherever the consumer rendered it.
+      const cloneContainers = new Map(session.dragCoordinateParent);
       if (!ghostPos?.container) {
         const finalTarget =
           root.hasDragSnapshotTree() && item.dragSnapshot
@@ -366,65 +371,82 @@ function drop(session: DragSession): void {
             });
         }
         dropAnimationConfig = item.dropAnimationConfig(session.sources[0].container);
-      } else if (session.dropEffect === "copy") {
-        // The clone items were only ever a drag visual — never part of any
-        // container's item list. Commit is a `onItemCopy` at the destination
-        // (the consumer materializes a real, permanent item there); the
-        // transient clones are then destroyed. If there is no destination
-        // (dropped outside any drop container), the clone is simply discarded.
-        if (destination) {
-          const destinationContainer = destination.container;
-          const beforeElement =
-            destination.index >= destinationContainer.itemOrderedList.length
-              ? null
-              : (destinationContainer.itemOrderedList[destination.index]
-                  ?.element ?? null);
-          fireItemCopy(
-            destinationContainer,
-            items,
-            destination.index,
-            beforeElement,
-            session,
-          );
-          await fireAwaitMutation(destinationContainer);
-        }
-        for (const clone of items) {
-          clone.destroy();
-        }
       } else if (destination) {
-        // "move": re-insert the detached originals as one batch move into the
-        // destination, firing onItemMove.
+        // "move" and "copy" share this path from here on: one batch
+        // `onItemMove` commit into the destination. For "move" the originals
+        // were already logically detached at dragStart, so this is their
+        // first (re-)attachment since; for "copy" the clones were never in
+        // any container's list, so this is their *first* attachment ever —
+        // `from`/`froms` report null and `origins` carries the item each
+        // clone stands in for (see ItemMoveEvent), so the consumer's
+        // onItemMove handler can tell "this itemId is new to me, add it"
+        // apart from "this itemId already exists, reorder it" — exactly the
+        // same distinction a cross-container move already requires.
         const destinationContainer = destination.container;
         dropAnimationConfig = item.dropAnimationConfig(destinationContainer);
+        const froms = isCopy ? items.map(() => null) : session.sources;
+        const origins = isCopy
+          ? (session.handoffOrigins ?? items.map(() => null))
+          : items.map(() => null);
         item.moveItemsAt(
-          session.sources,
+          froms,
           destinationContainer,
           items,
           destination.index,
           session,
+          origins,
         );
         await fireAwaitMutation(destinationContainer);
-        const headItem = items[0];
-        if (headItem.element && destinationContainer.element) {
-          const runEndIndex = destination.index + items.length;
-          const expectedBefore =
-            runEndIndex >= destinationContainer.itemOrderedList.length
-              ? null
-              : destinationContainer.itemOrderedList[runEndIndex].element;
-          const runTailElement = items[items.length - 1].element;
-          if (
-            headItem.element.parentElement !== destinationContainer.element ||
-            runTailElement?.nextElementSibling !== expectedBefore
-          ) {
-            console.warn(
-              "SnapSort: the adapter did not place the dropped item(s) where onItemMove/onItemInsert specified. Check the adapter's callback/awaitMutation wiring.",
-              {
-                items,
-                container: destinationContainer,
-                index: destination.index,
-              },
-            );
+
+        // Skip for copy: the dragged clone's element is *expected* to go
+        // stale here, once the consumer's state-driven re-render replaces it
+        // with a fresh, permanent Item instance sharing the same itemId (see
+        // ItemMoveEvent doc) — checking headItem.element would false-positive
+        // on exactly the success case, not just adapter wiring bugs.
+        if (!isCopy) {
+          const headItem = items[0];
+          if (headItem.element && destinationContainer.element) {
+            const runEndIndex = destination.index + items.length;
+            const expectedBefore =
+              runEndIndex >= destinationContainer.itemOrderedList.length
+                ? null
+                : destinationContainer.itemOrderedList[runEndIndex].element;
+            const runTailElement = items[items.length - 1].element;
+            if (
+              headItem.element.parentElement !== destinationContainer.element ||
+              runTailElement?.nextElementSibling !== expectedBefore
+            ) {
+              console.warn(
+                "SnapSort: the adapter did not place the dropped item(s) where onItemMove/onItemInsert specified. Check the adapter's callback/awaitMutation wiring.",
+                {
+                  items,
+                  container: destinationContainer,
+                  index: destination.index,
+                },
+              );
+            }
           }
+        }
+      } else if (isCopy) {
+        // Copy with no destination (dropped outside any drop container): a
+        // clone was never a real list member, so there is nothing to return
+        // home to — remove it from wherever the consumer rendered it and let
+        // them delete it from state.
+        const containersToFlush = new Set<Container>();
+        for (const clone of items) {
+          const cloneContainer = cloneContainers.get(clone) as
+            | Container
+            | undefined;
+          if (cloneContainer) {
+            fireItemRemove(cloneContainer, [clone], session);
+            containersToFlush.add(cloneContainer);
+          }
+        }
+        for (const container of containersToFlush) {
+          await fireAwaitMutation(container);
+        }
+        for (const clone of items) {
+          clone.destroy();
         }
       }
 

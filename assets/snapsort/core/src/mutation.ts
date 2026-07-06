@@ -110,14 +110,18 @@ export function fireItemRemove(
  * no `onItemMove` is registered, which matches the pre-refactor behavior (a
  * DOM `insertBefore` inherently moves the node, so no explicit remove is
  * needed on the source).
+ *
+ * Also the copy-drag commit path: a spawned item's `froms` entry is `null`
+ * (see `ItemMoveEvent`) and `origins` carries the item it was spawned from.
  */
 export function fireItemMove(
-  froms: DragLocation[],
+  froms: (DragLocation | null)[],
   to: DragLocation,
   items: Item[],
   beforeElement: HTMLElement | null,
   session: DragSession | null,
   phase: MutationPhase = "commit",
+  origins: (Item | null)[] = items.map(() => null),
 ): void {
   const onMove = to.container.callbacks?.onItemMove;
   if (onMove) {
@@ -127,9 +131,13 @@ export function fireItemMove(
       itemMetadata: items[0].metadata,
       items,
       itemsMetadata: items.map((item) => item.metadata),
-      from: froms[0],
+      from: froms[0] ?? null,
       to,
       froms,
+      originItem: origins[0] ?? null,
+      originItemMetadata: origins[0]?.metadata ?? null,
+      origins,
+      originsMetadata: origins.map((origin) => origin?.metadata ?? null),
       beforeElement,
       phase,
     };

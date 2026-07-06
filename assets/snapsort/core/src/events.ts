@@ -125,6 +125,19 @@ export interface ItemSwapEvent {
  * another (including within the same container). Preferred over the
  * insert/remove primitives when the consumer's state model can express a
  * move as one operation.
+ *
+ * Also the commit event for a `dropEffect = "copy"` drag: a spawned item
+ * (see `onDragClone`) has no source location, so `from`/`froms` are `null`
+ * for it — the consumer's job is to recognize an unfamiliar `itemId` and
+ * *add* an entry, exactly as it would for an item arriving from a container
+ * whose state it doesn't track. `origins`/`originsMetadata` carry the
+ * original item a spawned entry stands in for (`null` for a genuinely moved
+ * item), for consumers that want provenance (undo/history). The permanent
+ * entry the consumer creates on this event MUST reuse the spawned item's
+ * existing `itemId` — the dragged clone instance is destroyed once the
+ * consumer's own re-render takes over rendering the permanent entry, and
+ * only a stable `itemId` bridges the two instances for FLIP/key lookups
+ * (see `Item.itemKey`).
  */
 export interface ItemMoveEvent {
   session: DragSession | null;
@@ -133,10 +146,17 @@ export interface ItemMoveEvent {
   /** The full moved run, ordered by original (document) index. `item === items[0]` (single-item case: length 1). */
   items: Item[];
   itemsMetadata: ItemSnapshotMetadata[];
-  from: DragLocation;
+  /** Null when `item` was spawned (copy), not moved from anywhere. */
+  from: DragLocation | null;
   to: DragLocation;
-  /** Each item's source location, parallel to `items`. `from === froms[0]`. */
-  froms: DragLocation[];
+  /** Each item's source location, parallel to `items`; entries are null for spawned items. `from === froms[0]`. */
+  froms: (DragLocation | null)[];
+  /** The original item `item` was spawned from (copy), or null for a genuinely moved item. */
+  originItem: Item | null;
+  originItemMetadata: ItemSnapshotMetadata | null;
+  /** Parallel to `items`/`froms`. */
+  origins: (Item | null)[];
+  originsMetadata: (ItemSnapshotMetadata | null)[];
   /** Element the whole run is inserted before (all items share one insertion point). */
   beforeElement: HTMLElement | null;
   phase: MutationPhase;
@@ -243,10 +263,14 @@ export interface DragEndEvent {
  * exactly where they are, untouched and un-ghosted. If the consumer binds no
  * element, the copy drag is vetoed.
  *
- * `cloneItems` is parallel to `items` (the originals). At drop the clones
- * commit into the destination via the normal `onItemMove` path; a cancelled
- * drag fires `onDragEnd` with the clones and `destination: null` so the
- * consumer can remove them from state.
+ * From this point on, handling is identical to a move drag — hover, ghost
+ * placement, and drop-target resolution never branch on copy vs move.
+ * `cloneItems` is parallel to `items` (the originals). At drop, a clone with
+ * a valid destination commits through the **same** `onItemMove` path a moved
+ * item would (see `ItemMoveEvent` — `from`/`origins` distinguish "spawned"
+ * from "moved" for consumers that care). A clone dropped with no valid
+ * destination was never a real list member, so there is nothing to return —
+ * `onItemRemove` fires instead so the consumer deletes what it created.
  */
 export interface DragCloneEvent {
   session: DragSession;
