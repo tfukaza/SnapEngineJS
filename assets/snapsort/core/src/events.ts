@@ -31,6 +31,17 @@ export type DropEffect = "move" | "copy" | "none";
 /** Which role a ghost plays during a drag. See `DragSession.ghosts`. */
 export type GhostRole = "target" | "source" | "pointer";
 
+/**
+ * Distinguishes a mid-drag relocation from the final placement on a mutation
+ * event. `"preview"` fires as the drop target changes during a drag — apply
+ * it to state, but gate side effects (server sync, undo checkpoints, etc.)
+ * on `"commit"`, which fires once when the drag settles. Defaults to
+ * `"commit"` on events that don't yet distinguish the two (pre-unified-
+ * entries call sites); this will become load-bearing once previews are
+ * fired (see the unified entries redesign).
+ */
+export type MutationPhase = "preview" | "commit";
+
 export interface ItemRemoveEvent {
   session: DragSession | null;
   item: Item;
@@ -40,6 +51,7 @@ export interface ItemRemoveEvent {
   itemsMetadata: ItemSnapshotMetadata[];
   container: Container;
   containerMetadata: Record<string, unknown>;
+  phase: MutationPhase;
 }
 
 export interface ItemInsertEvent {
@@ -55,6 +67,7 @@ export interface ItemInsertEvent {
   index: number;
   /** Element the whole run is inserted before (all items share one insertion point). */
   beforeElement: HTMLElement | null;
+  phase: MutationPhase;
 }
 
 /**
@@ -104,6 +117,7 @@ export interface ItemSwapEvent {
   session: DragSession | null;
   a: ItemSwapParticipant;
   b: ItemSwapParticipant;
+  phase: MutationPhase;
 }
 
 /**
@@ -125,6 +139,7 @@ export interface ItemMoveEvent {
   froms: DragLocation[];
   /** Element the whole run is inserted before (all items share one insertion point). */
   beforeElement: HTMLElement | null;
+  phase: MutationPhase;
 }
 
 export interface GhostRect {

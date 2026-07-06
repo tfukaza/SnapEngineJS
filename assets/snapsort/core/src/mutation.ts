@@ -12,6 +12,7 @@ import type {
   ItemMoveEvent,
   ItemRemoveEvent,
   ItemSwapEvent,
+  MutationPhase,
 } from "./events";
 
 /**
@@ -27,6 +28,7 @@ export function fireItemInsert(
   index: number,
   beforeElement: HTMLElement | null,
   session: DragSession | null,
+  phase: MutationPhase = "commit",
 ): void {
   const onInsert = container.callbacks?.onItemInsert;
   if (!onInsert) {
@@ -42,6 +44,7 @@ export function fireItemInsert(
     containerMetadata: container.metadata,
     index,
     beforeElement,
+    phase,
   };
   onInsert(event);
 }
@@ -82,6 +85,7 @@ export function fireItemRemove(
   container: Container,
   items: Item[],
   session: DragSession | null,
+  phase: MutationPhase = "commit",
 ): void {
   const onRemove = container.callbacks?.onItemRemove;
   if (!onRemove) {
@@ -95,6 +99,7 @@ export function fireItemRemove(
     itemsMetadata: items.map((item) => item.metadata),
     container,
     containerMetadata: container.metadata,
+    phase,
   };
   onRemove(event);
 }
@@ -112,6 +117,7 @@ export function fireItemMove(
   items: Item[],
   beforeElement: HTMLElement | null,
   session: DragSession | null,
+  phase: MutationPhase = "commit",
 ): void {
   const onMove = to.container.callbacks?.onItemMove;
   if (onMove) {
@@ -125,11 +131,12 @@ export function fireItemMove(
       to,
       froms,
       beforeElement,
+      phase,
     };
     onMove(event);
     return;
   }
-  fireItemInsert(to.container, items, to.index, beforeElement, session);
+  fireItemInsert(to.container, items, to.index, beforeElement, session, phase);
 }
 
 /**
@@ -142,6 +149,7 @@ export function fireItemSwap(
   a: { item: Item; container: Container; index: number },
   b: { item: Item; container: Container; index: number },
   session: DragSession | null,
+  phase: MutationPhase = "commit",
 ): void {
   const onSwap = a.container.callbacks?.onItemSwap;
   if (onSwap) {
@@ -161,6 +169,7 @@ export function fireItemSwap(
         containerMetadata: b.container.metadata,
         index: b.index,
       },
+      phase,
     };
     onSwap(event);
     return;
@@ -194,6 +203,7 @@ export function fireItemSwap(
     [a.item],
     beforeElementFor(b.container, b.index),
     session,
+    phase,
   );
   fireItemMove(
     [
@@ -211,6 +221,7 @@ export function fireItemSwap(
     [b.item],
     beforeElementFor(a.container, a.index),
     session,
+    phase,
   );
 }
 

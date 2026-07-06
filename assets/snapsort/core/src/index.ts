@@ -8,6 +8,7 @@ export type {
   ContainerCallbacks,
   DragLocation,
   DropEffect,
+  MutationPhase,
   GhostRole,
   GhostKind,
   GhostRect,
