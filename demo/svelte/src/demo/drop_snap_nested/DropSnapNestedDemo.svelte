@@ -85,6 +85,10 @@
   // dragging any selected item drags the whole selected set together.
   let selectedVertical = $state<Set<number>>(new Set());
 
+  // Migrated to the items+snippet Container API (with a custom `ghost`
+  // snippet) as the Stage 2 adapter-ergonomics proof of concept.
+  const doubleRowItems = Array.from({ length: 28 }, (_, index) => index + 1);
+
   function toggleVerticalSelection(n: number, event: MouseEvent) {
     if (event.metaKey || event.ctrlKey) {
       const next = new Set(selectedVertical);
@@ -110,14 +114,15 @@
           <article class="demo-cell wide horizontal-row-demo">
             <h2>Vertical Column</h2>
             <p class="demo-hint">Cmd/ctrl-click to multi-select, then drag any selected item.</p>
-            <Container config={{ direction: "column", groupID: "vertical-group" }}>
-              {#each [1, 2, 3, 4] as n}
-                <Item
-                  className={selectedVertical.has(n) ? "demo-item selected" : "demo-item"}
-                  selected={selectedVertical.has(n)}
-                  onclick={(e: MouseEvent) => toggleVerticalSelection(n, e)}
-                ><p>Item {n}</p></Item>
-              {/each}
+            <Container
+              config={{ direction: "column", groupID: "vertical-group" }}
+              items={[1, 2, 3, 4]}
+              getId={(n) => `vertical-${n}`}
+              getClassName={(n) => (selectedVertical.has(n) ? "demo-item selected" : "demo-item")}
+              getSelected={(n) => selectedVertical.has(n)}
+              onItemClick={(n, e) => toggleVerticalSelection(n, e)}
+            >
+              {#snippet item(n)}<p>Item {n}</p>{/snippet}
             </Container>
           </article>
 
@@ -132,10 +137,14 @@
 
           <article class="demo-cell wide">
             <h2>Horizontal Double Row</h2>
-            <Container config={{ direction: "row", groupID: "double-row-group" }}>
-              {#each Array.from({ length: 28 }, (_, index) => index + 1) as n}
-                <Item className="demo-item row-item"><p>Item {n}</p></Item>
-              {/each}
+            <Container
+              config={{ direction: "row", groupID: "double-row-group" }}
+              items={doubleRowItems}
+              getId={(n) => `double-row-${n}`}
+              getClassName={() => "demo-item row-item"}
+            >
+              {#snippet item(n)}<p>Item {n}</p>{/snippet}
+              {#snippet ghost()}<span class="double-row-ghost-label">Drop</span>{/snippet}
             </Container>
           </article>
 
@@ -481,6 +490,20 @@
     border: 2px solid #9a9a9a;
     box-sizing: border-box;
     opacity: 1;
+  }
+
+  :global(.double-row-ghost-label) {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 100%;
+    height: 100%;
+    background: #eef2ff;
+    border: 2px dashed #6366f1;
+    box-sizing: border-box;
+    font-size: 0.7rem;
+    color: #6366f1;
+    user-select: none;
   }
 
   .layer-row {
