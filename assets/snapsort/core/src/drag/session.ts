@@ -39,12 +39,25 @@ export interface GroupDimensions {
  */
 export class DragSession {
   readonly root: Container;
-  readonly items: Item[];
-  readonly sources: DragLocation[];
-  /** The item the pointer actually grabbed — may differ from `items[0]` (the run head) for disjoint selections. Anchors pointer-follow geometry. */
-  readonly pressedItem: Item;
+  /** Pointer id driving this drag (from `dragStartProp`). Needed to transfer pointer ownership on `handoff`. */
+  readonly pointerId: number;
+  /**
+   * The items being dragged. Stable for the whole gesture EXCEPT across a
+   * `handoff` (copy), which replaces the originals with freshly-created clone
+   * items — see `handoff`. Ordered by original document index (lowest first).
+   */
+  items: Item[];
+  sources: DragLocation[];
+  /** The item the pointer actually grabbed — may differ from `items[0]` (the run head) for disjoint selections. Anchors pointer-follow geometry. Replaced on `handoff`. */
+  pressedItem: Item;
   /** `items` as a Set, for O(1) exclusion checks in layout/algorithm code. */
-  readonly itemSet: Set<Item>;
+  itemSet: Set<Item>;
+  /**
+   * When this drag was handed off to clones (`dropEffect = "copy"`), the
+   * original items the clones stand in for, parallel to `items`. Null for a
+   * normal (non-copy) drag. The originals are never detached or moved.
+   */
+  handoffOrigins: Item[] | null = null;
   /** Direction-aware bounding size of the whole dragged group, computed once drag snapshots are captured. Degenerates to the single item's box when `items.length === 1`. */
   groupDims: GroupDimensions | null = null;
   /** Per-item constant visual offset (relative to `pressedItem`) so companions preview the collapsed run while hoisted. */
@@ -138,8 +151,47 @@ export class DragSession {
     this.pressedItem = pressedItem;
     this.itemSet = new Set(items);
     this.strategy = strategy;
+    this.pointerId = prop.pointerId;
     this.start = { x: prop.start.x, y: prop.start.y };
     this.pointer = { x: prop.start.x, y: prop.start.y };
+  }
+
+  /**
+   * Hand off this drag from the original items to freshly-created clone items
+   * (the `dropEffect = "copy"` model). The originals stay exactly where they
+   * are — never detached, styled, or ghosted. Each clone must already have a
+   * DOM element bound by the consumer (rendered inside a drop container), from
+   * which the core derives its coordinate parent for hoisting.
+   *
+   * After handoff, `items`/`sources`/`itemSet`/`pressedItem` describe the
+   * clones, and the input pointer is retargeted to the new pressed item so
+   * subsequent `drag`/`dragEnd` events dispatch to it.
+   *
+   * @param clones Clone items parallel to the current `items` (one per member).
+   */
+  handoff(clones: Item[]): void {
+    if (clones.length !== this.items.length) {
+      throw new Error(
+        "DragSession.handoff: clones must be parallel to the dragged items.",
+      );
+    }
+    const origins = this.items;
+    const pressedIndex = origins.indexOf(this.pressedItem);
+
+    // Each clone reuses its original's frozen drag snapshot for geometry — the
+    // clone visually replaces the original at the pointer, so "as if dragging
+    // the original" is the correct drag position/size.
+    clones.forEach((clone, i) => {
+      clone.adoptDragSnapshotFrom(origins[i]);
+    });
+
+    this.handoffOrigins = origins;
+    this.items = clones;
+    this.itemSet = new Set(clones);
+    this.pressedItem = clones[pressedIndex === -1 ? 0 : pressedIndex];
+
+    // Retarget the input pointer so drag/dragEnd now dispatch to the clone.
+    this.root.engine.input.setPointerDragOwner(this.pointerId, this.pressedItem);
   }
 
   /** The run head — lowest original index, first element of `items`. Used as the singular `item` in backwards-compatible event fields. */

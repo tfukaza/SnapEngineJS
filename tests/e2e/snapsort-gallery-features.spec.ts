@@ -104,6 +104,71 @@ test.describe("SnapSort gallery — new drag primitives", () => {
       await firstBlock.locator(".clone-block-remove").click();
       await expect(canvas.locator(".clone-canvas-block")).toHaveCount(1);
     });
+
+    test("handoff copy never ghosts the palette and discards a clone dropped outside a drop zone", async ({
+      page,
+    }) => {
+      const exhibit = page.locator("#clone-palette");
+      await exhibit.scrollIntoViewIfNeeded();
+      const palette = exhibit.locator(".clone-palette");
+      const canvas = exhibit.locator(".clone-canvas");
+
+      const dividerTemplate = palette
+        .locator(".snapsort-item")
+        .filter({ hasText: "Divider" });
+
+      // Drag a palette block toward the canvas, sampling the palette DOM
+      // mid-drag: the handoff model must never place a ghost or hoisted item
+      // in the (noDrop) palette — the original template just sits there.
+      const src = await rect(dividerTemplate);
+      const dst = await rect(canvas);
+      const start = { x: src.x + src.width / 2, y: src.y + src.height / 2 };
+      const end = { x: dst.x + dst.width / 2, y: dst.y + dst.height / 2 };
+      await page.mouse.move(start.x, start.y);
+      await page.mouse.down();
+      await page.mouse.move(start.x + 6, start.y + 6);
+      await page.waitForTimeout(60);
+      let maxPaletteGhosts = 0;
+      for (let step = 1; step <= 16; step++) {
+        const t = step / 16;
+        await page.mouse.move(start.x + (end.x - start.x) * t, start.y + (end.y - start.y) * t);
+        await page.waitForTimeout(20);
+        maxPaletteGhosts = Math.max(
+          maxPaletteGhosts,
+          await palette.evaluate((el) => el.querySelectorAll("#spacer").length),
+        );
+      }
+      await page.mouse.up();
+      await page.waitForTimeout(250);
+
+      expect(maxPaletteGhosts).toBe(0);
+      await expect(palette.locator(".snapsort-item")).toHaveCount(4);
+      await expect(canvas.locator(".clone-canvas-block")).toHaveCount(1);
+
+      // Now drag another block but release back over the palette (a noDrop
+      // zone): the copy is cancelled and the clone discarded — canvas unchanged.
+      const spacerTemplate = palette
+        .locator(".snapsort-item")
+        .filter({ hasText: "Spacer" });
+      const spacerBox = await rect(spacerTemplate);
+      const spacerStart = {
+        x: spacerBox.x + spacerBox.width / 2,
+        y: spacerBox.y + spacerBox.height / 2,
+      };
+      await page.mouse.move(spacerStart.x, spacerStart.y);
+      await page.mouse.down();
+      await page.mouse.move(spacerStart.x, spacerStart.y + 40);
+      await page.waitForTimeout(60);
+      await page.mouse.move(spacerStart.x, spacerStart.y);
+      await page.waitForTimeout(60);
+      await page.mouse.up();
+      await page.waitForTimeout(250);
+
+      await expect(canvas.locator(".clone-canvas-block")).toHaveCount(1);
+      await expect(palette.locator(".snapsort-item")).toHaveCount(4);
+      // No leftover floating clone stuck in the canvas.
+      await expect(canvas.locator(".clone-dragging")).toHaveCount(0);
+    });
   });
 
   test.describe("Trash It (none effect)", () => {

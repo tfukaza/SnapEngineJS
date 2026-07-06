@@ -218,6 +218,33 @@ export interface DragEndEvent {
   destination: DragLocation | null;
 }
 
+/**
+ * Fired on the source (root) container at drag start when
+ * `session.dropEffect === "copy"`, BEFORE the drag is hoisted. The consumer
+ * must materialize a clone in their own state for each `cloneItems` entry and
+ * render it (bound via `itemObject`) inside a drop container, then flush
+ * (`awaitMutation`) so each clone has a DOM element. The core then hands the
+ * drag off to the clones (`DragSession.handoff`) — the original items stay
+ * exactly where they are, untouched and un-ghosted. If the consumer binds no
+ * element, the copy drag is vetoed.
+ *
+ * `cloneItems` is parallel to `items` (the originals). At drop the clones
+ * commit into the destination via the normal `onItemMove` path; a cancelled
+ * drag fires `onDragEnd` with the clones and `destination: null` so the
+ * consumer can remove them from state.
+ */
+export interface DragCloneEvent {
+  session: DragSession;
+  /** The original items (never moved). `item === items[0]`. */
+  item: Item;
+  itemMetadata: ItemSnapshotMetadata;
+  items: Item[];
+  itemsMetadata: ItemSnapshotMetadata[];
+  sources: DragLocation[];
+  /** Fresh clone items, parallel to `items`; the consumer binds each one's element. */
+  cloneItems: Item[];
+}
+
 export interface DropTargetChangeEvent {
   session: DragSession;
   item: Item;
@@ -282,8 +309,19 @@ export interface ContainerCallbacks {
   onItemSwap?: (event: ItemSwapEvent) => void;
 
   /**
-   * Fired when a `"copy"`-effect drag commits (see `DragSession.dropEffect`).
-   * No default: required on any container that ever sets `dropEffect = "copy"`.
+   * Flow-mode (euclidean/progressive) copy: fired at drag start when
+   * `dropEffect === "copy"` (see `DragCloneEvent`). The consumer must bind an
+   * element to each clone, or the copy drag is vetoed. The clones then commit
+   * at drop through the normal `onItemMove` path.
+   */
+  onDragClone?: (event: DragCloneEvent) => void;
+
+  /**
+   * Insertion-mode copy: fired at drop when `dropEffect === "copy"`. Unlike
+   * flow mode, the insertion marker never moves the dragged item, so the
+   * original stays put with no flicker and the clone is materialized here at
+   * the destination. Required on any insertion container that sets
+   * `dropEffect = "copy"`.
    */
   onItemCopy?: (event: ItemCopyEvent) => void;
 

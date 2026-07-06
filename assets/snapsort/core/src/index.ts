@@ -20,6 +20,7 @@ export type {
   ItemMoveEvent,
   ItemSwapParticipant,
   ItemSwapEvent,
+  DragCloneEvent,
   DragStartEvent,
   DragEndEvent,
   DropTargetChangeEvent,

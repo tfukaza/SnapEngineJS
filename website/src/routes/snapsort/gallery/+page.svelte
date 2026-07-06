@@ -11,6 +11,7 @@
   import FileExplorerExample from "../FileExplorerExample.svelte";
   import type {
     Container as SortContainer,
+    DragCloneEvent,
     DragEndEvent,
     DragItemHoverEvent,
     DragStartEvent,
@@ -588,8 +589,18 @@
     spacer: "Spacer",
   };
 
+  type DraggingClone = {
+    id: string;
+    type: PaletteBlockType;
+    item: SortItem;
+  };
+
   let canvasBlocks: CanvasBlock[] = $state([]);
   let cloneBlockCount = 0;
+  // The in-flight clone during a copy drag: a fresh item handed off from the
+  // palette block, rendered inside the canvas and following the pointer. The
+  // palette block itself is never touched.
+  let draggingClone: DraggingClone | null = $state(null);
 
   function handleCloneDragStart(event: DragStartEvent) {
     // Only dragging out of the palette should clone — reordering an
@@ -599,21 +610,40 @@
     }
   }
 
+  function handleDragClone(event: DragCloneEvent) {
+    const type = event.itemMetadata.blockType;
+    if (typeof type !== "string") return;
+    cloneBlockCount += 1;
+    const id = `canvas-clone-${cloneBlockCount}`;
+    const cloneItem = event.cloneItems[0];
+    cloneItem.metadata = { itemId: id, blockType: type };
+    // Materialize the clone in state; the #if below renders it inside the
+    // canvas container, binding its element via `itemObject`. Once its element
+    // exists (after awaitMutation), the core hands the drag off to it.
+    draggingClone = { id, type: type as PaletteBlockType, item: cloneItem };
+  }
+
   function handleCloneCopy(event: ItemCopyEvent) {
-    const sourceType = event.itemMetadata.blockType;
-    if (typeof sourceType !== "string") return;
+    // The copy drag committed into the canvas: materialize a real, permanent
+    // block at the drop index and retire the transient floating clone (which
+    // the core destroys).
+    const type = event.itemMetadata.blockType;
+    if (typeof type !== "string") return;
     cloneBlockCount += 1;
     const newBlock: CanvasBlock = {
       id: `canvas-block-${cloneBlockCount}`,
-      type: sourceType as PaletteBlockType,
+      type: type as PaletteBlockType,
     };
     const next = canvasBlocks.slice();
     const index = Math.max(0, Math.min(event.index, next.length));
     next.splice(index, 0, newBlock);
     canvasBlocks = next;
+    draggingClone = null;
   }
 
   function handleCanvasMove(event: ItemMoveEvent) {
+    // Reorder of an already-placed canvas block (copy commits go through
+    // onItemCopy, not here).
     const blockId = event.itemMetadata.itemId;
     if (typeof blockId !== "string") return;
     const block = canvasBlocks.find((candidate) => candidate.id === blockId);
@@ -622,6 +652,16 @@
     const index = Math.max(0, Math.min(event.to.index, next.length));
     next.splice(index, 0, block);
     canvasBlocks = next;
+  }
+
+  function handleCloneDragEnd(event: DragEndEvent) {
+    // A copy drag that didn't commit (dropped outside any drop container):
+    // discard the floating clone. If it committed, handleCloneCopy already
+    // cleared it.
+    void event;
+    if (draggingClone) {
+      draggingClone = null;
+    }
   }
 
   function removeCanvasBlock(id: string) {
@@ -1108,6 +1148,9 @@
               noDrop: true,
               callbacks: {
                 onDragStart: handleCloneDragStart,
+                onDragClone: handleDragClone,
+                onDragEnd: handleCloneDragEnd,
+                awaitMutation: tick,
               },
             }}
             locked={true}
@@ -1149,7 +1192,7 @@
               }}
               locked={true}
             >
-              {#if canvasBlocks.length === 0}
+              {#if canvasBlocks.length === 0 && !draggingClone}
                 <p class="clone-canvas-empty">Drop blocks here</p>
               {/if}
               {#each canvasBlocks as block (block.id)}
@@ -1172,6 +1215,17 @@
                   </div>
                 </Item>
               {/each}
+              {#if draggingClone}
+                <Item
+                  itemObject={draggingClone.item}
+                  metadata={{ itemId: draggingClone.id, blockType: draggingClone.type }}
+                >
+                  <div class="clone-block clone-block-{draggingClone.type} clone-canvas-block clone-dragging">
+                    <i class="material-symbols-rounded" aria-hidden="true">{blockIcon[draggingClone.type]}</i>
+                    <span>{blockLabel[draggingClone.type]}</span>
+                  </div>
+                </Item>
+              {/if}
             </Container>
           </Container>
         </div>

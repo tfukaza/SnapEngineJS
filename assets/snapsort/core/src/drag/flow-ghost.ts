@@ -1,8 +1,8 @@
 import type { AnimationConfig } from "../container";
 import type { Container } from "../container";
-import type { Item } from "../item";
+import { Item } from "../item";
 import { resetDropSnapshotDebugDump, type DropCandidate } from "../algorithm";
-import type { DragLocation, GhostRect, GhostRole } from "../events";
+import type { DragCloneEvent, DragLocation, GhostRect, GhostRole } from "../events";
 import { fireAwaitMutation, fireItemCopy } from "../mutation";
 import type { DragLifecycleStrategy } from "./lifecycle";
 import type { DragSession } from "./session";
@@ -175,79 +175,57 @@ async function removeGhost(
   run.length = 0;
 }
 
-/**
- * Insert `"source"`-role ghosts holding every vacated slot, for members that
- * don't already have one. Used for `"copy"` effect: unlike the target ghost,
- * source ghosts are placed once per member and left alone — they aren't
- * re-resolved on every pointer move — so they need no `pendingGhostTarget`
- * -style race guard.
- */
-async function ensureSourceGhosts(session: DragSession): Promise<void> {
-  for (let i = 0; i < session.items.length; i++) {
-    const member = session.items[i];
-    if (session.sourceGhosts.has(member)) continue;
-    const source = session.sources[i];
-    if (!source.container.element) continue;
-
-    const ghostItem = member.createGhostItem(
-      session,
-      "flow",
-      source.container,
-      null,
-      "source",
-    );
-    if (!ghostItem) continue;
-    session.sourceGhosts.set(member, ghostItem);
-    source.container.insertGhostAt(
-      member,
-      source.container,
-      ghostItem,
-      source.index,
-      null,
-      session,
-      "flow",
-      "source",
-    );
-    await fireAwaitMutation(source.container);
-  }
-}
-
-async function removeSourceGhosts(session: DragSession): Promise<void> {
-  for (const [original, ghostItem] of Array.from(
-    session.sourceGhosts.entries(),
-  )) {
-    const ghostContainer = ghostItem.parent as unknown as Container | null;
-    if (ghostContainer) {
-      original.removeGhostFrom(
-        original,
-        ghostContainer,
-        ghostItem,
-        session,
-        "flow",
-        "source",
-      );
-      await fireAwaitMutation(ghostContainer);
-    }
-    ghostItem.destroy();
-    session.sourceGhosts.delete(original);
-  }
+/** Find the SnapSort container whose element is `el`, via the global registry. */
+function containerForElement(
+  session: DragSession,
+  el: HTMLElement | null,
+): Container | null {
+  if (!el) return null;
+  const registry = (session.root.global.data["dragAndDropContainers"] ??
+    []) as Container[];
+  return registry.find((c) => c.element === el) ?? null;
 }
 
 /**
- * Reconcile the source-role ghosts with the session's current `dropEffect`.
- * Ghosts are added/removed independently of the target ghost — the source
- * slots only need to stay held open while `"copy"` is in effect.
+ * `dropEffect = "copy"` at drag start: create one clone item per dragged
+ * member and hand the drag off to them (see `DragSession.handoff`). The
+ * consumer materializes each clone in their own state and renders it inside a
+ * drop container (binding its element via `itemObject`); the original items
+ * are never touched, so they produce no ghosts. Returns false (vetoing the
+ * drag) if the consumer binds no element to a clone.
  */
-async function syncSourceGhost(session: DragSession): Promise<void> {
-  const wantsSourceGhosts = session.dropEffect === "copy";
-  const hasSourceGhosts = session.sourceGhosts.size > 0;
-  if (wantsSourceGhosts === hasSourceGhosts) return;
+async function startCopyHandoff(session: DragSession): Promise<boolean> {
+  const root = session.root;
+  const origins = session.items;
+  const cloneItems = origins.map(() => {
+    const clone = new Item(root.engine, null);
+    // A clone is created with no parent, so its rootContainer defaults to
+    // itself; point it at the real root so drag/dragEnd dispatch (via
+    // `rootContainer.dragSession`) and pointer-follow both resolve this drag.
+    clone.rootContainer = root;
+    return clone;
+  });
 
-  if (wantsSourceGhosts) {
-    await ensureSourceGhosts(session);
-  } else {
-    await removeSourceGhosts(session);
+  const event: DragCloneEvent = {
+    session,
+    item: origins[0],
+    itemMetadata: origins[0].metadata,
+    items: origins,
+    itemsMetadata: origins.map((o) => o.metadata),
+    sources: session.sources,
+    cloneItems,
+  };
+  root.callbacks?.onDragClone?.(event);
+  await fireAwaitMutation(root);
+
+  // Every clone must have been given an element by the consumer.
+  if (cloneItems.some((c) => !c.element)) {
+    for (const c of cloneItems) c.destroy();
+    return false;
   }
+
+  session.handoff(cloneItems);
+  return true;
 }
 
 function drop(session: DragSession): void {
@@ -303,11 +281,16 @@ function drop(session: DragSession): void {
         : (liveGhostPos as
             | { index: number; container: Container | null }
             | undefined);
+      const isCopy = session.dropEffect === "copy";
       if (!ghostPos?.container) {
         const finalTarget =
           root.hasDragSnapshotTree() && item.dragSnapshot
             ? session.strategy.dropTarget.resolve(item, root, session)
             : null;
+        // The source-slot fallback only applies to move/none (the originals
+        // belong there). A copy clone has no source slot — if it never
+        // resolved a real drop target, the drop is cancelled (destination
+        // null) and the consumer discards the clone in `onDragEnd`.
         ghostPos = finalTarget
           ? {
               index: liveIndexFromSnapshotIndex(
@@ -317,7 +300,7 @@ function drop(session: DragSession): void {
               ),
               container: finalTarget.container as unknown as Container,
             }
-          : session.sources[0]
+          : !isCopy && session.sources[0]
             ? {
                 index: session.sources[0].index,
                 container: session.sources[0].container,
@@ -347,10 +330,8 @@ function drop(session: DragSession): void {
       session.dragLayoutPosition.clear();
       session.groupVisualOffsets.clear();
 
-      // Remove the ghost(s) first — a "copy" drag may have both a target and
-      // source ghosts live; removing ghosts that were never created is a no-op.
+      // Remove the target ghost run first.
       await removeGhost(session, "target");
-      await removeSourceGhosts(session);
 
       const destination: DragLocation | null = ghostPos?.container
         ? {
@@ -360,48 +341,11 @@ function drop(session: DragSession): void {
           }
         : null;
 
-      if (session.dropEffect === "move") {
-        // Re-insert the dragged run at the ghost's former position.
-        if (destination) {
-          const destinationContainer = destination.container;
-          dropAnimationConfig = item.dropAnimationConfig(destinationContainer);
-          item.moveItemsAt(
-            session.sources,
-            destinationContainer,
-            items,
-            destination.index,
-            session,
-          );
-          await fireAwaitMutation(destinationContainer);
-          const headItem = items[0];
-          if (headItem.element && destinationContainer.element) {
-            const runEndIndex = destination.index + items.length;
-            const expectedBefore =
-              runEndIndex >= destinationContainer.itemOrderedList.length
-                ? null
-                : destinationContainer.itemOrderedList[runEndIndex].element;
-            const runTailElement = items[items.length - 1].element;
-            if (
-              headItem.element.parentElement !== destinationContainer.element ||
-              runTailElement?.nextElementSibling !== expectedBefore
-            ) {
-              console.warn(
-                "SnapSort: the adapter did not place the dropped item(s) where onItemMove/onItemInsert specified. Check the adapter's callback/awaitMutation wiring.",
-                {
-                  items,
-                  container: destinationContainer,
-                  index: destination.index,
-                },
-              );
-            }
-          }
-        }
-      } else {
-        // "copy" / "none": each original was only ever *logically* detached —
-        // its DOM element never left its source container's DOM — so
-        // returning it is pure bookkeeping, with no mutation event. Return in
-        // ascending original index (per source container) so relative order
-        // within any shared source container is preserved.
+      if (session.dropEffect === "none") {
+        // No mutation events: each item was only *logically* detached — its
+        // DOM element never left its source container — so returning it is
+        // pure bookkeeping. Return in ascending original index (per source
+        // container) so relative order within any shared source is preserved.
         const bySourceContainer = new Map<Container, number[]>();
         items.forEach((_, i) => {
           const list = bySourceContainer.get(session.sources[i].container) ?? [];
@@ -422,8 +366,13 @@ function drop(session: DragSession): void {
             });
         }
         dropAnimationConfig = item.dropAnimationConfig(session.sources[0].container);
-
-        if (session.dropEffect === "copy" && destination) {
+      } else if (session.dropEffect === "copy") {
+        // The clone items were only ever a drag visual — never part of any
+        // container's item list. Commit is a `onItemCopy` at the destination
+        // (the consumer materializes a real, permanent item there); the
+        // transient clones are then destroyed. If there is no destination
+        // (dropped outside any drop container), the clone is simply discarded.
+        if (destination) {
           const destinationContainer = destination.container;
           const beforeElement =
             destination.index >= destinationContainer.itemOrderedList.length
@@ -438,6 +387,44 @@ function drop(session: DragSession): void {
             session,
           );
           await fireAwaitMutation(destinationContainer);
+        }
+        for (const clone of items) {
+          clone.destroy();
+        }
+      } else if (destination) {
+        // "move": re-insert the detached originals as one batch move into the
+        // destination, firing onItemMove.
+        const destinationContainer = destination.container;
+        dropAnimationConfig = item.dropAnimationConfig(destinationContainer);
+        item.moveItemsAt(
+          session.sources,
+          destinationContainer,
+          items,
+          destination.index,
+          session,
+        );
+        await fireAwaitMutation(destinationContainer);
+        const headItem = items[0];
+        if (headItem.element && destinationContainer.element) {
+          const runEndIndex = destination.index + items.length;
+          const expectedBefore =
+            runEndIndex >= destinationContainer.itemOrderedList.length
+              ? null
+              : destinationContainer.itemOrderedList[runEndIndex].element;
+          const runTailElement = items[items.length - 1].element;
+          if (
+            headItem.element.parentElement !== destinationContainer.element ||
+            runTailElement?.nextElementSibling !== expectedBefore
+          ) {
+            console.warn(
+              "SnapSort: the adapter did not place the dropped item(s) where onItemMove/onItemInsert specified. Check the adapter's callback/awaitMutation wiring.",
+              {
+                items,
+                container: destinationContainer,
+                index: destination.index,
+              },
+            );
+          }
         }
       }
 
@@ -496,29 +483,43 @@ export class FlowGhostLifecycle implements DragLifecycleStrategy {
   readonly ghostKind = "flow" as const;
 
   async dragStart(session: DragSession): Promise<void> {
-    const pressedItem = session.pressedItem;
-    const pressedIndex = session.items.indexOf(pressedItem);
-    const pressedSource = session.sources[pressedIndex];
-    const currentContainer = pressedSource.container;
-    const currentIndex = pressedSource.index;
+    const isCopy = session.dropEffect === "copy";
 
-    if (session.dropEffect === "copy") {
-      // Hold every vacated slot with a source-role ghost; the target ghost is
-      // created separately, wherever the pointer resolves to (which may or
-      // may not be one of these same slots — that's the consumer's call via
-      // `noDrop`).
-      await ensureSourceGhosts(session);
+    if (isCopy) {
+      // Hand the drag off to freshly-created clone items; the originals stay
+      // put and produce no ghosts. A vetoed handoff (consumer bound no clone
+      // element) ends the drag cleanly.
+      const ok = await startCopyHandoff(session);
+      if (!ok) {
+        session.status = "ended";
+        session.root.dragSession = null;
+        return;
+      }
+      // No initial ghost: the target ghost run is created on the first
+      // dragMove when the pointer resolves to a valid drop container (which is
+      // never the noDrop source), so nothing appears in the source list.
     } else {
-      // Create a ghost element at the pressed item's current location.
-      await moveGhost(session, currentContainer, currentIndex, null);
+      const pressedIndex = session.items.indexOf(session.pressedItem);
+      const pressedSource = session.sources[pressedIndex];
+      // Create a ghost run at the pressed item's current location.
+      await moveGhost(session, pressedSource.container, pressedSource.index, null);
     }
 
-    // Compute each member's offset (relative to the pressed item) along its
-    // own source container's main axis, in run order. This is an
-    // approximation of the collapsed run using each member's *original*
-    // position/size — the destination's real gaps are corrected by FLIP once
-    // the drop actually lands (see DragSession.groupDims doc).
-    const axis = currentContainer.direction === "row" ? "x" : "y";
+    const pressedItem = session.pressedItem;
+    const coordinateContainer = (member: Item, sourceContainer: Container) =>
+      isCopy
+        ? (containerForElement(session, member.element?.parentElement ?? null) ??
+          sourceContainer)
+        : sourceContainer;
+    const axisContainer = isCopy
+      ? session.root
+      : session.sources[session.items.indexOf(pressedItem)].container;
+
+    // Compute each member's offset (relative to the pressed item) along the
+    // group's main axis, in run order — an approximation of the collapsed run
+    // using each member's own snapshot size; the destination's real gaps are
+    // corrected by FLIP once the drop lands (see DragSession.groupDims doc).
+    const axis = axisContainer.direction === "row" ? "x" : "y";
     let cumulative = 0;
     let pressedCumulative = 0;
     const cumulativeByItem = new Map<Item, number>();
@@ -536,13 +537,15 @@ export class FlowGhostLifecycle implements DragLifecycleStrategy {
       );
     }
 
-    // _Logically_ remove every dragged item from its container, meaning the
-    // DOM element is still in the current container but the container code
-    // does not recognize it anymore. The ghost now takes the pressed item's
-    // place in the layout.
+    // Hoist each dragged item: for a move/none drag this _logically_ removes
+    // the original from its container (the DOM element stays put, the ghost
+    // takes its layout slot); for a copy drag the members are clones that were
+    // never in a container's item list, so there is nothing to detach.
     session.items.forEach((member, i) => {
-      const source = session.sources[i];
-      member.detachItemFromContainer(source.container, member);
+      const sourceContainer = session.sources[i].container;
+      if (!isCopy) {
+        member.detachItemFromContainer(sourceContainer, member);
+      }
 
       const dragSnapshot = member.dragSnapshot;
       member.style = {
@@ -555,9 +558,13 @@ export class FlowGhostLifecycle implements DragLifecycleStrategy {
         height: dragSnapshot ? `${dragSnapshot.box.height}px` : "",
       };
 
-      // Each dragged item's DOM element stays under its own original DOM
-      // parent for the whole drag, so we maintain a logical reference to it.
-      session.dragCoordinateParent.set(member, source.container);
+      // The dragged element's coordinate parent is the container its element
+      // currently lives under (its original container for move/none; for a
+      // copy clone, the drop container the consumer rendered it into).
+      session.dragCoordinateParent.set(
+        member,
+        coordinateContainer(member, sourceContainer),
+      );
 
       member.refreshDraggedItemPosition();
     });
@@ -565,7 +572,6 @@ export class FlowGhostLifecycle implements DragLifecycleStrategy {
   }
 
   async dragMove(session: DragSession): Promise<void> {
-    await syncSourceGhost(session);
     for (const member of session.items) {
       member.writeDraggedTransform();
     }

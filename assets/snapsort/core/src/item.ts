@@ -624,6 +624,30 @@ export class Item extends ElementObject {
   }
 
   /**
+   * Give this item a frozen drag snapshot copied from another item's, keyed to
+   * this item. Used by `DragSession.handoff`: a copy-drag clone reuses its
+   * original's geometry (box) so drop prediction and pointer-follow treat the
+   * clone exactly as if the original were being dragged.
+   *
+   * @param source Item whose drag snapshot geometry to adopt.
+   * @internal
+   */
+  adoptDragSnapshotFrom(source: Item): void {
+    const src = source.#dragSnapshot;
+    if (!src) return;
+    this.#dragSnapshot = {
+      value: this,
+      key: this.itemKey(this),
+      metadata: { ...this.#metadata },
+      direction: src.direction,
+      mainAxisAlign: src.mainAxisAlign,
+      locked: this.#locked,
+      box: cloneDomProperty(src.box),
+      children: [],
+    };
+  }
+
+  /**
    * Clear frozen drag snapshots from this subtree after drag end.
    *
    * @param visited Items already cleared during this traversal.
