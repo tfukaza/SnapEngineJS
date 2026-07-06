@@ -81,6 +81,18 @@ export class DragSession {
    */
   readonly sourceGhosts: Map<Item, Item> = new Map();
 
+  /**
+   * Flow-mode target ghosts: one logical anchor per dragged member, ordered
+   * to parallel `items`, inserted as a contiguous run at the prospective drop
+   * slot. Each anchor fires its own `createGhost`/`onGhostInsert` (with the
+   * full `items` list), so the framework adapter decides whether to render
+   * them as separate ghosts, one merged ghost, or none — the core never
+   * forces a single group-sized spacer. Empty for insertion/swap modes, which
+   * use `ghosts` (`"target"`/`"pointer"`) instead. The run head
+   * (`flowGhostRun[0]`) is what `ghostItem`/`pendingGhostTarget` track.
+   */
+  readonly flowGhostRun: Item[] = [];
+
   /** Convenience accessor for the `"target"` ghost — the placeholder most lifecycles track. */
   get ghostItem(): Item | null {
     return this.ghosts.get("target") ?? null;

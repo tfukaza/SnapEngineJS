@@ -8,21 +8,27 @@ import type { DragLifecycleStrategy } from "./lifecycle";
 import type { DragSession } from "./session";
 
 /**
- * Flow-layout spacer ghost: euclidean and progressive modes. The ghost is a
+ * Flow-layout spacer ghosts: euclidean and progressive modes. Each ghost is a
  * real member of the target container's item-ordered list and is FLIP-
  * animated into place as items reorder around it; the dragged item(s) are
- * hoisted to `position: absolute` and follow the pointer. For a multi-item
- * drag the whole group collapses into one contiguous run and is represented
- * by a single group-sized ghost (see `DragSession.groupDims`).
+ * hoisted to `position: absolute` and follow the pointer.
+ *
+ * A multi-item drag creates ONE ghost anchor per dragged member
+ * (`DragSession.flowGhostRun`), inserted as a contiguous run at the drop
+ * slot. Each anchor fires its own `createGhost`/`onGhostInsert` carrying the
+ * full `items` list, so the framework adapter decides how the run looks —
+ * separate ghosts (default), one merged ghost (render only the head, leave
+ * the rest elementless), or none. The core never forces a single
+ * group-sized spacer.
  */
 
 function currentGhostLocation(
   session: DragSession,
 ): { container: Container; index: number } | null {
-  const ghostItem = session.ghostItem;
-  if (!ghostItem?.parent) return null;
-  const container = ghostItem.parent as unknown as Container;
-  const index = container.itemOrderedList.indexOf(ghostItem);
+  const head = session.flowGhostRun[0];
+  if (!head?.parent) return null;
+  const container = head.parent as unknown as Container;
+  const index = container.itemOrderedList.indexOf(head);
   if (index === -1) return null;
   return { container, index };
 }
@@ -30,7 +36,7 @@ function currentGhostLocation(
 /**
  * Translate a frozen snapshot insertion index into the current live list.
  *
- * The live list may contain a ghost and no longer contain any dragged item,
+ * The live list may contain ghosts and no longer contain any dragged item,
  * so this maps through the snapshot item that should appear after the target.
  */
 function liveIndexFromSnapshotIndex(
@@ -41,9 +47,9 @@ function liveIndexFromSnapshotIndex(
   const snapshotItems = (
     container.dragSnapshot?.children.map((snapshot) => snapshot.value) ?? []
   ).filter((i) => !session.itemSet.has(i) && !i.isGhost);
-  const ghostItem = session.ghostItem;
+  const runSet = new Set(session.flowGhostRun);
   const liveItems = container.itemOrderedList.filter(
-    (i) => !session.itemSet.has(i) && i !== ghostItem,
+    (i) => !session.itemSet.has(i) && !runSet.has(i),
   );
   const clampedIndex = Math.max(0, Math.min(snapshotIndex, snapshotItems.length));
   const beforeItem = snapshotItems[clampedIndex] ?? null;
@@ -53,92 +59,84 @@ function liveIndexFromSnapshotIndex(
   return liveIndex === -1 ? liveItems.length : liveIndex;
 }
 
-/** Direction-aware size of the whole dragged group, for sizing a single group ghost in `container`. Null until group dims are known (e.g. before drag snapshots are captured). */
-function groupGhostRect(
-  session: DragSession,
-  container: Container,
-): GhostRect | null {
-  const dims = session.groupDims;
-  if (!dims) return null;
-  const isRow = container.direction === "row";
-  return {
-    x: 0,
-    y: 0,
-    width: isRow ? dims.sumW : dims.maxW,
-    height: isRow ? dims.maxH : dims.sumH,
-  };
+/**
+ * Ensure the target ghost run has one anchor per dragged member. Each anchor
+ * is created for its own member (so `createGhost` sees `original = member`
+ * and can size/skip per member), sized to that member's snapshot box. Newly
+ * created anchors are not yet attached to any container.
+ */
+function ensureFlowGhostRun(session: DragSession, container: Container): Item[] {
+  const run = session.flowGhostRun;
+  for (let i = run.length; i < session.items.length; i++) {
+    const member = session.items[i];
+    const box = member.dragSnapshot?.box;
+    const rect: GhostRect | null = box
+      ? { x: 0, y: 0, width: box.width, height: box.height }
+      : null;
+    const ghost = member.createGhostItem(session, "flow", container, rect, "target");
+    if (!ghost) break;
+    run.push(ghost);
+  }
+  return run;
 }
 
 async function moveGhost(
   session: DragSession,
   container: Container,
   index: number,
-  ghostRect: GhostRect | null | undefined,
+  _ghostRect: GhostRect | null | undefined,
 ): Promise<void> {
   const item = session.primaryItem;
-  let ghostItem = session.ghostItem;
-  const effectiveGhostRect = ghostRect ?? groupGhostRect(session, container);
+  const run = ensureFlowGhostRun(session, container);
+  if (run.length === 0) return;
 
-  if (!ghostItem) {
-    ghostItem = item.createGhostItem(
-      session,
-      "flow",
-      container,
-      effectiveGhostRect,
-    );
-    if (!ghostItem) return;
-  } else if (
-    effectiveGhostRect &&
-    ghostItem.element &&
-    !ghostItem.frameworkManagedGhostElement
-  ) {
-    // Resize the existing core-owned ghost when the group's projected size
-    // for this container's direction differs from what it was created with
-    // (e.g. the pointer crossed from a column container into a row one).
-    ghostItem.element.style.width = `${effectiveGhostRect.width}px`;
-    ghostItem.element.style.height = `${effectiveGhostRect.height}px`;
-  }
-  session.ghostItem = ghostItem;
+  const head = run[0];
   session.pendingGhostTarget = {
-    ghostItem,
+    ghostItem: head,
     container,
     index,
-    ghostRect: effectiveGhostRect,
+    ghostRect: null,
   };
-  const resolvedGhostItem = ghostItem;
 
   const doMove = () => {
     const pendingTarget = session.pendingGhostTarget;
     if (
-      session.ghostItem !== resolvedGhostItem ||
-      pendingTarget?.ghostItem !== resolvedGhostItem ||
+      session.flowGhostRun[0] !== head ||
+      pendingTarget?.ghostItem !== head ||
       pendingTarget.container !== container ||
       pendingTarget.index !== index ||
-      (!resolvedGhostItem.element &&
-        !resolvedGhostItem.frameworkManagedGhostElement) ||
       !container.element
     ) {
       return;
     }
 
-    if (resolvedGhostItem.parent) {
-      container.detachItemFromContainer(
-        resolvedGhostItem.container,
-        resolvedGhostItem,
-      );
+    // Detach every run anchor from wherever it currently sits, then reinsert
+    // the whole run contiguously at `index..index+N-1`, in run order.
+    for (const ghost of run) {
+      if (ghost.parent) {
+        container.detachItemFromContainer(ghost.container, ghost);
+      }
     }
-    container.insertGhostAt(
-      item,
-      container,
-      resolvedGhostItem,
-      index,
-      pendingTarget.ghostRect,
-      session,
-      "flow",
-    );
+    run.forEach((ghost, i) => {
+      const box = session.items[i]?.dragSnapshot?.box;
+      const rect: GhostRect | null = box
+        ? { x: 0, y: 0, width: box.width, height: box.height }
+        : null;
+      container.insertGhostAt(
+        session.items[i] ?? item,
+        container,
+        ghost,
+        index + i,
+        rect,
+        session,
+        "flow",
+      );
+    });
   };
 
-  if (resolvedGhostItem.parent) {
+  // If any anchor is already placed, animate the whole run's move; otherwise
+  // this is the initial placement, which needs no FLIP.
+  if (run.some((ghost) => ghost.parent)) {
     container.withReorderAnimation(container, session.items, doMove);
   } else {
     doMove();
@@ -151,19 +149,30 @@ async function removeGhost(
   role: GhostRole = "target",
 ): Promise<void> {
   const item = session.primaryItem;
-  const ghostItem = session.ghosts.get(role);
-  if (role === "target") {
-    session.pendingGhostTarget = null;
+  if (role !== "target") {
+    // Flow mode only ever manages the "target" run here; source ghosts have
+    // their own removal path (removeSourceGhosts).
+    return;
   }
-  if (!ghostItem) return;
+  session.pendingGhostTarget = null;
+  const run = session.flowGhostRun;
+  if (run.length === 0) return;
 
-  const ghostContainer = ghostItem.parent as unknown as Container | null;
-  if (ghostContainer) {
-    item.removeGhostFrom(item, ghostContainer, ghostItem, session, "flow", role);
-    await fireAwaitMutation(ghostContainer);
+  const containers = new Set<Container>();
+  for (const ghost of run) {
+    const ghostContainer = ghost.parent as unknown as Container | null;
+    if (ghostContainer) {
+      item.removeGhostFrom(item, ghostContainer, ghost, session, "flow", "target");
+      containers.add(ghostContainer);
+    }
   }
-  ghostItem.destroy();
-  session.ghosts.delete(role);
+  for (const c of containers) {
+    await fireAwaitMutation(c);
+  }
+  for (const ghost of run) {
+    ghost.destroy();
+  }
+  run.length = 0;
 }
 
 /**
@@ -274,8 +283,8 @@ function drop(session: DragSession): void {
   session.pressedItem.schedule(
     async () => {
       const item = session.primaryItem;
-      // Get ghost's current position — this is where the run should land.
-      const ghostItem = session.ghostItem;
+      // Get the ghost run head's current position — where the run should land.
+      const ghostItem = session.flowGhostRun[0] ?? null;
       const pendingGhostTarget =
         session.pendingGhostTarget?.ghostItem === ghostItem
           ? session.pendingGhostTarget
