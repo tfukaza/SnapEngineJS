@@ -1,13 +1,10 @@
 <script lang="ts">
   import { tick } from "svelte";
   import { Engine } from "@snap-engine/asset-base-svelte";
-  import { Container, Item } from "@snap-engine/snapsort-svelte";
+  import { Container } from "@snap-engine/snapsort-svelte";
   import type {
     Container as SortContainer,
     GhostCreateEvent,
-    GhostInsertEvent,
-    GhostRemoveEvent,
-    Item as ItemType,
     ItemMoveEvent,
     ItemRemoveEvent,
   } from "@snap-engine/snapsort";
@@ -26,23 +23,6 @@
     tiles: string[];
   };
 
-  type TileGhostEntry = {
-    id: string;
-    isGhost: true;
-    zone: TileZone;
-    index: number;
-    originalItemId: string | null;
-    ghostItem: ItemType;
-    text: string;
-  };
-
-  type RenderedTile =
-    | {
-        isGhost: false;
-        tile: TileData;
-      }
-    | TileGhostEntry;
-
   let { embedded = false }: { embedded?: boolean } = $props();
 
   const exercise: Exercise = {
@@ -60,7 +40,6 @@
   let bankContainer: SortContainer | undefined = $state();
   let answerTiles: TileData[] = $state([]);
   let bankTiles: TileData[] = $state(toTileData(exercise.tiles));
-  let ghostEntry = $state<TileGhostEntry | null>(null);
   let result: { correct: boolean; expected: string } | null = $state(null);
   let lookupTarget: string | null = $state(null);
   let tilePointerStart: { x: number; y: number } | null = null;
@@ -79,7 +58,6 @@
   }
 
   function updateTileZone(tileId: string, targetZone: TileZone, targetIndex: number) {
-    ghostEntry = null;
     const allTiles = [...answerTiles, ...bankTiles];
     const movedTile = allTiles.find((tile) => tile.id === tileId);
     if (!movedTile) return;
@@ -105,25 +83,6 @@
     updateTileZone(itemId, targetZone, event.to.index);
   }
 
-  function handleSnapSortGhostInsert(event: GhostInsertEvent) {
-    const itemId = event.originalMetadata.itemId;
-    if (typeof itemId !== "string") return;
-
-    const targetZone = event.containerMetadata.zone;
-    if (targetZone !== "answer" && targetZone !== "bank") return;
-
-    const sourceTile = findTile(itemId);
-    ghostEntry = {
-      id: `ghost-${event.ghostItem.id}`,
-      isGhost: true,
-      zone: targetZone,
-      index: event.index,
-      originalItemId: itemId,
-      ghostItem: event.ghostItem,
-      text: sourceTile?.text ?? "",
-    };
-  }
-
   function handleSnapSortDomRemove(event: ItemRemoveEvent) {
     const itemId = event.itemMetadata.itemId;
     if (typeof itemId !== "string") return;
@@ -132,42 +91,15 @@
     bankTiles = bankTiles.filter((tile) => tile.id !== itemId);
   }
 
-  function handleSnapSortGhostRemove(event: GhostRemoveEvent) {
-    if (ghostEntry?.ghostItem === event.ghostItem) {
-      ghostEntry = null;
-    }
-  }
-
-  function createFrameworkGhost(_event: GhostCreateEvent): void {
-    return;
-  }
-
-  function tilesForZone(zone: TileZone) {
-    return zone === "answer" ? answerTiles : bankTiles;
-  }
-
   function findTile(tileId: string | undefined) {
     if (!tileId) return null;
     return [...answerTiles, ...bankTiles].find((tile) => tile.id === tileId) ?? null;
   }
 
-  function renderedTiles(zone: TileZone): RenderedTile[] {
-    const rendered: RenderedTile[] = tilesForZone(zone).map((tile) => ({
-      isGhost: false,
-      tile,
-    }));
-    if (ghostEntry?.zone !== zone) return rendered;
-
-    const coreIndex = Math.max(0, Math.min(ghostEntry.index, rendered.length));
-    const originalIndex = ghostEntry.originalItemId
-      ? tilesForZone(zone).findIndex((tile) => tile.id === ghostEntry?.originalItemId)
-      : -1;
-    const destinationIndex =
-      originalIndex !== -1 && originalIndex <= coreIndex
-        ? coreIndex + 1
-        : coreIndex;
-    rendered.splice(destinationIndex, 0, ghostEntry);
-    return rendered;
+  /** Ghost snippet content for both zones — looks up the dragged tile's text via its itemId. */
+  function ghostTileText(event: GhostCreateEvent): string {
+    const itemId = event.originalMetadata.itemId;
+    return typeof itemId === "string" ? (findTile(itemId)?.text ?? "") : "";
   }
 
   function moveTileToZone(tile: TileData, targetZone: TileZone) {
@@ -223,7 +155,6 @@
   }
 
   function resetTiles() {
-    ghostEntry = null;
     answerTiles = [];
     bankTiles = toTileData(exercise.tiles);
     result = null;
@@ -285,44 +216,36 @@
               callbacks: {
                 onItemMove: handleSnapSortDomMove,
                 onItemRemove: handleSnapSortDomRemove,
-                onGhostInsert: handleSnapSortGhostInsert,
-                onGhostRemove: handleSnapSortGhostRemove,
-                createGhost: createFrameworkGhost,
                 awaitMutation: tick,
               },
             }}
             locked={true}
             metadata={{ zone: "answer" }}
+            items={answerTiles}
+            getId={(tile) => tile.id}
+            getClassName={() => "tile-wrapper"}
           >
-            {#each renderedTiles("answer") as entry (entry.isGhost ? entry.id : entry.tile.id)}
-              {#if entry.isGhost}
-                <Item
-                  className="tile-wrapper ghost tile-ghost"
-                  itemObject={entry.ghostItem}
-                >
-                  <button type="button" class="tile selected" tabindex="-1">{entry.text}</button>
-                </Item>
-              {:else}
-                <Item className="tile-wrapper" metadata={{ itemId: entry.tile.id }}>
-                  <button
-                    type="button"
-                    class="tile selected"
-                    onpointerdown={handleTilePointerDown}
-                    onpointermove={handleTilePointerMove}
-                    onclick={(event) => handleTileClick(event, () => moveTileToZone(entry.tile, "bank"))}
-                    ondblclick={() => openLookup(entry.tile.text)}
-                    onkeydown={(event) => handleTileKeydown(event, entry.tile, "bank")}
-                    aria-label={entry.tile.text}
-                    title="Click to remove"
-                  >
-                    {entry.tile.text}
-                  </button>
-                </Item>
-              {/if}
-            {/each}
-            {#if answerTiles.length === 0 && ghostEntry?.zone !== "answer"}
+            {#if answerTiles.length === 0}
               <span class="placeholder">Drag tiles here or click to add</span>
             {/if}
+            {#snippet item(tile)}
+              <button
+                type="button"
+                class="tile selected"
+                onpointerdown={handleTilePointerDown}
+                onpointermove={handleTilePointerMove}
+                onclick={(event) => handleTileClick(event, () => moveTileToZone(tile, "bank"))}
+                ondblclick={() => openLookup(tile.text)}
+                onkeydown={(event) => handleTileKeydown(event, tile, "bank")}
+                aria-label={tile.text}
+                title="Click to remove"
+              >
+                {tile.text}
+              </button>
+            {/snippet}
+            {#snippet ghost(event)}
+              <button type="button" class="tile tile-ghost selected" tabindex="-1">{ghostTileText(event)}</button>
+            {/snippet}
           </Container>
 
           <Container
@@ -343,41 +266,33 @@
               callbacks: {
                 onItemMove: handleSnapSortDomMove,
                 onItemRemove: handleSnapSortDomRemove,
-                onGhostInsert: handleSnapSortGhostInsert,
-                onGhostRemove: handleSnapSortGhostRemove,
-                createGhost: createFrameworkGhost,
                 awaitMutation: tick,
               },
             }}
             locked={true}
             metadata={{ zone: "bank" }}
+            items={bankTiles}
+            getId={(tile) => tile.id}
+            getClassName={() => "tile-wrapper"}
           >
-            {#each renderedTiles("bank") as entry (entry.isGhost ? entry.id : entry.tile.id)}
-              {#if entry.isGhost}
-                <Item
-                  className="tile-wrapper ghost tile-ghost"
-                  itemObject={entry.ghostItem}
-                >
-                  <button type="button" class="tile" tabindex="-1">{entry.text}</button>
-                </Item>
-              {:else}
-                <Item className="tile-wrapper" metadata={{ itemId: entry.tile.id }}>
-                  <button
-                    type="button"
-                    class="tile"
-                    onpointerdown={handleTilePointerDown}
-                    onpointermove={handleTilePointerMove}
-                    onclick={(event) => handleTileClick(event, () => moveTileToZone(entry.tile, "answer"))}
-                    ondblclick={() => openLookup(entry.tile.text)}
-                    onkeydown={(event) => handleTileKeydown(event, entry.tile, "answer")}
-                    aria-label={entry.tile.text}
-                    title="Click to add"
-                  >
-                    {entry.tile.text}
-                  </button>
-                </Item>
-              {/if}
-            {/each}
+            {#snippet item(tile)}
+              <button
+                type="button"
+                class="tile"
+                onpointerdown={handleTilePointerDown}
+                onpointermove={handleTilePointerMove}
+                onclick={(event) => handleTileClick(event, () => moveTileToZone(tile, "answer"))}
+                ondblclick={() => openLookup(tile.text)}
+                onkeydown={(event) => handleTileKeydown(event, tile, "answer")}
+                aria-label={tile.text}
+                title="Click to add"
+              >
+                {tile.text}
+              </button>
+            {/snippet}
+            {#snippet ghost(event)}
+              <button type="button" class="tile tile-ghost" tabindex="-1">{ghostTileText(event)}</button>
+            {/snippet}
           </Container>
         </Container>
       </Engine>
@@ -537,6 +452,18 @@
     pointer-events: none;
   }
 
+  /* Hide the placeholder the moment an incoming ghost occupies the answer
+     box — the ghost entry is a sibling, adapter-rendered by Container's
+     items mode, so this is the CSS-native equivalent of the old
+     `ghostEntry?.zone !== "answer"` state check. `:global(...)` must wrap
+     the whole selector here (Svelte rejects it mid-chain), since both
+     `.answer-box` (applied dynamically via a prop) and `.placeholder`
+     (matched only as this global selector's descendant) need to resolve
+     outside Svelte's per-component scoping hash. */
+  :global(.snapsort-engine .answer-box:has([data-snapsort-ghost-entry]) .placeholder) {
+    display: none;
+  }
+
   .snapsort-engine :global(.tile-bank-container) {
     width: 100%;
     background: var(--bg-tertiary);
@@ -557,17 +484,24 @@
   }
 
   .snapsort-engine :global(.answer-box .tile-wrapper),
-  .snapsort-engine :global(.tile-bank .tile-wrapper) {
+  .snapsort-engine :global(.tile-bank .tile-wrapper),
+  .snapsort-engine :global(.answer-box [data-snapsort-ghost-entry]),
+  .snapsort-engine :global(.tile-bank [data-snapsort-ghost-entry]) {
     display: inline-flex;
     padding: 0;
     align-items: center;
     justify-content: center;
   }
 
-  .snapsort-engine :global(.ghost) {
+  /* Two classes for specificity over `.tile`'s own background/box-shadow —
+     the ghost preview should read as a dimmed placeholder, not a live tile. */
+  .snapsort-engine :global(.tile.tile-ghost) {
     background: var(--border-color);
-    border-radius: 12px;
+    color: var(--text-secondary);
+    border-color: var(--border-color);
     opacity: 0.55;
+    box-shadow: none;
+    cursor: default;
   }
 
   .tile {

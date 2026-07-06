@@ -12,6 +12,7 @@ type DragSample = {
   spacerCount: number;
   defaultSpacerCount: number;
   frameworkGhostCount: number;
+  adapterOwnedGhostCount: number;
   answerChildOrder: string[];
   bankChildOrder: string[];
   draggedParentClass: string | null;
@@ -71,11 +72,28 @@ async function collectSample(page: Page, step: number): Promise<DragSample> {
     const spacer = document.querySelector("#spacer, .tile-ghost");
     const defaultSpacerCount = document.querySelectorAll("#spacer").length;
     const frameworkGhostCount = document.querySelectorAll(".tile-ghost").length;
+    // `id="spacer"` is now a universal ghost-entry marker (both core-created
+    // and adapter-rendered ghosts carry it, post unified-entries redesign) --
+    // `data-snapsort-ghost-entry` is the authoritative "the Svelte adapter
+    // itself rendered this, not a raw core-inserted default" signal.
+    const adapterOwnedGhostCount = document.querySelectorAll(
+      "[data-snapsort-ghost-entry]",
+    ).length;
+    // `id="spacer"` is the universal ghost-PLACEMENT marker post
+    // unified-entries redesign (every ghost carries it, default or
+    // adapter-rendered) -- `.tile-ghost` is now a separate, nested
+    // CONTENT-level marker (the adapter's ghost entry is a wrapper div with
+    // `id="spacer"` containing the consumer's `.tile-ghost` button), not an
+    // alternate placement marker as it was pre-redesign. So placement count
+    // is `defaultSpacerCount` alone; summing it with the nested content
+    // marker would double-count one ghost as two.
+    const spacerCount = defaultSpacerCount;
     return {
       step,
-      spacerCount: defaultSpacerCount + frameworkGhostCount,
+      spacerCount,
       defaultSpacerCount,
       frameworkGhostCount,
+      adapterOwnedGhostCount,
       answerChildOrder: childOrder(".answer-box"),
       bankChildOrder: childOrder(".tile-bank"),
       draggedParentClass: active?.parentElement?.className ?? null,
@@ -246,10 +264,10 @@ test.describe("SnapSort Kiokun sentence builder demo", () => {
         (sample) =>
           sample.spacerCount === 1 &&
           sample.frameworkGhostCount === 1 &&
-          sample.defaultSpacerCount === 0 &&
+          sample.adapterOwnedGhostCount === 1 &&
           sample.spacerParentClass?.includes("answer-box"),
       ),
-      "framework-owned ghost should render under the answer container without a default spacer",
+      "framework-owned ghost should render under the answer container",
     ).toBe(true);
 
     await expectCleanConsole(
@@ -321,10 +339,10 @@ test.describe("SnapSort Kiokun sentence builder demo", () => {
         (sample) =>
           sample.spacerCount === 1 &&
           sample.frameworkGhostCount === 1 &&
-          sample.defaultSpacerCount === 0 &&
+          sample.adapterOwnedGhostCount === 1 &&
           sample.spacerParentClass?.includes("tile-bank"),
       ),
-      "framework-owned ghost should render under the bank container without a default spacer",
+      "framework-owned ghost should render under the bank container",
     ).toBe(true);
 
     await expectCleanConsole(

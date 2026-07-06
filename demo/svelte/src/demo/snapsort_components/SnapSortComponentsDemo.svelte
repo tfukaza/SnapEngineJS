@@ -6,9 +6,6 @@
   import type {
     Container as SortContainer,
     GhostCreateEvent,
-    GhostInsertEvent,
-    GhostRemoveEvent,
-    Item as ItemType,
     ItemMoveEvent,
     ItemRemoveEvent,
   } from "@snap-engine/snapsort";
@@ -25,24 +22,6 @@
     items: DemoItem[];
     container?: SortContainer;
   };
-
-  type DemoGhostEntry = {
-    id: string;
-    isGhost: true;
-    columnId: string;
-    index: number;
-    originalItemId: string | null;
-    ghostItem: ItemType;
-    label: string;
-    detail: string;
-  };
-
-  type RenderedDemoItem =
-    | {
-        isGhost: false;
-        item: DemoItem;
-      }
-    | DemoGhostEntry;
 
   type ProgressiveTile = {
     id: string;
@@ -134,7 +113,6 @@
 
   let nextItemNumber = $state(7);
   let columns = $state<DemoColumn[]>(structuredClone(initialColumns));
-  let ghostEntry = $state<DemoGhostEntry | null>(null);
   let boardVersion = $state(0);
   let itemCount = $derived(
     columns.reduce((total, column) => total + column.items.length, 0),
@@ -154,7 +132,6 @@
   }
 
   function addItem() {
-    ghostEntry = null;
     columns = columns.map((column, index) =>
       index === 0
         ? { ...column, items: [...column.items, createItem()] }
@@ -163,7 +140,6 @@
   }
 
   function deleteItem(itemId: string) {
-    ghostEntry = null;
     columns = columns.map((column) => ({
       ...column,
       items: column.items.filter((item) => item.id !== itemId),
@@ -230,13 +206,8 @@
 
   function resetItems() {
     nextItemNumber = 7;
-    ghostEntry = null;
     columns = cloneInitialColumns();
     boardVersion += 1;
-  }
-
-  function createFrameworkGhost(_event: GhostCreateEvent): void {
-    return;
   }
 
   function findDemoItem(itemId: string | undefined) {
@@ -248,26 +219,10 @@
     return null;
   }
 
-  function renderedColumnItems(column: DemoColumn): RenderedDemoItem[] {
-    const renderedItems: RenderedDemoItem[] = column.items.map((item) => ({
-      isGhost: false,
-      item,
-    }));
-    if (ghostEntry?.columnId !== column.id) return renderedItems;
-
-    const coreIndex = Math.max(
-      0,
-      Math.min(ghostEntry.index, renderedItems.length),
-    );
-    const originalIndex = ghostEntry.originalItemId
-      ? column.items.findIndex((item) => item.id === ghostEntry.originalItemId)
-      : -1;
-    const destinationIndex =
-      originalIndex !== -1 && originalIndex <= coreIndex
-        ? coreIndex + 1
-        : coreIndex;
-    renderedItems.splice(destinationIndex, 0, ghostEntry);
-    return renderedItems;
+  /** Ghost snippet content: looks up the dragged item's label/detail via its itemId. */
+  function ghostItemContent(event: GhostCreateEvent): DemoItem | null {
+    const itemId = event.originalMetadata.itemId;
+    return typeof itemId === "string" ? findDemoItem(itemId) : null;
   }
 
   function handleSnapSortDomMove(event: ItemMoveEvent) {
@@ -307,36 +262,11 @@
     });
   }
 
-  function handleSnapSortGhostInsert(event: GhostInsertEvent) {
-    const itemId = event.originalMetadata.itemId;
-    if (typeof itemId !== "string") return;
-    const targetColumnId = event.containerMetadata.columnId;
-    if (typeof targetColumnId !== "string") return;
-
-    const sourceItem = findDemoItem(itemId);
-    ghostEntry = {
-      id: `ghost-${event.ghostItem.id}`,
-      isGhost: true,
-      columnId: targetColumnId,
-      index: event.index,
-      originalItemId: itemId,
-      ghostItem: event.ghostItem,
-      label: sourceItem?.label ?? "",
-      detail: sourceItem?.detail ?? "",
-    };
-  }
-
   function handleSnapSortDomRemove(event: ItemRemoveEvent) {
     const itemId = event.itemMetadata.itemId;
     if (typeof itemId !== "string") return;
 
     deleteItem(itemId);
-  }
-
-  function handleSnapSortGhostRemove(event: GhostRemoveEvent) {
-    if (ghostEntry?.ghostItem === event.ghostItem) {
-      ghostEntry = null;
-    }
   }
 
   function stopControlEvent(event: Event) {
@@ -427,73 +357,58 @@
                       callbacks: {
                         onItemMove: handleSnapSortDomMove,
                         onItemRemove: handleSnapSortDomRemove,
-                        onGhostInsert: handleSnapSortGhostInsert,
-                        onGhostRemove: handleSnapSortGhostRemove,
-                        createGhost: createFrameworkGhost,
                         awaitMutation: tick,
                       },
                     }}
                     locked={true}
                     metadata={{ columnId: column.id }}
+                    items={column.items}
+                    getId={(item) => item.id}
+                    getClassName={() => "task-card"}
+                    getMetadata={(item) => ({ label: item.label, detail: item.detail })}
                   >
                     <div class="list-header">
                       <h2>{column.title}</h2>
                       <span>{column.items.length}</span>
                     </div>
-
-                    {#each renderedColumnItems(column) as entry (entry.isGhost ? entry.id : entry.item.id)}
-                      {#if entry.isGhost}
-                        <Item
-                          className="task-card ghost task-ghost"
-                          itemObject={entry.ghostItem}
-                        >
-                          <div class="task-content">
-                            <div class="task-main">
-                              <strong>{entry.label}</strong>
-                              <span>{entry.detail}</span>
-                            </div>
-                          </div>
-                        </Item>
-                      {:else}
-                        <Item
-                          className="task-card"
-                          metadata={{
-                            itemId: entry.item.id,
-                            label: entry.item.label,
-                            detail: entry.item.detail,
-                          }}
-                        >
-                          <div class="task-content">
-                            <Handle className="task-drag-handle">
-                              <span class="material-symbols-outlined" aria-hidden="true">drag_indicator</span>
-                            </Handle>
-                            <div class="task-main">
-                              <strong>{entry.item.label}</strong>
-                              <span>{entry.item.detail}</span>
-                            </div>
-                            <div class="card-actions">
-                              <button
-                                class="icon-button"
-                                aria-label={`Delete ${entry.item.label}`}
-                                use:controlButton={() => deleteItem(entry.item.id)}
-                              ><span class="material-symbols-outlined" aria-hidden="true">delete</span></button>
-                              <button
-                                class="icon-button"
-                                aria-label={`Move ${entry.item.label} left`}
-                                disabled={columns.findIndex((candidate) => candidate.id === column.id) === 0}
-                                use:controlButton={() => moveItemAcrossColumns(entry.item.id, -1)}
-                              ><span class="material-symbols-outlined" aria-hidden="true">arrow_left_alt</span></button>
-                              <button
-                                class="icon-button"
-                                aria-label={`Move ${entry.item.label} right`}
-                                disabled={columns.findIndex((candidate) => candidate.id === column.id) === columns.length - 1}
-                                use:controlButton={() => moveItemAcrossColumns(entry.item.id, 1)}
-                              ><span class="material-symbols-outlined" aria-hidden="true">arrow_right_alt</span></button>
-                            </div>
-                          </div>
-                        </Item>
-                      {/if}
-                    {/each}
+                    {#snippet item(entry)}
+                      <div class="task-content">
+                        <Handle className="task-drag-handle">
+                          <span class="material-symbols-outlined" aria-hidden="true">drag_indicator</span>
+                        </Handle>
+                        <div class="task-main">
+                          <strong>{entry.label}</strong>
+                          <span>{entry.detail}</span>
+                        </div>
+                        <div class="card-actions">
+                          <button
+                            class="icon-button"
+                            aria-label={`Delete ${entry.label}`}
+                            use:controlButton={() => deleteItem(entry.id)}
+                          ><span class="material-symbols-outlined" aria-hidden="true">delete</span></button>
+                          <button
+                            class="icon-button"
+                            aria-label={`Move ${entry.label} left`}
+                            disabled={columns.findIndex((candidate) => candidate.id === column.id) === 0}
+                            use:controlButton={() => moveItemAcrossColumns(entry.id, -1)}
+                          ><span class="material-symbols-outlined" aria-hidden="true">arrow_left_alt</span></button>
+                          <button
+                            class="icon-button"
+                            aria-label={`Move ${entry.label} right`}
+                            disabled={columns.findIndex((candidate) => candidate.id === column.id) === columns.length - 1}
+                            use:controlButton={() => moveItemAcrossColumns(entry.id, 1)}
+                          ><span class="material-symbols-outlined" aria-hidden="true">arrow_right_alt</span></button>
+                        </div>
+                      </div>
+                    {/snippet}
+                    {#snippet ghost(event)}
+                      <div class="task-content">
+                        <div class="task-main">
+                          <strong>{ghostItemContent(event)?.label ?? ""}</strong>
+                          <span>{ghostItemContent(event)?.detail ?? ""}</span>
+                        </div>
+                      </div>
+                    {/snippet}
                   </Container>
                 {/each}
               </Container>

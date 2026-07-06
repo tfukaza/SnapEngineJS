@@ -17,8 +17,6 @@
     DragStartEvent,
     DropTargetChangeEvent,
     GhostCreateEvent,
-    GhostInsertEvent,
-    GhostRemoveEvent,
     Item as SortItem,
     ItemMoveEvent,
     ItemRemoveEvent,
@@ -31,23 +29,6 @@
     id: string;
     text: string;
   };
-
-  type SentenceGhostEntry = {
-    id: string;
-    isGhost: true;
-    zone: SentenceZone;
-    index: number;
-    originalItemId: string | null;
-    ghostItem: SortItem;
-    text: string;
-  };
-
-  type RenderedSentenceTile =
-    | {
-        isGhost: false;
-        tile: SentenceTile;
-      }
-    | SentenceGhostEntry;
 
   type EditorFieldType =
     | "shortText"
@@ -297,7 +278,6 @@
   let sentenceBankContainer: SortContainer | undefined = $state();
   let sentenceAnswerTiles: SentenceTile[] = $state([]);
   let sentenceBankTiles: SentenceTile[] = $state([...sentenceWords]);
-  let sentenceGhostEntry = $state<SentenceGhostEntry | null>(null);
   let sentenceResult = $state("");
   let sentencePointerStart: { x: number; y: number } | null = null;
   let suppressSentenceClick = false;
@@ -402,17 +382,12 @@
     return zone === "answer" ? sentenceAnswerContainer : sentenceBankContainer;
   }
 
-  function sentenceTilesForZone(zone: SentenceZone) {
-    return zone === "answer" ? sentenceAnswerTiles : sentenceBankTiles;
-  }
-
   function findSentenceTile(tileId: string | undefined) {
     if (!tileId) return null;
     return [...sentenceAnswerTiles, ...sentenceBankTiles].find((tile) => tile.id === tileId) ?? null;
   }
 
   function updateSentenceTileZone(tileId: string, targetZone: SentenceZone, targetIndex: number) {
-    sentenceGhostEntry = null;
     const allTiles = [...sentenceAnswerTiles, ...sentenceBankTiles];
     const movedTile = allTiles.find((tile) => tile.id === tileId);
     if (!movedTile) return;
@@ -446,52 +421,10 @@
     sentenceBankTiles = sentenceBankTiles.filter((tile) => tile.id !== itemId);
   }
 
-  function handleSentenceGhostInsert(event: GhostInsertEvent) {
+  /** Ghost snippet content for both sentence zones — looks up the dragged tile's text via its itemId. */
+  function sentenceGhostTileText(event: GhostCreateEvent): string {
     const itemId = event.originalMetadata.itemId;
-    if (typeof itemId !== "string") return;
-
-    const targetZone = event.containerMetadata.zone;
-    if (targetZone !== "answer" && targetZone !== "bank") return;
-
-    const sourceTile = findSentenceTile(itemId);
-    sentenceGhostEntry = {
-      id: `sentence-ghost-${event.ghostItem.id}`,
-      isGhost: true,
-      zone: targetZone,
-      index: event.index,
-      originalItemId: itemId,
-      ghostItem: event.ghostItem,
-      text: sourceTile?.text ?? "",
-    };
-  }
-
-  function handleSentenceGhostRemove(event: GhostRemoveEvent) {
-    if (sentenceGhostEntry?.ghostItem === event.ghostItem) {
-      sentenceGhostEntry = null;
-    }
-  }
-
-  function createSentenceGhost(_event: GhostCreateEvent): void {
-    return;
-  }
-
-  function renderedSentenceTiles(zone: SentenceZone): RenderedSentenceTile[] {
-    const rendered: RenderedSentenceTile[] = sentenceTilesForZone(zone).map((tile) => ({
-      isGhost: false,
-      tile,
-    }));
-    if (sentenceGhostEntry?.zone !== zone) return rendered;
-
-    const coreIndex = Math.max(0, Math.min(sentenceGhostEntry.index, rendered.length));
-    const originalIndex = sentenceGhostEntry.originalItemId
-      ? sentenceTilesForZone(zone).findIndex((tile) => tile.id === sentenceGhostEntry?.originalItemId)
-      : -1;
-    const destinationIndex =
-      originalIndex !== -1 && originalIndex <= coreIndex
-        ? coreIndex + 1
-        : coreIndex;
-    rendered.splice(destinationIndex, 0, sentenceGhostEntry);
-    return rendered;
+    return typeof itemId === "string" ? (findSentenceTile(itemId)?.text ?? "") : "";
   }
 
   function moveSentenceTileToZone(tile: SentenceTile, targetZone: SentenceZone) {
@@ -1021,38 +954,30 @@
                   callbacks: {
                     onItemMove: handleSentenceMove,
                     onItemRemove: handleSentenceRemove,
-                    onGhostInsert: handleSentenceGhostInsert,
-                    onGhostRemove: handleSentenceGhostRemove,
-                    createGhost: createSentenceGhost,
                     awaitMutation: tick,
                   },
                 }}
                 locked={true}
                 metadata={{ zone: "answer" }}
+                items={sentenceAnswerTiles}
+                getId={(tile) => tile.id}
+                getClassName={() => "sentence-tile-wrapper"}
               >
-                {#each renderedSentenceTiles("answer") as entry (entry.isGhost ? entry.id : entry.tile.id)}
-                  {#if entry.isGhost}
-                    <Item
-                      className="sentence-tile-wrapper ghost sentence-tile-ghost"
-                      itemObject={entry.ghostItem}
-                    >
-                      <button type="button" class="word-card sentence-word selected" tabindex="-1">{entry.text}</button>
-                    </Item>
-                  {:else}
-                    <Item className="sentence-tile-wrapper" metadata={{ itemId: entry.tile.id }}>
-                      <button
-                        type="button"
-                        class="word-card sentence-word selected"
-                        onpointerdown={handleSentenceTilePointerDown}
-                        onpointermove={handleSentenceTilePointerMove}
-                        onclick={(event) => handleSentenceTileClick(event, () => moveSentenceTileToZone(entry.tile, "bank"))}
-                        aria-label={`Move ${entry.tile.text} to bank`}
-                      >
-                        {entry.tile.text}
-                      </button>
-                    </Item>
-                  {/if}
-                {/each}
+                {#snippet item(tile)}
+                  <button
+                    type="button"
+                    class="word-card sentence-word selected"
+                    onpointerdown={handleSentenceTilePointerDown}
+                    onpointermove={handleSentenceTilePointerMove}
+                    onclick={(event) => handleSentenceTileClick(event, () => moveSentenceTileToZone(tile, "bank"))}
+                    aria-label={`Move ${tile.text} to bank`}
+                  >
+                    {tile.text}
+                  </button>
+                {/snippet}
+                {#snippet ghost(event)}
+                  <button type="button" class="word-card sentence-word sentence-tile-ghost selected" tabindex="-1">{sentenceGhostTileText(event)}</button>
+                {/snippet}
               </Container>
               <Container
                 className="sentence-source-zone"
@@ -1072,38 +997,30 @@
                   callbacks: {
                     onItemMove: handleSentenceMove,
                     onItemRemove: handleSentenceRemove,
-                    onGhostInsert: handleSentenceGhostInsert,
-                    onGhostRemove: handleSentenceGhostRemove,
-                    createGhost: createSentenceGhost,
                     awaitMutation: tick,
                   },
                 }}
                 locked={true}
                 metadata={{ zone: "bank" }}
+                items={sentenceBankTiles}
+                getId={(tile) => tile.id}
+                getClassName={() => "sentence-tile-wrapper"}
               >
-                {#each renderedSentenceTiles("bank") as entry (entry.isGhost ? entry.id : entry.tile.id)}
-                  {#if entry.isGhost}
-                    <Item
-                      className="sentence-tile-wrapper ghost sentence-tile-ghost"
-                      itemObject={entry.ghostItem}
-                    >
-                      <button type="button" class="word-card sentence-word" tabindex="-1">{entry.text}</button>
-                    </Item>
-                  {:else}
-                    <Item className="sentence-tile-wrapper" metadata={{ itemId: entry.tile.id }}>
-                      <button
-                        type="button"
-                        class="word-card sentence-word"
-                        onpointerdown={handleSentenceTilePointerDown}
-                        onpointermove={handleSentenceTilePointerMove}
-                        onclick={(event) => handleSentenceTileClick(event, () => moveSentenceTileToZone(entry.tile, "answer"))}
-                        aria-label={`Move ${entry.tile.text} to answer`}
-                      >
-                        {entry.tile.text}
-                      </button>
-                    </Item>
-                  {/if}
-                {/each}
+                {#snippet item(tile)}
+                  <button
+                    type="button"
+                    class="word-card sentence-word"
+                    onpointerdown={handleSentenceTilePointerDown}
+                    onpointermove={handleSentenceTilePointerMove}
+                    onclick={(event) => handleSentenceTileClick(event, () => moveSentenceTileToZone(tile, "answer"))}
+                    aria-label={`Move ${tile.text} to answer`}
+                  >
+                    {tile.text}
+                  </button>
+                {/snippet}
+                {#snippet ghost(event)}
+                  <button type="button" class="word-card sentence-word sentence-tile-ghost" tabindex="-1">{sentenceGhostTileText(event)}</button>
+                {/snippet}
               </Container>
             </Container>
           </div>
@@ -1325,11 +1242,19 @@
             {#each swapTiles as tile (tile.id)}
               <Item metadata={{ itemId: tile.id, color: tile.color, label: tile.label }}>
                 <div
-                  class="swap-tile"
+                  class="swap-tile card"
                   class:swap-tile-hovered={swapHoveredId === tile.id}
                   style={`--tile-color: ${tile.color};`}
                 >
-                  {tile.label}
+                  <span class="swap-tile-grip" aria-hidden="true">
+                    <i></i>
+                    <i></i>
+                    <i></i>
+                    <i></i>
+                    <i></i>
+                    <i></i>
+                  </span>
+                  <span class="swap-tile-label">{tile.label}</span>
                 </div>
               </Item>
             {/each}
@@ -1740,7 +1665,7 @@
   .example-caption {
     max-width: 52ch;
     margin: 0;
-    color: #8f9497;
+    color: #485158;
     font-family: "Geist", sans-serif;
     font-size: 0.85rem;
     font-weight: 300;
@@ -1768,7 +1693,7 @@
   }
 
   .example-card h3 {
-    color: #8f9497;
+    color: #20262b;
     font-family: "Bitcount Grid Single", monospace;
     font-size: 24px;
     font-weight: 300;
@@ -2009,45 +1934,81 @@
 
   /* Swap Grid */
   .swap-workspace {
-    width: min(100%, 360px);
+    width: min(100%, 520px);
     justify-self: center;
   }
 
   .swap-workspace :global(.swap-grid) {
     width: 100%;
-    gap: 0.5rem;
+    gap: var(--size-4);
     flex-wrap: wrap;
+    padding: var(--size-4);
+    border-radius: calc(var(--size-16) + var(--size-4));
+    background: color-mix(in srgb, var(--color-background-tint) 88%, #000);
+    box-sizing: border-box;
+    overflow: hidden;
   }
 
   .swap-workspace :global(.swap-grid .snapsort-item) {
-    width: calc((100% - 1rem) / 3);
+    width: calc((100% - (var(--size-4) * 2)) / 3);
     padding: 0;
   }
 
   .swap-tile {
     --tile-color: #999;
+    --card-color: var(--color-background-tint);
+    position: relative;
     display: flex;
     align-items: center;
     justify-content: center;
     aspect-ratio: 1;
     width: 100%;
-    border-radius: calc(var(--ui-radius) - 2px);
-    background: var(--tile-color);
-    color: #ffffff;
+    padding: clamp(0.85rem, 1.8vw, 1.25rem) clamp(2.75rem, 5vw, 3.75rem);
+    border-radius: var(--size-16);
+    background: var(--card-color);
+    color: #20262b;
     font-family: "Bitcount Grid Single", monospace;
-    font-size: 1.1rem;
+    font-size: clamp(1.35rem, 3vw, 2rem);
     font-weight: 300;
     cursor: grab;
     touch-action: none;
-    box-shadow: 0 2px 6px -2px rgba(0, 0, 0, 0.25);
+    box-sizing: border-box;
   }
 
   .swap-tile:active {
     cursor: grabbing;
   }
 
+  .swap-tile-grip {
+    position: absolute;
+    left: clamp(1rem, 2vw, 1.45rem);
+    top: 50%;
+    display: grid;
+    grid-template-columns: repeat(2, 0.28rem);
+    grid-template-rows: repeat(3, 0.28rem);
+    gap: 0.28rem;
+    opacity: 1;
+    transform: translateY(-50%);
+  }
+
+  .swap-tile-grip i {
+    display: block;
+    width: 0.28rem;
+    height: 0.28rem;
+    border-radius: 50%;
+    background: #9ca3a8;
+  }
+
+  .swap-tile-label {
+    position: relative;
+    z-index: 1;
+    color: inherit;
+    font: inherit;
+    line-height: 1;
+  }
+
   .swap-tile-hovered {
-    outline: 3px solid #232526;
+    outline: 3px solid color-mix(in srgb, var(--tile-color) 68%, #232526);
     outline-offset: 2px;
   }
 

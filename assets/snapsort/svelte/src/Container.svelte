@@ -26,6 +26,7 @@
     children,
     items,
     getId = (entry: T) => (entry as { id: string }).id,
+    getMetadata,
     getClassName,
     getSelected,
     onItemClick,
@@ -48,6 +49,8 @@
     items?: T[];
     /** Stable id for each `items` entry; also used as the underlying Item's `metadata.itemId`. Defaults to `entry.id`. */
     getId?: (entry: T) => string;
+    /** Extra per-entry metadata fields beyond `itemId` (e.g. for a commit-event fallback that reads more than the id). Merged with `{ itemId: getId(entry) }`. */
+    getMetadata?: (entry: T) => Record<string, unknown>;
     /** Per-entry className for the wrapping `<Item>`, e.g. for a "selected" style. */
     getClassName?: (entry: T) => string;
     /** Per-entry selected state for the wrapping `<Item>` (drives multi-select drag). */
@@ -358,7 +361,7 @@
         </div>
       {:else}
         <Item
-          metadata={{ itemId: re.id }}
+          metadata={{ ...getMetadata?.(re.entry), itemId: re.id }}
           className={getClassName?.(re.entry) ?? ""}
           selected={getSelected?.(re.entry) ?? false}
           onclick={onItemClick ? (event: MouseEvent) => onItemClick(re.entry, event) : undefined}
