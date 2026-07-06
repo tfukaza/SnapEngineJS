@@ -27,6 +27,15 @@
   const nestedItems = ["Item 4", "Item 5", "Item 6"];
   const gripDots = Array.from({ length: 6 }, (_, index) => index);
 
+  // Heterogeneous: the nested child Container sits as a trailing sibling
+  // among the parent's plain rows -- `entry` renders each position's
+  // Item/Container itself.
+  type NestedEntry = { kind: "item"; label: string } | { kind: "group" };
+  const nestedEntries: NestedEntry[] = [
+    ...parentItems.map((label): NestedEntry => ({ kind: "item", label })),
+    { kind: "group" },
+  ];
+
   let sidewaysSolved = $state(false);
   let multiContainers: MultiContainerColumn[] = $state([
     {
@@ -145,6 +154,16 @@
         <article class="core-demo-card" data-demo="sideways-list">
           <h2>Sideways list</h2>
           <div class="core-demo-surface sideways-demo-surface card">
+            <!--
+              Deliberately kept on the legacy children API: handleSidewaysInsert
+              mutates the DOM directly (raw insertBefore) instead of updating
+              reactive state, showcasing the core's vanilla DOM-splice
+              behavior. Items mode assumes Svelte owns the rendered order via
+              reactive `items` -- migrating this would let ghost-driven
+              reconciliation snap the manually reordered node back to its
+              stale array position. Also covered by
+              snapsort-drag-snapshot.spec.ts's website-parity tests.
+            -->
             <Container
               className={`sideways-list ${sidewaysSolved ? "solved" : ""}`}
               config={{
@@ -176,37 +195,13 @@
             <Container
               className="basic-list bounded-demo-list"
               config={{ direction: "column", groupID: "core-nested" }}
+              items={nestedEntries}
+              getId={(e) => (e.kind === "item" ? e.label : "nested-group")}
             >
-              {#each parentItems as item (item)}
-                <Item>
-                  <div class="basic-row handle-row">
-                    <Handle className="demo-row-handle">
-                      <span class="demo-grip" aria-hidden="true">
-                        {#each gripDots as dot}
-                          <span data-dot={dot}></span>
-                        {/each}
-                      </span>
-                    </Handle>
-                    <span>{item}</span>
-                  </div>
-                </Item>
-              {/each}
-
-              <Container
-                className="nested-list bounded-demo-list card shallow"
-                config={{ direction: "column", groupID: "core-nested" }}
-                locked={false}
-              >
-                <Handle className="demo-container-handle">
-                  <span class="demo-grip" aria-hidden="true">
-                    {#each gripDots as dot}
-                      <span data-dot={dot}></span>
-                    {/each}
-                  </span>
-                </Handle>
-                {#each nestedItems as item (item)}
+              {#snippet entry(e)}
+                {#if e.kind === "item"}
                   <Item>
-                    <div class="basic-row nested-row handle-row">
+                    <div class="basic-row handle-row">
                       <Handle className="demo-row-handle">
                         <span class="demo-grip" aria-hidden="true">
                           {#each gripDots as dot}
@@ -214,11 +209,39 @@
                           {/each}
                         </span>
                       </Handle>
-                      <span>{item}</span>
+                      <span>{e.label}</span>
                     </div>
                   </Item>
-                {/each}
-              </Container>
+                {:else}
+                  <Container
+                    className="nested-list bounded-demo-list card shallow"
+                    config={{ direction: "column", groupID: "core-nested" }}
+                    locked={false}
+                    items={nestedItems}
+                    getId={(label) => label}
+                  >
+                    <Handle className="demo-container-handle">
+                      <span class="demo-grip" aria-hidden="true">
+                        {#each gripDots as dot}
+                          <span data-dot={dot}></span>
+                        {/each}
+                      </span>
+                    </Handle>
+                    {#snippet item(label)}
+                      <div class="basic-row nested-row handle-row">
+                        <Handle className="demo-row-handle">
+                          <span class="demo-grip" aria-hidden="true">
+                            {#each gripDots as dot}
+                              <span data-dot={dot}></span>
+                            {/each}
+                          </span>
+                        </Handle>
+                        <span>{label}</span>
+                      </div>
+                    {/snippet}
+                  </Container>
+                {/if}
+              {/snippet}
             </Container>
           </div>
         </article>
@@ -230,8 +253,10 @@
               className="multi-container-board"
               config={{ direction: "row", name: "core-multi-root", noDrop: true }}
               locked={true}
+              items={multiContainers}
+              getId={(column) => column.id}
             >
-              {#each multiContainers as column (column.id)}
+              {#snippet entry(column)}
                 <Container
                   className="basic-column card"
                   bind:container={column.container}
@@ -243,29 +268,29 @@
                     callbacks: { onItemMove: handleMultiContainerMove },
                   }}
                   locked={true}
+                  items={column.items}
+                  getId={(item) => item.id}
                 >
                   <h3>{column.title}</h3>
-                  {#each column.items as item (item.id)}
-                    <Item metadata={{ itemId: item.id }}>
-                      <div class="basic-row compact-row multi-container-row">
-                        <span>{item.label}</span>
-                        <button
-                          class="column-move-button"
-                          type="button"
-                          aria-label="Move {item.label} to the other column"
-                          onpointerdown={(event) => event.stopPropagation()}
-                          onclick={(event) => {
-                            event.stopPropagation();
-                            moveItemToOppositeColumn(item.id);
-                          }}
-                        >
-                          {column.direction === "right" ? ">" : "<"}
-                        </button>
-                      </div>
-                    </Item>
-                  {/each}
+                  {#snippet item(item)}
+                    <div class="basic-row compact-row multi-container-row">
+                      <span>{item.label}</span>
+                      <button
+                        class="column-move-button"
+                        type="button"
+                        aria-label="Move {item.label} to the other column"
+                        onpointerdown={(event) => event.stopPropagation()}
+                        onclick={(event) => {
+                          event.stopPropagation();
+                          moveItemToOppositeColumn(item.id);
+                        }}
+                      >
+                        {column.direction === "right" ? ">" : "<"}
+                      </button>
+                    </div>
+                  {/snippet}
                 </Container>
-              {/each}
+              {/snippet}
             </Container>
           </div>
         </article>

@@ -1,6 +1,6 @@
 <script lang="ts">
     import { Engine } from "@snap-engine/asset-base-svelte";
-    import { Container, Item } from "@snap-engine/snapsort-svelte";
+    import { Container } from "@snap-engine/snapsort-svelte";
     import type { Engine as EngineClass } from "@snap-engine/core";
 
     let engineComponent: Engine | null = null;
@@ -66,6 +66,25 @@
     export function setDebug(enabled: boolean) {
         debugMode = enabled;
     }
+
+    const verticalItems = [1, 2, 3, 4];
+    const horizontalItems = [1, 2, 3, 4];
+    const doubleRowItems = Array.from({ length: 28 }, (_, i) => i + 1);
+    const sizedItems = [
+        { label: "Small", width: 60 },
+        { label: "Medium", width: 100 },
+        { label: "Large", width: 140 },
+        { label: "Tall", width: 60 },
+        { label: "Short", width: 30 },
+    ];
+    const areaItems = {
+        area1: ["Item A", "Item B", "Item C"],
+        area2: ["Item X", "Item Y", "Item Z"],
+    };
+    const rowAreaItems = {
+        area1: ["Item A", "Item B", "Item C"],
+        area2: ["Item X", "Item Y", "Item Z"],
+    };
 </script>
 
 <div class="page-layout">
@@ -76,11 +95,13 @@
     <div class="demo-box">
         <h3>Vertical Column</h3>
         <div class="container-wrapper">
-            <Container config={{ direction: "column", groupID: "vertical-group" }}>
-                <Item className="demo-item"><p>Item 1</p></Item>
-                <Item className="demo-item"><p>Item 2</p></Item>
-                <Item className="demo-item"><p>Item 3</p></Item>
-                <Item className="demo-item"><p>Item 4</p></Item>
+            <Container
+                config={{ direction: "column", groupID: "vertical-group" }}
+                items={verticalItems}
+                getId={(n) => `vertical-${n}`}
+                getClassName={() => "demo-item"}
+            >
+                {#snippet item(n)}<p>Item {n}</p>{/snippet}
             </Container>
         </div>
     </div>
@@ -89,11 +110,13 @@
     <div class="demo-box">
         <h3>Horizontal Row</h3>
         <div class="container-wrapper" style="min-height: 60px;">
-            <Container config={{ direction: "row", groupID: "horizontal-group" }}>
-                <Item className="demo-item"><p>Item 1</p></Item>
-                <Item className="demo-item"><p>Item 2</p></Item>
-                <Item className="demo-item"><p>Item 3</p></Item>
-                <Item className="demo-item"><p>Item 4</p></Item>
+            <Container
+                config={{ direction: "row", groupID: "horizontal-group" }}
+                items={horizontalItems}
+                getId={(n) => `horizontal-${n}`}
+                getClassName={() => "demo-item"}
+            >
+                {#snippet item(n)}<p>Item {n}</p>{/snippet}
             </Container>
         </div>
     </div>
@@ -102,10 +125,13 @@
     <div class="demo-box">
         <h3>Horizontal Double Row</h3>
         <div class="container-wrapper">
-            <Container config={{ direction: "row", groupID: "double-row-group" }}>
-                {#each Array.from({ length: 28 }, (_, i) => i + 1) as n}
-                    <Item className="demo-item"><p>Item {n}</p></Item>
-                {/each}
+            <Container
+                config={{ direction: "row", groupID: "double-row-group" }}
+                items={doubleRowItems}
+                getId={(n) => `double-row-${n}`}
+                getClassName={() => "demo-item"}
+            >
+                {#snippet item(n)}<p>Item {n}</p>{/snippet}
             </Container>
         </div>
     </div>
@@ -114,12 +140,13 @@
     <div class="demo-box">
         <h3>Different Sizes</h3>
         <div class="container-wrapper">
-            <Container config={{ direction: "row", groupID: "sizes-group" }}>
-                <Item className="demo-item"><p style="width: 60px;">Small</p></Item>
-                <Item className="demo-item"><p style="width: 100px;">Medium</p></Item>
-                <Item className="demo-item"><p style="width: 140px;">Large</p></Item>
-                <Item className="demo-item"><p style="width: 60px;">Tall</p></Item>
-                <Item className="demo-item"><p style="width: 30px;">Short</p></Item>
+            <Container
+                config={{ direction: "row", groupID: "sizes-group" }}
+                items={sizedItems}
+                getId={(entry) => entry.label}
+                getClassName={() => "demo-item"}
+            >
+                {#snippet item(entry)}<p style="width: {entry.width}px;">{entry.label}</p>{/snippet}
             </Container>
         </div>
     </div>
@@ -129,17 +156,25 @@
         <h3>Multiple Drop Areas</h3>
         <div class="areas-wrapper">
             <Container config={{ direction: "row", name: "multi-root", noDrop: true }} locked={true}>
-                <Container config={{ direction: "column", name: "multi-area-1" }} locked={true}>
+                <Container
+                    config={{ direction: "column", name: "multi-area-1" }}
+                    locked={true}
+                    items={areaItems.area1}
+                    getId={(label) => `area1-${label}`}
+                    getClassName={() => "demo-item"}
+                >
                     <h4>Area 1</h4>
-                    <Item className="demo-item"><p>Item A</p></Item>
-                    <Item className="demo-item"><p>Item B</p></Item>
-                    <Item className="demo-item"><p>Item C</p></Item>
+                    {#snippet item(label)}<p>{label}</p>{/snippet}
                 </Container>
-                <Container config={{ direction: "column", name: "multi-area-2" }} locked={true}>
+                <Container
+                    config={{ direction: "column", name: "multi-area-2" }}
+                    locked={true}
+                    items={areaItems.area2}
+                    getId={(label) => `area2-${label}`}
+                    getClassName={() => "demo-item"}
+                >
                     <h4>Area 2</h4>
-                    <Item className="demo-item"><p>Item X</p></Item>
-                    <Item className="demo-item"><p>Item Y</p></Item>
-                    <Item className="demo-item"><p>Item Z</p></Item>
+                    {#snippet item(label)}<p>{label}</p>{/snippet}
                 </Container>
             </Container>
         </div>
@@ -151,16 +186,24 @@
         <div class="areas-wrapper-row">
             <Container config={{ direction: "column", name: "multi-row-root" }} locked={true}>
                 <h4>Area 1</h4>
-                <Container config={{ direction: "row", name: "multi-row-area-1" }} locked={true}>
-                    <Item className="demo-item"><p>Item A</p></Item>
-                    <Item className="demo-item"><p>Item B</p></Item>
-                    <Item className="demo-item"><p>Item C</p></Item>
+                <Container
+                    config={{ direction: "row", name: "multi-row-area-1" }}
+                    locked={true}
+                    items={rowAreaItems.area1}
+                    getId={(label) => `row-area1-${label}`}
+                    getClassName={() => "demo-item"}
+                >
+                    {#snippet item(label)}<p>{label}</p>{/snippet}
                 </Container>
                 <h4>Area 2</h4>
-                <Container config={{ direction: "row", name: "multi-row-area-2" }} locked={true}>
-                    <Item className="demo-item"><p>Item X</p></Item>
-                    <Item className="demo-item"><p>Item Y</p></Item>
-                    <Item className="demo-item"><p>Item Z</p></Item>
+                <Container
+                    config={{ direction: "row", name: "multi-row-area-2" }}
+                    locked={true}
+                    items={rowAreaItems.area2}
+                    getId={(label) => `row-area2-${label}`}
+                    getClassName={() => "demo-item"}
+                >
+                    {#snippet item(label)}<p>{label}</p>{/snippet}
                 </Container>
             </Container>
         </div>
