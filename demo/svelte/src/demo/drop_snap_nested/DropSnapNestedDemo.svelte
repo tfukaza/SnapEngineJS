@@ -136,6 +136,72 @@
     setMultiAreaList(targetArea, targetList);
   }
 
+  const horizontalRowItems = Array.from({ length: 12 }, (_, index) => index + 1);
+
+  const sizedItems = [
+    { label: "Small", width: 72, minHeight: 48 },
+    { label: "Medium", width: 128, minHeight: 72 },
+    { label: "Wide", width: 220, minHeight: 96 },
+    { label: "Tall", width: 92, minHeight: 156 },
+    { label: "Large", width: 168, minHeight: 120 },
+    { label: "Narrow", width: 56, minHeight: 64 },
+    { label: "Extra Wide", width: 260, minHeight: 72 },
+  ];
+
+  type NestedGroupEntry = { kind: "item"; label: string } | { kind: "group" };
+  const nestedGroupEntries: NestedGroupEntry[] = [
+    { kind: "item", label: "Item 1" },
+    { kind: "item", label: "Item 1.5" },
+    { kind: "group" },
+    { kind: "item", label: "Item 2" },
+    { kind: "item", label: "Item 3" },
+  ];
+  const nestedGroupChildren = ["Sub A1", "Sub A2", "Sub A3"];
+
+  type CompactEntry = { kind: "item"; label: string } | { kind: "group" };
+  const compactEntries: CompactEntry[] = [
+    { kind: "item", label: "Overview" },
+    { kind: "item", label: "Components" },
+    { kind: "item", label: "Usage" },
+    { kind: "group" },
+  ];
+  const compactGroupChildren = ["Container", "Item", "Handle"];
+
+  type DragNestedEntry = { kind: "group"; id: string; labels: string[] } | { kind: "item"; label: string };
+  const dragNestedEntries: DragNestedEntry[] = [
+    { kind: "group", id: "group-1", labels: ["Group 1 - A", "Group 1 - B"] },
+    { kind: "group", id: "group-2", labels: ["Group 2 - A", "Group 2 - B", "Group 2 - C"] },
+    { kind: "item", label: "Loose Item" },
+  ];
+
+  type NestedRowEntry = { kind: "item"; label: string } | { kind: "group" };
+  const nestedRowEntries: NestedRowEntry[] = [
+    { kind: "item", label: "R1" },
+    { kind: "group" },
+    { kind: "item", label: "R2" },
+    { kind: "item", label: "R3" },
+  ];
+  const nestedRowChildren = ["S1", "S2", "S3"];
+
+  type LayerEntry =
+    | { kind: "leaf"; id: string; icon: string; name: string }
+    | { kind: "group"; id: string; label: string; children: { icon: string; name: string }[] };
+  const layerEntries: LayerEntry[] = [
+    { kind: "leaf", id: "header", icon: "◻", name: "Header" },
+    {
+      kind: "group",
+      id: "hero-section",
+      label: "Hero Section",
+      children: [
+        { icon: "○", name: "Avatar" },
+        { icon: "T", name: "Title" },
+        { icon: "T", name: "Subtitle" },
+      ],
+    },
+    { kind: "leaf", id: "card-grid", icon: "◻", name: "Card Grid" },
+    { kind: "leaf", id: "footer", icon: "◻", name: "Footer" },
+  ];
+
   function toggleVerticalSelection(n: number, event: MouseEvent) {
     if (event.metaKey || event.ctrlKey) {
       const next = new Set(selectedVertical);
@@ -175,10 +241,14 @@
 
           <article class="demo-cell">
             <h2>Horizontal Row</h2>
-            <Container config={{ direction: "row", groupID: "wrap-row" }} locked={true}>
-              {#each Array.from({ length: 12 }, (_, index) => index + 1) as n}
-                <Item className="demo-item row-item"><p>Item {n}</p></Item>
-              {/each}
+            <Container
+              config={{ direction: "row", groupID: "wrap-row" }}
+              locked={true}
+              items={horizontalRowItems}
+              getId={(n) => `wrap-row-${n}`}
+              getClassName={() => "demo-item row-item"}
+            >
+              {#snippet item(n)}<p>Item {n}</p>{/snippet}
             </Container>
           </article>
 
@@ -197,14 +267,13 @@
 
           <article class="demo-cell wide size-demo">
             <h2>Different Sizes</h2>
-            <Container config={{ direction: "row", groupID: "sizes-group" }}>
-              <Item className="demo-item size-item"><p style="width: 72px; min-height: 48px;">Small</p></Item>
-              <Item className="demo-item size-item"><p style="width: 128px; min-height: 72px;">Medium</p></Item>
-              <Item className="demo-item size-item"><p style="width: 220px; min-height: 96px;">Wide</p></Item>
-              <Item className="demo-item size-item"><p style="width: 92px; min-height: 156px;">Tall</p></Item>
-              <Item className="demo-item size-item"><p style="width: 168px; min-height: 120px;">Large</p></Item>
-              <Item className="demo-item size-item"><p style="width: 56px; min-height: 64px;">Narrow</p></Item>
-              <Item className="demo-item size-item"><p style="width: 260px; min-height: 72px;">Extra Wide</p></Item>
+            <Container
+              config={{ direction: "row", groupID: "sizes-group" }}
+              items={sizedItems}
+              getId={(entry) => entry.label}
+              getClassName={() => "demo-item size-item"}
+            >
+              {#snippet item(entry)}<p style="width: {entry.width}px; min-height: {entry.minHeight}px;">{entry.label}</p>{/snippet}
             </Container>
           </article>
 
@@ -236,107 +305,149 @@
 
           <article class="demo-cell">
             <h2>Nested Container</h2>
-            <Container config={{ direction: "column", groupID: "nested-group", ...nestedAnimationConfig }} locked={true}>
-              <Item className="demo-item"><p>Item 1</p></Item>
-              <Item className="demo-item"><p>Item 1.5</p></Item>
-              <Container config={{ direction: "column", groupID: "nested-group", ...nestedAnimationConfig }} locked={lockNestedChild}>
-                <Item className="demo-item sub-item"><p>Sub A1</p></Item>
-                <Item className="demo-item sub-item"><p>Sub A2</p></Item>
-                <Item className="demo-item sub-item"><p>Sub A3</p></Item>
-              </Container>
-              <Item className="demo-item"><p>Item 2</p></Item>
-              <Item className="demo-item"><p>Item 3</p></Item>
+            <Container
+              config={{ direction: "column", groupID: "nested-group", ...nestedAnimationConfig }}
+              locked={true}
+              items={nestedGroupEntries}
+              getId={(e) => (e.kind === "item" ? e.label : "nested-sub-group")}
+            >
+              {#snippet entry(e)}
+                {#if e.kind === "item"}
+                  <Item className="demo-item" metadata={{ itemId: e.label }}><p>{e.label}</p></Item>
+                {:else}
+                  <Container
+                    config={{ direction: "column", groupID: "nested-group", ...nestedAnimationConfig }}
+                    locked={lockNestedChild}
+                    metadata={{ itemId: "nested-sub-group" }}
+                    items={nestedGroupChildren}
+                    getId={(label) => label}
+                    getClassName={() => "demo-item sub-item"}
+                  >
+                    {#snippet item(label)}<p>{label}</p>{/snippet}
+                  </Container>
+                {/if}
+              {/snippet}
             </Container>
           </article>
 
           {#if showCompactNested}
             <article class="demo-cell compact-nested-demo">
               <h2>Compact Nested List</h2>
-              <Container className="compact-basic-list" config={{ direction: "column", groupID: "compact-nested", ...nestedAnimationConfig }}>
-                <Item className="compact-item"><p>Overview</p></Item>
-                <Item className="compact-item"><p>Components</p></Item>
-                <Item className="compact-item"><p>Usage</p></Item>
-                <Container className="compact-nested-list" config={{ direction: "column", groupID: "compact-nested", ...nestedAnimationConfig }}>
-                  <Item className="compact-item"><p>Container</p></Item>
-                  <Item className="compact-item"><p>Item</p></Item>
-                  <Item className="compact-item"><p>Handle</p></Item>
-                </Container>
+              <Container
+                className="compact-basic-list"
+                config={{ direction: "column", groupID: "compact-nested", ...nestedAnimationConfig }}
+                items={compactEntries}
+                getId={(e) => (e.kind === "item" ? e.label : "compact-sub-group")}
+              >
+                {#snippet entry(e)}
+                  {#if e.kind === "item"}
+                    <Item className="compact-item" metadata={{ itemId: e.label }}><p>{e.label}</p></Item>
+                  {:else}
+                    <Container
+                      className="compact-nested-list"
+                      config={{ direction: "column", groupID: "compact-nested", ...nestedAnimationConfig }}
+                      metadata={{ itemId: "compact-sub-group" }}
+                      items={compactGroupChildren}
+                      getId={(label) => label}
+                      getClassName={() => "compact-item"}
+                    >
+                      {#snippet item(label)}<p>{label}</p>{/snippet}
+                    </Container>
+                  {/if}
+                {/snippet}
               </Container>
             </article>
           {/if}
 
           <article class="demo-cell">
             <h2>Draggable Sub-Containers</h2>
-            <Container config={{ direction: "column", groupID: "drag-nested-group" }} locked={true}>
-              <Container config={{ direction: "column", groupID: "drag-nested-group" }} locked={false}>
-                <Item className="demo-item sub-item"><p>Group 1 - A</p></Item>
-                <Item className="demo-item sub-item"><p>Group 1 - B</p></Item>
-              </Container>
-              <Container config={{ direction: "column", groupID: "drag-nested-group" }} locked={false}>
-                <Item className="demo-item sub-item"><p>Group 2 - A</p></Item>
-                <Item className="demo-item sub-item"><p>Group 2 - B</p></Item>
-                <Item className="demo-item sub-item"><p>Group 2 - C</p></Item>
-              </Container>
-              <Item className="demo-item"><p>Loose Item</p></Item>
+            <Container
+              config={{ direction: "column", groupID: "drag-nested-group" }}
+              locked={true}
+              items={dragNestedEntries}
+              getId={(e) => (e.kind === "group" ? e.id : e.label)}
+            >
+              {#snippet entry(e)}
+                {#if e.kind === "group"}
+                  <Container
+                    config={{ direction: "column", groupID: "drag-nested-group" }}
+                    locked={false}
+                    metadata={{ itemId: e.id }}
+                    items={e.labels}
+                    getId={(label) => label}
+                    getClassName={() => "demo-item sub-item"}
+                  >
+                    {#snippet item(label)}<p>{label}</p>{/snippet}
+                  </Container>
+                {:else}
+                  <Item className="demo-item" metadata={{ itemId: e.label }}><p>{e.label}</p></Item>
+                {/if}
+              {/snippet}
             </Container>
           </article>
 
           <article class="demo-cell">
             <h2>Nested Row Groups</h2>
-            <Container config={{ direction: "row", groupID: "nested-row-group" }} locked={true}>
-              <Item className="demo-item row-item"><p>R1</p></Item>
-              <Container config={{ direction: "row", groupID: "nested-row-group" }} locked={false}>
-                <Item className="demo-item row-item sub-item"><p>S1</p></Item>
-                <Item className="demo-item row-item sub-item"><p>S2</p></Item>
-                <Item className="demo-item row-item sub-item"><p>S3</p></Item>
-              </Container>
-              <Item className="demo-item row-item"><p>R2</p></Item>
-              <Item className="demo-item row-item"><p>R3</p></Item>
+            <Container
+              config={{ direction: "row", groupID: "nested-row-group" }}
+              locked={true}
+              items={nestedRowEntries}
+              getId={(e) => (e.kind === "item" ? e.label : "nested-row-sub-group")}
+            >
+              {#snippet entry(e)}
+                {#if e.kind === "item"}
+                  <Item className="demo-item row-item" metadata={{ itemId: e.label }}><p>{e.label}</p></Item>
+                {:else}
+                  <Container
+                    config={{ direction: "row", groupID: "nested-row-group" }}
+                    locked={false}
+                    metadata={{ itemId: "nested-row-sub-group" }}
+                    items={nestedRowChildren}
+                    getId={(label) => label}
+                    getClassName={() => "demo-item row-item sub-item"}
+                  >
+                    {#snippet item(label)}<p>{label}</p>{/snippet}
+                  </Container>
+                {/if}
+              {/snippet}
             </Container>
           </article>
 
           <article class="demo-cell">
             <h2>Layers Panel</h2>
-            <Container config={{ direction: "column", groupID: "layers" }} locked={true}>
-              <Item className="layer-item">
-                <div class="layer-row">
-                  <span class="layer-icon">&#x25FB;</span>
-                  <span>Header</span>
-                </div>
-              </Item>
-              <Container config={{ direction: "column", groupID: "layers" }} locked={false}>
-                <div class="group-label">Hero Section</div>
-                <Item className="layer-item">
-                  <div class="layer-row">
-                    <span class="layer-icon">&#x25CB;</span>
-                    <span>Avatar</span>
-                  </div>
-                </Item>
-                <Item className="layer-item">
-                  <div class="layer-row">
-                    <span class="layer-icon">T</span>
-                    <span>Title</span>
-                  </div>
-                </Item>
-                <Item className="layer-item">
-                  <div class="layer-row">
-                    <span class="layer-icon">T</span>
-                    <span>Subtitle</span>
-                  </div>
-                </Item>
-              </Container>
-              <Item className="layer-item">
-                <div class="layer-row">
-                  <span class="layer-icon">&#x25FB;</span>
-                  <span>Card Grid</span>
-                </div>
-              </Item>
-              <Item className="layer-item">
-                <div class="layer-row">
-                  <span class="layer-icon">&#x25FB;</span>
-                  <span>Footer</span>
-                </div>
-              </Item>
+            <Container
+              config={{ direction: "column", groupID: "layers" }}
+              locked={true}
+              items={layerEntries}
+              getId={(e) => e.id}
+            >
+              {#snippet entry(e)}
+                {#if e.kind === "leaf"}
+                  <Item className="layer-item" metadata={{ itemId: e.id }}>
+                    <div class="layer-row">
+                      <span class="layer-icon">{e.icon}</span>
+                      <span>{e.name}</span>
+                    </div>
+                  </Item>
+                {:else}
+                  <Container
+                    config={{ direction: "column", groupID: "layers" }}
+                    locked={false}
+                    metadata={{ itemId: e.id }}
+                    items={e.children}
+                    getId={(child) => child.name}
+                    getClassName={() => "layer-item"}
+                  >
+                    <div class="group-label">{e.label}</div>
+                    {#snippet item(child)}
+                      <div class="layer-row">
+                        <span class="layer-icon">{child.icon}</span>
+                        <span>{child.name}</span>
+                      </div>
+                    {/snippet}
+                  </Container>
+                {/if}
+              {/snippet}
             </Container>
           </article>
         </div>
