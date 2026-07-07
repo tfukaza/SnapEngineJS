@@ -3,7 +3,7 @@
   "version": "0.1.0",
   "repository": {
     "type": "git",
-    "url": "https://github.com/tfukaza/SnapEngineJS",
+    "url": "git+https://github.com/tfukaza/SnapEngineJS.git",
     "directory": "assets/snapzap/react"
   },
   "description": "React components for camera control and background",

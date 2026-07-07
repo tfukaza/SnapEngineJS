@@ -3,7 +3,7 @@
   "version": "0.2.0",
   "repository": {
     "type": "git",
-    "url": "https://github.com/tfukaza/SnapEngineJS",
+    "url": "git+https://github.com/tfukaza/SnapEngineJS.git",
     "directory": "assets/snapline/core"
   },
   "description": "Core TypeScript logic for node graph UI",
