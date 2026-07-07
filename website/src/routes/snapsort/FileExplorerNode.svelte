@@ -80,6 +80,8 @@
       insertionMarkerInsetLeft: 8 + (depth + 1) * 14,
       insertionMarkerInsetRight: 8,
     }}
+    items={node.open !== false ? (node.children ?? []) : []}
+    getId={(child) => child.id}
   >
     <div
       class="tree-row folder-row"
@@ -100,11 +102,9 @@
       <span class="row-name">{node.name}</span>
     </div>
 
-    {#if node.open !== false}
-      {#each node.children ?? [] as child (child.id)}
-        <FileExplorerNode node={child} depth={depth + 1} {callbacks} {onToggleFolder} {selectedIds} {onSelectNode} />
-      {/each}
-    {/if}
+    {#snippet entry(child)}
+      <FileExplorerNode node={child} depth={depth + 1} {callbacks} {onToggleFolder} {selectedIds} {onSelectNode} />
+    {/snippet}
   </Container>
 {:else}
   <Item

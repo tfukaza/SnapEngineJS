@@ -49,7 +49,6 @@
   };
 
   let tree = $state<FileExplorerNodeData[]>(structuredClone(initialTree));
-  let treeRenderVersion = $state(0);
   let selectedIds = $state<Set<string>>(new Set());
   let lastClickedId: string | null = null;
 
@@ -151,7 +150,6 @@
 
   function toggleFolderOpen(nodeId: string) {
     tree = toggleNodeOpen(tree, nodeId);
-    treeRenderVersion += 1;
   }
 
   /** Visible node ids in on-screen order (collapsed folders' children excluded), for shift-click range selection. */
@@ -223,7 +221,6 @@
       nextTree = insertNode(nextTree, containerId, event.to.index + i, node);
     });
     tree = nextTree;
-    treeRenderVersion += 1;
   }
 
   /** Block dropping a folder into its own descendant (or itself), for every dragged item. */
@@ -276,39 +273,39 @@
       <span></span>
       <span></span>
     </div>
-    {#key treeRenderVersion}
-      <Container
-        className="code-tree"
-        config={{
-          mode: "insertion",
-          direction: "column",
-          groupID: "website-file-explorer",
-          name: "website-file-explorer-root",
-          callbacks,
-          animation: {
-            reorder: fileTreeAnimation,
-            drop: fileTreeAnimation,
-          },
-        }}
-        locked={true}
-        metadata={{
-          containerId: "root",
-          insertionDepth: 0,
-          insertionMarkerInsetLeft: 8,
-          insertionMarkerInsetRight: 8,
-        }}
-      >
-        {#each tree as node (node.id)}
-          <FileExplorerNode
-            {node}
-            {callbacks}
-            onToggleFolder={toggleFolderOpen}
-            {selectedIds}
-            onSelectNode={handleSelectNode}
-          />
-        {/each}
-      </Container>
-    {/key}
+    <Container
+      className="code-tree"
+      config={{
+        mode: "insertion",
+        direction: "column",
+        groupID: "website-file-explorer",
+        name: "website-file-explorer-root",
+        callbacks,
+        animation: {
+          reorder: fileTreeAnimation,
+          drop: fileTreeAnimation,
+        },
+      }}
+      locked={true}
+      metadata={{
+        containerId: "root",
+        insertionDepth: 0,
+        insertionMarkerInsetLeft: 8,
+        insertionMarkerInsetRight: 8,
+      }}
+      items={tree}
+      getId={(node) => node.id}
+    >
+      {#snippet entry(node)}
+        <FileExplorerNode
+          {node}
+          {callbacks}
+          onToggleFolder={toggleFolderOpen}
+          {selectedIds}
+          onSelectNode={handleSelectNode}
+        />
+      {/snippet}
+    </Container>
   </div>
 </div>
 
