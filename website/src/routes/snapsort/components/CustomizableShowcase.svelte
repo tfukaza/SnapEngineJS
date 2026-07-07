@@ -239,7 +239,7 @@
             </div>
 
             <div
-              class="customizable-demo card shallow"
+              class="customizable-demo shallow"
               style={`--customizable-progress: ${customizableProgress};`}
             >
               <div class="customizable-demo-scale">
@@ -383,7 +383,7 @@
                       >
                         {#snippet entry(e)}
                           {#if e.kind === "row"}
-                            <Item>
+                            <Item metadata={{ itemId: `parent-${e.row.label}` }}>
                               <div class="customizable-mini-row">
                                 <Handle className="customizable-mini-handle">
                                   <span class="customizable-mini-grip" aria-hidden="true">
@@ -405,6 +405,7 @@
                                 groupID: `customizable-${theme.id}-nested`,
                                 ...getCustomizableThemeConfig(theme.id),
                               }}
+                              metadata={{ itemId: `child-group-${theme.id}` }}
                               items={customizableMockupNested.child}
                               getId={(row) => row.label}
                             >
@@ -619,6 +620,7 @@
                           name: column.id,
                         }}
                         locked={true}
+                        metadata={{ itemId: column.id }}
                         items={column.cards}
                         getId={(card) => card.id}
                       >

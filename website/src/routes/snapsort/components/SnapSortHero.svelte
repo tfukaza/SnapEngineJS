@@ -44,7 +44,7 @@
           >
             {#snippet entry(kind)}
               {#if kind === "title"}
-                <Item className="hero-stack-item hero-title-item">
+                <Item className="hero-stack-item hero-title-item" metadata={{ itemId: kind }}>
                   <div class="hero-row card">
                     <Handle className="hero-row-handle">
                       <span class="hero-row-grip" aria-hidden="true">
@@ -79,7 +79,7 @@
                   </div>
                 </Item>
               {:else if kind === "copy"}
-                <Item className="hero-stack-item hero-copy-item">
+                <Item className="hero-stack-item hero-copy-item" metadata={{ itemId: kind }}>
                   <div class="hero-row card">
                     <Handle className="hero-row-handle">
                       <span class="hero-row-grip" aria-hidden="true">
@@ -94,7 +94,7 @@
                   </div>
                 </Item>
               {:else}
-                <Item className="hero-stack-item hero-cta-item">
+                <Item className="hero-stack-item hero-cta-item" metadata={{ itemId: kind }}>
                   <div class="hero-row hero-row-final card">
                     <Handle className="hero-row-handle">
                       <span class="hero-row-grip" aria-hidden="true">

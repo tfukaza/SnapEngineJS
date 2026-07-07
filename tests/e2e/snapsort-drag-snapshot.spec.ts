@@ -1687,6 +1687,12 @@ async function directSnapSortItemTexts(locator: Locator): Promise<string[]> {
   );
 }
 
+// A nested container's own textContent concatenates its children's text with
+// no separator by default; hand-authored templates picked up an incidental
+// space from template whitespace between sibling tags, which items-mode's
+// internal {#each} doesn't reproduce. Expected strings below reflect the
+// no-space (items-mode) DOM shape -- this is a DOM formatting detail, not a
+// behavior difference (content and order are unaffected).
 async function directSnapSortChildTexts(locator: Locator): Promise<string[]> {
   return locator.evaluate((element) =>
     [...element.children]
@@ -2959,7 +2965,7 @@ test.describe("Snapsort drag-start snapshot layout", () => {
         "Item 1",
         "Item 1.5",
         "Sub A1",
-        "Sub A2 Sub A3",
+        "Sub A2Sub A3",
         "Item 2",
         "Item 3",
       ]);
@@ -3016,7 +3022,7 @@ test.describe("Snapsort drag-start snapshot layout", () => {
       .poll(() => directSnapSortChildTexts(outerContainer))
       .toEqual([
         "Item 1.5",
-        "Sub A1 Sub A2 Sub A3",
+        "Sub A1Sub A2Sub A3",
         "Item 2",
         "Item 1",
         "Item 3",

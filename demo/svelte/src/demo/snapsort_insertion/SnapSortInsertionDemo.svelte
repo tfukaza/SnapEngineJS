@@ -221,7 +221,7 @@
             },
           }}
           locked={true}
-          metadata={{ columnId: column.id }}
+          metadata={{ itemId: column.id, columnId: column.id }}
           items={column.items}
           getId={(item) => item.id}
           getClassName={() => "insertion-card"}

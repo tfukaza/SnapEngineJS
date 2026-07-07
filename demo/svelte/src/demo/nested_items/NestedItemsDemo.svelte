@@ -159,11 +159,12 @@
             >
                 {#snippet entry(e)}
                     {#if e.kind === "item"}
-                        <Item className="demo-item"><p>{e.label}</p></Item>
+                        <Item className="demo-item" metadata={{ itemId: e.label }}><p>{e.label}</p></Item>
                     {:else}
                         <Container
                             config={{ direction: "column", groupID: "nested-group" }}
                             locked={false}
+                            metadata={{ itemId: "nested-sub-group" }}
                             items={nestedGroupChildren}
                             getId={(label) => label}
                             getClassName={() => "demo-item sub-item"}
@@ -194,6 +195,7 @@
                         <Container
                             config={{ direction: "column", groupID: "drag-nested-group" }}
                             locked={false}
+                            metadata={{ itemId: e.id }}
                             items={e.labels}
                             getId={(label) => label}
                             getClassName={() => "demo-item sub-item"}
@@ -201,7 +203,7 @@
                             {#snippet item(label)}<p>{label}</p>{/snippet}
                         </Container>
                     {:else}
-                        <Item className="demo-item"><p>{e.label}</p></Item>
+                        <Item className="demo-item" metadata={{ itemId: e.label }}><p>{e.label}</p></Item>
                     {/if}
                 {/snippet}
             </Container>
@@ -242,11 +244,12 @@
             >
                 {#snippet entry(e)}
                     {#if e.kind === "item"}
-                        <Item className="demo-item row-item"><p>{e.label}</p></Item>
+                        <Item className="demo-item row-item" metadata={{ itemId: e.label }}><p>{e.label}</p></Item>
                     {:else}
                         <Container
                             config={{ direction: "row", groupID: "nested-row-group" }}
                             locked={false}
+                            metadata={{ itemId: "nested-row-sub-group" }}
                             items={nestedRowChildren}
                             getId={(label) => label}
                             getClassName={() => "demo-item row-item sub-item"}
@@ -293,7 +296,7 @@
             >
                 {#snippet entry(e)}
                     {#if e.kind === "leaf"}
-                        <Item className="layer-item">
+                        <Item className="layer-item" metadata={{ itemId: e.id }}>
                             <div class="layer-row">
                                 <span class="layer-icon">{e.icon}</span>
                                 <span class="layer-name">{e.name}</span>
@@ -303,6 +306,7 @@
                         <Container
                             config={{ direction: "column", groupID: "layers" }}
                             locked={false}
+                            metadata={{ itemId: e.id }}
                             items={e.children}
                             getId={(child) => child.name}
                             getClassName={() => "layer-item"}

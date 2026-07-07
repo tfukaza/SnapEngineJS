@@ -260,7 +260,7 @@
           >
             {#snippet entry(e)}
               {#if e.kind === "item"}
-                <Item>
+                <Item metadata={{ itemId: e.id }}>
                   <div class="basic-row handle-row">
                     <Handle className="demo-row-handle">
                       <span class="demo-grip" aria-hidden="true">
@@ -275,6 +275,7 @@
                   className="nested-list bounded-demo-list card shallow"
                   config={{ direction: "column", groupID: "core-nested" }}
                   locked={false}
+                  metadata={{ itemId: "nested-group" }}
                   items={nestedChildren}
                   getId={(label) => label}
                 >
@@ -311,7 +312,7 @@
           >
             {#snippet entry(e)}
               {#if e.kind === "item"}
-                <Item>
+                <Item metadata={{ itemId: e.id }}>
                   <div class="basic-row handle-row">
                     <Handle className="demo-row-handle">
                       <span class="demo-grip" aria-hidden="true">
@@ -326,6 +327,7 @@
                   className="nested-list nested-insertion-list insertion-list bounded-demo-list card shallow"
                   config={{ direction: "column", groupID: "core-insert", mode: "insertion" }}
                   locked={false}
+                  metadata={{ itemId: "insert-group" }}
                   items={insertNestedItems}
                   getId={(label) => label}
                 >
@@ -383,7 +385,7 @@
               <Container
                 className="basic-column card"
                 bind:container={column.container}
-                metadata={{ columnId: column.id }}
+                metadata={{ itemId: column.id, columnId: column.id }}
                 config={{
                   direction: "column",
                   groupID: "core-multi-container",
