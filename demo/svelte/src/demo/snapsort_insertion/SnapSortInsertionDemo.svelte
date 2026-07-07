@@ -1,6 +1,6 @@
 <script lang="ts">
   import { Engine } from "@snap-engine/asset-base-svelte";
-  import { Container, Item } from "@snap-engine/snapsort-svelte";
+  import { Container } from "@snap-engine/snapsort-svelte";
   import type {
     Container as SortContainer,
     DragStartEvent,
@@ -202,8 +202,10 @@
       }}
       locked={true}
       metadata={{ boardId: "insertion-demo" }}
+      items={columns}
+      getId={(column) => column.id}
     >
-      {#each columns as column (column.id)}
+      {#snippet entry(column)}
         <Container
           className="insertion-list"
           bind:container={column.container}
@@ -220,27 +222,28 @@
           }}
           locked={true}
           metadata={{ columnId: column.id }}
+          items={column.items}
+          getId={(item) => item.id}
+          getClassName={() => "insertion-card"}
         >
           <div class="list-header">
             <h2>{column.title}</h2>
             <span>{column.items.length}</span>
           </div>
 
-          {#each column.items as item (item.id)}
-            <Item className="insertion-card" metadata={{ itemId: item.id }}>
-              <span
-                class="material-symbols-outlined file-icon"
-                class:folder-icon={item.kind === "folder"}
-                aria-hidden="true"
-              >{item.kind === "folder" ? "folder" : "description"}</span>
-              <div class="card-copy">
-                <strong>{item.title}</strong>
-                <span>{item.detail}</span>
-              </div>
-            </Item>
-          {/each}
+          {#snippet item(item)}
+            <span
+              class="material-symbols-outlined file-icon"
+              class:folder-icon={item.kind === "folder"}
+              aria-hidden="true"
+            >{item.kind === "folder" ? "folder" : "description"}</span>
+            <div class="card-copy">
+              <strong>{item.title}</strong>
+              <span>{item.detail}</span>
+            </div>
+          {/snippet}
         </Container>
-      {/each}
+      {/snippet}
     </Container>
   </Engine>
 </div>
