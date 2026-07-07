@@ -66,6 +66,8 @@
       insertionMarkerInsetLeft: 8 + (depth + 1) * 14,
       insertionMarkerInsetRight: 8,
     }}
+    items={node.open !== false ? (node.children ?? []) : []}
+    getId={(child) => child.id}
   >
     <div class="tree-row folder-row" style={`--depth: ${depth}`}>
       <span class="indent" aria-hidden="true"></span>
@@ -81,11 +83,9 @@
       <span class="row-name">{node.name}</span>
     </div>
 
-    {#if node.open !== false}
-      {#each node.children ?? [] as child (child.id)}
-        <FileTreeNode node={child} depth={depth + 1} {callbacks} {onToggleFolder} />
-      {/each}
-    {/if}
+    {#snippet entry(child)}
+      <FileTreeNode node={child} depth={depth + 1} {callbacks} {onToggleFolder} />
+    {/snippet}
   </Container>
 {:else}
   <Item

@@ -69,7 +69,6 @@
 
   let nextId = $state(1);
   let tree = $state<TreeNodeData[]>(structuredClone(initialTree));
-  let treeRenderVersion = $state(0);
   const treeAnimation = {
     duration: 260,
     timing_function: "cubic-bezier(0.2, 0, 0, 1)",
@@ -158,7 +157,6 @@
 
   function toggleFolderOpen(nodeId: string) {
     tree = toggleNodeOpen(tree, nodeId);
-    treeRenderVersion += 1;
   }
 
   function handleMove(event: ItemMoveEvent) {
@@ -179,7 +177,6 @@
     if (containsNode(extracted.node, containerId)) return;
 
     tree = insertNode(extracted.nodes, containerId, event.to.index, extracted.node);
-    treeRenderVersion += 1;
   }
 
   function createFileTreeGhost(event: GhostCreateEvent): HTMLElement {
@@ -207,7 +204,6 @@
   function reset() {
     nextId = 1;
     tree = structuredClone(initialTree);
-    treeRenderVersion += 1;
   }
 
   function addFile() {
@@ -220,7 +216,6 @@
         kind: "file",
       },
     ];
-    treeRenderVersion += 1;
   }
 
   const callbacks: ContainerCallbacks = {
@@ -267,12 +262,12 @@
           insertionMarkerInsetLeft: 8,
           insertionMarkerInsetRight: 8,
         }}
+        items={tree}
+        getId={(node) => node.id}
       >
-        {#key treeRenderVersion}
-          {#each tree as node (node.id)}
-            <FileTreeNode {node} depth={0} {callbacks} onToggleFolder={toggleFolderOpen} />
-          {/each}
-        {/key}
+        {#snippet entry(node)}
+          <FileTreeNode {node} depth={0} {callbacks} onToggleFolder={toggleFolderOpen} />
+        {/snippet}
       </Container>
     </Engine>
   </aside>
