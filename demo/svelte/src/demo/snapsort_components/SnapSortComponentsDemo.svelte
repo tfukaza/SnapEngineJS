@@ -2,7 +2,7 @@
   import { Engine } from "@snap-engine/asset-base-svelte";
   import { tick } from "svelte";
   import SnapSortDuolingoDemo from "../snapsort_duolingo/SnapSortDuolingoDemo.svelte";
-  import { Container, Handle, Item } from "@snap-engine/snapsort-svelte";
+  import { Container, Handle } from "@snap-engine/snapsort-svelte";
   import type {
     Container as SortContainer,
     GhostCreateEvent,
@@ -437,8 +437,10 @@
           }}
           locked={true}
           metadata={{ boardId: "progressive-components" }}
+          items={progressiveExamples}
+          getId={(example) => example.id}
         >
-          {#each progressiveExamples as example (example.id)}
+          {#snippet entry(example)}
             <Container
               className="progressive-example"
               config={{
@@ -448,7 +450,7 @@
                 noDrop: true,
               }}
               locked={true}
-              metadata={{ exampleId: example.id }}
+              metadata={{ itemId: example.id, exampleId: example.id }}
             >
               <div class="progressive-prompt">
                 <span>{example.prompt}</span>
@@ -470,15 +472,13 @@
                 }}
                 locked={true}
                 metadata={{ zone: "answer", exampleId: example.id }}
+                items={example.answerTiles}
+                getId={(tile) => tile.id}
+                getClassName={() => "sentence-tile-wrapper"}
               >
-                {#each example.answerTiles as tile (tile.id)}
-                  <Item
-                    className="sentence-tile-wrapper"
-                    metadata={{ itemId: tile.id }}
-                  >
-                    <button type="button" class="sentence-tile">{tile.text}</button>
-                  </Item>
-                {/each}
+                {#snippet item(tile)}
+                  <button type="button" class="sentence-tile">{tile.text}</button>
+                {/snippet}
               </Container>
 
               <Container
@@ -497,18 +497,16 @@
                 }}
                 locked={true}
                 metadata={{ zone: "bank", exampleId: example.id }}
+                items={example.bankTiles}
+                getId={(tile) => tile.id}
+                getClassName={() => "sentence-tile-wrapper"}
               >
-                {#each example.bankTiles as tile (tile.id)}
-                  <Item
-                    className="sentence-tile-wrapper"
-                    metadata={{ itemId: tile.id }}
-                  >
-                    <button type="button" class="sentence-tile muted">{tile.text}</button>
-                  </Item>
-                {/each}
+                {#snippet item(tile)}
+                  <button type="button" class="sentence-tile muted">{tile.text}</button>
+                {/snippet}
               </Container>
             </Container>
-          {/each}
+          {/snippet}
         </Container>
       </Engine>
     </section>
