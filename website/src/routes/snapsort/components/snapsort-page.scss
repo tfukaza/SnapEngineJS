@@ -2,141 +2,6 @@
   @import url("https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Playfair+Display:wght@600;700&display=swap");
   @import url("https://fonts.googleapis.com/css2?family=VT323&display=swap");
 
-  .debug-layout-toolbar {
-    position: fixed;
-    top: var(--size-16);
-    right: var(--size-16);
-    z-index: 2147483000;
-    display: flex;
-    align-items: center;
-    flex-wrap: wrap;
-    justify-content: flex-end;
-    gap: var(--size-8);
-    max-width: calc(100vw - var(--size-32));
-    padding: 0.38rem;
-    border: 1px solid rgb(31 41 55 / 14%);
-    border-radius: 999px;
-    background: rgb(255 255 255 / 88%);
-    box-shadow: 0 10px 28px rgb(15 23 42 / 12%);
-    backdrop-filter: blur(14px);
-  }
-
-  .debug-layout-toolbar button {
-    display: inline-flex;
-    align-items: center;
-    gap: 0.48rem;
-    min-height: 2rem;
-    padding: 0.28rem 0.62rem 0.28rem 0.34rem;
-    border: 0;
-    border-radius: 999px;
-    background: transparent;
-    color: #111827;
-    font-family: "Geist Mono", monospace;
-    font-size: 0.74rem;
-    font-weight: 700;
-    line-height: 1;
-    white-space: nowrap;
-    cursor: pointer;
-  }
-
-  .debug-layout-toolbar button:hover,
-  .debug-layout-toolbar button:focus-visible {
-    background: rgb(15 23 42 / 7%);
-    outline: 0;
-  }
-
-  .debug-layout-toolbar button.enabled {
-    color: #0f172a;
-  }
-
-  .debug-layout-switch {
-    position: relative;
-    display: inline-flex;
-    flex: 0 0 auto;
-    width: 2rem;
-    height: 1.12rem;
-    border: 1px solid rgb(15 23 42 / 24%);
-    border-radius: 999px;
-    background: #e5e7eb;
-    box-sizing: border-box;
-  }
-
-  .debug-layout-switch span {
-    position: absolute;
-    top: 0.13rem;
-    left: 0.13rem;
-    width: 0.74rem;
-    height: 0.74rem;
-    border-radius: 50%;
-    background: #ffffff;
-    box-shadow: 0 1px 3px rgb(15 23 42 / 22%);
-    transition: transform 120ms ease, background 120ms ease;
-  }
-
-  .debug-layout-toolbar button.enabled .debug-layout-switch {
-    border-color: rgb(14 116 144 / 58%);
-    background: #0891b2;
-  }
-
-  .debug-layout-toolbar button.enabled .debug-layout-switch span {
-    transform: translateX(0.88rem);
-  }
-
-  .debug-layout-legend {
-    display: inline-flex;
-    align-items: center;
-    flex-wrap: wrap;
-    gap: 0.5rem;
-    padding: 0 0.58rem 0 0.1rem;
-    color: #334155;
-    font-family: "Geist Mono", monospace;
-    font-size: 0.68rem;
-    font-weight: 700;
-    line-height: 1;
-  }
-
-  .debug-layout-legend span {
-    display: inline-flex;
-    align-items: center;
-    gap: 0.24rem;
-    white-space: nowrap;
-  }
-
-  .debug-layout-legend i {
-    display: block;
-    width: 0.72rem;
-    height: 0.72rem;
-    border: 2px solid currentColor;
-    box-sizing: border-box;
-  }
-
-  .debug-layout-legend .snapshot {
-    color: #0284c7;
-  }
-
-  .debug-layout-legend .content {
-    color: #16a34a;
-    border-style: dotted;
-  }
-
-  .debug-layout-legend .live {
-    color: #f97316;
-    border-style: dashed;
-  }
-
-  .debug-layout-legend .candidate {
-    color: #eab308;
-    border-width: 2.5px;
-  }
-
-  .debug-layout-legend .distance {
-    width: 1rem;
-    height: 0;
-    color: #eab308;
-    border-width: 0;
-    border-top: 2px solid currentColor;
-  }
-
   .debug-layout-overlay {
     position: fixed;
     inset: 0;
@@ -191,7 +56,9 @@
 
   #landing,
   .core-showcase {
-    width: min(90%, 1200px);
+    --page-gutter: clamp(var(--size-16), 5vw, var(--size-64));
+
+    width: min(1200px, calc(100% - (var(--page-gutter) * 2)));
   }
 
   #landing {
@@ -566,6 +433,7 @@
     grid-template-columns: repeat(12, minmax(0, 1fr));
     align-items: stretch;
     gap: var(--size-24);
+    width: 100%;
     margin-top: var(--size-48);
   }
 
@@ -2476,6 +2344,8 @@
 
     .core-demo-grid {
       grid-template-columns: minmax(0, 1fr);
+      padding-inline: var(--size-16);
+      box-sizing: border-box;
     }
 
     .feature-card {
@@ -2484,8 +2354,8 @@
     }
 
     .customizable-demo {
-      height: 260px;
-      min-height: 260px;
+      height: 480px;
+      min-height: 480px;
       /* Decorative preview only on mobile: the drag-and-drop demos inside
          aren't usable at this size, so pointer input is disabled while the
          scroll-driven rail/theme animations (transform-based) keep playing. */
@@ -2498,9 +2368,9 @@
          whole (now-wider-than-the-phone) row down with a transform so it
          still fits — the row gets smaller, the design inside it doesn't
          get cramped. */
-      --mobile-demo-scale: 0.52;
+      --mobile-demo-scale: 0.62;
       width: max-content;
-      height: 500px;
+      height: 760px;
       transform: scale(var(--mobile-demo-scale));
       transform-origin: top left;
     }
@@ -2510,11 +2380,7 @@
          these fixed-width columns, so the rail must size to match rather
          than resolving its calc(%) against an undefined parent size. */
       width: max-content;
-      /* Tilt all 4 columns together as a single plane instead of rotating
-         each column individually. The scroll-driven slide (translateX) and
-         the tilt live on the same element, so both are combined into one
-         transform. */
-      transform: translateY(40px) translateX(calc(var(--customizable-progress, 0) * -25%)) rotate(30deg);
+      transform: translateX(calc(var(--customizable-progress, 0) * -68%));
     }
 
     .customizable-surface {

@@ -2,8 +2,8 @@
   import type { Engine as SnapEngine } from "@snap-engine/core";
   import CoreShowcase from "./components/CoreShowcase.svelte";
   import DebugLayoutOverlay from "./components/DebugLayoutOverlay.svelte";
-  import DebugLayoutToolbar from "./components/DebugLayoutToolbar.svelte";
   import SnapSortHero from "./components/SnapSortHero.svelte";
+  import { debugLayoutFooterControl } from "$lib/stores/debugLayoutFooter";
   import {
     collectDebugRects,
     type DebugOverlayRect,
@@ -52,9 +52,16 @@
   function toggleDebugLayout() {
     debugLayout = !debugLayout;
   }
+
+  $effect(() => {
+    debugLayoutFooterControl.set({ debugLayout, onToggle: toggleDebugLayout });
+
+    return () => {
+      debugLayoutFooterControl.set(null);
+    };
+  });
 </script>
 
-<DebugLayoutToolbar {debugLayout} onToggle={toggleDebugLayout} />
 <DebugLayoutOverlay {debugLayout} rects={debugRects} />
 <SnapSortHero {debugLayout} bind:engine={heroEngine} />
 <CoreShowcase {debugLayout} bind:engine={examplesEngine} />

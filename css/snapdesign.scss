@@ -197,7 +197,9 @@ article {
 }
 
 section {
-  width: clamp(100px, 90%, 1200px);
+  --page-gutter: clamp(var(--size-16), 5vw, var(--size-64));
+
+  width: min(1200px, calc(100% - (var(--page-gutter) * 2)));
   margin: 0 auto;
   box-sizing: border-box;
 
