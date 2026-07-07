@@ -747,27 +747,29 @@
           </p>
         </div>
         <div class="project-list">
-          <Container config={{ direction: "column", groupID: "project-list" }}>
-            {#each todoItems as todo (todo.id)}
-              <Item>
-                <div class="project-card" class:checked={todo.checked}>
-                  <Handle className="project-drag-handle">
-                    <i class="material-symbols-rounded" aria-hidden="true">drag_indicator</i>
-                  </Handle>
-                  <label>
-                    <input type="checkbox" bind:checked={todo.checked} />
-                    <span></span>
-                  </label>
-                  <span class="project-text">{todo.text}</span>
-                  <div class="project-meta" aria-label="Task metadata">
-                    <span class="project-meta-item">
-                      <i class="material-symbols-rounded" aria-hidden="true">schedule</i>
-                      {todo.due}
-                    </span>
-                  </div>
+          <Container
+            config={{ direction: "column", groupID: "project-list" }}
+            items={todoItems}
+            getId={(todo) => todo.id}
+          >
+            {#snippet item(todo)}
+              <div class="project-card" class:checked={todo.checked}>
+                <Handle className="project-drag-handle">
+                  <i class="material-symbols-rounded" aria-hidden="true">drag_indicator</i>
+                </Handle>
+                <label>
+                  <input type="checkbox" bind:checked={todo.checked} />
+                  <span></span>
+                </label>
+                <span class="project-text">{todo.text}</span>
+                <div class="project-meta" aria-label="Task metadata">
+                  <span class="project-meta-item">
+                    <i class="material-symbols-rounded" aria-hidden="true">schedule</i>
+                    {todo.due}
+                  </span>
                 </div>
-              </Item>
-            {/each}
+              </div>
+            {/snippet}
           </Container>
         </div>
       </div>
@@ -1292,9 +1294,10 @@
             <Container
               className="editor-field-list"
               config={{ direction: "column", groupID: "editor-fields" }}
+              items={editorFields}
+              getId={(field) => field.id}
             >
-              {#each editorFields as field (field.id)}
-                <Item>
+              {#snippet item(field)}
                   <div class="editor-field">
                     <Handle className="editor-field-handle">
                       <i class="material-symbols-rounded editor-field-grip" aria-hidden="true">drag_indicator</i>
@@ -1331,9 +1334,11 @@
                             }}
                             locked={true}
                             metadata={{ fieldId: field.id }}
+                            items={field.options ?? []}
+                            getId={(option) => option.id}
+                            getClassName={() => "editor-option-item"}
                           >
-                            {#each field.options ?? [] as option (option.id)}
-                              <Item className="editor-option-item" metadata={{ itemId: option.id }}>
+                            {#snippet item(option)}
                                 <div class="editor-option-row">
                                   <Handle className="editor-option-handle">
                                     <i class="material-symbols-rounded editor-option-grip" aria-hidden="true">drag_indicator</i>
@@ -1366,8 +1371,7 @@
                                     <i class="material-symbols-rounded" aria-hidden="true">delete</i>
                                   </button>
                                 </div>
-                              </Item>
-                            {/each}
+                            {/snippet}
                           </Container>
                         </SnapSortContextBoundary>
                         <button
@@ -1399,9 +1403,11 @@
                             }}
                             locked={true}
                             metadata={{ fieldId: field.id }}
+                            items={field.options ?? []}
+                            getId={(option) => option.id}
+                            getClassName={() => "editor-option-item"}
                           >
-                            {#each field.options ?? [] as option (option.id)}
-                              <Item className="editor-option-item" metadata={{ itemId: option.id }}>
+                            {#snippet item(option)}
                                 <div class="editor-option-row">
                                   <Handle className="editor-option-handle">
                                     <i class="material-symbols-rounded editor-option-grip" aria-hidden="true">drag_indicator</i>
@@ -1434,8 +1440,7 @@
                                     <i class="material-symbols-rounded" aria-hidden="true">delete</i>
                                   </button>
                                 </div>
-                              </Item>
-                            {/each}
+                            {/snippet}
                           </Container>
                         </SnapSortContextBoundary>
                         <button
@@ -1467,9 +1472,11 @@
                             }}
                             locked={true}
                             metadata={{ fieldId: field.id }}
+                            items={field.options ?? []}
+                            getId={(option) => option.id}
+                            getClassName={() => "editor-option-item"}
                           >
-                            {#each field.options ?? [] as option (option.id)}
-                              <Item className="editor-option-item" metadata={{ itemId: option.id }}>
+                            {#snippet item(option)}
                                 <div class="editor-option-row">
                                   <Handle className="editor-option-handle">
                                     <i class="material-symbols-rounded editor-option-grip" aria-hidden="true">drag_indicator</i>
@@ -1499,8 +1506,7 @@
                                     <i class="material-symbols-rounded" aria-hidden="true">delete</i>
                                   </button>
                                 </div>
-                              </Item>
-                            {/each}
+                            {/snippet}
                           </Container>
                         </SnapSortContextBoundary>
                         <button
@@ -1526,8 +1532,7 @@
                       {/if}
                     </div>
                   </div>
-                </Item>
-              {/each}
+              {/snippet}
             </Container>
           </div>
         </div>
