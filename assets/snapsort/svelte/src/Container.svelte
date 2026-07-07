@@ -71,6 +71,15 @@
      * engine list — ghost splicing is unaffected either way. Takes
      * precedence over `item`/`getClassName`/`getSelected`/`onItemClick`/
      * `getMetadata`, which only apply to the adapter-wrapped `item` tier.
+     *
+     * IMPORTANT: `entry` bypasses the automatic `metadata.itemId = getId(entry)`
+     * that the `item` tier's wrapping `<Item>` gets for free. Every
+     * `<Item>`/`<Container>` rendered inside `entry` must set its own
+     * `metadata={{ itemId: <same value getId(entry) returns> }}` — otherwise
+     * the engine falls back to its own auto-generated id for that entry's
+     * drag identity, which won't match `getId`'s id, and flow-mode ghost
+     * splicing will silently misplace the ghost by one slot whenever this
+     * entry sits next to the dragged item's boundary.
      */
     entry?: Snippet<[T]>;
     /**
