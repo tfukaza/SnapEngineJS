@@ -284,7 +284,8 @@
     margin: 0 auto;
   }
 
-  .core-showcase > #snap-canvas {
+  .core-showcase > #snap-canvas,
+  .core-showcase > .core-demo-grid {
     grid-column: 1 / -1;
     width: 100%;
   }
@@ -342,6 +343,31 @@
   .core-demo-surface::before,
   .core-demo-surface::after {
     pointer-events: none;
+  }
+
+  .core-demo-skeleton {
+    min-height: clamp(13rem, 22vw, 18rem);
+    background:
+      linear-gradient(90deg, rgb(31 30 41 / 8%) 20%, transparent 20% 28%, rgb(31 30 41 / 6%) 28% 70%, transparent 70%),
+      var(--color-background);
+  }
+
+  .core-demo-skeleton .basic-list {
+    width: 100%;
+  }
+
+  .core-demo-skeleton .sideways-list {
+    display: flex;
+    flex: 0 0 auto;
+    flex-direction: row;
+    flex-wrap: nowrap;
+    width: max-content;
+    min-height: auto;
+    margin: auto;
+  }
+
+  .static-customizable-preview {
+    overflow: hidden;
   }
 
   .sideways-demo-surface {

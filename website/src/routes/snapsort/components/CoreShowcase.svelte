@@ -1,4 +1,5 @@
 <script lang="ts">
+  import ClientDemoFrame from "$lib/components/ClientDemoFrame.svelte";
   import { Engine } from "@snap-engine/asset-base-svelte";
   import type { Engine as SnapEngine } from "@snap-engine/core";
   import { Container, Handle, Item } from "@snap-engine/snapsort-svelte";
@@ -39,6 +40,14 @@
     "and drop",
     "them in",
     "place",
+  ];
+  const skeletonDemoTitles = [
+    "Sortable list",
+    "Sideways list",
+    "Nested list",
+    "Insert mode",
+    "Multiple rows",
+    "Multiple containers",
   ];
   const logoSliceCount = 6;
   const logoSliceWidth = 30;
@@ -192,7 +201,184 @@
     </p>
   </div>
 
-  <Engine id="snapsort-core-demos" bind:engine debug={debugLayout}>
+  <ClientDemoFrame>
+    {#snippet fallback()}
+      <div class="core-demo-grid core-demo-skeleton-grid" aria-hidden="true">
+        {#each skeletonDemoTitles as title, index}
+          <article class="core-demo-card">
+            <h3>{title}</h3>
+            <div class="core-demo-surface card core-demo-skeleton">
+              {#if index === 0}
+                <div class="basic-list sortable-list">
+                  {#each sortableItems as label}
+                    <div class="basic-row card-content">
+                      <span>{label}</span>
+                    </div>
+                  {/each}
+                </div>
+              {:else if index === 1}
+                <div class="sideways-list solved">
+                  {#each sidewaysItems as item}
+                    <div class="snapsort-item">
+                      <div
+                        class="logo-slice"
+                        data-slice={item.slice}
+                        style={`--slice-x: ${item.x};`}
+                      ></div>
+                    </div>
+                  {/each}
+                </div>
+              {:else if index === 2 || index === 3}
+                <div class="basic-list bounded-demo-list">
+                  {#each (index === 2 ? nestedItems : insertItems) as label}
+                    <div class="basic-row handle-row">
+                      <span>{label}</span>
+                    </div>
+                  {/each}
+                  <div class="nested-list bounded-demo-list card shallow">
+                    {#each (index === 2 ? nestedChildren : insertNestedItems) as label}
+                      <div class="basic-row nested-row handle-row">
+                        <span>{label}</span>
+                      </div>
+                    {/each}
+                  </div>
+                </div>
+              {:else if index === 4}
+                <div class="multi-row-list">
+                  {#each multiRowItems as item}
+                    <div class="basic-token">
+                      <span>{item.label}</span>
+                    </div>
+                  {/each}
+                </div>
+              {:else if index === 5}
+                <div class="multi-container-board">
+                  {#each multiContainers as column}
+                    <div class="basic-column card">
+                      <h4>{column.title}</h4>
+                      {#each column.items as item}
+                        <div class="basic-row compact-row multi-container-row">
+                          <span>{item.label}</span>
+                        </div>
+                      {/each}
+                    </div>
+                  {/each}
+                </div>
+              {/if}
+            </div>
+          </article>
+        {/each}
+        <section class="feature-card-section static-customizable-section">
+          <div class="feature-card-grid">
+            <div class="customizable-scroll-scene">
+              <article class="customizable-feature-card" style="--customizable-progress: 0;">
+                <div class="feature-card-copy">
+                  <div class="feature-card-copy-text">
+                    <h2>Customizable</h2>
+                    <p class="large">
+                      SnapSort components are styleless by default. Use our default theme or
+                      apply your own, including Tailwind. Configuration parameters allow
+                      adjustment of animation and drag behavior.
+                    </p>
+                  </div>
+                </div>
+
+                <div class="customizable-demo shallow static-customizable-preview" style="--customizable-progress: 0;">
+                  <div class="customizable-demo-scale">
+                    <div class="customizable-theme-rail">
+                      <div class="customizable-surface" data-theme="default">
+                        <div class="customizable-motion-frame" style="--theme-offset: 0px;">
+                          <div class="customizable-mockup-shell">
+                            <div class="customizable-mockup-title">Default</div>
+                            <div class="customizable-mockup-card shallow">
+                              <div class="customizable-mini-list">
+                                {#each sortableItems.slice(0, 4) as label}
+                                  <div class="snapsort-item">
+                                    <div class="customizable-mini-row">
+                                      <span class="customizable-mini-handle" aria-hidden="true">
+                                        <span class="customizable-mini-grip"><i></i><i></i><i></i></span>
+                                      </span>
+                                      <span class="customizable-mini-row-main">
+                                        <span class="customizable-mini-row-text">{label}</span>
+                                      </span>
+                                    </div>
+                                  </div>
+                                {/each}
+                              </div>
+                            </div>
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              </article>
+            </div>
+
+            <section class="closing-grid" aria-label="Get started with SnapSort">
+              <div class="closing-card get-started-card">
+                <div class="closing-copy">
+                  <h3>Get started</h3>
+                  <p>
+                    Install SnapSort, wrap your markup in a container, and ship drag
+                    and drop in minutes — with the framework you already use.
+                  </p>
+                </div>
+                <ul class="closing-frameworks" aria-label="Supported frameworks">
+                  <li><img src="/icon/javascript.svg" alt="JavaScript" /></li>
+                  <li><img src="/icon/svelte.svg" alt="Svelte" /></li>
+                  <li><img src="/icon/react.svg" alt="React" /></li>
+                </ul>
+                <a class="button primary closing-button" href="/docs/snapsort/introduction">
+                  Read the docs
+                </a>
+              </div>
+
+              <div class="closing-card gallery-card">
+                <div class="gallery-kanban" aria-hidden="true">
+                  <div class="gallery-kanban-scale">
+                    <div class="gk-board">
+                      {#each multiContainers as column}
+                        <div class="gk-column">
+                          <div class="gk-column-head">
+                            <h4>{column.title}</h4>
+                            <span class="gk-count">{column.items.length}</span>
+                          </div>
+                          {#each column.items as item}
+                            <div class="gk-card">
+                              <div class="gk-header">
+                                <span class="gk-title">{item.label}</span>
+                                <span class="gk-tag">Demo</span>
+                              </div>
+                              <p class="gk-desc">Static preview content.</p>
+                              <div class="gk-footer">
+                                <span class="gk-avatar" style="--avatar-color: #00a6a6;">S</span>
+                                <span class="gk-due">
+                                  <i class="material-symbols-rounded">event</i>Today
+                                </span>
+                              </div>
+                            </div>
+                          {/each}
+                        </div>
+                      {/each}
+                    </div>
+                  </div>
+                </div>
+                <div class="closing-copy">
+                  <h3>Explore the gallery</h3>
+                  <p>
+                    File trees, form builders, sentence puzzles, and more — complete
+                    interactive demos built with SnapSort.
+                  </p>
+                </div>
+                <a class="button closing-button" href="/snapsort/gallery">Browse the gallery</a>
+              </div>
+            </section>
+          </div>
+        </section>
+      </div>
+    {/snippet}
+    <Engine id="snapsort-core-demos" bind:engine debug={debugLayout}>
     <div class="core-demo-grid">
       <article class="core-demo-card">
         <h3>Sortable list</h3>
@@ -427,5 +613,6 @@
       <CustomizableShowcase />
 
     </div>
-  </Engine>
+    </Engine>
+  </ClientDemoFrame>
 </section>

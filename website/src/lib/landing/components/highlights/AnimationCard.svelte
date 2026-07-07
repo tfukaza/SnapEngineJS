@@ -1,5 +1,6 @@
 <script lang="ts">
   import { onDestroy } from "svelte";
+  import ClientDemoFrame from "$lib/components/ClientDemoFrame.svelte";
   import { Engine } from "@snap-engine/asset-base-svelte";
   import { ElementObject } from "@snapline/object";
   import { AnimationObject } from "@snapline/animation";
@@ -420,9 +421,19 @@
 </script>
 
 <article class="animation-card theme-secondary-4">
-  <div class="animation-card-layout">
+    <div class="animation-card-layout">
     <div class="animation-card-body card">
-      <Engine id="highlight-animation" bind:engine bind:this={canvasComponent} debug={debugState.enabled}>
+      <ClientDemoFrame>
+        {#snippet fallback()}
+          <div class="animation-demo animation-skeleton" aria-hidden="true">
+            <div class="timeline grid-layout">
+              {#each Array(16) as _, index}
+                <span class={index % 4 === 0 ? "animation-skeleton-wide" : ""}></span>
+              {/each}
+            </div>
+          </div>
+        {/snippet}
+        <Engine id="highlight-animation" bind:engine bind:this={canvasComponent} debug={debugState.enabled}>
         <div class="animation-demo">
           <div class="timeline grid-layout">
             <div class="timeline-content">
@@ -499,7 +510,8 @@
             </button> -->
           </div>
         </div>
-      </Engine>
+        </Engine>
+      </ClientDemoFrame>
     </div>
 
     <div class="animation-card-heading">
@@ -674,6 +686,27 @@
 
   .timeline.grid-layout {
     display: block;
+  }
+
+  .animation-skeleton {
+    min-height: 24rem;
+  }
+
+  .animation-skeleton .timeline {
+    display: grid;
+    grid-template-columns: 6rem minmax(0, 1fr);
+    gap: 0.55rem 0.75rem;
+  }
+
+  .animation-skeleton span {
+    display: block;
+    height: 0.8rem;
+    border-radius: 999px;
+    background: rgb(31 30 41 / 8%);
+  }
+
+  .animation-skeleton-wide {
+    height: 1.2rem !important;
   }
 
   .timeline-content {

@@ -1,5 +1,6 @@
 <script lang="ts">
   import { onMount } from "svelte";
+  import ClientDemoFrame from "$lib/components/ClientDemoFrame.svelte";
   import { Engine } from "@snap-engine/asset-base-svelte";
   import { Container } from "@snap-engine/snapsort-svelte";
   import * as Tone from "tone";
@@ -267,7 +268,28 @@
       </div> -->
     </div>
     <div class="hero-card card">
-      <Engine id="hero-synth-pads">
+      <ClientDemoFrame>
+        {#snippet fallback()}
+          <div class="hero-synth-panel hero-synth-skeleton" aria-hidden="true">
+            <div class="hero-synth-top">
+              <div class="hero-oled display"></div>
+              <div class="hero-transport-grid">
+                {#each Array(4) as _}
+                  <div class="hero-transport-button"></div>
+                {/each}
+              </div>
+              <div class="hero-skeleton-joystick"></div>
+            </div>
+            <div class="hero-button-bed slot">
+              <div class="hero-skeleton-pad-grid">
+                {#each padIndices as index}
+                  <div class={`hero-synth-button ${padColorClasses[index]}`}></div>
+                {/each}
+              </div>
+            </div>
+          </div>
+        {/snippet}
+        <Engine id="hero-synth-pads">
         <div class="hero-synth-panel">
           <div class="hero-synth-top">
             <div class="hero-oled display">
@@ -320,7 +342,8 @@
             </div>
           </div>
         </div>
-      </Engine>
+        </Engine>
+      </ClientDemoFrame>
     </div>
   </div>
 </section>
@@ -397,6 +420,31 @@
     justify-self: end;
     box-sizing: border-box;
     padding: var(--size-24);
+  }
+
+  .hero-synth-skeleton {
+    min-height: 100%;
+    pointer-events: none;
+  }
+
+  .hero-skeleton-joystick {
+    width: var(--hero-control-size);
+    aspect-ratio: 1 / 1;
+    border-radius: 50%;
+    background: #e7ebef;
+    box-shadow: inset 0 0 0 1px rgb(31 30 41 / 8%);
+  }
+
+  .hero-skeleton-pad-grid {
+    display: grid;
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+    gap: var(--hero-pad-gap);
+    width: 100%;
+    height: 100%;
+  }
+
+  .hero-skeleton-pad-grid .hero-synth-button {
+    aspect-ratio: auto;
   }
 
   .hero-card :global(#snap-canvas) {

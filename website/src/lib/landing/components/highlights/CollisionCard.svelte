@@ -1,5 +1,6 @@
 <script lang="ts">
   import type { Action } from "svelte/action";
+  import ClientDemoFrame from "$lib/components/ClientDemoFrame.svelte";
   import { Engine } from "@snap-engine/asset-base-svelte";
   import { CircleCollider, RectCollider } from "@snap-engine/core/collision";
   import type { Collider } from "@snap-engine/core/collision";
@@ -622,7 +623,26 @@
 <article class="collision-card theme-secondary-1">
   <h3 class="sr-only">Collision Detection</h3>
 
-  <Engine id="collision-card-canvas" bind:engine debug={debugState.enabled}>
+  <ClientDemoFrame>
+    {#snippet fallback()}
+      <div class="collision-stage collision-skeleton" aria-hidden="true">
+        <div class="collision-content">
+          <div
+            class="dot-title"
+            style={`--dot-columns: ${gridColumns}; --dot-rows: ${gridRows};`}
+          >
+            {#each dots.slice(0, 120) as dot (dot.key)}
+              <div
+                class="dot-cell"
+                style={`grid-column: ${dot.x + 1}; grid-row: ${dot.y + 1};`}
+              ></div>
+            {/each}
+          </div>
+          <p class="collision-description">{DESCRIPTION_TEXT}</p>
+        </div>
+      </div>
+    {/snippet}
+    <Engine id="collision-card-canvas" bind:engine debug={debugState.enabled}>
     <div class="collision-stage" use:stageRef>
       <div class="collision-content">
         <div
@@ -680,7 +700,8 @@
         </div>
       {/if}
     </div>
-  </Engine>
+    </Engine>
+  </ClientDemoFrame>
 </article>
 
 <style lang="scss">
@@ -723,6 +744,10 @@
     height: 100%;
     min-height: inherit;
     overflow: hidden;
+  }
+
+  .collision-skeleton .dot-cell {
+    opacity: 0.16;
   }
 
   .collision-content {

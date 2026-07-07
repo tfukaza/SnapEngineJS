@@ -1,4 +1,5 @@
 <script lang="ts">
+  import ClientDemoFrame from "$lib/components/ClientDemoFrame.svelte";
   import { Engine } from "@snap-engine/asset-base-svelte";
   import type { Engine as SnapEngine } from "@snap-engine/core";
   import { Container, Handle, Item } from "@snap-engine/snapsort-svelte";
@@ -32,7 +33,40 @@
 </script>
 
 <section id="landing">
-  <Engine id="snapsort-canvas" bind:engine debug={debugLayout}>
+  <ClientDemoFrame>
+    {#snippet fallback()}
+      <div class="hero-section" aria-hidden="true">
+        <div class="hero-frame">
+          <div class="hero-slot">
+            <div class="hero-stack snapsort-hero-skeleton">
+              <div class="hero-stack-item hero-title-item">
+                <div class="hero-row card">
+                  <div class="title-section" aria-label="SnapSort">
+                    <span class="title-glyph title-text pixel-font">SnapSort</span>
+                  </div>
+                </div>
+              </div>
+              <div class="hero-stack-item hero-copy-item">
+                <div class="hero-row card">
+                  <p class="hero-statement large">
+                    Component library for drag and drop UI. Open source and framework agnostic.
+                  </p>
+                </div>
+              </div>
+              <div class="hero-stack-item hero-cta-item">
+                <div class="hero-row hero-row-final card">
+                  <div class="hero-cta">
+                    <button class="primary" type="button" tabindex="-1">Get Started</button>
+                    <button type="button" tabindex="-1">Gallery</button>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    {/snippet}
+    <Engine id="snapsort-canvas" bind:engine debug={debugLayout}>
     <div class="hero-section">
       <div class="hero-frame">
         <div class="hero-slot slot">
@@ -115,6 +149,7 @@
         </div>
       </div>
     </div>
-  </Engine>
+    </Engine>
+  </ClientDemoFrame>
 
 </section>
