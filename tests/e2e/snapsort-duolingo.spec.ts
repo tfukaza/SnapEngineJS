@@ -10,6 +10,9 @@ type ConsoleEntry = {
 type DragSample = {
   step: number;
   spacerCount: number;
+  defaultSpacerCount: number;
+  frameworkGhostCount: number;
+  adapterOwnedGhostCount: number;
   answerChildOrder: string[];
   bankChildOrder: string[];
   draggedParentClass: string | null;
@@ -62,13 +65,35 @@ async function collectSample(page: Page, step: number): Promise<DragSample> {
     const childOrder = (selector: string) =>
       [...(document.querySelector(selector)?.children ?? [])].map((node) => {
         if (node.id === "spacer") return "#spacer";
+        if (node.classList.contains("tile-ghost")) return ".tile-ghost";
         return node.textContent?.trim().replace(/\s+/g, " ") ?? "";
       });
     const active = document.querySelector(".snapsort-item[style*='absolute']");
-    const spacer = document.querySelector("#spacer");
+    const spacer = document.querySelector("#spacer, .tile-ghost");
+    const defaultSpacerCount = document.querySelectorAll("#spacer").length;
+    const frameworkGhostCount = document.querySelectorAll(".tile-ghost").length;
+    // `id="spacer"` is now a universal ghost-entry marker (both core-created
+    // and adapter-rendered ghosts carry it, post unified-entries redesign) --
+    // `data-snapsort-ghost-entry` is the authoritative "the Svelte adapter
+    // itself rendered this, not a raw core-inserted default" signal.
+    const adapterOwnedGhostCount = document.querySelectorAll(
+      "[data-snapsort-ghost-entry]",
+    ).length;
+    // `id="spacer"` is the universal ghost-PLACEMENT marker post
+    // unified-entries redesign (every ghost carries it, default or
+    // adapter-rendered) -- `.tile-ghost` is now a separate, nested
+    // CONTENT-level marker (the adapter's ghost entry is a wrapper div with
+    // `id="spacer"` containing the consumer's `.tile-ghost` button), not an
+    // alternate placement marker as it was pre-redesign. So placement count
+    // is `defaultSpacerCount` alone; summing it with the nested content
+    // marker would double-count one ghost as two.
+    const spacerCount = defaultSpacerCount;
     return {
       step,
-      spacerCount: document.querySelectorAll("#spacer").length,
+      spacerCount,
+      defaultSpacerCount,
+      frameworkGhostCount,
+      adapterOwnedGhostCount,
       answerChildOrder: childOrder(".answer-box"),
       bankChildOrder: childOrder(".tile-bank"),
       draggedParentClass: active?.parentElement?.className ?? null,
@@ -216,7 +241,7 @@ test.describe("SnapSort Kiokun sentence builder demo", () => {
     );
   });
 
-  test("drags a tile from bank to answer and moves DOM ownership with the spacer", async ({
+  test("drags a tile from bank to answer with a framework-owned ghost", async ({
     page,
   }, testInfo) => {
     const consoleEntries: ConsoleEntry[] = [];
@@ -238,10 +263,11 @@ test.describe("SnapSort Kiokun sentence builder demo", () => {
       samples.some(
         (sample) =>
           sample.spacerCount === 1 &&
-          sample.spacerParentClass?.includes("answer-box") &&
-          sample.draggedParentClass?.includes("answer-box"),
+          sample.frameworkGhostCount === 1 &&
+          sample.adapterOwnedGhostCount === 1 &&
+          sample.spacerParentClass?.includes("answer-box"),
       ),
-      "dragged element should move under the answer container when the spacer does",
+      "framework-owned ghost should render under the answer container",
     ).toBe(true);
 
     await expectCleanConsole(
@@ -287,7 +313,7 @@ test.describe("SnapSort Kiokun sentence builder demo", () => {
     );
   });
 
-  test("drags a selected tile back to the bank without losing the active DOM node", async ({
+  test("drags a selected tile back to the bank with a framework-owned ghost", async ({
     page,
   }, testInfo) => {
     const consoleEntries: ConsoleEntry[] = [];
@@ -312,10 +338,11 @@ test.describe("SnapSort Kiokun sentence builder demo", () => {
       samples.some(
         (sample) =>
           sample.spacerCount === 1 &&
-          sample.spacerParentClass?.includes("tile-bank") &&
-          sample.draggedParentClass?.includes("tile-bank"),
+          sample.frameworkGhostCount === 1 &&
+          sample.adapterOwnedGhostCount === 1 &&
+          sample.spacerParentClass?.includes("tile-bank"),
       ),
-      "dragged element should move back under the bank container",
+      "framework-owned ghost should render under the bank container",
     ).toBe(true);
 
     await expectCleanConsole(

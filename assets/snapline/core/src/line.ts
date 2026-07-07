@@ -7,6 +7,7 @@ class LineComponent extends ElementObject {
 
   start: ConnectorComponent;
   target: ConnectorComponent | null;
+  #renderCallbacks: Set<(line: LineComponent) => void>;
 
   constructor(engine: any, parent: BaseObject) {
     super(engine, parent);
@@ -16,8 +17,22 @@ class LineComponent extends ElementObject {
 
     this.start = parent as unknown as ConnectorComponent;
     this.target = null;
+    this.#renderCallbacks = new Set();
 
     this.transformMode = "direct";
+  }
+
+  onRender(callback: (line: LineComponent) => void): () => void {
+    this.#renderCallbacks.add(callback);
+    return () => {
+      this.#renderCallbacks.delete(callback);
+    };
+  }
+
+  requestRender() {
+    for (const callback of this.#renderCallbacks) {
+      callback(this);
+    }
   }
 
   setLineStartAtConnector() {
@@ -58,6 +73,11 @@ class LineComponent extends ElementObject {
     } else {
       this.setLineEndAtConnector();
     }
+  }
+
+  writeTransform() {
+    super.writeTransform();
+    this.requestRender();
   }
 }
 

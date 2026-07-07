@@ -3,11 +3,21 @@
   "version": "0.1.0",
   "repository": {
     "type": "git",
-    "url": "https://github.com/tfukaza/SnapEngineJS",
+    "url": "git+https://github.com/tfukaza/SnapEngineJS.git",
     "directory": "assets/snapsort/react"
   },
   "description": "React components for drag-and-drop system",
   "type": "module",
+  "main": "./src/index.ts",
+  "types": "./src/index.ts",
+  "exports": {
+    ".": "./src/index.ts",
+    "./Engine": "./src/Engine.tsx",
+    "./Container": "./src/Container.tsx",
+    "./Handle": "./src/Handle.tsx",
+    "./Item": "./src/Item.tsx",
+    "./useSnapSortAwaitMutation": "./src/useSnapSortAwaitMutation.ts"
+  },
   "keywords": [
     "drag-and-drop",
     "react",
@@ -17,9 +27,18 @@
   "author": "Tomoki Fukazawa",
   "license": "MIT",
   "dependencies": {
-  "@snap-engine/snapsort": "^0.1.0"
+    "@snap-engine/core": "^0.4.0",
+    "@snap-engine/snapsort": "^0.4.0"
+  },
+  "files": [
+    "src",
+    "README.md"
+  ],
+  "publishConfig": {
+    "access": "public"
   },
   "peerDependencies": {
-    "react": "^18.0.0"
+    "react": "^18.0.0",
+    "react-dom": "^18.0.0"
   }
 }

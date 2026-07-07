@@ -42,7 +42,18 @@ class RectSelectComponent extends ElementObject {
     };
     this.schedule(() => this.writeDom(), {
       stage: "WRITE_1",
-      queueId: "WRITE_1",
+      queueId: `${this.id}-dom`,
+    });
+  }
+
+  scheduleWrite() {
+    this.schedule(() => this.writeDom(), {
+      stage: "WRITE_1",
+      queueId: `${this.id}-dom`,
+    });
+    this.schedule(() => this.writeTransform(), {
+      stage: "WRITE_2",
+      queueId: `${this.id}-transform`,
     });
   }
 
@@ -54,7 +65,7 @@ class RectSelectComponent extends ElementObject {
     ) {
       return;
     }
-    for (let node of this.global.data.select) {
+    for (let node of [...this.global.data.select]) {
       node.setSelected(false);
     }
 
@@ -68,6 +79,7 @@ class RectSelectComponent extends ElementObject {
     };
     this._mouseDownX = prop.position.x;
     this._mouseDownY = prop.position.y;
+    this.scheduleWrite();
 
     this._selectHitBox.event.collider.onBeginContact = (
       _: Collider,
@@ -107,10 +119,7 @@ class RectSelectComponent extends ElementObject {
       this._selectHitBox.localTransform = { x: 0, y: 0 };
       this._selectHitBox.width = boxWidth;
       this._selectHitBox.height = boxHeight;
-      this.schedule(() => this.writeTransform(), {
-        stage: "WRITE_2",
-        queueId: `${this.id}-transform`,
-      });
+      this.scheduleWrite();
     }
   }
 
@@ -122,10 +131,7 @@ class RectSelectComponent extends ElementObject {
 
     this._selectHitBox.event.collider.onBeginContact = null;
     this._selectHitBox.event.collider.onEndContact = null;
-    this.schedule(() => this.writeTransform(), {
-      stage: "WRITE_2",
-      queueId: `${this.id}-transform`,
-    });
+    this.scheduleWrite();
   }
 
   onCollideNode(_hitBox: Collider, _node: Collider): void {}

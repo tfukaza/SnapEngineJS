@@ -3,6 +3,11 @@
 	"private": true,
 	"version": "0.1.0",
 	"type": "module",
+	"repository": {
+		"type": "git",
+		"url": "git+https://github.com/tfukaza/SnapEngineJS.git",
+		"directory": "website"
+	},
 	"scripts": {
 		"dev": "vite dev --host",
 		"build": "vite build",

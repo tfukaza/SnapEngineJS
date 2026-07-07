@@ -2,9 +2,9 @@
 
 Svelte components for SnapEngine drag-and-drop interactions.
 
-`Container` and `Item` are aliases for the Euclidean
-components. The explicit component pairs are available as Euclidean and
-Progressive variants.
+`Container` and `Item` are the only components — every container picks its
+drag behavior with a `mode` config field (`"euclidean"` default,
+`"progressive"`, or `"insertion"`). `Item` never needs a mode.
 
 ## Install
 
@@ -14,22 +14,18 @@ npm install @snap-engine/snapsort-svelte @snap-engine/snapsort
 
 ## Includes
 
-- `ContainerEuclidean`
-- `ItemEuclidean`
-- `ContainerProgressive`
-- `ItemProgressive`
 - `Container`
 - `Item`
+- `Handle`
 
 ## Usage
 
 ```svelte
 <script>
-  import {
-    Container,
-    Item,
-    ContainerProgressive,
-    ItemProgressive,
-  } from "@snap-engine/snapsort-svelte";
+  import { Container, Item, Handle } from "@snap-engine/snapsort-svelte";
 </script>
+
+<Container config={{ mode: "progressive", groupID: "sentence" }}>
+  <Item metadata={{ itemId: "word-1" }}>hello</Item>
+</Container>
 ```

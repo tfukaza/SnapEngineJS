@@ -1,5 +1,6 @@
 <script lang="ts">
   import { onDestroy, tick } from "svelte";
+  import ClientDemoFrame from "$lib/components/ClientDemoFrame.svelte";
   import { Engine } from "@snap-engine/asset-base-svelte";
   import { AnimationObject } from "@snapline/animation";
   import type { Engine as EngineType } from "@snapline/index";
@@ -294,7 +295,18 @@
           </span>
         </div>
 
-        <Engine id="dom-optimization-highlight" bind:engine debug={debugState.enabled}>
+        <ClientDemoFrame>
+          {#snippet fallback()}
+            <div class="operation-stack dom-optimization-skeleton" aria-hidden="true">
+              {#each baselineOperations as operation (operation.id)}
+                <div class={`operation-pill ${operation.type}`}>
+                  <span>{operation.meta}</span>
+                  <strong>{operation.label}</strong>
+                </div>
+              {/each}
+            </div>
+          {/snippet}
+          <Engine id="dom-optimization-highlight" bind:engine debug={debugState.enabled}>
           <div class:optimized={optimize} class="operation-stack" aria-hidden="true">
             {#each operations as operation (operation.id)}
               <div
@@ -306,7 +318,8 @@
               </div>
             {/each}
           </div>
-        </Engine>
+          </Engine>
+        </ClientDemoFrame>
       </div>
     </div>
   </div>
@@ -563,6 +576,10 @@
 
   .operation-stack.optimized {
     gap: var(--size-8);
+  }
+
+  .dom-optimization-skeleton {
+    opacity: 0.72;
   }
 
   .operation-pill {

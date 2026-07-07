@@ -4,7 +4,6 @@ import {
   ElementObject,
   BaseObject,
   ObjectTransform,
-  TransformView,
 } from "./object";
 import type { DomProperty } from "./object";
 import { GlobalManager } from "./global";
@@ -32,7 +31,6 @@ export {
   BaseObject,
   ElementObject,
   ObjectTransform,
-  TransformView,
   GlobalManager,
   Camera,
   InputControl,

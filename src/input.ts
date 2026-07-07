@@ -461,17 +461,34 @@ class InputControl {
     }
   }
 
-  #onPointerDown = (event: PointerEvent) => {
+  dispatchPointerDown(
+    object: ElementObject,
+    params?: { x?: number; y?: number; buttons?: number; pointerId?: number },
+  ) {
+    const event = new PointerEvent("pointerdown", {
+      clientX: params?.x ?? object.worldTransform.x,
+      clientY: params?.y ?? object.worldTransform.y,
+      buttons: params?.buttons ?? mouseButtonBitmap.LEFT,
+      pointerId: params?.pointerId,
+    });
+    this.#onPointerDown(event, object);
+  }
+
+  #onPointerDown = (
+    event: PointerEvent,
+    object: ElementObject | null = null,
+  ) => {
     if (!this.#isEventInsideContainer(event)) {
       return;
     }
 
-    const owner = this.#getTargetOwner(event);
+    const owner = object ?? this.#getTargetOwner(event);
     const position = this.#getCoordinates(event.clientX, event.clientY);
     const isWithinEngine = this.#isCoordinateWithinEngine(
       event.clientX,
       event.clientY,
     );
+    // TODO: Use persistentDeviceId if available
     this.#pointerDict[event.pointerId] = {
       id: event.pointerId,
       callerObjectId: owner?.id ?? null,
@@ -593,8 +610,16 @@ class InputControl {
 
     const gesture = this.#gestureDict[event.pointerId];
     if (gesture?.type === "drag") {
+      // Once a drag has actually started (dragStart was dispatched, so the
+      // gesture is in the "drag" state), releasing must always fire dragEnd —
+      // even if the pointer wandered back near its start point. Re-measuring
+      // the distance at release would misclassify an away-and-back gesture
+      // (e.g. dropping an item back in the same place) as a click and leave
+      // the drag session uncommitted. Only a gesture still "pending" at
+      // release (never crossed the start threshold) is a click.
+      const dragStarted = gesture.state === "drag";
       gesture.state = "release";
-      if (this.#isPastDragStartThreshold(pointer)) {
+      if (dragStarted || this.#isPastDragStartThreshold(pointer)) {
         this.#fireDragEnd(pointer, pointer.button);
       }
       delete this.#gestureDict[event.pointerId];

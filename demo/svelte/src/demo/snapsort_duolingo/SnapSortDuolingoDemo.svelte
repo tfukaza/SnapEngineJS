@@ -1,14 +1,12 @@
 <script lang="ts">
   import { tick } from "svelte";
   import { Engine } from "@snap-engine/asset-base-svelte";
-  import {
-    ContainerProgressive,
-    ItemProgressive,
-  } from "@snap-engine/snapsort-svelte";
+  import { Container } from "@snap-engine/snapsort-svelte";
   import type {
-    ContainerBase as SortContainer,
-    SnapSortDomInsertEvent,
-    SnapSortDomRemoveEvent,
+    Container as SortContainer,
+    GhostCreateEvent,
+    ItemMoveEvent,
+    ItemRemoveEvent,
   } from "@snap-engine/snapsort";
 
   type TileZone = "answer" | "bank";
@@ -75,22 +73,33 @@
     result = null;
   }
 
-  function handleSnapSortDomInsert(event: SnapSortDomInsertEvent) {
+  function handleSnapSortDomMove(event: ItemMoveEvent) {
     const itemId = event.itemMetadata.itemId;
     if (typeof itemId !== "string") return;
 
-    const targetZone = event.containerMetadata.zone;
+    const targetZone = event.to.containerMetadata.zone;
     if (targetZone !== "answer" && targetZone !== "bank") return;
 
-    updateTileZone(itemId, targetZone, event.index);
+    updateTileZone(itemId, targetZone, event.to.index);
   }
 
-  function handleSnapSortDomRemove(event: SnapSortDomRemoveEvent) {
+  function handleSnapSortDomRemove(event: ItemRemoveEvent) {
     const itemId = event.itemMetadata.itemId;
     if (typeof itemId !== "string") return;
 
     answerTiles = answerTiles.filter((tile) => tile.id !== itemId);
     bankTiles = bankTiles.filter((tile) => tile.id !== itemId);
+  }
+
+  function findTile(tileId: string | undefined) {
+    if (!tileId) return null;
+    return [...answerTiles, ...bankTiles].find((tile) => tile.id === tileId) ?? null;
+  }
+
+  /** Ghost snippet content for both zones — looks up the dragged tile's text via its itemId. */
+  function ghostTileText(event: GhostCreateEvent): string {
+    const itemId = event.originalMetadata.itemId;
+    return typeof itemId === "string" ? (findTile(itemId)?.text ?? "") : "";
   }
 
   function moveTileToZone(tile: TileData, targetZone: TileZone) {
@@ -141,6 +150,8 @@
     }
 
     action();
+    suppressTileClick = false;
+    tilePointerStart = null;
   }
 
   function resetTiles() {
@@ -182,16 +193,17 @@
 
     <div class="snapsort-engine" data-lang="ja">
       <Engine id="sentence-builder-snapsort-demo">
-        <ContainerProgressive
+        <Container
           className="sentence-builder-root"
-          config={{ direction: "column", name: "sentence-builder-root", noDrop: true }}
+          config={{ mode: "progressive", direction: "column", name: "sentence-builder-root", noDrop: true }}
           locked={true}
           metadata={{ purpose: "sentence-builder" }}
         >
-          <ContainerProgressive
+          <Container
             className="answer-area answer-box"
             bind:container={answerContainer}
             config={{
+              mode: "progressive",
               direction: "row",
               name: "sentence-answer",
               groupID: "sentence-builder",
@@ -202,40 +214,45 @@
                 clickMove: snapSortAnimation,
               },
               callbacks: {
-                onDomInsert: handleSnapSortDomInsert,
-                onDomRemove: handleSnapSortDomRemove,
-                afterDomMutation: tick,
+                onItemMove: handleSnapSortDomMove,
+                onItemRemove: handleSnapSortDomRemove,
+                awaitMutation: tick,
               },
             }}
             locked={true}
             metadata={{ zone: "answer" }}
+            items={answerTiles}
+            getId={(tile) => tile.id}
+            getClassName={() => "tile-wrapper"}
           >
-            {#each answerTiles as tile (tile.id)}
-              <ItemProgressive className="tile-wrapper" metadata={{ itemId: tile.id }}>
-                <button
-                  type="button"
-                  class="tile selected"
-                  onpointerdown={handleTilePointerDown}
-                  onpointermove={handleTilePointerMove}
-                  onclick={(event) => handleTileClick(event, () => moveTileToZone(tile, "bank"))}
-                  ondblclick={() => openLookup(tile.text)}
-                  onkeydown={(event) => handleTileKeydown(event, tile, "bank")}
-                  aria-label={tile.text}
-                  title="Click to remove"
-                >
-                  {tile.text}
-                </button>
-              </ItemProgressive>
-            {/each}
             {#if answerTiles.length === 0}
               <span class="placeholder">Drag tiles here or click to add</span>
             {/if}
-          </ContainerProgressive>
+            {#snippet item(tile)}
+              <button
+                type="button"
+                class="tile selected"
+                onpointerdown={handleTilePointerDown}
+                onpointermove={handleTilePointerMove}
+                onclick={(event) => handleTileClick(event, () => moveTileToZone(tile, "bank"))}
+                ondblclick={() => openLookup(tile.text)}
+                onkeydown={(event) => handleTileKeydown(event, tile, "bank")}
+                aria-label={tile.text}
+                title="Click to remove"
+              >
+                {tile.text}
+              </button>
+            {/snippet}
+            {#snippet ghost(event)}
+              <button type="button" class="tile tile-ghost selected" tabindex="-1">{ghostTileText(event)}</button>
+            {/snippet}
+          </Container>
 
-          <ContainerProgressive
+          <Container
             className="tile-bank-container tile-bank"
             bind:container={bankContainer}
             config={{
+              mode: "progressive",
               direction: "row",
               mainAxisAlign: "center",
               name: "sentence-bank",
@@ -247,33 +264,37 @@
                 clickMove: snapSortAnimation,
               },
               callbacks: {
-                onDomInsert: handleSnapSortDomInsert,
-                onDomRemove: handleSnapSortDomRemove,
-                afterDomMutation: tick,
+                onItemMove: handleSnapSortDomMove,
+                onItemRemove: handleSnapSortDomRemove,
+                awaitMutation: tick,
               },
             }}
             locked={true}
             metadata={{ zone: "bank" }}
+            items={bankTiles}
+            getId={(tile) => tile.id}
+            getClassName={() => "tile-wrapper"}
           >
-            {#each bankTiles as tile (tile.id)}
-              <ItemProgressive className="tile-wrapper" metadata={{ itemId: tile.id }}>
-                <button
-                  type="button"
-                  class="tile"
-                  onpointerdown={handleTilePointerDown}
-                  onpointermove={handleTilePointerMove}
-                  onclick={(event) => handleTileClick(event, () => moveTileToZone(tile, "answer"))}
-                  ondblclick={() => openLookup(tile.text)}
-                  onkeydown={(event) => handleTileKeydown(event, tile, "answer")}
-                  aria-label={tile.text}
-                  title="Click to add"
-                >
-                  {tile.text}
-                </button>
-              </ItemProgressive>
-            {/each}
-          </ContainerProgressive>
-        </ContainerProgressive>
+            {#snippet item(tile)}
+              <button
+                type="button"
+                class="tile"
+                onpointerdown={handleTilePointerDown}
+                onpointermove={handleTilePointerMove}
+                onclick={(event) => handleTileClick(event, () => moveTileToZone(tile, "answer"))}
+                ondblclick={() => openLookup(tile.text)}
+                onkeydown={(event) => handleTileKeydown(event, tile, "answer")}
+                aria-label={tile.text}
+                title="Click to add"
+              >
+                {tile.text}
+              </button>
+            {/snippet}
+            {#snippet ghost(event)}
+              <button type="button" class="tile tile-ghost" tabindex="-1">{ghostTileText(event)}</button>
+            {/snippet}
+          </Container>
+        </Container>
       </Engine>
     </div>
 
@@ -431,6 +452,18 @@
     pointer-events: none;
   }
 
+  /* Hide the placeholder the moment an incoming ghost occupies the answer
+     box — the ghost entry is a sibling, adapter-rendered by Container's
+     items mode, so this is the CSS-native equivalent of the old
+     `ghostEntry?.zone !== "answer"` state check. `:global(...)` must wrap
+     the whole selector here (Svelte rejects it mid-chain), since both
+     `.answer-box` (applied dynamically via a prop) and `.placeholder`
+     (matched only as this global selector's descendant) need to resolve
+     outside Svelte's per-component scoping hash. */
+  :global(.snapsort-engine .answer-box:has([data-snapsort-ghost-entry]) .placeholder) {
+    display: none;
+  }
+
   .snapsort-engine :global(.tile-bank-container) {
     width: 100%;
     background: var(--bg-tertiary);
@@ -451,17 +484,24 @@
   }
 
   .snapsort-engine :global(.answer-box .tile-wrapper),
-  .snapsort-engine :global(.tile-bank .tile-wrapper) {
+  .snapsort-engine :global(.tile-bank .tile-wrapper),
+  .snapsort-engine :global(.answer-box [data-snapsort-ghost-entry]),
+  .snapsort-engine :global(.tile-bank [data-snapsort-ghost-entry]) {
     display: inline-flex;
     padding: 0;
     align-items: center;
     justify-content: center;
   }
 
-  .snapsort-engine :global(.ghost) {
+  /* Two classes for specificity over `.tile`'s own background/box-shadow —
+     the ghost preview should read as a dimmed placeholder, not a live tile. */
+  .snapsort-engine :global(.tile.tile-ghost) {
     background: var(--border-color);
-    border-radius: 12px;
+    color: var(--text-secondary);
+    border-color: var(--border-color);
     opacity: 0.55;
+    box-shadow: none;
+    cursor: default;
   }
 
   .tile {

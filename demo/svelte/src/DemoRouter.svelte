@@ -5,6 +5,9 @@
   import NodeUiPage from "./demo/node_ui_demo/NodeUIDemo.svelte";
   import DropSnapNestedPage from "./demo/drop_snap_nested/DropSnapNestedDemo.svelte";
   import SnapSortComponentsPage from "./demo/snapsort_components/SnapSortComponentsDemo.svelte";
+  import SnapSortFileExplorerPage from "./demo/snapsort_file_explorer/SnapSortFileExplorerDemo.svelte";
+  import SnapSortInsertionPage from "./demo/snapsort_insertion/SnapSortInsertionDemo.svelte";
+  import SnapSortWebsiteCorePage from "./demo/snapsort_website_core/SnapSortWebsiteCoreDemo.svelte";
   import CollisionPage from "./demo/collision/CollisionDemo.svelte";
   import CollisionStressPage from "./demo/collision/CollisionStressDemo.svelte";
   import CameraControlPage from "./demo/camera_control/CameraControlDemo.svelte";
@@ -65,6 +68,24 @@
       path: "/snapsort-components",
       legacyPaths: ["/snapsort-duolingo"],
       legacyDemoValues: ["snapsort_components", "snapsort_duolingo"],
+      usesDevNav: true,
+    },
+    {
+      label: "SnapSort Insertion",
+      path: "/snapsort-insertion",
+      legacyDemoValues: ["snapsort_insertion"],
+      usesDevNav: true,
+    },
+    {
+      label: "SnapSort Website Core",
+      path: "/snapsort-website-core",
+      legacyDemoValues: ["snapsort_website_core"],
+      usesDevNav: true,
+    },
+    {
+      label: "SnapSort File Explorer",
+      path: "/snapsort-file-explorer",
+      legacyDemoValues: ["snapsort_file_explorer"],
       usesDevNav: true,
     },
     {
@@ -239,6 +260,12 @@
       <DropSnapNestedPage bind:this={dropSnapNestedPageRef} />
     {:else if selectedPath === "/snapsort-components"}
       <SnapSortComponentsPage />
+    {:else if selectedPath === "/snapsort-insertion"}
+      <SnapSortInsertionPage />
+    {:else if selectedPath === "/snapsort-website-core"}
+      <SnapSortWebsiteCorePage />
+    {:else if selectedPath === "/snapsort-file-explorer"}
+      <SnapSortFileExplorerPage />
     {:else if selectedPath === "/collision"}
       <CollisionPage />
     {:else if selectedPath === "/collision-stress"}

@@ -1,17 +1,11 @@
 <script lang="ts">
     import { Node, Connector, Line } from "@snap-engine/snapline-svelte";
-    import { onMount } from "svelte";
     
-    let { title = "Node" } = $props();
+    let { title = "Node", x = 0, y = 0 } = $props();
     let nodeComponent: any = $state(null);
-    // let nodeObject: any = $state(null);
-
-    onMount(() => {
-       
-    });
 </script>
 
-<Node bind:this={nodeComponent} className="card node" LineSvelteComponent={Line}>
+<Node bind:this={nodeComponent} className="card node" LineSvelteComponent={Line} {x} {y}>
     <div class="node-header">
         <h3>{title}</h3>
     </div>

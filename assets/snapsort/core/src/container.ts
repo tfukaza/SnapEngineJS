@@ -1,11 +1,9 @@
-import { BaseObject } from "@snap-engine/core";
-import { ItemBase, ItemEuclidean, ItemProgressive, type ItemMetadata } from "./item";
-import {
-  determineDropTarget,
-  determineProgressiveDropTarget,
-  type DropCandidate,
-} from "./algorithm";
+import { Item } from "./item";
+import type { ContainerCallbacks } from "./events";
+import { defaultCallbacks } from "./mutation";
 import type { LayoutMainAxisAlign } from "./layout";
+import type { SortMode, SortStrategy } from "./drag/drop-strategy";
+import type { DragSession } from "./drag/session";
 
 export interface AnimationConfig {
   timing_function?: string;
@@ -18,29 +16,11 @@ export interface ContainerAnimations {
   clickMove?: AnimationConfig | null;
 }
 
-export interface SnapSortDomRemoveEvent {
-  item: ItemBase;
-  itemMetadata: ItemMetadata;
-  container: ContainerBase;
-  containerMetadata: Record<string, unknown>;
-}
-
-export interface SnapSortDomInsertEvent {
-  item: ItemBase;
-  itemMetadata: ItemMetadata;
-  container: ContainerBase;
-  containerMetadata: Record<string, unknown>;
-  index: number;
-  beforeElement: HTMLElement | null;
-}
-
-export interface ContainerCallbacks {
-  onDomRemove?: (event: SnapSortDomRemoveEvent) => void;
-  onDomInsert?: (event: SnapSortDomInsertEvent) => void;
-  afterDomMutation?: () => void | Promise<void>;
-}
-
 export interface ContainerConfig {
+  /** Which built-in drop-target/lifecycle strategy pair to use for this tree. Default `"euclidean"`. */
+  mode?: SortMode;
+  /** Advanced: a custom strategy pair, overriding `mode`. Lets consumers plug in their own drop-target resolution and/or drag lifecycle. */
+  strategy?: SortStrategy;
   groupID?: string;
   direction?: "column" | "row";
   mainAxisAlign?: LayoutMainAxisAlign;
@@ -52,50 +32,44 @@ export interface ContainerConfig {
   callbacks?: ContainerCallbacks;
 }
 
-export class ContainerBase extends ItemBase {
-  #itemList: ItemBase[] = [];
+const defaultConfig: ContainerConfig = {
+  mode: "euclidean",
+  groupID: "default-group",
+  direction: "column",
+  animation: {
+    reorder: { duration: 100, timing_function: "ease-out" },
+    drop: { duration: 100, timing_function: "ease-out" },
+    clickMove: { duration: 100, timing_function: "ease-out" },
+  },
+  noDrop: false,
+  callbacks: defaultCallbacks,
+};
+
+export class Container extends Item {
   #config: ContainerConfig;
   #depth: number = 0;
+  #itemList: Item[] = [];
 
-  constructor(
-    engine: any,
-    parent: BaseObject | null,
-    config?: ContainerConfig,
-  ) {
+  /** The in-progress drag session for this tree, or null when nothing is being dragged. Only meaningful on the root container. */
+  dragSession: DragSession | null = null;
+
+  constructor(engine: any, parent: Container | null, config?: ContainerConfig) {
     super(engine, parent);
     this.locked = true;
-    this.#config = config || {};
-    if (!this.#config.groupID) {
-      this.#config.groupID = "default-group";
-    }
-    if (!this.#config.direction) {
-      this.#config.direction = "column";
-    }
-    if (this.#config.animation === undefined) {
-      const defaultAnimation = { duration: 100, timing_function: "ease-out" };
-      this.#config.animation = {
-        reorder: defaultAnimation,
-        drop: defaultAnimation,
-        clickMove: defaultAnimation,
-      };
-    } else if (this.#config.animation) {
-      const defaultAnimation = { duration: 100, timing_function: "ease-out" };
-      this.#config.animation = {
-        reorder: this.#config.animation.reorder ?? defaultAnimation,
-        drop: this.#config.animation.drop ?? defaultAnimation,
-        clickMove: this.#config.animation.clickMove ?? defaultAnimation,
-      };
-    }
+    this.#config = {
+      ...defaultConfig,
+      ...(config || {}),
+      callbacks: {
+        ...defaultConfig.callbacks,
+        ...(config?.callbacks || {}),
+      },
+    };
+
     if (!this.#config.name) {
       if (!this.global.data["dragAndDropContainerCounter"]) {
         this.global.data["dragAndDropContainerCounter"] = 0;
       }
       this.#config.name = `container-${this.global.data["dragAndDropContainerCounter"]++}`;
-    }
-    if (!this.#config.noDrop) {
-      this.noDrop = false;
-    } else {
-      this.noDrop = this.#config.noDrop;
     }
 
     this.style = {
@@ -140,6 +114,14 @@ export class ContainerBase extends ItemBase {
     this.#config.dropArea = value;
   }
 
+  get mode(): SortMode {
+    return this.#config.mode ?? "euclidean";
+  }
+
+  set mode(value: SortMode) {
+    this.#config.mode = value;
+  }
+
   get configuration() {
     return this.#config;
   }
@@ -160,73 +142,16 @@ export class ContainerBase extends ItemBase {
     return this.#depth;
   }
 
-  // addItem(item: ItemBase) {
-  //   this.#itemList.push(item);
-  //   item.setContainer(this);
-  // }
-
-  // insertItemAt(item: ItemBase, index: number) {
-  //   if (index >= this.#itemList.length) {
-  //     this.#itemList.push(item);
-  //   } else {
-  //     this.#itemList.splice(index, 0, item);
-  //   }
-  //   item.setContainer(this);
-  // }
-
-  setAllDepth(depth: number, root: ContainerBase | null = null) {
-    this.#depth = depth;
-    const effectiveRoot = depth === 0 ? this : root;
-    this.setRootContainer(effectiveRoot);
-    for (const item of this.#itemList) {
-      if (item instanceof ContainerBase) {
-        item.setAllDepth(depth + 1, effectiveRoot);
-      } else {
-        item.setRootContainer(effectiveRoot);
-      }
-    }
+  get config() {
+    return this.#config;
   }
 
   destroy() {
     if (this.global.data["dragAndDropContainers"]) {
       this.global.data["dragAndDropContainers"] = this.global.data[
         "dragAndDropContainers"
-      ].filter((c: ContainerBase) => c !== this);
+      ].filter((c: Container) => c !== this);
     }
     super.destroy();
-  }
-}
-
-export class ContainerEuclidean extends ContainerBase {
-  protected get dragDropEnabled(): boolean {
-    return true;
-  }
-
-  protected createGhostItem(original: ItemBase): ItemBase {
-    return this.createDefaultGhostItem(ItemEuclidean, original);
-  }
-
-  protected resolveDropTarget(
-    item: ItemBase,
-    root: ItemBase,
-  ): DropCandidate | null {
-    return determineDropTarget(item, root);
-  }
-}
-
-export class ContainerProgressive extends ContainerBase {
-  protected get dragDropEnabled(): boolean {
-    return true;
-  }
-
-  protected createGhostItem(original: ItemBase): ItemBase {
-    return this.createDefaultGhostItem(ItemProgressive, original);
-  }
-
-  protected resolveDropTarget(
-    item: ItemBase,
-    root: ItemBase,
-  ): DropCandidate | null {
-    return determineProgressiveDropTarget(item, root);
   }
 }

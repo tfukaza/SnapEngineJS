@@ -2,16 +2,12 @@
   import { Engine } from "@snap-engine/asset-base-svelte";
   import { tick } from "svelte";
   import SnapSortDuolingoDemo from "../snapsort_duolingo/SnapSortDuolingoDemo.svelte";
-  import {
-    ContainerEuclidean,
-    ContainerProgressive,
-    ItemEuclidean,
-    ItemProgressive,
-  } from "@snap-engine/snapsort-svelte";
+  import { Container, Handle } from "@snap-engine/snapsort-svelte";
   import type {
-    ContainerBase as SortContainer,
-    SnapSortDomInsertEvent,
-    SnapSortDomRemoveEvent,
+    Container as SortContainer,
+    GhostCreateEvent,
+    ItemMoveEvent,
+    ItemRemoveEvent,
   } from "@snap-engine/snapsort";
 
   type DemoItem = {
@@ -117,6 +113,7 @@
 
   let nextItemNumber = $state(7);
   let columns = $state<DemoColumn[]>(structuredClone(initialColumns));
+  let boardVersion = $state(0);
   let itemCount = $derived(
     columns.reduce((total, column) => total + column.items.length, 0),
   );
@@ -210,12 +207,28 @@
   function resetItems() {
     nextItemNumber = 7;
     columns = cloneInitialColumns();
+    boardVersion += 1;
   }
 
-  function handleSnapSortDomInsert(event: SnapSortDomInsertEvent) {
+  function findDemoItem(itemId: string | undefined) {
+    if (!itemId) return null;
+    for (const column of columns) {
+      const item = column.items.find((candidate) => candidate.id === itemId);
+      if (item) return item;
+    }
+    return null;
+  }
+
+  /** Ghost snippet content: looks up the dragged item's label/detail via its itemId. */
+  function ghostItemContent(event: GhostCreateEvent): DemoItem | null {
+    const itemId = event.originalMetadata.itemId;
+    return typeof itemId === "string" ? findDemoItem(itemId) : null;
+  }
+
+  function handleSnapSortDomMove(event: ItemMoveEvent) {
     const itemId = event.itemMetadata.itemId;
     if (typeof itemId !== "string") return;
-    const targetColumnId = event.containerMetadata.columnId;
+    const targetColumnId = event.to.containerMetadata.columnId;
     if (typeof targetColumnId !== "string") return;
 
     let movedItem: DemoItem | null = null;
@@ -229,7 +242,12 @@
       return { ...column, items: nextItems };
     });
 
-    if (!movedItem) return;
+    if (!movedItem) {
+      const label = event.itemMetadata.label;
+      const detail = event.itemMetadata.detail;
+      if (typeof label !== "string" || typeof detail !== "string") return;
+      movedItem = { id: itemId, label, detail };
+    }
 
     columns = withoutMovedItem.map((column) => {
       if (column.id !== targetColumnId) return column;
@@ -237,14 +255,14 @@
       const nextItems = column.items.slice();
       const destinationIndex = Math.max(
         0,
-        Math.min(event.index, nextItems.length),
+        Math.min(event.to.index, nextItems.length),
       );
       nextItems.splice(destinationIndex, 0, movedItem);
       return { ...column, items: nextItems };
     });
   }
 
-  function handleSnapSortDomRemove(event: SnapSortDomRemoveEvent) {
+  function handleSnapSortDomRemove(event: ItemRemoveEvent) {
     const itemId = event.itemMetadata.itemId;
     if (typeof itemId !== "string") return;
 
@@ -286,7 +304,7 @@
 <svelte:head>
   <link
     rel="stylesheet"
-    href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined&icon_names=arrow_left_alt,arrow_right_alt,delete&display=block"
+    href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined&icon_names=arrow_left_alt,arrow_right_alt,delete,drag_indicator&display=block"
   />
 </svelte:head>
 
@@ -311,78 +329,92 @@
       </div>
 
       <div class="engine-area">
-        <Engine id="snapsort-components-demo-canvas">
-          <div class="board-frame">
-            <ContainerEuclidean
-              className="board"
-              config={{
-                direction: "row",
-                name: "component-kanban-root",
-                noDrop: true,
-              }}
-              locked={true}
-              metadata={{ boardId: "component-kanban" }}
-            >
-              {#each columns as column (column.id)}
-                <ContainerEuclidean
-                  className={column.id === "backlog" ? "list-panel array-list" : "list-panel"}
-                  bind:container={column.container}
-                  config={{
-                    direction: "column",
-                    name: `component-${column.id}`,
-                    animation: {
-                      reorder: snapSortCubicAnimation,
-                      drop: snapSortCubicAnimation,
-                      clickMove: snapSortCubicAnimation,
-                    },
-                    callbacks: {
-                      onDomInsert: handleSnapSortDomInsert,
-                      onDomRemove: handleSnapSortDomRemove,
-                      afterDomMutation: tick,
-                    },
-                  }}
-                  locked={true}
-                  metadata={{ columnId: column.id }}
-                >
-                  <div class="list-header">
-                    <h2>{column.title}</h2>
-                    <span>{column.items.length}</span>
-                  </div>
-
-                  {#each column.items as item (item.id)}
-                    <ItemEuclidean className="task-card" metadata={{ itemId: item.id }}>
+        {#key boardVersion}
+          <Engine id="snapsort-components-demo-canvas">
+            <div class="board-frame">
+              <Container
+                className="board"
+                config={{
+                  direction: "row",
+                  name: "component-kanban-root",
+                  noDrop: true,
+                }}
+                locked={true}
+                metadata={{ boardId: "component-kanban" }}
+              >
+                {#each columns as column (column.id)}
+                  <Container
+                    className={column.id === "backlog" ? "list-panel array-list" : "list-panel"}
+                    bind:container={column.container}
+                    config={{
+                      direction: "column",
+                      name: `component-${column.id}`,
+                      animation: {
+                        reorder: snapSortCubicAnimation,
+                        drop: snapSortCubicAnimation,
+                        clickMove: snapSortCubicAnimation,
+                      },
+                      callbacks: {
+                        onItemMove: handleSnapSortDomMove,
+                        onItemRemove: handleSnapSortDomRemove,
+                        awaitMutation: tick,
+                      },
+                    }}
+                    locked={true}
+                    metadata={{ columnId: column.id }}
+                    items={column.items}
+                    getId={(item) => item.id}
+                    getClassName={() => "task-card"}
+                    getMetadata={(item) => ({ label: item.label, detail: item.detail })}
+                  >
+                    <div class="list-header">
+                      <h2>{column.title}</h2>
+                      <span>{column.items.length}</span>
+                    </div>
+                    {#snippet item(entry)}
                       <div class="task-content">
+                        <Handle className="task-drag-handle">
+                          <span class="material-symbols-outlined" aria-hidden="true">drag_indicator</span>
+                        </Handle>
                         <div class="task-main">
-                          <strong>{item.label}</strong>
-                          <span>{item.detail}</span>
+                          <strong>{entry.label}</strong>
+                          <span>{entry.detail}</span>
                         </div>
                         <div class="card-actions">
                           <button
                             class="icon-button"
-                            aria-label={`Delete ${item.label}`}
-                            use:controlButton={() => deleteItem(item.id)}
+                            aria-label={`Delete ${entry.label}`}
+                            use:controlButton={() => deleteItem(entry.id)}
                           ><span class="material-symbols-outlined" aria-hidden="true">delete</span></button>
                           <button
                             class="icon-button"
-                            aria-label={`Move ${item.label} left`}
+                            aria-label={`Move ${entry.label} left`}
                             disabled={columns.findIndex((candidate) => candidate.id === column.id) === 0}
-                            use:controlButton={() => moveItemAcrossColumns(item.id, -1)}
+                            use:controlButton={() => moveItemAcrossColumns(entry.id, -1)}
                           ><span class="material-symbols-outlined" aria-hidden="true">arrow_left_alt</span></button>
                           <button
                             class="icon-button"
-                            aria-label={`Move ${item.label} right`}
+                            aria-label={`Move ${entry.label} right`}
                             disabled={columns.findIndex((candidate) => candidate.id === column.id) === columns.length - 1}
-                            use:controlButton={() => moveItemAcrossColumns(item.id, 1)}
+                            use:controlButton={() => moveItemAcrossColumns(entry.id, 1)}
                           ><span class="material-symbols-outlined" aria-hidden="true">arrow_right_alt</span></button>
                         </div>
                       </div>
-                    </ItemEuclidean>
-                  {/each}
-                </ContainerEuclidean>
-              {/each}
-            </ContainerEuclidean>
-          </div>
-        </Engine>
+                    {/snippet}
+                    {#snippet ghost(event)}
+                      <div class="task-content">
+                        <div class="task-main">
+                          <strong>{ghostItemContent(event)?.label ?? ""}</strong>
+                          <span>{ghostItemContent(event)?.detail ?? ""}</span>
+                        </div>
+                      </div>
+                    {/snippet}
+                  </Container>
+                {/each}
+              </Container>
+            </div>
+          </Engine>
+        {/key}
       </div>
     </div>
   </section>
@@ -395,34 +427,39 @@
       </div>
 
       <Engine id="snapsort-progressive-components-demo-canvas">
-        <ContainerProgressive
+        <Container
           className="progressive-root"
           config={{
+            mode: "progressive",
             direction: "column",
             name: "progressive-components-root",
             noDrop: true,
           }}
           locked={true}
           metadata={{ boardId: "progressive-components" }}
+          items={progressiveExamples}
+          getId={(example) => example.id}
         >
-          {#each progressiveExamples as example (example.id)}
-            <ContainerProgressive
+          {#snippet entry(example)}
+            <Container
               className="progressive-example"
               config={{
+                mode: "progressive",
                 direction: "column",
                 name: `progressive-example-${example.id}`,
                 noDrop: true,
               }}
               locked={true}
-              metadata={{ exampleId: example.id }}
+              metadata={{ itemId: example.id, exampleId: example.id }}
             >
               <div class="progressive-prompt">
                 <span>{example.prompt}</span>
               </div>
 
-              <ContainerProgressive
+              <Container
                 className="sentence-answer-line"
                 config={{
+                  mode: "progressive",
                   direction: "row",
                   name: `progressive-answer-${example.id}`,
                   groupID: `progressive-${example.id}`,
@@ -435,20 +472,19 @@
                 }}
                 locked={true}
                 metadata={{ zone: "answer", exampleId: example.id }}
+                items={example.answerTiles}
+                getId={(tile) => tile.id}
+                getClassName={() => "sentence-tile-wrapper"}
               >
-                {#each example.answerTiles as tile (tile.id)}
-                  <ItemProgressive
-                    className="sentence-tile-wrapper"
-                    metadata={{ itemId: tile.id }}
-                  >
-                    <button type="button" class="sentence-tile">{tile.text}</button>
-                  </ItemProgressive>
-                {/each}
-              </ContainerProgressive>
+                {#snippet item(tile)}
+                  <button type="button" class="sentence-tile">{tile.text}</button>
+                {/snippet}
+              </Container>
 
-              <ContainerProgressive
+              <Container
                 className="sentence-bank-line"
                 config={{
+                  mode: "progressive",
                   direction: "row",
                   name: `progressive-bank-${example.id}`,
                   groupID: `progressive-${example.id}`,
@@ -461,19 +497,17 @@
                 }}
                 locked={true}
                 metadata={{ zone: "bank", exampleId: example.id }}
+                items={example.bankTiles}
+                getId={(tile) => tile.id}
+                getClassName={() => "sentence-tile-wrapper"}
               >
-                {#each example.bankTiles as tile (tile.id)}
-                  <ItemProgressive
-                    className="sentence-tile-wrapper"
-                    metadata={{ itemId: tile.id }}
-                  >
-                    <button type="button" class="sentence-tile muted">{tile.text}</button>
-                  </ItemProgressive>
-                {/each}
-              </ContainerProgressive>
-            </ContainerProgressive>
-          {/each}
-        </ContainerProgressive>
+                {#snippet item(tile)}
+                  <button type="button" class="sentence-tile muted">{tile.text}</button>
+                {/snippet}
+              </Container>
+            </Container>
+          {/snippet}
+        </Container>
       </Engine>
     </section>
 
@@ -661,7 +695,11 @@
     padding: var(--size-12);
     background: #fff;
     box-sizing: border-box;
-    gap: var(--size-12);
+    /* No flex gap here: the answer/bank drop containers below must sit flush
+       against each other with zero dead space between them, otherwise the
+       pointer crosses a "no valid target" strip while dragging between them
+       and the ghost gets destroyed/recreated instead of animating smoothly. */
+    gap: 0;
     pointer-events: auto;
   }
 
@@ -669,6 +707,7 @@
     width: 100%;
     border-bottom: 1px solid #000;
     padding-bottom: var(--size-8);
+    margin-bottom: var(--size-12);
     box-sizing: border-box;
   }
 
@@ -772,30 +811,48 @@
     align-items: stretch;
     border: 2px solid #000;
     background: #fff;
-    cursor: grab;
     box-sizing: border-box;
     margin: 0;
     padding: 0;
   }
 
-  :global(.task-card:active) {
-    cursor: grabbing;
-  }
-
   .task-content {
     display: flex;
     justify-content: space-between;
-    align-items: flex-start;
-    gap: var(--size-12);
+    align-items: stretch;
+    gap: var(--size-10);
     width: 100%;
-    padding: var(--size-12);
+    padding: var(--size-10) var(--size-12) var(--size-10) var(--size-8);
     box-sizing: border-box;
+  }
+
+  :global(.task-drag-handle) {
+    width: 28px;
+    min-width: 28px;
+    margin-right: var(--size-2);
+    align-self: stretch;
+    border: 1px solid #000;
+    background: #f2f2f2;
+    color: #111;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    cursor: grab;
+    box-sizing: border-box;
+    touch-action: none;
+    user-select: none;
+  }
+
+  :global(.task-drag-handle:active) {
+    cursor: grabbing;
+    background: #e4e4e4;
   }
 
   .task-main {
     min-width: 0;
     display: flex;
     flex-direction: column;
+    justify-content: center;
     gap: var(--size-4);
   }
 

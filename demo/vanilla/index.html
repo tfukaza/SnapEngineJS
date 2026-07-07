@@ -1,162 +1,83 @@
 <!doctype html>
-<html>
+<html lang="en">
   <head>
-    <meta charset=" UTF-8" />
+    <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <title>SnapLine: Vanilla Js</title>
-    <link rel="stylesheet" href="demo.css" />
-
+    <title>SnapSort: Vanilla JS</title>
     <link
       rel="stylesheet"
-      href="lib/style.css"
-      media=""
-      id="theme-standard"
-      class="theme"
+      href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined&icon_names=arrow_left_alt,arrow_right_alt,delete&display=block"
     />
+    <link rel="stylesheet" href="demo.css" />
   </head>
-
-  <template id="node-math">
-    <div class="sl-row right">
-      <span class="sl-label right">Result</span>
-      <span class="sl-connector right" id="result"></span>
-    </div>
-    <div class="sl-row">
-      <select class="sl-input" sl-name="operation" id="operation">
-        <option value="+">Add</option>
-        <option value="-">Subtract</option>
-        <option value="*">Multiply</option>
-        <option value="/">Divide</option>
-      </select>
-    </div>
-    <div class="sl-row">
-      <span class="sl-connector left" id="input_1"></span>
-      <span class="sl-label">Input 1</span>
-      <input class="sl-input" type="number" value="0" id="form_1" />
-    </div>
-    <div class="sl-row">
-      <span class="sl-connector left" id="input_2"></span>
-      <span class="sl-label">Input 2</span>
-      <input class="sl-input" type="number" value="0" id="form_2" />
-    </div>
-  </template>
-
-  <template id="node-print">
-    <div class="sl-row">
-      <span class="sl-connector left" id="input"></span>
-      <span class="sl-label" id="print"> </span>
-    </div>
-  </template>
-
-  <template id="node-number">
-    <div class="sl-row right">
-      <span class="sl-connector right" id="output"></span>
-    </div>
-    <div class="sl-row">
-      <input class="sl-input" id="value" type="number" value="0" />
-    </div>
-  </template>
-
-  <template id="node-lerp">
-    <div class="sl-node" sl-init="initLerp">
-      <div class="sl-row right">
-        <span class="sl-label right">Result</span>
-        <span class="sl-connector right" id="result"></span>
-      </div>
-      <div class="sl-row">
-        <input class="sl-input" id="alpha" type="range" min="0" max="100" />
-      </div>
-      <div class="sl-row">
-        <span class="sl-connector left" id="input_1"></span>
-        <span class="sl-label">Input 1</span>
-        <input class="sl-input" type="number" value="0" id="form_1" />
-      </div>
-      <div class="sl-row">
-        <span class="sl-connector left" id="input_2"></span>
-        <span class="sl-label">Input 2</span>
-        <input class="sl-input" type="number" value="0" id="form_2" />
-      </div>
-    </div>
-  </template>
 
   <body>
     <script type="module" src="demo.mjs" defer></script>
 
-    <main>
-      <div id="sl-canvas-container">
-        <div id="sl-canvas">
-          <div id="sl-background"></div>
+    <main class="components-demo">
+      <header class="demo-header">
+        <div>
+          <h1>SnapSort Vanilla</h1>
+          <p><span id="item-count">0</span> Euclidean cards backed by plain DOM and JS state</p>
         </div>
-        <div id="sl-selection"></div>
-      </div>
-      <navbar class="control-center">
-        <div class="control-box">
-          <div class="control-box-header">
-            <h1>Add Node</h1>
-          </div>
-          <div class="control-box-content">
-            <ul>
-              <li><button id="mathButton" class="sl-btn">+ Math</button></li>
-              <li><button id="printButton" class="sl-btn">+ Print</button></li>
-              <li><button id="lerpButton" class="sl-btn">+ Lerp</button></li>
-              <li>
-                <button id="constantButton" class="sl-btn">+ Constant</button>
-              </li>
-            </ul>
-          </div>
-        </div>
-        <div class="control-box">
-          <h1>Control Options</h1>
+      </header>
 
-          <div class="control-box-content">
-            <ul>
-              <li>
-                <input type="checkbox" id="enable-zoom" checked />
-                <label for="enable-zoom">Enable Zoom</label>
-                <input type="number" id="zoom-min" value="0.2" />
-                <input type="number" id="zoom-max" value="1" />
-              </li>
-              <li>
-                <input type="checkbox" id="enable-pan" checked />
-                <label for="enable-pan">Enable Pan</label>
-              </li>
-            </ul>
+      <section class="algorithm-panel kanban-panel">
+        <div class="section-heading">
+          <h2>Euclidean drag and drop</h2>
+          <p>Vanilla JS board with column moves, item deletion, and drag reordering.</p>
+        </div>
+
+        <div class="kanban-demo-shell">
+          <div class="toolbar">
+            <button id="add-item-button" type="button">Add Item</button>
+            <button id="reset-button" type="button">Reset</button>
           </div>
 
-          <div class="control-box-content" id="pan-limits-container">
-            <h2>Bounds</h2>
-            <div id="pan-limits">
-              <input type="number" id="pan-top" value="0" />
-              <input type="number" id="pan-left" value="0" />
-              <input type="number" id="pan-right" value="0" />
-              <input type="number" id="pan-bottom" value="0" />
+          <div class="engine-area">
+            <div id="vanilla-snapsort-canvas" class="engine-canvas">
+              <div class="board-frame">
+                <div
+                  id="vanilla-board"
+                  class="snapsort-container snapsort-container-euclidean board"
+                  aria-label="SnapSort vanilla Kanban board"
+                ></div>
+              </div>
             </div>
           </div>
         </div>
+      </section>
 
-        <div class="control-box">
-          <h1>Line Options</h1>
-          <div class="control-box-content">
-            <label for="line-style">Line Style</label>
-            <select id="line-style">
-              <option value="straight">Straight</option>
-              <option value="curved">Curved</option>
-              <option value="zigzag">Zigzag</option>
-            </select>
-          </div>
+      <section class="algorithm-panel file-tree-section">
+        <div class="section-heading">
+          <h2>Insertion file explorer</h2>
+          <p>Vanilla DOM tree using built-in SnapSort insertion ghost and DOM callbacks.</p>
         </div>
 
-        <div class="control-box">
-          <h1>Node Options</h1>
-          <div class="control-box-content">
-            <button id="lock-position-button" class="sl-btn">
-              Lock Position
-            </button>
-            <button id="unlock-position-button" class="sl-btn">
-              Unlock Position
-            </button>
-          </div>
+        <div class="file-tree-demo">
+          <aside class="file-tree-panel" aria-label="Vanilla explorer file tree">
+            <div class="explorer-title">
+              <span>Explorer</span>
+              <div class="title-actions">
+                <button id="reset-tree-button" type="button">Reset</button>
+              </div>
+            </div>
+
+            <div class="workspace-row">
+              <span class="chevron open" aria-hidden="true"></span>
+              <strong>SNAPENGINEJS</strong>
+            </div>
+
+            <div id="vanilla-file-tree-canvas" class="file-tree-canvas">
+              <div
+                id="vanilla-file-tree"
+                class="snapsort-container snapsort-container-insertion code-tree"
+                aria-label="SnapSort vanilla file tree"
+              ></div>
+            </div>
+          </aside>
         </div>
-      </navbar>
+      </section>
     </main>
   </body>
 </html>

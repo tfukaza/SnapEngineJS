@@ -4,7 +4,6 @@
   import CameraControlCard from "./highlights/CameraControlCard.svelte";
   import DomOptimizationCard from "./highlights/DomOptimizationCard.svelte";
   import CollisionCard from "./highlights/CollisionCard.svelte";
-  import VisualDebuggerCard from "./highlights/VisualDebuggerCard.svelte";
   import "./highlights/highlight-cards.css";
 </script>
 
@@ -19,7 +18,6 @@
     <AnimationCard />
     <CollisionCard />
     <DomOptimizationCard />
-    <VisualDebuggerCard />
   </div>
 </section>
 
@@ -36,7 +34,11 @@
   }
 
   .interactivity-intro {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
     grid-column: 1 / -1;
+    gap: var(--size-20);
     text-align: center;
     width: min(100%, 760px);
     margin: clamp(3rem, 7vw, 6rem) auto clamp(2rem, 4vw, 3.5rem);

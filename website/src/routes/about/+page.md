@@ -1,3 +1,14 @@
+<script lang="ts">
+  import SeoHead from "$lib/components/SeoHead.svelte";
+</script>
+
+<SeoHead
+  title="About SnapEngineJS"
+  description="Learn why SnapEngineJS brings game-engine-style interactivity, reusable assets, and DOM-first performance to complex web interfaces."
+  path="/about"
+  imageAlt="About SnapEngineJS website preview"
+/>
+
 <section class="about-section">
   <div class="about-container">
 

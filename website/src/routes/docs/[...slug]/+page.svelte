@@ -1,6 +1,7 @@
 
 <script lang="ts">
 	import "./doc.scss";
+	import SeoHead from "$lib/components/SeoHead.svelte";
 	let { data } = $props();
 
 	// Import the grouped entries function from +page.ts for sidebar
@@ -34,6 +35,20 @@
 	// Compute prev/next navigation
 	const currentSlug = $derived($page.params.slug || '');
 	const currentProject = $derived(slugParts[0] || 'snapengine');
+	const currentProjectTitle = $derived(
+		currentProject === 'snapsort' ? 'SnapSort' : 'SnapEngine'
+	);
+	const docDescription = $derived(
+		data.metadata?.description ??
+			(currentProject === 'snapsort'
+				? 'Documentation for installing, configuring, and building drag and drop interfaces with SnapSort.'
+				: 'Documentation for building draggable, animated, collision-aware web experiences with SnapEngine.')
+	);
+	const docTitle = $derived(
+		data.metadata?.title
+			? `${data.metadata.title} | ${currentProjectTitle} Docs`
+			: `${currentProjectTitle} Docs`
+	);
 	const visibleDocSections = $derived(docSections.filter((section) => section.project === currentProject));
 	const currentProjectEntries = $derived(allEntries.filter((entry) => entry.project === currentProject));
 	const currentIndex = $derived(currentProjectEntries.findIndex(e => e.slug === currentSlug));
@@ -62,6 +77,12 @@
 	}
 </script>
 
+<SeoHead
+	title={docTitle}
+	description={docDescription}
+	path={`/docs/${currentSlug}`}
+	imageAlt={`${currentProjectTitle} documentation preview`}
+/>
 
 <!-- Mobile sub-navbar with hamburger, breadcrumb, and dropdown menu -->
 <div class="mobile-navbar card">

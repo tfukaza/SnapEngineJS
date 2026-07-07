@@ -1,6 +1,6 @@
 <script lang="ts">
     import type { LineComponent } from "@snap-engine/snapline";
-    import { onMount } from "svelte";
+    import { onDestroy, onMount } from "svelte";
     let { line }: { line: LineComponent } = $props();
 
     let style = $state("position: absolute; overflow: visible; pointer-events: none; will-change: transform; transform: translate3d(0px, 0px, 0);");
@@ -31,10 +31,16 @@
     }
 
     let lineDOM: SVGElement | null = null;
+    let cleanupRenderCallback: (() => void) | null = null;
 
   onMount(() => {
     line.element = (lineDOM as unknown as HTMLElement);
-    line.callback.afterWrite2 = renderLine;
+    cleanupRenderCallback = line.onRender(renderLine);
+    renderLine();
+  });
+
+  onDestroy(() => {
+    cleanupRenderCallback?.();
   });
 </script>
 
@@ -48,9 +54,9 @@
   <path
     class="sl-connector-line"
     d={`M 0,0 C ${x1}, ${y1} ${x2}, ${y2} ${x3}, ${y3}`}
-    marker-end="url(#arrow)"
+    marker-end={`url(#arrow-${line.id})`}
   />
-  <marker id="arrow" viewBox="0 0 24 24" refX="0" refY="12" orient="auto">
+  <marker id={`arrow-${line.id}`} viewBox="0 0 24 24" refX="0" refY="12" orient="auto">
     <polygon points="4,4 20,12 4,22" fill="#545454"/>
   </marker>
 </svg>

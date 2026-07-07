@@ -1,11 +1,13 @@
 <script lang="ts">
   import { onMount } from "svelte";
+  import ClientDemoFrame from "$lib/components/ClientDemoFrame.svelte";
   import { Engine } from "@snap-engine/asset-base-svelte";
-  import { Container, Item } from "@snap-engine/snapsort-svelte";
+  import { Container } from "@snap-engine/snapsort-svelte";
   import * as Tone from "tone";
   import HeroToneJoystick from "./hero/HeroToneJoystick.svelte";
 
   const recessedPadIndices = new Set([5, 6, 9, 10]);
+  const padIndices = Array.from({ length: 16 }, (_, index) => index);
   const waveShapes = ["sine", "triangle8", "square8", "sawtooth8"] as const;
   type WaveShape = (typeof waveShapes)[number];
 
@@ -266,7 +268,28 @@
       </div> -->
     </div>
     <div class="hero-card card">
-      <Engine id="hero-synth-pads">
+      <ClientDemoFrame>
+        {#snippet fallback()}
+          <div class="hero-synth-panel hero-synth-skeleton" aria-hidden="true">
+            <div class="hero-synth-top">
+              <div class="hero-oled display"></div>
+              <div class="hero-transport-grid">
+                {#each Array(4) as _}
+                  <div class="hero-transport-button"></div>
+                {/each}
+              </div>
+              <div class="hero-skeleton-joystick"></div>
+            </div>
+            <div class="hero-button-bed slot">
+              <div class="hero-skeleton-pad-grid">
+                {#each padIndices as index}
+                  <div class={`hero-synth-button ${padColorClasses[index]}`}></div>
+                {/each}
+              </div>
+            </div>
+          </div>
+        {/snippet}
+        <Engine id="hero-synth-pads">
         <div class="hero-synth-panel">
           <div class="hero-synth-top">
             <div class="hero-oled display">
@@ -295,28 +318,32 @@
               {/each}
             </div>
             <div class="hero-button-grid" aria-hidden="true">
-              <Container config={{ direction: "row", groupID: "hero-synth-pads" }}>
-                {#each Array(16) as _, index}
-                  <Item className="hero-synth-item">
-                    <div
-                      class={`hero-synth-button ${padColorClasses[index]} ${activePadIndex === index ? "is-active" : ""}`}
-                      data-pad-index={index}
-                      onpointerdown={() => playPad(index)}
-                    >
-                      <span class="hero-synth-button-number" aria-hidden="true">{index + 1}</span>
-                      {#if recessedPadIndices.has(index)}
-                        <div class="hero-synth-button-indent"></div>
-                      {:else}
-                        <div class="hero-synth-button-bump"></div>
-                      {/if}
-                    </div>
-                  </Item>
-                {/each}
+              <Container
+                config={{ direction: "row", groupID: "hero-synth-pads" }}
+                items={padIndices}
+                getId={(index) => `pad-${index}`}
+                getClassName={() => "hero-synth-item"}
+              >
+                {#snippet item(index)}
+                  <div
+                    class={`hero-synth-button ${padColorClasses[index]} ${activePadIndex === index ? "is-active" : ""}`}
+                    data-pad-index={index}
+                    onpointerdown={() => playPad(index)}
+                  >
+                    <span class="hero-synth-button-number" aria-hidden="true">{index + 1}</span>
+                    {#if recessedPadIndices.has(index)}
+                      <div class="hero-synth-button-indent"></div>
+                    {:else}
+                      <div class="hero-synth-button-bump"></div>
+                    {/if}
+                  </div>
+                {/snippet}
               </Container>
             </div>
           </div>
         </div>
-      </Engine>
+        </Engine>
+      </ClientDemoFrame>
     </div>
   </div>
 </section>
@@ -393,6 +420,31 @@
     justify-self: end;
     box-sizing: border-box;
     padding: var(--size-24);
+  }
+
+  .hero-synth-skeleton {
+    min-height: 100%;
+    pointer-events: none;
+  }
+
+  .hero-skeleton-joystick {
+    width: var(--hero-control-size);
+    aspect-ratio: 1 / 1;
+    border-radius: 50%;
+    background: #e7ebef;
+    box-shadow: inset 0 0 0 1px rgb(31 30 41 / 8%);
+  }
+
+  .hero-skeleton-pad-grid {
+    display: grid;
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+    gap: var(--hero-pad-gap);
+    width: 100%;
+    height: 100%;
+  }
+
+  .hero-skeleton-pad-grid .hero-synth-button {
+    aspect-ratio: auto;
   }
 
   .hero-card :global(#snap-canvas) {

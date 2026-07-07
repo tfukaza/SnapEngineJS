@@ -1,34 +1,11 @@
 <script lang="ts">
   import "../../../css/snapdesign.scss";
+  import DebugLayoutToolbar from "$lib/components/DebugLayoutToolbar.svelte";
   import "$lib/fonts.css";
+  import { debugLayoutFooterControl } from "$lib/stores/debugLayoutFooter";
+
   let { children } = $props();
 </script>
-
-<svelte:head>
-  <title>SnapEngineJS</title>
-  <meta
-    name="description"
-    content="SnapEngine is an interactivity engine for building draggable, animated, collision-aware web experiences."
-  />
-  <meta property="og:title" content="SnapEngineJS" />
-  <meta
-    property="og:description"
-    content="An interactivity engine for building draggable, animated, collision-aware web experiences."
-  />
-  <meta property="og:type" content="website" />
-  <meta property="og:image" content="https://snap-engine-js.vercel.app/images/thumbnail.png" />
-  <meta property="og:image:secure_url" content="https://snap-engine-js.vercel.app/images/thumbnail.png" />
-  <meta property="og:image:width" content="1200" />
-  <meta property="og:image:height" content="627" />
-  <meta property="og:image:alt" content="SnapEngineJS website preview" />
-  <meta name="twitter:card" content="summary_large_image" />
-  <meta name="twitter:title" content="SnapEngineJS" />
-  <meta
-    name="twitter:description"
-    content="An interactivity engine for building draggable, animated, collision-aware web experiences."
-  />
-  <meta name="twitter:image" content="https://snap-engine-js.vercel.app/images/thumbnail.png" />
-</svelte:head>
 
 <nav class="nav-bar">
   <div class="nav-left">
@@ -49,7 +26,7 @@
 {@render children()}
 
 <footer>
-  <div class="app-footer">
+    <div class="app-footer">
     <div class="footer-content">
       <div class="footer-brand">
         <span class="brand-name">SnapEngine</span>
@@ -68,6 +45,15 @@
           <a href="/snapsort">SnapSort</a>
           <span class="footer-link-disabled">SnapLine</span>
         </div>
+        {#if $debugLayoutFooterControl}
+          <div class="footer-column footer-debug-column">
+            <h4>Debug</h4>
+            <DebugLayoutToolbar
+              debugLayout={$debugLayoutFooterControl.debugLayout}
+              onToggle={$debugLayoutFooterControl.onToggle}
+            />
+          </div>
+        {/if}
       </div>
     </div>
 </div>
@@ -75,6 +61,8 @@
 
 <style lang="scss">
   .nav-bar {
+    --page-gutter: clamp(var(--size-16), 5vw, var(--size-64));
+
     display: flex;
     justify-content: space-between;
     gap: var(--size-64);
@@ -83,7 +71,7 @@
     top: 0;
     background: rgba(255, 255, 255, 0.8);
     border-radius: 0 0 var(--size-8) var(--size-8);
-    width: clamp(100px, 90%, 1200px);
+    width: min(1200px, calc(100% - (var(--page-gutter) * 2)));
     box-sizing: border-box;
     margin: 0px auto;
 
@@ -153,8 +141,10 @@
       width: 100%;
   }
   .app-footer {
+    --page-gutter: clamp(var(--size-16), 5vw, var(--size-64));
+
     margin-top: auto;
-    width: clamp(100px, 90%, 1200px);
+    width: min(1200px, calc(100% - (var(--page-gutter) * 2)));
     margin: var(--size-128) auto;
     box-sizing: border-box;
     background: white;
@@ -162,11 +152,12 @@
     .footer-content {
       max-width: var(--page-width, 1400px);
       display: flex;
-      justify-content: space-between;
+      flex-direction: column;
+      justify-content: flex-start;
       align-items: flex-start;
+      gap: var(--size-16);
 
       @media (max-width: 720px) {
-        flex-direction: column;
         gap: 2rem;
       }
     }
@@ -187,7 +178,15 @@
 
     .footer-sections {
       display: flex;
+      align-items: flex-start;
       gap: 4rem;
+      flex-wrap: wrap;
+
+      @media (max-width: 720px) {
+        width: 100%;
+        justify-content: flex-start;
+        gap: var(--size-32) var(--size-48);
+      }
     }
 
     .footer-column {
@@ -214,6 +213,10 @@
         color: #a8a4a2;
         cursor: default;
       }
+    }
+
+    .footer-debug-column {
+      align-items: flex-start;
     }
   }
 </style>

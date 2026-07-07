@@ -3,7 +3,7 @@
   "version": "0.4.0",
   "repository": {
     "type": "git",
-    "url": "https://github.com/tfukaza/SnapEngineJS",
+    "url": "git+https://github.com/tfukaza/SnapEngineJS.git",
     "directory": "assets/asset-base/svelte"
   },
   "type": "module",

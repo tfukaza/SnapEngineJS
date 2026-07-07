@@ -24,9 +24,12 @@
 </script>
 
 <div class="css-showcase" data-showcase-style={showcaseStyle}>
-    <section class="showcase-section showcase-header">
-      <div>
-        <h1 class="showcase-title">Style<br />Guide</h1>
+    <section class="showcase-section showcase-header col-12">
+      <div class="showcase-hero-copy">
+        <h1 class="showcase-title">Snap<br />Design</h1>
+        <p class="large">
+          A working inventory of SnapDesign type, color, cards, controls, and interface states.
+        </p>
         <div class="style-selector" aria-label="Style">
           <button
             class:active={showcaseStyle === "existing"}
@@ -47,7 +50,7 @@
     </section>
 
     <!-- Typography Section -->
-    <section class="showcase-section">
+    <section class="showcase-section col-12">
       <h2>Typography</h2>
       <article class="type-article prose">
         <h1>Inside Snap Engine</h1>
@@ -114,7 +117,7 @@ object.schedule(() => &#123;
     </section>
 
     <!-- Colors Section -->
-    <section class="showcase-section">
+    <section class="showcase-section col-12">
       <h2>Color Palette</h2>
       <div class="color-grid">
         <div class="color-swatch primary">
@@ -145,7 +148,7 @@ object.schedule(() => &#123;
     </section>
 
     <!-- Cards, Slots & Displays Section -->
-    <section class="showcase-section">
+    <section class="showcase-section col-12">
       <h2>Cards, Slots & Displays</h2>
       <div class="card-slot-grid">
         <div class="card">
@@ -170,7 +173,7 @@ object.schedule(() => &#123;
     </section>
 
     <!-- Buttons & Form Elements Section -->
-    <section class="showcase-section">
+    <section class="showcase-section col-12">
       <h2>Buttons & Form Elements</h2>
       <div class="controls-stack">
         <div class="controls-top">
@@ -363,7 +366,7 @@ object.schedule(() => &#123;
     </section>
 
     <!-- UI Elements Section -->
-    <section class="showcase-section">
+    <section class="showcase-section col-12">
       <h2>UI Elements</h2>
       <div class="ui-elements-grid">
         <div class="ui-example">
@@ -430,16 +433,20 @@ object.schedule(() => &#123;
   }
 
   .showcase-header {
-    display: flex;
     align-items: center;
-    justify-content: flex-start;
     text-align: left;
     height: 500px;
+  }
+
+  .showcase-hero-copy {
+    grid-column: 1 / span 7;
+    align-self: center;
   }
 
   .showcase-title {
     font-size: 96px;
     line-height: 1;
+    margin-bottom: var(--size-24);
   }
 
   .style-selector {
@@ -463,6 +470,10 @@ object.schedule(() => &#123;
       margin-bottom: var(--size-24);
       text-transform: lowercase;
     }
+  }
+
+  .showcase-section > :where(h2, article, .color-grid, .card-slot-grid, .controls-stack, .ui-elements-grid) {
+    grid-column: 1 / -1;
   }
 
   .type-article {

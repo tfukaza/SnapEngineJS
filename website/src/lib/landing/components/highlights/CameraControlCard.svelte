@@ -1,5 +1,6 @@
 <script lang="ts">
   import { onMount } from "svelte";
+  import ClientDemoFrame from "$lib/components/ClientDemoFrame.svelte";
   import { Engine, Camera as CameraControlComponent } from "@snap-engine/asset-base-svelte";
   import type { CameraControl as CameraControlApi } from "@snap-engine/asset-base";
   import { debugState } from "$lib/landing/debugState.svelte";
@@ -97,7 +98,17 @@
 
 <article class="camera-control-card theme-secondary-7">
   <div class="camera-viewport">
-    <Engine id="camera-control-highlight" debug={debugState.enabled}>
+    <ClientDemoFrame>
+      {#snippet fallback()}
+        <div class="camera-scene camera-skeleton" aria-hidden="true">
+          <div class="camera-topo-map">
+            {#each topoRowsText.slice(0, 28) as row}
+              <span>{row}</span>
+            {/each}
+          </div>
+        </div>
+      {/snippet}
+      <Engine id="camera-control-highlight" debug={debugState.enabled}>
       <CameraControlComponent bind:cameraControl>
         <div class="camera-scene">
           <div class="camera-topo-map" aria-hidden="true">
@@ -112,7 +123,8 @@
           </div>
         </div>
       </CameraControlComponent>
-    </Engine>
+      </Engine>
+    </ClientDemoFrame>
   </div>
 
   <div class="camera-controls card" aria-label="Camera controls">
@@ -199,6 +211,11 @@
     display: grid;
     place-items: center;
     overflow: visible;
+  }
+
+  .camera-skeleton {
+    overflow: hidden;
+    background: color-mix(in srgb, var(--color-background-tint) 92%, #000 4%);
   }
 
   .camera-topo-map {
