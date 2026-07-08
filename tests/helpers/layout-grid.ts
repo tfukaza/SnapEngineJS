@@ -1,0 +1,187 @@
+// Shared helpers for layout-engine tests (tests/ut/layout.spec.ts and the
+// wrap-matrix e2e test in tests/e2e/snapsort-drag-snapshot.spec.ts): DOM-free
+// snapshot builders plus the row-shape assertions both suites make. Keeping
+// the grid construction and row counting here guarantees the unit tests and
+// the cross-browser e2e matrix judge the layout engine by the same rules.
+//
+// Note: code inside `page.evaluate` blocks cannot import from here (evaluate
+// serializes the closure into the browser), so in-page measurement helpers
+// like `boxOf` remain local to their spec.
+import type { DomProperty } from "../../src/object";
+import {
+  contentBoxOrigin,
+  flowLayoutPositions,
+  type LayoutFilter,
+  type VirtualInsertion,
+} from "../../assets/snapsort/core/src/layout";
+import type { ItemSnapshot } from "../../assets/snapsort/core/src/snapshot";
+
+export type BoxInit = {
+  x: number;
+  y: number;
+  width: number;
+  height: number;
+  margin?: Partial<DomProperty["margin"]>;
+  padding?: Partial<DomProperty["padding"]>;
+  border?: Partial<DomProperty["border"]>;
+};
+
+export function makeBox(init: BoxInit): DomProperty {
+  const edges = (
+    src: Partial<DomProperty["margin"]> | undefined,
+  ): DomProperty["margin"] => ({
+    top: src?.top ?? 0,
+    right: src?.right ?? 0,
+    bottom: src?.bottom ?? 0,
+    left: src?.left ?? 0,
+  });
+  return {
+    x: init.x,
+    y: init.y,
+    width: init.width,
+    height: init.height,
+    scaleX: 1,
+    scaleY: 1,
+    screenX: init.x,
+    screenY: init.y,
+    margin: edges(init.margin),
+    padding: edges(init.padding),
+    border: edges(init.border),
+  } as DomProperty;
+}
+
+let nextKey = 0;
+
+export function makeItemSnapshot(
+  value: string,
+  box: DomProperty,
+  children: ItemSnapshot<string>[] = [],
+): ItemSnapshot<string> {
+  return {
+    value,
+    key: `key-${nextKey++}`,
+    itemId: value,
+    metadata: {},
+    direction: "column",
+    mainAxisAlign: "start",
+    layoutModel: "flow",
+    locked: false,
+    box,
+    children,
+  };
+}
+
+export function makeContainerSnapshot(
+  box: DomProperty,
+  children: ItemSnapshot<string>[],
+  direction: "row" | "column" = "row",
+  mainAxisAlign: "start" | "center" = "start",
+): ItemSnapshot<string> {
+  return {
+    value: "container",
+    key: `key-${nextKey++}`,
+    itemId: "container",
+    metadata: {},
+    direction,
+    mainAxisAlign,
+    layoutModel: "flow",
+    locked: false,
+    box,
+    children,
+  };
+}
+
+/**
+ * Build a wrapped row grid snapshot: `rows` x `cols` items of `itemW` x
+ * `itemH` with `gap`, inside a container sized to fit `cols` per row exactly
+ * (zero slack). `jitter` injects per-item measurement noise to simulate
+ * browser imprecision.
+ */
+export function makeGrid(options: {
+  rows: number;
+  cols: number;
+  itemW: number;
+  itemH: number;
+  gap: number;
+  originX?: number;
+  originY?: number;
+  padding?: number;
+  jitter?: (index: number) => { w?: number; x?: number };
+}): ItemSnapshot<string> {
+  const { rows, cols, itemW, itemH, gap } = options;
+  const originX = options.originX ?? 0;
+  const originY = options.originY ?? 0;
+  const pad = options.padding ?? 0;
+  const contentW = cols * itemW + (cols - 1) * gap;
+  const children: ItemSnapshot<string>[] = [];
+  for (let r = 0; r < rows; r++) {
+    for (let c = 0; c < cols; c++) {
+      const i = r * cols + c;
+      const jitter = options.jitter?.(i) ?? {};
+      children.push(
+        makeItemSnapshot(
+          `item-${i}`,
+          makeBox({
+            x: originX + pad + c * (itemW + gap) + (jitter.x ?? 0),
+            y: originY + pad + r * (itemH + gap),
+            width: itemW + (jitter.w ?? 0),
+            height: itemH,
+          }),
+        ),
+      );
+    }
+  }
+  return makeContainerSnapshot(
+    makeBox({
+      x: originX,
+      y: originY,
+      width: contentW + pad * 2,
+      height: rows * itemH + (rows - 1) * gap + pad * 2,
+      padding: { top: pad, right: pad, bottom: pad, left: pad },
+    }),
+    children,
+  );
+}
+
+/** Group y positions into lines `rowStep` apart and return per-line counts. */
+export function rowCounts(ys: number[], rowStep: number): number[] {
+  const base = Math.min(...ys);
+  const counts = new Map<number, number>();
+  for (const y of ys) {
+    const row = Math.round((y - base) / rowStep);
+    counts.set(row, (counts.get(row) ?? 0) + 1);
+  }
+  return [...counts.entries()]
+    .sort((a, b) => a[0] - b[0])
+    .map(([, count]) => count);
+}
+
+/**
+ * Run the flow-layout simulation on a container snapshot and return the
+ * per-line entry counts (items plus the ghost, when an insertion is given).
+ * Throws if an insertion is given but the simulation produced no rect for it.
+ */
+export function simulatedRowCounts<T>(
+  container: ItemSnapshot<T>,
+  options: {
+    rowStep: number;
+    insertion?: VirtualInsertion<T>;
+    filter?: LayoutFilter<T>;
+  },
+): number[] {
+  const origin = contentBoxOrigin(container.box);
+  const result = flowLayoutPositions(container, origin.x, origin.y, {
+    filter: options.filter,
+    insertions: options.insertion ? [options.insertion] : undefined,
+  });
+  const ys: number[] = [];
+  for (const [, position] of result.itemPositions) ys.push(position.y);
+  if (options.insertion) {
+    const rect = result.virtualRects.get(options.insertion);
+    if (!rect) {
+      throw new Error("simulation produced no rect for the insertion");
+    }
+    ys.push(rect.y);
+  }
+  return rowCounts(ys, options.rowStep);
+}
