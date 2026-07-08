@@ -2548,6 +2548,595 @@ test.describe("Snapsort drag-start snapshot layout", () => {
     ).toHaveLength(0);
   });
 
+  test("layout simulation invariants hold across randomized containers (property fuzz)", async ({
+    page,
+  }, testInfo) => {
+    // Property-based ground truth: instead of hand-picked scenarios, build
+    // seeded-random containers and assert invariants that must hold for ANY
+    // layout the engine claims to support:
+    //
+    // - identity: simulating with no exclusions/insertions reproduces the
+    //   browser's measured positions;
+    // - away-and-back: excluding item k and inserting a same-size ghost at
+    //   index k is a no-op — every other item stays put and the ghost lands
+    //   on item k's measured rect;
+    // - locality: a ghost at index k never moves an entry before index k
+    //   (compared against the identity simulation, so the bound is exact).
+    //
+    // The generator stays inside the engine's stated envelope (uniform gaps,
+    // no per-item margins, LTR, no spans); failures record their seed for
+    // deterministic repro.
+    const TOLERANCE = 1.25;
+    const caseCount = 36;
+
+    await page.setContent('<main id="property-fixture"></main>');
+    const measured = await page.evaluate((caseCount) => {
+      const fixture = document.querySelector(
+        "#property-fixture",
+      ) as HTMLElement;
+      let seed = 20260708;
+      const rand = () => {
+        seed = (seed * 1664525 + 1013904223) % 4294967296;
+        return seed / 4294967296;
+      };
+      const between = (lo: number, hi: number) => lo + rand() * (hi - lo);
+      const int = (lo: number, hi: number) => Math.floor(between(lo, hi + 1));
+      const boxOf = (element: HTMLElement) => {
+        const rect = element.getBoundingClientRect();
+        const style = getComputedStyle(element);
+        const number = (value: string) => parseFloat(value) || 0;
+        return {
+          x: rect.x,
+          y: rect.y,
+          width: rect.width,
+          height: rect.height,
+          scaleX: 1,
+          scaleY: 1,
+          screenX: rect.x,
+          screenY: rect.y,
+          margin: {
+            top: number(style.marginTop),
+            right: number(style.marginRight),
+            bottom: number(style.marginBottom),
+            left: number(style.marginLeft),
+          },
+          padding: {
+            top: number(style.paddingTop),
+            right: number(style.paddingRight),
+            bottom: number(style.paddingBottom),
+            left: number(style.paddingLeft),
+          },
+          border: {
+            top: number(style.borderTopWidth),
+            right: number(style.borderRightWidth),
+            bottom: number(style.borderBottomWidth),
+            left: number(style.borderLeftWidth),
+          },
+        };
+      };
+
+      const cases = [];
+      for (let index = 0; index < caseCount; index++) {
+        const caseSeed = seed;
+        const kind = rand() < 0.6 ? "flow" : "slots";
+        const width = between(240, 520);
+        const gap = int(2, 12);
+        const pad = int(0, 12);
+        const border = int(0, 3);
+        const count = int(8, 16);
+
+        fixture.innerHTML = "";
+        const container = document.createElement("section");
+        let containerCss =
+          `box-sizing:border-box;width:${width}px;padding:${pad}px;` +
+          `border:${border}px solid #111;`;
+        if (kind === "flow") {
+          containerCss +=
+            "display:flex;flex-direction:row;flex-wrap:wrap;" +
+            `align-items:flex-start;align-content:flex-start;gap:${gap}px;`;
+        } else {
+          const templates = [
+            `repeat(${int(3, 5)}, 1fr)`,
+            `repeat(auto-fill, minmax(${int(60, 90)}px, 1fr))`,
+            Array.from({ length: int(3, 4) }, () => `${int(50, 120)}px`).join(
+              " ",
+            ),
+          ];
+          containerCss +=
+            `display:grid;grid-template-columns:${templates[int(0, 2)]};` +
+            `gap:${gap}px;`;
+        }
+        container.style.cssText = containerCss;
+        fixture.appendChild(container);
+        for (let i = 0; i < count; i++) {
+          const item = document.createElement("div");
+          let itemCss = `box-sizing:border-box;height:${int(24, 64)}px;background:#dbeafe;`;
+          if (kind === "flow") itemCss += `width:${between(30, 110)}px;`;
+          item.style.cssText = itemCss;
+          container.appendChild(item);
+        }
+        cases.push({
+          caseSeed,
+          kind,
+          container: boxOf(container),
+          items: [...container.children].map((element) =>
+            boxOf(element as HTMLElement),
+          ),
+        });
+      }
+      return cases;
+    }, caseCount);
+
+    const failures: Array<{
+      caseSeed: number;
+      kind: string;
+      property: string;
+      detail: string;
+      delta: number;
+    }> = [];
+    const distance = (
+      a: { x: number; y: number },
+      b: { x: number; y: number },
+    ) => Math.max(Math.abs(a.x - b.x), Math.abs(a.y - b.y));
+
+    for (const propertyCase of measured) {
+      const root = makeContainerSnapshot(
+        propertyCase.container as Box,
+        propertyCase.items.map((box, index) =>
+          makeItemSnapshot(`${index}`, box as Box),
+        ),
+        "row",
+        "start",
+        propertyCase.kind as "flow" | "slots",
+      );
+      const origin = contentBoxOrigin(root.box);
+      const record = (property: string, detail: string, delta: number) =>
+        failures.push({
+          caseSeed: propertyCase.caseSeed,
+          kind: propertyCase.kind,
+          property,
+          detail,
+          delta: +delta.toFixed(2),
+        });
+
+      // Identity: the simulation of the unmodified container must reproduce
+      // the measured layout.
+      const identity = flowLayoutPositions(root, origin.x, origin.y);
+      for (const child of root.children) {
+        const delta = distance(identity.itemPositions.get(child)!, child.box);
+        if (delta > TOLERANCE) record("identity", `item-${child.value}`, delta);
+      }
+
+      const count = root.children.length;
+      for (const k of [0, Math.floor(count / 2), count - 1]) {
+        const target = root.children[k];
+
+        // Away-and-back: excluding item k and inserting an identical ghost
+        // at index k must be a no-op.
+        const insertion = {
+          container: root,
+          index: k,
+          entry: {
+            width: target.box.width,
+            height: target.box.height,
+            margin: target.box.margin,
+          },
+        };
+        const roundTrip = flowLayoutPositions(root, origin.x, origin.y, {
+          filter: { excludeSnapshots: new Set([target]) },
+          insertions: [insertion],
+        });
+        for (const child of root.children) {
+          if (child === target) continue;
+          const delta = distance(
+            roundTrip.itemPositions.get(child)!,
+            child.box,
+          );
+          if (delta > TOLERANCE) {
+            record("away-and-back", `k=${k} item-${child.value}`, delta);
+          }
+        }
+        const ghost = roundTrip.virtualPositions.get(insertion)!;
+        const ghostDelta = distance(ghost, target.box);
+        if (ghostDelta > TOLERANCE) {
+          record("away-and-back", `k=${k} ghost`, ghostDelta);
+        }
+
+        // Locality: inserting at index k (no exclusion) must not move any
+        // entry before k. Compared against the identity simulation, so this
+        // bound is exact rather than tolerance-based.
+        const inserted = flowLayoutPositions(root, origin.x, origin.y, {
+          insertions: [
+            {
+              container: root,
+              index: k,
+              entry: {
+                width: target.box.width,
+                height: target.box.height,
+                margin: target.box.margin,
+              },
+            },
+          ],
+        });
+        for (let i = 0; i < k; i++) {
+          const child = root.children[i];
+          const delta = distance(
+            inserted.itemPositions.get(child)!,
+            identity.itemPositions.get(child)!,
+          );
+          if (delta > 0.01) record("locality", `k=${k} item-${i}`, delta);
+        }
+      }
+    }
+
+    await writeJson(testInfo.outputPath("layout-property-fuzz.json"), {
+      caseCount: measured.length,
+      failures: failures.slice(0, 40),
+    });
+    expect(
+      failures.slice(0, 8),
+      "identity / away-and-back / locality invariants should hold for every generated container",
+    ).toHaveLength(0);
+  });
+
+  test("drops land where the drag preview predicted (drift oracle)", async ({
+    page,
+  }, testInfo) => {
+    // The mid-drag preview IS the layout engine's prediction: displaced
+    // items sit at simulated positions and the spacer marks the dragged
+    // item's landing slot. After the drop, the framework re-renders and the
+    // browser performs the real layout — the authoritative ground truth.
+    // Comparing the settled DOM against the last preview turns any real
+    // drag into a layout-engine oracle: drift means the simulation and the
+    // browser disagreed about the committed arrangement.
+    const TOLERANCE = 1.5;
+    await page.goto("/?demo=drop_snap_nested", { waitUntil: "networkidle" });
+
+    const verticalColumn = await demoBoxByHeading(page, "Vertical Column");
+
+    const dragWithOracle = async (
+      sourceText: string,
+      target: { x: number; y: number },
+      label: string,
+    ) => {
+      const source = await itemByTextIn(verticalColumn, sourceText);
+      const start = center(await itemRect(source));
+      await page.mouse.move(start.x, start.y);
+      await page.mouse.down();
+      for (let step = 1; step <= 14; step++) {
+        await page.mouse.move(
+          start.x + ((target.x - start.x) * step) / 14,
+          start.y + ((target.y - start.y) * step) / 14,
+        );
+        await page.waitForTimeout(16);
+      }
+      // Let the preview settle so captured rects are the engine's final
+      // prediction, not a mid-animation frame.
+      await page.waitForTimeout(350);
+
+      const texts = (element: Element) =>
+        element.textContent?.trim().replace(/\s+/g, " ") ?? "";
+      const prediction = await verticalColumn.evaluate(
+        (box, dragged) => {
+          const out: Record<string, { x: number; y: number }> = {};
+          for (const element of box.querySelectorAll(".snapsort-item")) {
+            const text =
+              element.textContent?.trim().replace(/\s+/g, " ") ?? "";
+            if (element.id === "spacer" || text.includes(dragged)) continue;
+            const rect = element.getBoundingClientRect();
+            out[text] = { x: rect.x, y: rect.y };
+          }
+          const spacer = box.querySelector("#spacer");
+          if (spacer) {
+            const rect = spacer.getBoundingClientRect();
+            out["__dragged__"] = { x: rect.x, y: rect.y };
+          }
+          return out;
+        },
+        sourceText,
+      );
+
+      await page.mouse.up();
+      await page.waitForTimeout(500);
+
+      const settled = await verticalColumn.evaluate((box, dragged) => {
+        const out: Record<string, { x: number; y: number }> = {};
+        for (const element of box.querySelectorAll(".snapsort-item")) {
+          const text = element.textContent?.trim().replace(/\s+/g, " ") ?? "";
+          const rect = element.getBoundingClientRect();
+          out[text.includes(dragged) ? "__dragged__" : text] = {
+            x: rect.x,
+            y: rect.y,
+          };
+        }
+        return out;
+      }, sourceText);
+
+      const drifts: Array<{ label: string; entry: string; delta: number }> =
+        [];
+      let compared = 0;
+      for (const [entry, predicted] of Object.entries(prediction)) {
+        const actual = settled[entry];
+        if (!actual) continue;
+        compared++;
+        const delta = Math.max(
+          Math.abs(predicted.x - actual.x),
+          Math.abs(predicted.y - actual.y),
+        );
+        if (delta > TOLERANCE) drifts.push({ label, entry, delta: +delta.toFixed(2) });
+      }
+      // Guard against a vacuous pass: the oracle must have compared the
+      // dragged item's landing slot plus the displaced items.
+      expect(
+        compared,
+        `oracle should compare several entries for ${label}`,
+      ).toBeGreaterThanOrEqual(4);
+      expect(
+        prediction.__dragged__,
+        `spacer prediction should exist for ${label}`,
+      ).toBeTruthy();
+      return drifts;
+    };
+
+    const item3 = await itemByTextIn(verticalColumn, "Item 3");
+    const item3Center = center(await itemRect(item3));
+    const item4 = await itemByTextIn(verticalColumn, "Item 4");
+    const item4Rect = await itemRect(item4);
+
+    const allDrifts = [
+      // Reorder downward past two slots.
+      ...(await dragWithOracle("Item 1", item3Center, "item1-to-item3")),
+      // Reach the final slot (past the last item's bottom edge).
+      ...(await dragWithOracle(
+        "Item 2",
+        {
+          x: item4Rect.x + item4Rect.width / 2,
+          y: item4Rect.y + item4Rect.height * 1.05,
+        },
+        "item2-to-final-slot",
+      )),
+    ];
+
+    await writeJson(testInfo.outputPath("drop-drift-oracle.json"), {
+      drifts: allDrifts,
+    });
+    expect(
+      allDrifts,
+      "settled post-drop positions should match the drag preview's prediction",
+    ).toHaveLength(0);
+  });
+
+  // Documented-unsupported layout shapes, encoded as expected failures so
+  // the boundary is visible in the test report and any accidental fix or
+  // regression flips the result. Each builds a real DOM, inserts a real
+  // spacer, and counts entries where the simulation misses the browser's
+  // placement by more than 1.25px.
+  async function unsupportedShapeMismatches(
+    page: Page,
+    config: {
+      containerCss: string;
+      itemCss: string[];
+      itemInnerHeights?: number[];
+      layoutModel: "flow" | "slots";
+      spacerIndices: number[];
+    },
+  ): Promise<number> {
+    await page.setContent('<main id="unsupported-fixture"></main>');
+    const measured = await page.evaluate((cfg) => {
+      const fixture = document.querySelector(
+        "#unsupported-fixture",
+      ) as HTMLElement;
+      const boxOf = (element: HTMLElement) => {
+        const rect = element.getBoundingClientRect();
+        const style = getComputedStyle(element);
+        const number = (value: string) => parseFloat(value) || 0;
+        return {
+          x: rect.x,
+          y: rect.y,
+          width: rect.width,
+          height: rect.height,
+          scaleX: 1,
+          scaleY: 1,
+          screenX: rect.x,
+          screenY: rect.y,
+          margin: {
+            top: number(style.marginTop),
+            right: number(style.marginRight),
+            bottom: number(style.marginBottom),
+            left: number(style.marginLeft),
+          },
+          padding: {
+            top: number(style.paddingTop),
+            right: number(style.paddingRight),
+            bottom: number(style.paddingBottom),
+            left: number(style.paddingLeft),
+          },
+          border: {
+            top: number(style.borderTopWidth),
+            right: number(style.borderRightWidth),
+            bottom: number(style.borderBottomWidth),
+            left: number(style.borderLeftWidth),
+          },
+        };
+      };
+      const build = (
+        spacer: { index: number; width: number; height: number } | null,
+      ) => {
+        fixture.innerHTML = "";
+        const container = document.createElement("section");
+        container.style.cssText = "box-sizing:border-box;" + cfg.containerCss;
+        fixture.appendChild(container);
+        const nodes: HTMLElement[] = [];
+        for (let i = 0; i < cfg.itemCss.length; i++) {
+          if (spacer && i === 0) continue; // dragged item lifted
+          const item = document.createElement("div");
+          item.style.cssText =
+            "box-sizing:border-box;background:#dbeafe;" + cfg.itemCss[i];
+          item.dataset.i = String(i);
+          const innerHeight = cfg.itemInnerHeights?.[i];
+          if (innerHeight != null) {
+            const inner = document.createElement("div");
+            inner.style.cssText = `height:${innerHeight}px;`;
+            item.appendChild(inner);
+          }
+          nodes.push(item);
+        }
+        if (spacer) {
+          const spacerEl = document.createElement("div");
+          spacerEl.id = "spacer";
+          spacerEl.style.cssText = `box-sizing:border-box;background:#fecaca;width:${spacer.width}px;height:${spacer.height}px;`;
+          nodes.splice(Math.min(spacer.index, nodes.length), 0, spacerEl);
+        }
+        for (const node of nodes) container.appendChild(node);
+        return container;
+      };
+
+      const pristine = build(null);
+      const containerBox = boxOf(pristine);
+      const itemBoxes = [...pristine.children].map((element) =>
+        boxOf(element as HTMLElement),
+      );
+      const dragged = itemBoxes[0];
+      const truths = cfg.spacerIndices.map((index) => {
+        const container = build({
+          index,
+          width: dragged.width,
+          height: dragged.height,
+        });
+        let ghost: { x: number; y: number } | null = null;
+        const items: Array<{ id: string; x: number; y: number }> = [];
+        for (const element of container.children) {
+          const rect = element.getBoundingClientRect();
+          if (element.id === "spacer") ghost = { x: rect.x, y: rect.y };
+          else {
+            items.push({
+              id: (element as HTMLElement).dataset.i!,
+              x: rect.x,
+              y: rect.y,
+            });
+          }
+        }
+        return { spacerIndex: index, ghost, items };
+      });
+      return { container: containerBox, itemBoxes, truths };
+    }, config);
+
+    const root = makeContainerSnapshot(
+      measured.container as Box,
+      measured.itemBoxes.map((box, index) =>
+        makeItemSnapshot(`${index}`, box as Box),
+      ),
+      "row",
+      "start",
+      config.layoutModel,
+    );
+    const dragged = root.children[0];
+    let mismatches = 0;
+    for (const truth of measured.truths) {
+      const insertion = {
+        container: root,
+        index: truth.spacerIndex,
+        entry: {
+          width: dragged.box.width,
+          height: dragged.box.height,
+          margin: dragged.box.margin,
+        },
+      };
+      const origin = contentBoxOrigin(root.box);
+      const result = flowLayoutPositions(root, origin.x, origin.y, {
+        filter: { excludeSnapshots: new Set([dragged]) },
+        insertions: [insertion],
+      });
+      const actualById = new Map(truth.items.map((item) => [item.id, item]));
+      for (const [snapshotItem, position] of result.itemPositions) {
+        const actual = actualById.get(snapshotItem.value);
+        if (!actual) continue;
+        if (
+          Math.max(
+            Math.abs(position.x - actual.x),
+            Math.abs(position.y - actual.y),
+          ) > 1.25
+        ) {
+          mismatches++;
+        }
+      }
+      const ghost = result.virtualPositions.get(insertion);
+      if (
+        !ghost ||
+        !truth.ghost ||
+        Math.max(
+          Math.abs(ghost.x - truth.ghost.x),
+          Math.abs(ghost.y - truth.ghost.y),
+        ) > 1.25
+      ) {
+        mismatches++;
+      }
+    }
+    return mismatches;
+  }
+
+  test("documents unsupported: RTL flex containers", async ({ page }) => {
+    test.fail(
+      true,
+      "The flow model assumes LTR main-axis growth: RTL offsets regress per item, so line detection and positions are mirrored. Slot mode covers RTL grids; RTL flex is out of scope.",
+    );
+    const mismatches = await unsupportedShapeMismatches(page, {
+      containerCss:
+        "display:flex;flex-wrap:wrap;direction:rtl;width:380.33px;gap:4px;" +
+        "align-items:flex-start;align-content:flex-start;",
+      itemCss: Array.from(
+        { length: 16 },
+        () => "width:calc((100% - 12px)/4);height:40px;",
+      ),
+      layoutModel: "flow",
+      spacerIndices: [0, 3, 7],
+    });
+    expect(mismatches).toBe(0);
+  });
+
+  test("documents unsupported: grid items spanning multiple tracks", async ({
+    page,
+  }) => {
+    test.fail(
+      true,
+      "Slot mode assumes one entry per slot: a span-2 item makes slot geometry depend on placement, which reordering invalidates.",
+    );
+    const mismatches = await unsupportedShapeMismatches(page, {
+      containerCss:
+        "display:grid;grid-template-columns:repeat(4, 88px);gap:4px;width:380px;",
+      itemCss: Array.from({ length: 14 }, (_, i) =>
+        i === 5 ? "height:40px;grid-column:span 2;" : "height:40px;",
+      ),
+      layoutModel: "slots",
+      spacerIndices: [0, 3, 7],
+    });
+    expect(mismatches).toBe(0);
+  });
+
+  test("documents unsupported: stretch items with intrinsic heights across content-sized rows", async ({
+    page,
+  }) => {
+    test.fail(
+      true,
+      "Items with align-self:stretch and no explicit height measure at their row's height, not their intrinsic height; when displaced across content-sized rows the simulation carries the stale stretched height. Predicting the true height would require intrinsic sizing per destination track.",
+    );
+    const mismatches = await unsupportedShapeMismatches(page, {
+      containerCss:
+        "display:grid;grid-template-columns:repeat(3, 110px);grid-auto-rows:auto;gap:4px;width:346px;",
+      // No explicit item heights: each stretches to its row. Item 0's inner
+      // content is 90px tall, making row 1's track 90 and stretching its
+      // short siblings to 90 as measured. Removing item 0 shrinks row 1 to
+      // 30 in the real layout; the simulation keeps the stale 90.
+      itemCss: Array.from({ length: 9 }, () => ""),
+      itemInnerHeights: Array.from({ length: 9 }, (_, i) =>
+        i === 0 ? 90 : 30,
+      ),
+      layoutModel: "slots",
+      spacerIndices: [8],
+    });
+    expect(mismatches).toBe(0);
+  });
+
   test("does not crash when drag movement arrives before snapshot capture", async ({
     page,
   }, testInfo) => {
