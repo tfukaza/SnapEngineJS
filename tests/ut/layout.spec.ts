@@ -253,6 +253,235 @@ test.describe("wrap robustness against browser measurement noise", () => {
   });
 });
 
+test.describe("slot layout model", () => {
+  // Unequal-track grid: columns 60/140/80/88, gap 4 -> column x: 0/64/208/292.
+  const unequalGrid = () =>
+    makeGrid({
+      rows: 2,
+      cols: 4,
+      itemW: 0,
+      itemH: 40,
+      gap: 4,
+      colWidths: [60, 140, 80, 88],
+      layoutModel: "slots",
+    });
+
+  test("entries adopt measured slot geometry on an unequal-track grid", () => {
+    const grid = unequalGrid();
+    const dragged = grid.children[0];
+    const insertion: VirtualInsertion<string> = {
+      container: grid,
+      index: 3,
+      entry: { width: 60, height: 40, margin: dragged.box.margin },
+    };
+    const origin = contentBoxOrigin(grid.box);
+    const result = flowLayoutPositions(grid, origin.x, origin.y, {
+      filter: { excludeValues: new Set([dragged.value]) },
+      insertions: [insertion],
+    });
+    // Entries [item-1, item-2, item-3, ghost, item-4..item-7] -> slots 0..7.
+    const byValue = new Map(
+      [...result.itemPositions].map(([snapshotItem, position]) => [
+        snapshotItem.value,
+        position,
+      ]),
+    );
+    expect(byValue.get("item-1")).toEqual({ x: 0, y: 0 }); // slot 0
+    expect(byValue.get("item-2")).toEqual({ x: 64, y: 0 }); // slot 1 (140px track)
+    expect(byValue.get("item-4")).toEqual({ x: 0, y: 44 }); // slot 4, row 2
+    // Ghost takes slot 3 and adopts its track geometry (88px), not the
+    // dragged item's own 60px.
+    expect(result.virtualRects.get(insertion)).toEqual({
+      x: 292,
+      y: 0,
+      width: 88,
+      height: 40,
+    });
+  });
+
+  test("remaining items compact into leading slots when one is dragged away", () => {
+    const grid = unequalGrid();
+    const dragged = grid.children[0];
+    const origin = contentBoxOrigin(grid.box);
+    const result = flowLayoutPositions(grid, origin.x, origin.y, {
+      filter: { excludeValues: new Set([dragged.value]) },
+    });
+    const byValue = new Map(
+      [...result.itemPositions].map(([snapshotItem, position]) => [
+        snapshotItem.value,
+        position,
+      ]),
+    );
+    // item-7 (was slot 7: row 2, col 4) compacts into slot 6 (row 2, col 3).
+    expect(byValue.get("item-7")).toEqual({ x: 208, y: 44 });
+  });
+
+  test("an appended insertion extrapolates one slot past the measured grid", () => {
+    const grid = unequalGrid();
+    const insertion: VirtualInsertion<string> = {
+      container: grid,
+      index: 8,
+      entry: {
+        width: 60,
+        height: 40,
+        margin: { top: 0, right: 0, bottom: 0, left: 0 },
+      },
+    };
+    const origin = contentBoxOrigin(grid.box);
+    const result = flowLayoutPositions(grid, origin.x, origin.y, {
+      insertions: [insertion],
+    });
+    // New row 3, reusing column 0's measured geometry.
+    expect(result.virtualRects.get(insertion)).toEqual({
+      x: 0,
+      y: 88,
+      width: 60,
+      height: 40,
+    });
+  });
+
+  test("auto-flow column grids assign slots in measured fill order", () => {
+    // DOM order fills columns top-to-bottom: item i -> col floor(i/3),
+    // row i%3. 2 columns x 3 rows, 80x40 items, gap 4.
+    const children = Array.from({ length: 6 }, (_, i) =>
+      makeItemSnapshot(
+        `item-${i}`,
+        makeBox({
+          x: Math.floor(i / 3) * 84,
+          y: (i % 3) * 44,
+          width: 80,
+          height: 40,
+        }),
+      ),
+    );
+    const container = makeContainerSnapshot(
+      makeBox({ x: 0, y: 0, width: 164, height: 128 }),
+      children,
+      "row",
+      "start",
+      "slots",
+    );
+    const dragged = children[0];
+    const insertion: VirtualInsertion<string> = {
+      container,
+      index: 2,
+      entry: { width: 80, height: 40, margin: dragged.box.margin },
+    };
+    const result = flowLayoutPositions(container, 0, 0, {
+      filter: { excludeValues: new Set([dragged.value]) },
+      insertions: [insertion],
+    });
+    const byValue = new Map(
+      [...result.itemPositions].map(([snapshotItem, position]) => [
+        snapshotItem.value,
+        position,
+      ]),
+    );
+    // Entries [item-1, item-2, ghost, item-3, item-4, item-5] -> slots 0..5,
+    // which advance DOWN column 1 before moving to column 2.
+    expect(byValue.get("item-1")).toEqual({ x: 0, y: 0 }); // slot 0
+    expect(byValue.get("item-2")).toEqual({ x: 0, y: 44 }); // slot 1
+    expect(result.virtualPositions.get(insertion)).toEqual({ x: 0, y: 88 }); // slot 2
+    expect(byValue.get("item-3")).toEqual({ x: 84, y: 0 }); // slot 3: column 2
+  });
+
+  test("non-uniform fixed template rows keep measured slot positions (static variant)", () => {
+    // Rows 40/80/40 with uniform 40px items: the 80px track leaves slack, so
+    // residuals differ between rows -> static rows detected.
+    const grid = makeGrid({
+      rows: 3,
+      cols: 2,
+      itemW: 40,
+      itemH: 40,
+      gap: 4,
+      rowHeights: [40, 80, 40],
+      layoutModel: "slots",
+    });
+    const dragged = grid.children[0];
+    const insertion: VirtualInsertion<string> = {
+      container: grid,
+      index: 0,
+      entry: { width: 40, height: 40, margin: dragged.box.margin },
+    };
+    const result = flowLayoutPositions(grid, 0, 0, {
+      filter: { excludeValues: new Set([dragged.value]) },
+      insertions: [insertion],
+    });
+    const byValue = new Map(
+      [...result.itemPositions].map(([snapshotItem, position]) => [
+        snapshotItem.value,
+        position,
+      ]),
+    );
+    // Row starts stay measured: row 2 at 44, row 3 at 44 + 80 + 4 = 128.
+    expect(byValue.get("item-2")).toEqual({ x: 0, y: 44 }); // slot 2
+    expect(byValue.get("item-5")).toEqual({ x: 44, y: 128 }); // slot 5
+  });
+
+  test("content-sized rows recompute heights when a tall item moves rows", () => {
+    // 2x2 content-sized grid: item-1 is 80px tall so row 1's track is 80.
+    const grid = makeGrid({
+      rows: 2,
+      cols: 2,
+      itemW: 40,
+      itemH: 40,
+      gap: 4,
+      itemHeight: (i) => (i === 1 ? 80 : 40),
+      layoutModel: "slots",
+    });
+    const dragged = grid.children[1]; // the tall item
+    const insertion: VirtualInsertion<string> = {
+      container: grid,
+      index: 3,
+      entry: { width: 40, height: 80, margin: dragged.box.margin },
+    };
+    const result = flowLayoutPositions(grid, 0, 0, {
+      filter: { excludeValues: new Set([dragged.value]) },
+      insertions: [insertion],
+    });
+    const byValue = new Map(
+      [...result.itemPositions].map(([snapshotItem, position]) => [
+        snapshotItem.value,
+        position,
+      ]),
+    );
+    // Entries [item-0, item-2, item-3, ghost]: row 1 is now two 40px items,
+    // so row 2 moves UP from its measured 84 to 40 + 4 = 44, and the ghost
+    // (still 80 tall) sits in row 2.
+    expect(byValue.get("item-2")).toEqual({ x: 44, y: 0 }); // slot 1, row 1
+    expect(byValue.get("item-3")).toEqual({ x: 0, y: 44 }); // slot 2, row 2 moved up
+    expect(result.virtualRects.get(insertion)).toEqual({
+      x: 44,
+      y: 44,
+      width: 40,
+      height: 80,
+    });
+  });
+
+  test("virtualDimensions grows by a row when an insertion extrapolates a slot", () => {
+    const grid = makeGrid({
+      rows: 1,
+      cols: 4,
+      itemW: 88,
+      itemH: 40,
+      gap: 4,
+      layoutModel: "slots",
+    });
+    const insertion: VirtualInsertion<string> = {
+      container: grid,
+      index: 4,
+      entry: {
+        width: 88,
+        height: 40,
+        margin: { top: 0, right: 0, bottom: 0, left: 0 },
+      },
+    };
+    const dims = virtualDimensions(grid, { insertions: [insertion] });
+    expect(dims.width).toBeCloseTo(grid.box.width, 4);
+    expect(dims.height).toBeGreaterThan(grid.box.height + 39);
+  });
+});
+
 test.describe("virtualDimensions", () => {
   test("grows a row container's height when an insertion adds a line", () => {
     const grid = makeGrid({ rows: 1, cols: 4, itemW: 93, itemH: 93, gap: 4 });

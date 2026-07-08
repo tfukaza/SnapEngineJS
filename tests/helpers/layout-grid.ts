@@ -60,7 +60,6 @@ export function makeItemSnapshot(
   return {
     value,
     key: `key-${nextKey++}`,
-    itemId: value,
     metadata: {},
     direction: "column",
     mainAxisAlign: "start",
@@ -76,15 +75,15 @@ export function makeContainerSnapshot(
   children: ItemSnapshot<string>[],
   direction: "row" | "column" = "row",
   mainAxisAlign: "start" | "center" = "start",
+  layoutModel: "flow" | "slots" = "flow",
 ): ItemSnapshot<string> {
   return {
     value: "container",
     key: `key-${nextKey++}`,
-    itemId: "container",
     metadata: {},
     direction,
     mainAxisAlign,
-    layoutModel: "flow",
+    layoutModel,
     locked: false,
     box,
     children,
@@ -92,10 +91,18 @@ export function makeContainerSnapshot(
 }
 
 /**
- * Build a wrapped row grid snapshot: `rows` x `cols` items of `itemW` x
- * `itemH` with `gap`, inside a container sized to fit `cols` per row exactly
- * (zero slack). `jitter` injects per-item measurement noise to simulate
- * browser imprecision.
+ * Build a wrapped row grid snapshot: `rows` x `cols` items with `gap`,
+ * inside a container sized to fit `cols` per row exactly (zero slack).
+ *
+ * - `colWidths` gives each column its own track width (unequal-track grids);
+ *   default is `itemW` everywhere.
+ * - `rowHeights` fixes each row's track height independently of its items
+ *   (template-fixed rows; items sit at the row start, possibly shorter);
+ *   default rows are content-sized: track height = tallest item in the row.
+ * - `itemHeight(index)` gives per-item heights; default `itemH`.
+ * - `jitter` injects per-item measurement noise to simulate browser
+ *   imprecision.
+ * - `layoutModel` marks the container `"slots"` for grid semantics.
  */
 export function makeGrid(options: {
   rows: number;
@@ -106,13 +113,33 @@ export function makeGrid(options: {
   originX?: number;
   originY?: number;
   padding?: number;
+  colWidths?: number[];
+  rowHeights?: number[];
+  itemHeight?: (index: number) => number;
+  layoutModel?: "flow" | "slots";
   jitter?: (index: number) => { w?: number; x?: number };
 }): ItemSnapshot<string> {
   const { rows, cols, itemW, itemH, gap } = options;
   const originX = options.originX ?? 0;
   const originY = options.originY ?? 0;
   const pad = options.padding ?? 0;
-  const contentW = cols * itemW + (cols - 1) * gap;
+  const colWidth = (c: number) => options.colWidths?.[c] ?? itemW;
+  const itemHeight = (i: number) => options.itemHeight?.(i) ?? itemH;
+  const rowTrack = (r: number) =>
+    options.rowHeights?.[r] ??
+    Math.max(
+      ...Array.from({ length: cols }, (_, c) => itemHeight(r * cols + c)),
+    );
+  const colX = (c: number) => {
+    let x = originX + pad;
+    for (let k = 0; k < c; k++) x += colWidth(k) + gap;
+    return x;
+  };
+  const rowY = (r: number) => {
+    let y = originY + pad;
+    for (let k = 0; k < r; k++) y += rowTrack(k) + gap;
+    return y;
+  };
   const children: ItemSnapshot<string>[] = [];
   for (let r = 0; r < rows; r++) {
     for (let c = 0; c < cols; c++) {
@@ -122,24 +149,29 @@ export function makeGrid(options: {
         makeItemSnapshot(
           `item-${i}`,
           makeBox({
-            x: originX + pad + c * (itemW + gap) + (jitter.x ?? 0),
-            y: originY + pad + r * (itemH + gap),
-            width: itemW + (jitter.w ?? 0),
-            height: itemH,
+            x: colX(c) + (jitter.x ?? 0),
+            y: rowY(r),
+            width: colWidth(c) + (jitter.w ?? 0),
+            height: itemHeight(i),
           }),
         ),
       );
     }
   }
+  const contentW = colX(cols) - gap - (originX + pad);
+  const contentH = rowY(rows) - gap - (originY + pad);
   return makeContainerSnapshot(
     makeBox({
       x: originX,
       y: originY,
       width: contentW + pad * 2,
-      height: rows * itemH + (rows - 1) * gap + pad * 2,
+      height: contentH + pad * 2,
       padding: { top: pad, right: pad, bottom: pad, left: pad },
     }),
     children,
+    "row",
+    "start",
+    options.layoutModel ?? "flow",
   );
 }
 

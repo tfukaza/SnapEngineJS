@@ -9,6 +9,7 @@ import type {
   ItemSnapshotMetadata,
   LayoutDirection,
   LayoutMainAxisAlign,
+  LayoutModel,
 } from "./snapshot";
 import type {
   DragLocation,
@@ -591,6 +592,12 @@ export class Item extends ElementObject {
       : "start";
   }
 
+  #snapshotLayoutModel(): LayoutModel {
+    return "layoutModel" in this && (this as any).layoutModel === "slots"
+      ? "slots"
+      : "flow";
+  }
+
   #dragSnapshotItems(): Item[] {
     return this.#dragSnapshot?.children.map((snapshot) => snapshot.value) ?? [];
   }
@@ -612,6 +619,7 @@ export class Item extends ElementObject {
       metadata: { ...this.#metadata },
       direction: this.#snapshotDirection(),
       mainAxisAlign: this.#snapshotMainAxisAlign(),
+      layoutModel: this.#snapshotLayoutModel(),
       locked: this.#locked,
       box: cloneDomProperty(this.currentDomProperty),
       children: [],
@@ -641,6 +649,7 @@ export class Item extends ElementObject {
       metadata: { ...this.#metadata },
       direction: src.direction,
       mainAxisAlign: src.mainAxisAlign,
+      layoutModel: src.layoutModel,
       locked: this.#locked,
       box: cloneDomProperty(src.box),
       children: [],

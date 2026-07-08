@@ -271,7 +271,27 @@ export function inferFlowLayoutMetrics<T>(
   };
 }
 
-export function flowLayoutPositions<T>(
+/**
+ * Slot layout model (CSS-grid-like containers): position is a function of
+ * *index*, not accumulated size. The pristine snapshot's measured child
+ * boxes are the slots; simulated entry i adopts slot i's geometry, so an
+ * insertion at index k shifts every following entry one slot over. This
+ * inherits correctness for unequal tracks, `grid-auto-flow: column`, and RTL
+ * grids, because slots are measured rather than derived.
+ *
+ * Contract: the main-axis (column) track geometry must not depend on which
+ * items occupy it — fixed/fr/percent templates. Rows need no such
+ * constraint: content-sized rows (`grid-auto-rows: auto`) are detected from
+ * measurements and their heights recomputed flow-style (row height = max
+ * cross size of the entries assigned to that row), so a tall item moving
+ * rows grows its destination row's prediction.
+ *
+ * Known approximations, corrected by the real browser layout + FLIP on
+ * drop: spanning items (slot geometry unstable under reorder), items with
+ * `align-self: stretch` and no explicit cross size (they measure at the
+ * row's height, not their intrinsic height), and content-sized *columns*.
+ */
+function slotLayoutPositions<T>(
   container: ItemSnapshot<T>,
   startX: number,
   startY: number,
@@ -280,11 +300,179 @@ export function flowLayoutPositions<T>(
     insertions?: VirtualInsertion<T>[];
   } = {},
 ): FlowPositionResult<T> {
-  const axes = flowAxesForDirection(container.direction);
-  const contentSize = contentBoxSize(container.box);
   const filter = options.filter ?? {};
   const items = layoutItems(container, filter);
-  const metrics = inferFlowLayoutMetrics(container, axes);
+  const entries = assembleEntries(container, items, options);
+
+  // Slots: content-relative rects of ALL children (unfiltered — the dragged
+  // item's original box is still a valid slot for whoever shifts into it).
+  const children = container.children;
+  const slots = children.map((child) => {
+    const rel = childRelativeOffset(container.box, child.box);
+    return {
+      x: rel.x,
+      y: rel.y,
+      width: child.box.width,
+      height: child.box.height,
+    };
+  });
+
+  // The fill axis is measured, not declared: consecutive slots advance along
+  // the main axis of the grid's auto-flow (x for row-major, y for
+  // `grid-auto-flow: column`).
+  const fillAxis: AxisName =
+    slots.length >= 2 &&
+    Math.abs(slots[1].y - slots[0].y) > Math.abs(slots[1].x - slots[0].x)
+      ? "y"
+      : "x";
+  const crossAxis: AxisName = fillAxis === "x" ? "y" : "x";
+  const crossSizeName: SizeName = fillAxis === "x" ? "height" : "width";
+  const entryCrossSize = (entry: FlowEntry<T>) => entry[crossSizeName];
+
+  // Group slots into lines by fill-axis regression (same heuristic as
+  // inferFlowLayoutMetrics).
+  const lineOfSlot: number[] = [];
+  const lines: number[][] = [];
+  for (let i = 0; i < slots.length; i++) {
+    const startsNewLine =
+      i > 0 && slots[i][fillAxis] < slots[i - 1][fillAxis] - 1;
+    if (i === 0 || startsNewLine) lines.push([]);
+    lineOfSlot.push(lines.length - 1);
+    lines[lines.length - 1].push(i);
+  }
+  const perLine = Math.max(...lines.map((line) => line.length));
+
+  // Detect content-sized rows: each measured line's cross advance minus the
+  // tallest item in it leaves the same residual (the row gap). Fixed tracks
+  // with slack leave varying residuals when item sizes vary; a single line
+  // is ambiguous, where both variants agree at capture time.
+  const lineCrossStart = (line: number[]) =>
+    Math.min(...line.map((i) => slots[i][crossAxis]));
+  const lineMaxItemCross = (line: number[]) =>
+    Math.max(...line.map((i) => slots[i][crossSizeName]));
+  const residuals: number[] = [];
+  for (let j = 0; j < lines.length - 1; j++) {
+    residuals.push(
+      lineCrossStart(lines[j + 1]) -
+        lineCrossStart(lines[j]) -
+        lineMaxItemCross(lines[j]),
+    );
+  }
+  const contentSizedRows =
+    residuals.length === 0 ||
+    residuals.every((residual) => Math.abs(residual - residuals[0]) <= 0.75);
+  const crossGap = residuals.length > 0 ? Math.max(0, median(residuals)) : 0;
+
+  // Geometry per entry index: measured slot, or one extrapolated slot past
+  // the end (entries exceed slots by at most one insertion) reusing the
+  // main-axis geometry of the slot one full line earlier.
+  const slotForEntry = (index: number) => {
+    if (index < slots.length) {
+      const line = lineOfSlot[index];
+      return {
+        ...slots[index],
+        line,
+        // Offset within the row (e.g. align-self) survives row movement.
+        crossOffset: slots[index][crossAxis] - lineCrossStart(lines[line]),
+      };
+    }
+    const wrapped = Math.max(0, index - perLine);
+    return {
+      ...slots[wrapped],
+      line: lineOfSlot[wrapped] + 1,
+      crossOffset: 0,
+    };
+  };
+
+  // Cross-axis position per line: measured for static tracks; accumulated
+  // from assigned entry sizes for content-sized rows.
+  const entrySlots = entries.map((_, index) => slotForEntry(index));
+  const lineCount = entrySlots.length
+    ? Math.max(...entrySlots.map((slot) => slot.line)) + 1
+    : 0;
+  const lineCross: number[] = [];
+  if (contentSizedRows) {
+    let cursor = lines.length > 0 ? lineCrossStart(lines[0]) : 0;
+    for (let j = 0; j < lineCount; j++) {
+      lineCross.push(cursor);
+      let lineHeight = 0;
+      for (let index = 0; index < entries.length; index++) {
+        if (entrySlots[index].line === j) {
+          lineHeight = Math.max(lineHeight, entryCrossSize(entries[index]));
+        }
+      }
+      cursor += lineHeight + crossGap;
+    }
+  } else {
+    for (let j = 0; j < lineCount; j++) {
+      if (j < lines.length) {
+        lineCross.push(lineCrossStart(lines[j]));
+      } else {
+        // Extrapolated line: extend by the last measured cross advance.
+        const last = lines.length - 1;
+        const advance =
+          last > 0
+            ? lineCrossStart(lines[last]) - lineCrossStart(lines[last - 1])
+            : lineMaxItemCross(lines[last]) + crossGap;
+        lineCross.push(lineCrossStart(lines[last]) + advance);
+      }
+    }
+  }
+
+  const origin = { x: startX, y: startY };
+  const itemPositions = new Map<ItemSnapshot<T>, { x: number; y: number }>();
+  const virtualPositions = new Map<VirtualInsertion<T>, { x: number; y: number }>();
+  const virtualRects = new Map<
+    VirtualInsertion<T>,
+    { x: number; y: number; width: number; height: number }
+  >();
+
+  for (let index = 0; index < entries.length; index++) {
+    const entry = entries[index];
+    const slot = entrySlots[index];
+    const main = slot[fillAxis];
+    const cross = lineCross[slot.line] + slot.crossOffset;
+    const position =
+      fillAxis === "x"
+        ? { x: origin.x + main, y: origin.y + cross }
+        : { x: origin.x + cross, y: origin.y + main };
+
+    if (entry.kind === "virtual") {
+      virtualPositions.set(entry.insertion, position);
+      virtualRects.set(entry.insertion, {
+        ...position,
+        // The slot's measured main-axis size (the track); for content-sized
+        // rows the cross size is the entry's own, since the row will size
+        // to its content.
+        width:
+          fillAxis === "x"
+            ? slot.width
+            : contentSizedRows
+              ? entry.width
+              : slot.width,
+        height:
+          fillAxis === "x"
+            ? contentSizedRows
+              ? entry.height
+              : slot.height
+            : slot.height,
+      });
+    } else {
+      itemPositions.set(entry.item, position);
+    }
+  }
+
+  return { itemPositions, virtualPositions, virtualRects };
+}
+
+function assembleEntries<T>(
+  container: ItemSnapshot<T>,
+  items: ItemSnapshot<T>[],
+  options: {
+    filter?: LayoutFilter<T>;
+    insertions?: VirtualInsertion<T>[];
+  },
+): FlowEntry<T>[] {
   const entries: FlowEntry<T>[] = items.map((item) => {
     const dimensions =
       item.children.length > 0
@@ -309,6 +497,27 @@ export function flowLayoutPositions<T>(
       });
     }
   }
+  return entries;
+}
+
+export function flowLayoutPositions<T>(
+  container: ItemSnapshot<T>,
+  startX: number,
+  startY: number,
+  options: {
+    filter?: LayoutFilter<T>;
+    insertions?: VirtualInsertion<T>[];
+  } = {},
+): FlowPositionResult<T> {
+  if (container.layoutModel === "slots" && container.children.length > 0) {
+    return slotLayoutPositions(container, startX, startY, options);
+  }
+  const axes = flowAxesForDirection(container.direction);
+  const contentSize = contentBoxSize(container.box);
+  const filter = options.filter ?? {};
+  const items = layoutItems(container, filter);
+  const metrics = inferFlowLayoutMetrics(container, axes);
+  const entries = assembleEntries(container, items, options);
 
   const itemPositions = new Map<ItemSnapshot<T>, { x: number; y: number }>();
   const virtualPositions = new Map<VirtualInsertion<T>, { x: number; y: number }>();
