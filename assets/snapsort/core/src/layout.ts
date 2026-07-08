@@ -7,7 +7,22 @@ import type {
 export type { LayoutDirection, LayoutMainAxisAlign } from "./snapshot";
 type AxisName = "x" | "y";
 type SizeName = "width" | "height";
-const LAYOUT_EPSILON = 1e-6;
+/**
+ * Tolerance for main-axis wrap comparisons. Measured geometry is noisy well
+ * beyond double-precision: browsers lay out on a snapped grid (Blink 1/64px,
+ * Gecko 1/60px app units) and `getBoundingClientRect` doubles carry
+ * unit-conversion noise (~1e-5px per value in Firefox), which a simulated
+ * line sum accumulates per entry — plus ~1e-2px per parsed box-model value
+ * (computed style returns specified values, e.g. `0.35rem` → 5.6px, while
+ * the browser lays out the snapped 5.59375px). With a tolerance below that
+ * accumulated noise, a container whose items exactly fill it (zero slack)
+ * over-wraps: the simulated line overshoots capacity by pure measurement
+ * noise and the last column spills to the next line. The tolerance must
+ * stay far below real layout features (gaps, item sizes) or lines that
+ * genuinely overflow would under-wrap; 0.05px sits ~5x above the worst
+ * observed noise and ~100x below typical feature scale.
+ */
+const LAYOUT_EPSILON = 0.05;
 
 export interface FlowAxes {
   direction: LayoutDirection;
