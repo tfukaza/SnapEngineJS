@@ -136,10 +136,11 @@
                 config={{ direction: "column", groupID: "flat-group" }}
                 locked={true}
                 items={flatItems}
-                getId={(label) => label}
-                getClassName={() => "demo-item"}
+                getItemId={(label) => label}
             >
-                {#snippet item(label)}<p>{label}</p>{/snippet}
+                {#snippet entry(label)}
+                    <Item itemId={label} className="demo-item"><p>{label}</p></Item>
+                {/snippet}
             </Container>
         </div>
     </div>
@@ -155,21 +156,22 @@
                 config={{ direction: "column", groupID: "nested-group" }}
                 locked={true}
                 items={nestedGroupEntries}
-                getId={(e) => (e.kind === "item" ? e.label : "nested-sub-group")}
+                getItemId={(e) => (e.kind === "item" ? e.label : "nested-sub-group")}
             >
                 {#snippet entry(e)}
                     {#if e.kind === "item"}
-                        <Item className="demo-item" metadata={{ itemId: e.label }}><p>{e.label}</p></Item>
+                        <Item itemId={e.label} className="demo-item"><p>{e.label}</p></Item>
                     {:else}
                         <Container
+                            itemId="nested-sub-group"
                             config={{ direction: "column", groupID: "nested-group" }}
                             locked={false}
-                            metadata={{ itemId: "nested-sub-group" }}
                             items={nestedGroupChildren}
-                            getId={(label) => label}
-                            getClassName={() => "demo-item sub-item"}
+                            getItemId={(label) => label}
                         >
-                            {#snippet item(label)}<p>{label}</p>{/snippet}
+                            {#snippet entry(label)}
+                                <Item itemId={label} className="demo-item sub-item"><p>{label}</p></Item>
+                            {/snippet}
                         </Container>
                     {/if}
                 {/snippet}
@@ -188,22 +190,23 @@
                 config={{ direction: "column", groupID: "drag-nested-group" }}
                 locked={true}
                 items={dragNestedEntries}
-                getId={(e) => (e.kind === "group" ? e.id : e.label)}
+                getItemId={(e) => (e.kind === "group" ? e.id : e.label)}
             >
                 {#snippet entry(e)}
                     {#if e.kind === "group"}
                         <Container
+                            itemId={e.id}
                             config={{ direction: "column", groupID: "drag-nested-group" }}
                             locked={false}
-                            metadata={{ itemId: e.id }}
                             items={e.labels}
-                            getId={(label) => label}
-                            getClassName={() => "demo-item sub-item"}
+                            getItemId={(label) => label}
                         >
-                            {#snippet item(label)}<p>{label}</p>{/snippet}
+                            {#snippet entry(label)}
+                                <Item itemId={label} className="demo-item sub-item"><p>{label}</p></Item>
+                            {/snippet}
                         </Container>
                     {:else}
-                        <Item className="demo-item" metadata={{ itemId: e.label }}><p>{e.label}</p></Item>
+                        <Item itemId={e.label} className="demo-item"><p>{e.label}</p></Item>
                     {/if}
                 {/snippet}
             </Container>
@@ -221,10 +224,11 @@
                 config={{ direction: "row", groupID: "row-group" }}
                 locked={true}
                 items={rowItems}
-                getId={(label) => label}
-                getClassName={() => "demo-item row-item"}
+                getItemId={(label) => label}
             >
-                {#snippet item(label)}<p>{label}</p>{/snippet}
+                {#snippet entry(label)}
+                    <Item itemId={label} className="demo-item row-item"><p>{label}</p></Item>
+                {/snippet}
             </Container>
         </div>
     </div>
@@ -240,21 +244,22 @@
                 config={{ direction: "row", groupID: "nested-row-group" }}
                 locked={true}
                 items={nestedRowEntries}
-                getId={(e) => (e.kind === "item" ? e.label : "nested-row-sub-group")}
+                getItemId={(e) => (e.kind === "item" ? e.label : "nested-row-sub-group")}
             >
                 {#snippet entry(e)}
                     {#if e.kind === "item"}
-                        <Item className="demo-item row-item" metadata={{ itemId: e.label }}><p>{e.label}</p></Item>
+                        <Item itemId={e.label} className="demo-item row-item"><p>{e.label}</p></Item>
                     {:else}
                         <Container
+                            itemId="nested-row-sub-group"
                             config={{ direction: "row", groupID: "nested-row-group" }}
                             locked={false}
-                            metadata={{ itemId: "nested-row-sub-group" }}
                             items={nestedRowChildren}
-                            getId={(label) => label}
-                            getClassName={() => "demo-item row-item sub-item"}
+                            getItemId={(label) => label}
                         >
-                            {#snippet item(label)}<p>{label}</p>{/snippet}
+                            {#snippet entry(label)}
+                                <Item itemId={label} className="demo-item row-item sub-item"><p>{label}</p></Item>
+                            {/snippet}
                         </Container>
                     {/if}
                 {/snippet}
@@ -273,10 +278,11 @@
                 config={{ direction: "row", groupID: "wrap-row" }}
                 locked={true}
                 items={wrapRowItems}
-                getId={(label) => label}
-                getClassName={() => "demo-item row-item"}
+                getItemId={(label) => label}
             >
-                {#snippet item(label)}<p>{label}</p>{/snippet}
+                {#snippet entry(label)}
+                    <Item itemId={label} className="demo-item row-item"><p>{label}</p></Item>
+                {/snippet}
             </Container>
         </div>
     </div>
@@ -292,11 +298,11 @@
                 config={{ direction: "column", groupID: "layers" }}
                 locked={true}
                 items={layerEntries}
-                getId={(e) => e.id}
+                getItemId={(e) => e.id}
             >
                 {#snippet entry(e)}
                     {#if e.kind === "leaf"}
-                        <Item className="layer-item" metadata={{ itemId: e.id }}>
+                        <Item itemId={e.id} className="layer-item">
                             <div class="layer-row">
                                 <span class="layer-icon">{e.icon}</span>
                                 <span class="layer-name">{e.name}</span>
@@ -304,19 +310,20 @@
                         </Item>
                     {:else}
                         <Container
+                            itemId={e.id}
                             config={{ direction: "column", groupID: "layers" }}
                             locked={false}
-                            metadata={{ itemId: e.id }}
                             items={e.children}
-                            getId={(child) => child.name}
-                            getClassName={() => "layer-item"}
+                            getItemId={(child) => child.name}
                         >
-                            <div class="group-label">{e.label}</div>
-                            {#snippet item(child)}
-                                <div class="layer-row">
-                                    <span class="layer-icon">{child.icon}</span>
-                                    <span class="layer-name">{child.name}</span>
-                                </div>
+                            {#snippet before()}<div class="group-label">{e.label}</div>{/snippet}
+                            {#snippet entry(child)}
+                                <Item itemId={child.name} className="layer-item">
+                                    <div class="layer-row">
+                                        <span class="layer-icon">{child.icon}</span>
+                                        <span class="layer-name">{child.name}</span>
+                                    </div>
+                                </Item>
                             {/snippet}
                         </Container>
                     {/if}

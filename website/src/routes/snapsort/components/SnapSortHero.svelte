@@ -74,11 +74,11 @@
             className="hero-stack"
             config={{ direction: "column", groupID: "snapsort-hero-content" }}
             items={heroStackEntries}
-            getId={(kind) => kind}
+            getItemId={(kind) => kind}
           >
             {#snippet entry(kind)}
               {#if kind === "title"}
-                <Item className="hero-stack-item hero-title-item" metadata={{ itemId: kind }}>
+                <Item itemId={kind} className="hero-stack-item hero-title-item">
                   <div class="hero-row card">
                     <Handle className="hero-row-handle">
                       <span class="hero-row-grip" aria-hidden="true">
@@ -92,20 +92,21 @@
                         <Container
                           config={{ direction: "row", groupID: "snapsort-title" }}
                           items={titleChars}
-                          getId={(t) => t.id}
-                          getStyle={() => "padding: 0; width: auto;"}
+                          getItemId={(t) => t.id}
                         >
-                          {#snippet item(t)}
-                            <span id={t.id} class="letter-shell">
-                              <span class="title-glyph title-text pixel-font">
-                                {t.char === " " ? "\u00A0" : t.char}
+                          {#snippet entry(t)}
+                            <Item itemId={t.id} style="padding: 0; width: auto;">
+                              <span id={t.id} class="letter-shell">
+                                <span class="title-glyph title-text pixel-font">
+                                  {t.char === " " ? "\u00A0" : t.char}
+                                </span>
+                                <span class="letter-grip" aria-hidden="true">
+                                  {#each gripDots as dot (dot)}
+                                    <i class="letter-grip-dot"></i>
+                                  {/each}
+                                </span>
                               </span>
-                              <span class="letter-grip" aria-hidden="true">
-                                {#each gripDots as dot (dot)}
-                                  <i class="letter-grip-dot"></i>
-                                {/each}
-                              </span>
-                            </span>
+                            </Item>
                           {/snippet}
                         </Container>
                       </SnapSortContextBoundary>
@@ -113,7 +114,7 @@
                   </div>
                 </Item>
               {:else if kind === "copy"}
-                <Item className="hero-stack-item hero-copy-item" metadata={{ itemId: kind }}>
+                <Item itemId={kind} className="hero-stack-item hero-copy-item">
                   <div class="hero-row card">
                     <Handle className="hero-row-handle">
                       <span class="hero-row-grip" aria-hidden="true">
@@ -128,7 +129,7 @@
                   </div>
                 </Item>
               {:else}
-                <Item className="hero-stack-item hero-cta-item" metadata={{ itemId: kind }}>
+                <Item itemId={kind} className="hero-stack-item hero-cta-item">
                   <div class="hero-row hero-row-final card">
                     <Handle className="hero-row-handle">
                       <span class="hero-row-grip" aria-hidden="true">

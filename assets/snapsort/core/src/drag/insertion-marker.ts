@@ -202,8 +202,10 @@ function drop(session: DragSession): void {
       root.callbacks?.onDragEnd?.({
         session,
         item,
+        itemId: item.resolvedItemId,
         itemMetadata: item.metadata,
         items,
+        itemIds: items.map((member) => member.resolvedItemId),
         itemsMetadata: items.map((member) => member.metadata),
         element: item.element,
         source: session.sources[0],

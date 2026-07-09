@@ -21,6 +21,18 @@ import type {
  * exactly one place.
  */
 
+function itemIds(items: Item[]): string[] {
+  return items.map((item) => item.resolvedItemId);
+}
+
+function ghostItems(session: DragSession): Item[] {
+  return session.items;
+}
+
+function ghostItemIds(session: DragSession): string[] {
+  return session.items.map((item) => item.resolvedItemId);
+}
+
 export function fireItemInsert(
   container: Container,
   items: Item[],
@@ -36,8 +48,10 @@ export function fireItemInsert(
   const event: ItemInsertEvent = {
     session,
     item: items[0],
+    itemId: items[0].resolvedItemId,
     itemMetadata: items[0].metadata,
     items,
+    itemIds: itemIds(items),
     itemsMetadata: items.map((item) => item.metadata),
     container,
     containerMetadata: container.metadata,
@@ -61,8 +75,10 @@ export function fireItemRemove(
   const event: ItemRemoveEvent = {
     session,
     item: items[0],
+    itemId: items[0].resolvedItemId,
     itemMetadata: items[0].metadata,
     items,
+    itemIds: itemIds(items),
     itemsMetadata: items.map((item) => item.metadata),
     container,
     containerMetadata: container.metadata,
@@ -95,15 +111,19 @@ export function fireItemMove(
     const event: ItemMoveEvent = {
       session,
       item: items[0],
+      itemId: items[0].resolvedItemId,
       itemMetadata: items[0].metadata,
       items,
+      itemIds: itemIds(items),
       itemsMetadata: items.map((item) => item.metadata),
       from: froms[0] ?? null,
       to,
       froms,
       originItem: origins[0] ?? null,
+      originItemId: origins[0]?.resolvedItemId ?? null,
       originItemMetadata: origins[0]?.metadata ?? null,
       origins,
+      originItemIds: origins.map((origin) => origin?.resolvedItemId ?? null),
       originsMetadata: origins.map((origin) => origin?.metadata ?? null),
       beforeElement,
       phase,
@@ -132,6 +152,7 @@ export function fireItemSwap(
       session,
       a: {
         item: a.item,
+        itemId: a.item.resolvedItemId,
         itemMetadata: a.item.metadata,
         container: a.container,
         containerMetadata: a.container.metadata,
@@ -139,6 +160,7 @@ export function fireItemSwap(
       },
       b: {
         item: b.item,
+        itemId: b.item.resolvedItemId,
         itemMetadata: b.item.metadata,
         container: b.container,
         containerMetadata: b.container.metadata,
@@ -209,8 +231,10 @@ function buildDragItemHoverEvent(
   return {
     session,
     item,
+    itemId: item.resolvedItemId,
     itemMetadata: item.metadata,
     overItem,
+    overItemId: overItem.resolvedItemId,
     overItemMetadata: overItem.metadata,
     container,
     containerMetadata: container.metadata,
@@ -271,8 +295,12 @@ export function fireGhostInsert(
     kind,
     role,
     original,
+    originalItemId: original.resolvedItemId,
     originalMetadata: original.metadata,
+    items: ghostItems(session),
+    itemIds: ghostItemIds(session),
     ghostItem,
+    ghostItemId: ghostItem.resolvedItemId,
     ghostMetadata: ghostItem.metadata,
     container,
     containerMetadata: container.metadata,
@@ -300,11 +328,19 @@ export function fireGhostRemove(
     kind,
     role,
     original,
+    originalItemId: original.resolvedItemId,
     originalMetadata: original.metadata,
+    items: ghostItems(session),
+    itemIds: ghostItemIds(session),
     ghostItem,
+    ghostItemId: ghostItem.resolvedItemId,
     ghostMetadata: ghostItem.metadata,
     container,
     containerMetadata: container.metadata,
+    ghostRect:
+      session.pendingGhostTarget?.ghostItem === ghostItem
+        ? session.pendingGhostTarget.ghostRect
+        : undefined,
   };
   onRemove(event);
 }
