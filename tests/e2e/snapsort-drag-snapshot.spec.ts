@@ -4,6 +4,7 @@ import { dirname } from "node:path";
 import {
   contentBoxOrigin,
   flowLayoutPositions,
+  virtualEntrySizeFor,
 } from "../../assets/snapsort/core/src/layout";
 import type { ItemSnapshot } from "../../assets/snapsort/core/src/snapshot";
 import {
@@ -300,6 +301,8 @@ function itemSnapshot<T>(
     direction,
     mainAxisAlign: "start",
     layoutModel: "flow",
+    wrap: "auto",
+    stretchItems: false,
     locked: false,
     box,
     children,
@@ -308,12 +311,20 @@ function itemSnapshot<T>(
 
 type SnapshotFixture<T> = Omit<
   ItemSnapshot<T>,
-  "key" | "metadata" | "mainAxisAlign" | "layoutModel" | "children"
+  | "key"
+  | "metadata"
+  | "mainAxisAlign"
+  | "layoutModel"
+  | "wrap"
+  | "stretchItems"
+  | "children"
 > & {
   key?: string;
   metadata?: ItemSnapshot<T>["metadata"];
   mainAxisAlign?: ItemSnapshot<T>["mainAxisAlign"];
   layoutModel?: ItemSnapshot<T>["layoutModel"];
+  wrap?: ItemSnapshot<T>["wrap"];
+  stretchItems?: ItemSnapshot<T>["stretchItems"];
   children: SnapshotFixture<T>[];
 };
 
@@ -324,6 +335,8 @@ function snapshotFixture<T>(fixture: SnapshotFixture<T>): ItemSnapshot<T> {
     metadata: fixture.metadata ?? {},
     mainAxisAlign: fixture.mainAxisAlign ?? "start",
     layoutModel: fixture.layoutModel ?? "flow",
+    wrap: fixture.wrap ?? "auto",
+    stretchItems: fixture.stretchItems ?? false,
     children: fixture.children.map(snapshotFixture),
   };
 }
@@ -2904,6 +2917,270 @@ test.describe("Snapsort drag-start snapshot layout", () => {
       allDrifts,
       "settled post-drop positions should match the drag preview's prediction",
     ).toHaveLength(0);
+  });
+
+  test("keeps the spacer stable while dragging into a narrower nested container (stretch flicker regression)", async ({
+    page,
+  }, testInfo) => {
+    // Before `stretchItems`, insertion entries kept the dragged item's
+    // source-container size everywhere, so nested candidates' ghost rects
+    // and centers were computed at parent width — candidate scoring
+    // flip-flopped between parent and nested slots as the pointer moved and
+    // the spacer visibly oscillated between containers. The Stretch Nested
+    // demo cell's items are genuinely 100% width and its containers declare
+    // `stretchItems`, so the spacer host must settle: at most a couple of
+    // transitions on the way in, ending inside the nested sub-list, with
+    // the drop committing there.
+    await page.goto("/?demo=drop_snap_nested", { waitUntil: "networkidle" });
+
+    const nested = await demoBoxByHeading(page, "Stretch Nested");
+    const source = await itemByTextIn(nested, "Task 1");
+    const target = await itemByTextIn(nested, "Sub task 2");
+    const start = center(await itemRect(source));
+    const end = center(await itemRect(target));
+
+    const spacerHost = () =>
+      nested.evaluate((box) => {
+        const spacer = box.querySelector("#spacer");
+        if (!spacer) return "none";
+        const container = spacer.closest(".snapsort-container");
+        if (!container) return "unknown";
+        return container.classList.contains("stretch-sublist")
+          ? "nested"
+          : "parent";
+      });
+
+    await page.mouse.move(start.x, start.y);
+    await page.mouse.down();
+    const hosts: string[] = [];
+    const steps = 24;
+    for (let step = 1; step <= steps; step++) {
+      await page.mouse.move(
+        start.x + ((end.x - start.x) * step) / steps,
+        start.y + ((end.y - start.y) * step) / steps,
+      );
+      await page.waitForTimeout(16);
+      hosts.push(await spacerHost());
+    }
+    await page.waitForTimeout(350);
+    hosts.push(await spacerHost());
+
+    // The core of the fix: once the spacer is hosted by the narrower
+    // sublist, it must be re-sized to the sublist's content width (minus
+    // its own margins) rather than keeping the parent-container width it
+    // was measured at.
+    const spacerSizing = await nested.evaluate((box) => {
+      const spacer = box.querySelector("#spacer") as HTMLElement | null;
+      const sublist = box.querySelector(".stretch-sublist") as HTMLElement | null;
+      if (!spacer || !sublist) return null;
+      const spacerRect = spacer.getBoundingClientRect();
+      const style = getComputedStyle(sublist);
+      const spacerStyle = getComputedStyle(spacer);
+      const number = (value: string) => parseFloat(value) || 0;
+      const contentWidth =
+        sublist.getBoundingClientRect().width -
+        number(style.borderLeftWidth) -
+        number(style.borderRightWidth) -
+        number(style.paddingLeft) -
+        number(style.paddingRight);
+      const expected =
+        contentWidth -
+        number(spacerStyle.marginLeft) -
+        number(spacerStyle.marginRight);
+      return { spacerWidth: spacerRect.width, expected };
+    });
+    expect(spacerSizing, "spacer should be inside the sublist").toBeTruthy();
+    expect(
+      Math.abs(spacerSizing!.spacerWidth - spacerSizing!.expected),
+      `spacer width ${spacerSizing!.spacerWidth} should match the sublist's content width ${spacerSizing!.expected}`,
+    ).toBeLessThanOrEqual(1.5);
+
+    // Drift oracle for the nested drop: preview rects just before release
+    // vs the settled DOM afterward.
+    const prediction = await nested.evaluate((box) => {
+      const out: Record<string, { x: number; y: number }> = {};
+      for (const element of box.querySelectorAll(".snapsort-item")) {
+        const text = element.textContent?.trim().replace(/\s+/g, " ") ?? "";
+        if (element.id === "spacer" || text === "Task 1") continue;
+        if (!/^Sub task \d$/.test(text)) continue;
+        const rect = element.getBoundingClientRect();
+        out[text] = { x: rect.x, y: rect.y };
+      }
+      const spacer = box.querySelector("#spacer");
+      if (spacer) {
+        const rect = spacer.getBoundingClientRect();
+        out["__dragged__"] = { x: rect.x, y: rect.y };
+      }
+      return out;
+    });
+    await page.mouse.up();
+    await page.waitForTimeout(500);
+    const settled = await nested.evaluate((box) => {
+      const out: Record<string, { x: number; y: number }> = {};
+      for (const element of box.querySelectorAll(".snapsort-item")) {
+        const text = element.textContent?.trim().replace(/\s+/g, " ") ?? "";
+        const rect = element.getBoundingClientRect();
+        if (text === "Task 1") out["__dragged__"] = { x: rect.x, y: rect.y };
+        else if (/^Sub task \d$/.test(text)) out[text] = { x: rect.x, y: rect.y };
+      }
+      return out;
+    });
+    const drifts: Array<{ entry: string; delta: number }> = [];
+    for (const [entry, predicted] of Object.entries(prediction)) {
+      const actual = settled[entry];
+      if (!actual) continue;
+      const delta = Math.max(
+        Math.abs(predicted.x - actual.x),
+        Math.abs(predicted.y - actual.y),
+      );
+      if (delta > 1.5) drifts.push({ entry, delta: +delta.toFixed(2) });
+    }
+
+    const transitions = hosts.filter(
+      (host, index) => index > 0 && host !== hosts[index - 1],
+    ).length;
+    const subGroupTexts = await nested.evaluate(
+      (box) =>
+        [...box.querySelectorAll(".stretch-sublist .snapsort-item")].map(
+          (element) => element.textContent?.trim().replace(/\s+/g, " ") ?? "",
+        ),
+    );
+
+    await writeJson(testInfo.outputPath("nested-stretch-flicker.json"), {
+      hosts,
+      transitions,
+      drifts,
+      subGroupTexts,
+    });
+    expect(hosts[hosts.length - 1], "spacer should end in the nested sub-list").toBe(
+      "nested",
+    );
+    expect(
+      transitions,
+      "spacer host must not oscillate between parent and nested containers",
+    ).toBeLessThanOrEqual(2);
+    expect(drifts, "nested drop should land where the preview predicted").toHaveLength(0);
+    expect(
+      subGroupTexts.some((text) => text.includes("Task 1")),
+      "the dragged item should commit into the nested sub-list",
+    ).toBe(true);
+  });
+
+  test("stretch entry sizing matches a real width-100% spacer (ground truth)", async ({
+    page,
+  }) => {
+    // A stretchItems container's simulated entry must match what the browser
+    // does with an unsized (stretch) flex child: fill the content box minus
+    // the entry's own margins — including fractional container widths,
+    // padding, and borders.
+    await page.setContent('<main id="stretch-fixture"></main>');
+    const measured = await page.evaluate(() => {
+      const fixture = document.querySelector("#stretch-fixture") as HTMLElement;
+      const boxOf = (element: HTMLElement) => {
+        const rect = element.getBoundingClientRect();
+        const style = getComputedStyle(element);
+        const number = (value: string) => parseFloat(value) || 0;
+        return {
+          x: rect.x,
+          y: rect.y,
+          width: rect.width,
+          height: rect.height,
+          scaleX: 1,
+          scaleY: 1,
+          screenX: rect.x,
+          screenY: rect.y,
+          margin: {
+            top: number(style.marginTop),
+            right: number(style.marginRight),
+            bottom: number(style.marginBottom),
+            left: number(style.marginLeft),
+          },
+          padding: {
+            top: number(style.paddingTop),
+            right: number(style.paddingRight),
+            bottom: number(style.paddingBottom),
+            left: number(style.paddingLeft),
+          },
+          border: {
+            top: number(style.borderTopWidth),
+            right: number(style.borderRightWidth),
+            bottom: number(style.borderBottomWidth),
+            left: number(style.borderLeftWidth),
+          },
+        };
+      };
+      const build = (withSpacer: boolean) => {
+        fixture.innerHTML = "";
+        const container = document.createElement("section");
+        container.style.cssText =
+          "box-sizing:border-box;display:flex;flex-direction:column;" +
+          "width:222.33px;padding:9px;border:2px solid #111;gap:6px;";
+        fixture.appendChild(container);
+        for (let i = 0; i < 3; i++) {
+          const item = document.createElement("div");
+          item.style.cssText =
+            "box-sizing:border-box;height:40px;background:#dbeafe;";
+          item.dataset.i = String(i);
+          container.appendChild(item);
+          if (withSpacer && i === 0) {
+            // Unsized stretch flex child with margins: the browser's own
+            // notion of a "100% width" entry.
+            const spacer = document.createElement("div");
+            spacer.id = "spacer";
+            spacer.style.cssText =
+              "box-sizing:border-box;height:40px;margin:0 4px;background:#fecaca;";
+            container.appendChild(spacer);
+          }
+        }
+        return container;
+      };
+      const pristine = build(false);
+      const containerBox = boxOf(pristine);
+      const itemBoxes = [...pristine.children].map((element) =>
+        boxOf(element as HTMLElement),
+      );
+      const truth = build(true);
+      const spacer = truth.querySelector("#spacer") as HTMLElement;
+      const spacerRect = spacer.getBoundingClientRect();
+      return {
+        container: containerBox,
+        itemBoxes,
+        spacer: {
+          x: spacerRect.x,
+          y: spacerRect.y,
+          width: spacerRect.width,
+          height: spacerRect.height,
+        },
+      };
+    });
+
+    const root = makeContainerSnapshot(
+      measured.container as Box,
+      measured.itemBoxes.map((box, index) =>
+        makeItemSnapshot(`${index}`, box as Box),
+      ),
+      "column",
+      "start",
+      "flow",
+      { wrap: "nowrap", stretchItems: true },
+    );
+    const margin = { top: 0, right: 4, bottom: 0, left: 4 };
+    const insertion = {
+      container: root,
+      index: 1,
+      entry: {
+        // Deliberately oversized base: the source container was wider.
+        ...virtualEntrySizeFor(root, { width: 500, height: 40, margin }),
+        margin,
+      },
+    };
+    const origin = contentBoxOrigin(root.box);
+    const result = flowLayoutPositions(root, origin.x, origin.y, {
+      insertions: [insertion],
+    });
+    const rect = result.virtualRects.get(insertion)!;
+    expect(Math.abs(rect.width - measured.spacer.width)).toBeLessThanOrEqual(1.25);
+    expect(Math.abs(rect.y - measured.spacer.y)).toBeLessThanOrEqual(1.25);
   });
 
   // Documented-unsupported layout shapes, encoded as expected failures so

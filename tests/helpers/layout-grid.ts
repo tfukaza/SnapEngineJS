@@ -64,6 +64,8 @@ export function makeItemSnapshot(
     direction: "column",
     mainAxisAlign: "start",
     layoutModel: "flow",
+    wrap: "auto",
+    stretchItems: false,
     locked: false,
     box,
     children,
@@ -76,6 +78,7 @@ export function makeContainerSnapshot(
   direction: "row" | "column" = "row",
   mainAxisAlign: "start" | "center" = "start",
   layoutModel: "flow" | "slots" = "flow",
+  options: { wrap?: "auto" | "nowrap"; stretchItems?: boolean } = {},
 ): ItemSnapshot<string> {
   return {
     value: "container",
@@ -84,6 +87,8 @@ export function makeContainerSnapshot(
     direction,
     mainAxisAlign,
     layoutModel,
+    wrap: options.wrap ?? "auto",
+    stretchItems: options.stretchItems ?? false,
     locked: false,
     box,
     children,

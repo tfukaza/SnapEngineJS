@@ -5,6 +5,7 @@ import {
   flowLayoutPositions,
   inferFlowLayoutMetrics,
   virtualDimensions,
+  virtualEntrySizeFor,
   type VirtualInsertion,
 } from "../../assets/snapsort/core/src/layout";
 import {
@@ -479,6 +480,130 @@ test.describe("slot layout model", () => {
     const dims = virtualDimensions(grid, { insertions: [insertion] });
     expect(dims.width).toBeCloseTo(grid.box.width, 4);
     expect(dims.height).toBeGreaterThan(grid.box.height + 39);
+  });
+});
+
+test.describe("wrap and stretchItems declarations", () => {
+  test("wrap: nowrap keeps an overflowing row list on one line", () => {
+    // Zero-slack single-row list: an appended ghost overflows the container.
+    const grid = makeGrid({ rows: 1, cols: 4, itemW: 88, itemH: 40, gap: 4 });
+    const insertion = (container: typeof grid): VirtualInsertion<string> => ({
+      container,
+      index: 4,
+      entry: {
+        width: 88,
+        height: 40,
+        margin: { top: 0, right: 0, bottom: 0, left: 0 },
+      },
+    });
+    // Control: with wrap "auto" a row container wraps the overflow.
+    expect(
+      simulatedRowCounts(grid, { rowStep: 44, insertion: insertion(grid) }),
+    ).toEqual([4, 1]);
+    // Declared nowrap: the list keeps growing on the same line.
+    const noWrapGrid = makeGrid({
+      rows: 1,
+      cols: 4,
+      itemW: 88,
+      itemH: 40,
+      gap: 4,
+    });
+    noWrapGrid.wrap = "nowrap";
+    expect(
+      simulatedRowCounts(noWrapGrid, {
+        rowStep: 44,
+        insertion: insertion(noWrapGrid),
+      }),
+    ).toEqual([5]);
+  });
+
+  test("virtualEntrySizeFor fills the cross axis minus entry margins", () => {
+    // Column container: 200px outer, 3px borders, 10px padding -> 174px
+    // content width. Entry has 4px horizontal margins -> 166px.
+    const container = makeContainerSnapshot(
+      makeBox({
+        x: 0,
+        y: 0,
+        width: 200,
+        height: 400,
+        padding: { top: 10, right: 10, bottom: 10, left: 10 },
+        border: { top: 3, right: 3, bottom: 3, left: 3 },
+      }),
+      [],
+      "column",
+      "start",
+      "flow",
+      { stretchItems: true },
+    );
+    const base = {
+      width: 300,
+      height: 48,
+      margin: { top: 2, right: 4, bottom: 2, left: 4 },
+    };
+    expect(virtualEntrySizeFor(container, base)).toEqual({
+      width: 174 - 8,
+      height: 48,
+    });
+    // Row container: the cross axis is height.
+    container.direction = "row";
+    expect(virtualEntrySizeFor(container, base)).toEqual({
+      width: 300,
+      height: 400 - 26 - 4,
+    });
+    // Without stretchItems the base passes through unchanged.
+    container.stretchItems = false;
+    expect(virtualEntrySizeFor(container, base)).toEqual({
+      width: 300,
+      height: 48,
+    });
+  });
+
+  test("a wide entry dropped into a narrow stretch column adopts its width and center", () => {
+    // Narrow nested list (140px content) receiving an entry measured at
+    // 300px in its source container — the nested-container flicker setup.
+    const children = [0, 1, 2].map((i) =>
+      makeItemSnapshot(
+        `item-${i}`,
+        makeBox({ x: 10, y: 10 + i * 44, width: 140, height: 40 }),
+      ),
+    );
+    const container = makeContainerSnapshot(
+      makeBox({
+        x: 0,
+        y: 0,
+        width: 160,
+        height: 160,
+        padding: { top: 10, right: 10, bottom: 10, left: 10 },
+      }),
+      children,
+      "column",
+      "start",
+      "flow",
+      { wrap: "nowrap", stretchItems: true },
+    );
+    const insertion: VirtualInsertion<string> = {
+      container,
+      index: 1,
+      entry: {
+        ...virtualEntrySizeFor(container, {
+          width: 300,
+          height: 40,
+          margin: { top: 0, right: 0, bottom: 0, left: 0 },
+        }),
+        margin: { top: 0, right: 0, bottom: 0, left: 0 },
+      },
+    };
+    const origin = contentBoxOrigin(container.box);
+    const result = flowLayoutPositions(container, origin.x, origin.y, {
+      insertions: [insertion],
+    });
+    const rect = result.virtualRects.get(insertion)!;
+    expect(rect.width).toBe(140);
+    // Ghost center sits inside the narrow container, not at source width.
+    const centerX = rect.x + rect.width / 2;
+    expect(centerX).toBeGreaterThan(0);
+    expect(centerX).toBeLessThan(160);
+    expect(rect.y).toBeCloseTo(10 + 44, 4);
   });
 });
 
