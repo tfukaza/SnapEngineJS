@@ -51,11 +51,11 @@
   ];
   const logoSliceCount = 6;
   const logoSliceWidth = 30;
-  const sidewaysItems = [3, 0, 5, 1, 4, 2].map((slice) => ({
+  let sidewaysItems = $state([3, 0, 5, 1, 4, 2].map((slice) => ({
     id: `typescript-slice-${slice}`,
     slice,
     x: `${slice * -logoSliceWidth}px`,
-  }));
+  })));
 
   function updateSidewaysSolved(containerElement: HTMLElement | null | undefined) {
     if (!containerElement) return;
@@ -69,7 +69,14 @@
   }
 
   function handleSidewaysMove(event: ItemMoveEvent) {
-    event.to.container.element?.insertBefore(event.item.element!, event.beforeElement);
+    const itemId = event.itemId;
+    const moved = sidewaysItems.find((item) => item.id === itemId);
+    if (!moved) return;
+
+    const nextItems = sidewaysItems.filter((item) => item.id !== itemId);
+    nextItems.splice(Math.max(0, Math.min(event.to.index, nextItems.length)), 0, moved);
+    sidewaysItems = nextItems;
+
     requestAnimationFrame(() => updateSidewaysSolved(event.to.container.element));
   }
   const nestedItems = ["Item 1", "Item 2", "Item 3"];
@@ -159,7 +166,7 @@
   }
 
   function handleMultiContainerMove(event: ItemMoveEvent) {
-    const itemId = event.itemMetadata.itemId;
+    const itemId = event.itemId;
     const targetColumnId = event.to.containerMetadata.columnId;
     if (typeof itemId !== "string" || typeof targetColumnId !== "string") return;
 
@@ -324,10 +331,18 @@
                     and drop in minutes — with the framework you already use.
                   </p>
                 </div>
-                <ul class="closing-frameworks" aria-label="Supported frameworks">
+                <ul class="closing-frameworks" aria-label="Framework availability">
                   <li><img src="/icon/javascript.svg" alt="JavaScript" /></li>
                   <li><img src="/icon/svelte.svg" alt="Svelte" /></li>
                   <li><img src="/icon/react.svg" alt="React" /></li>
+                  <li class="framework-wip-logo">
+                    <img src="/icon/vue.svg" alt="Vue" />
+                    <span>WIP</span>
+                  </li>
+                  <li class="framework-wip-logo">
+                    <img src="/icon/angular.svg" alt="Angular" />
+                    <span>WIP</span>
+                  </li>
                 </ul>
                 <a class="button primary closing-button" href="/docs/snapsort/introduction">
                   Read the docs
@@ -387,12 +402,14 @@
             className="basic-list sortable-list"
             config={{ direction: "column", groupID: "core-sortable" }}
             items={sortableItems}
-            getId={(label) => label}
+            getItemId={(label) => label}
           >
-            {#snippet item(label)}
-              <div class="basic-row card-content">
-                <span>{label}</span>
-              </div>
+            {#snippet entry(label)}
+              <Item itemId={label}>
+                <div class="basic-row card-content">
+                  <span>{label}</span>
+                </div>
+              </Item>
             {/snippet}
           </Container>
         </div>
@@ -401,17 +418,6 @@
       <article class="core-demo-card sideways-demo-card">
         <h3>Sideways list</h3>
         <div class="core-demo-surface sideways-demo-surface card">
-          <!--
-            Deliberately kept on the legacy children API: handleSidewaysMove
-            mutates the DOM directly (raw insertBefore) instead of updating
-            reactive state, showcasing the core's vanilla DOM-splice
-            behavior. Items mode assumes Svelte owns the rendered order via
-            reactive `items` -- migrating this would let ghost-driven
-            reconciliation (which DOES react to state) snap the manually
-            reordered node back to its stale array position. This is also
-            this arc's one deliberate vanilla-path e2e surface (see
-            snapsort-drag-snapshot.spec.ts's core-showcase coverage).
-          -->
           <Container
             className={`sideways-list ${sidewaysSolved ? "solved" : ""}`}
             config={{
@@ -420,9 +426,11 @@
               mainAxisAlign: "center",
               callbacks: { onItemMove: handleSidewaysMove },
             }}
+            items={sidewaysItems}
+            getItemId={(item) => item.id}
           >
-            {#each sidewaysItems as item (item.id)}
-              <Item>
+            {#snippet entry(item)}
+              <Item itemId={item.id}>
                 <div
                   class="logo-slice"
                   data-slice={item.slice}
@@ -430,7 +438,7 @@
                   style={`--slice-x: ${item.x};`}
                 ></div>
               </Item>
-            {/each}
+            {/snippet}
           </Container>
         </div>
       </article>
@@ -442,11 +450,11 @@
             className="basic-list bounded-demo-list"
             config={{ direction: "column", groupID: "core-nested" }}
             items={nestedEntries}
-            getId={(e) => (e.kind === "item" ? e.id : "nested-group")}
+            getItemId={(e) => (e.kind === "item" ? e.id : "nested-group")}
           >
             {#snippet entry(e)}
               {#if e.kind === "item"}
-                <Item metadata={{ itemId: e.id }}>
+                <Item itemId={e.id}>
                   <div class="basic-row handle-row">
                     <Handle className="demo-row-handle">
                       <span class="demo-grip" aria-hidden="true">
@@ -461,24 +469,28 @@
                   className="nested-list bounded-demo-list card shallow"
                   config={{ direction: "column", groupID: "core-nested" }}
                   locked={false}
-                  metadata={{ itemId: "nested-group" }}
+                  itemId="nested-group"
                   items={nestedChildren}
-                  getId={(label) => label}
+                  getItemId={(label) => label}
                 >
-                  <Handle className="demo-container-handle">
-                    <span class="demo-grip" aria-hidden="true">
-                      <i></i><i></i><i></i><i></i>
-                    </span>
-                  </Handle>
-                  {#snippet item(label)}
-                    <div class="basic-row nested-row handle-row">
-                      <Handle className="demo-row-handle">
-                        <span class="demo-grip" aria-hidden="true">
-                          <i></i><i></i><i></i><i></i>
-                        </span>
-                      </Handle>
-                      <span>{label}</span>
-                    </div>
+                  {#snippet before()}
+                    <Handle className="demo-container-handle">
+                      <span class="demo-grip" aria-hidden="true">
+                        <i></i><i></i><i></i><i></i>
+                      </span>
+                    </Handle>
+                  {/snippet}
+                  {#snippet entry(label)}
+                    <Item itemId={label}>
+                      <div class="basic-row nested-row handle-row">
+                        <Handle className="demo-row-handle">
+                          <span class="demo-grip" aria-hidden="true">
+                            <i></i><i></i><i></i><i></i>
+                          </span>
+                        </Handle>
+                        <span>{label}</span>
+                      </div>
+                    </Item>
                   {/snippet}
                 </Container>
               {/if}
@@ -494,11 +506,11 @@
             className="basic-list insertion-list bounded-demo-list"
             config={{ direction: "column", groupID: "core-insert", mode: "insertion" }}
             items={insertEntries}
-            getId={(e) => (e.kind === "item" ? e.id : "insert-group")}
+            getItemId={(e) => (e.kind === "item" ? e.id : "insert-group")}
           >
             {#snippet entry(e)}
               {#if e.kind === "item"}
-                <Item metadata={{ itemId: e.id }}>
+                <Item itemId={e.id}>
                   <div class="basic-row handle-row">
                     <Handle className="demo-row-handle">
                       <span class="demo-grip" aria-hidden="true">
@@ -513,24 +525,28 @@
                   className="nested-list nested-insertion-list insertion-list bounded-demo-list card shallow"
                   config={{ direction: "column", groupID: "core-insert", mode: "insertion" }}
                   locked={false}
-                  metadata={{ itemId: "insert-group" }}
+                  itemId="insert-group"
                   items={insertNestedItems}
-                  getId={(label) => label}
+                  getItemId={(label) => label}
                 >
-                  <Handle className="demo-container-handle">
-                    <span class="demo-grip" aria-hidden="true">
-                      <i></i><i></i><i></i><i></i>
-                    </span>
-                  </Handle>
-                  {#snippet item(label)}
-                    <div class="basic-row nested-row handle-row">
-                      <Handle className="demo-row-handle">
-                        <span class="demo-grip" aria-hidden="true">
-                          <i></i><i></i><i></i><i></i>
-                        </span>
-                      </Handle>
-                      <span>{label}</span>
-                    </div>
+                  {#snippet before()}
+                    <Handle className="demo-container-handle">
+                      <span class="demo-grip" aria-hidden="true">
+                        <i></i><i></i><i></i><i></i>
+                      </span>
+                    </Handle>
+                  {/snippet}
+                  {#snippet entry(label)}
+                    <Item itemId={label}>
+                      <div class="basic-row nested-row handle-row">
+                        <Handle className="demo-row-handle">
+                          <span class="demo-grip" aria-hidden="true">
+                            <i></i><i></i><i></i><i></i>
+                          </span>
+                        </Handle>
+                        <span>{label}</span>
+                      </div>
+                    </Item>
                   {/snippet}
                 </Container>
               {/if}
@@ -546,12 +562,14 @@
             className="multi-row-list"
             config={{ direction: "row", groupID: "core-multi-row", mode: "progressive" }}
             items={multiRowItems}
-            getId={(item) => item.id}
+            getItemId={(item) => item.id}
           >
-            {#snippet item(item)}
-              <div class="basic-token">
-                <span>{item.label}</span>
-              </div>
+            {#snippet entry(item)}
+              <Item itemId={item.id}>
+                <div class="basic-token">
+                  <span>{item.label}</span>
+                </div>
+              </Item>
             {/snippet}
           </Container>
         </div>
@@ -565,13 +583,14 @@
             config={{ direction: "row", name: "core-multi-root", noDrop: true }}
             locked={true}
             items={multiContainers}
-            getId={(column) => column.id}
+            getItemId={(column) => column.id}
           >
             {#snippet entry(column)}
               <Container
                 className="basic-column card"
                 bind:container={column.container}
-                metadata={{ itemId: column.id, columnId: column.id }}
+                itemId={column.id}
+                metadata={{ columnId: column.id }}
                 config={{
                   direction: "column",
                   groupID: "core-multi-container",
@@ -580,29 +599,33 @@
                 }}
                 locked={true}
                 items={column.items}
-                getId={(item) => item.id}
+                getItemId={(item) => item.id}
               >
-                <h4>{column.title}</h4>
-                {#snippet item(item)}
-                  <div class="basic-row compact-row multi-container-row">
-                    <span>{item.label}</span>
-                    <button
-                      class="column-move-button"
-                      type="button"
-                      aria-label="Move {item.label} to the other column"
-                      onpointerdown={(event) => event.stopPropagation()}
-                      onclick={(event) => {
-                        event.stopPropagation();
-                        moveItemToOppositeColumn(item.id);
-                      }}
-                    >
-                      {#if column.direction === "right"}
-                        &rarr;
-                      {:else}
-                        &larr;
-                      {/if}
-                    </button>
-                  </div>
+                {#snippet before()}
+                  <h4>{column.title}</h4>
+                {/snippet}
+                {#snippet entry(item)}
+                  <Item itemId={item.id}>
+                    <div class="basic-row compact-row multi-container-row">
+                      <span>{item.label}</span>
+                      <button
+                        class="column-move-button"
+                        type="button"
+                        aria-label="Move {item.label} to the other column"
+                        onpointerdown={(event) => event.stopPropagation()}
+                        onclick={(event) => {
+                          event.stopPropagation();
+                          moveItemToOppositeColumn(item.id);
+                        }}
+                      >
+                        {#if column.direction === "right"}
+                          &rarr;
+                        {:else}
+                          &larr;
+                        {/if}
+                      </button>
+                    </div>
+                  </Item>
                 {/snippet}
               </Container>
             {/snippet}

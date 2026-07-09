@@ -1,7 +1,7 @@
 <script lang="ts">
   import { Engine } from "@snap-engine/asset-base-svelte";
   import { Container, Handle, Item } from "@snap-engine/snapsort-svelte";
-  import type { Container as ContainerType, ItemInsertEvent, ItemMoveEvent } from "@snap-engine/snapsort";
+  import type { Container as ContainerType, ItemMoveEvent } from "@snap-engine/snapsort";
 
   type MultiContainerItem = {
     id: string;
@@ -18,11 +18,11 @@
 
   const logoSliceCount = 6;
   const logoSliceWidth = 30;
-  const sidewaysItems = [3, 0, 5, 1, 4, 2].map((slice) => ({
+  let sidewaysItems = $state([3, 0, 5, 1, 4, 2].map((slice) => ({
     id: `typescript-slice-${slice}`,
     slice,
     x: `${slice * -logoSliceWidth}px`,
-  }));
+  })));
   const parentItems = ["Item 1", "Item 2", "Item 3"];
   const nestedItems = ["Item 4", "Item 5", "Item 6"];
   const gripDots = Array.from({ length: 6 }, (_, index) => index);
@@ -68,12 +68,17 @@
       order.every((slice, index) => slice === index);
   }
 
-  function handleSidewaysInsert(event: ItemInsertEvent) {
-    const containerElement = event.container.element;
-    const itemElement = event.item.element;
-    if (!containerElement || !itemElement) return;
+  function handleSidewaysMove(event: ItemMoveEvent) {
+    const itemId = event.itemId;
+    const containerElement = event.to.container.element;
+    const sourceIndex = sidewaysItems.findIndex((item) => item.id === itemId);
+    if (sourceIndex === -1) return;
 
-    containerElement.insertBefore(itemElement, event.beforeElement);
+    const nextItems = sidewaysItems.slice();
+    const [item] = nextItems.splice(sourceIndex, 1);
+    const destinationIndex = Math.max(0, Math.min(event.to.index, nextItems.length));
+    nextItems.splice(destinationIndex, 0, item);
+    sidewaysItems = nextItems;
     requestAnimationFrame(() => updateSidewaysSolved(containerElement));
   }
 
@@ -107,7 +112,7 @@
   }
 
   function handleMultiContainerMove(event: ItemMoveEvent) {
-    const itemId = event.itemMetadata.itemId;
+    const itemId = event.itemId;
     const targetColumnId = event.to.containerMetadata.columnId;
     if (typeof itemId !== "string" || typeof targetColumnId !== "string") return;
 
@@ -154,16 +159,6 @@
         <article class="core-demo-card" data-demo="sideways-list">
           <h2>Sideways list</h2>
           <div class="core-demo-surface sideways-demo-surface card">
-            <!--
-              Deliberately kept on the legacy children API: handleSidewaysInsert
-              mutates the DOM directly (raw insertBefore) instead of updating
-              reactive state, showcasing the core's vanilla DOM-splice
-              behavior. Items mode assumes Svelte owns the rendered order via
-              reactive `items` -- migrating this would let ghost-driven
-              reconciliation snap the manually reordered node back to its
-              stale array position. Also covered by
-              snapsort-drag-snapshot.spec.ts's website-parity tests.
-            -->
             <Container
               className={`sideways-list ${sidewaysSolved ? "solved" : ""}`}
               config={{
@@ -171,12 +166,14 @@
                 groupID: "core-sideways",
                 mainAxisAlign: "center",
                 callbacks: {
-                  onItemInsert: handleSidewaysInsert,
+                  onItemMove: handleSidewaysMove,
                 },
               }}
+              items={sidewaysItems}
+              getItemId={(item) => item.id}
             >
-              {#each sidewaysItems as item (item.id)}
-                <Item>
+              {#snippet entry(item)}
+                <Item itemId={item.id}>
                   <div
                     class="logo-slice"
                     data-slice={item.slice}
@@ -184,7 +181,7 @@
                     style={`--slice-x: ${item.x};`}
                   ></div>
                 </Item>
-              {/each}
+              {/snippet}
             </Container>
           </div>
         </article>
@@ -196,11 +193,11 @@
               className="basic-list bounded-demo-list"
               config={{ direction: "column", groupID: "core-nested" }}
               items={nestedEntries}
-              getId={(e) => (e.kind === "item" ? e.label : "nested-group")}
+              getItemId={(e) => (e.kind === "item" ? e.label : "nested-group")}
             >
               {#snippet entry(e)}
                 {#if e.kind === "item"}
-                  <Item metadata={{ itemId: e.label }}>
+                  <Item itemId={e.label}>
                     <div class="basic-row handle-row">
                       <Handle className="demo-row-handle">
                         <span class="demo-grip" aria-hidden="true">
@@ -214,31 +211,35 @@
                   </Item>
                 {:else}
                   <Container
+                    itemId="nested-group"
                     className="nested-list bounded-demo-list card shallow"
                     config={{ direction: "column", groupID: "core-nested" }}
                     locked={false}
-                    metadata={{ itemId: "nested-group" }}
                     items={nestedItems}
-                    getId={(label) => label}
+                    getItemId={(label) => label}
                   >
-                    <Handle className="demo-container-handle">
-                      <span class="demo-grip" aria-hidden="true">
-                        {#each gripDots as dot}
-                          <span data-dot={dot}></span>
-                        {/each}
-                      </span>
-                    </Handle>
-                    {#snippet item(label)}
-                      <div class="basic-row nested-row handle-row">
-                        <Handle className="demo-row-handle">
-                          <span class="demo-grip" aria-hidden="true">
-                            {#each gripDots as dot}
-                              <span data-dot={dot}></span>
-                            {/each}
-                          </span>
-                        </Handle>
-                        <span>{label}</span>
-                      </div>
+                    {#snippet before()}
+                      <Handle className="demo-container-handle">
+                        <span class="demo-grip" aria-hidden="true">
+                          {#each gripDots as dot}
+                            <span data-dot={dot}></span>
+                          {/each}
+                        </span>
+                      </Handle>
+                    {/snippet}
+                    {#snippet entry(label)}
+                      <Item itemId={label}>
+                        <div class="basic-row nested-row handle-row">
+                          <Handle className="demo-row-handle">
+                            <span class="demo-grip" aria-hidden="true">
+                              {#each gripDots as dot}
+                                <span data-dot={dot}></span>
+                              {/each}
+                            </span>
+                          </Handle>
+                          <span>{label}</span>
+                        </div>
+                      </Item>
                     {/snippet}
                   </Container>
                 {/if}
@@ -255,13 +256,14 @@
               config={{ direction: "row", name: "core-multi-root", noDrop: true }}
               locked={true}
               items={multiContainers}
-              getId={(column) => column.id}
+              getItemId={(column) => column.id}
             >
               {#snippet entry(column)}
                 <Container
+                  itemId={column.id}
                   className="basic-column card"
                   bind:container={column.container}
-                  metadata={{ itemId: column.id, columnId: column.id }}
+                  metadata={{ columnId: column.id }}
                   config={{
                     direction: "column",
                     groupID: "core-multi-container",
@@ -270,25 +272,27 @@
                   }}
                   locked={true}
                   items={column.items}
-                  getId={(item) => item.id}
+                  getItemId={(item) => item.id}
                 >
-                  <h3>{column.title}</h3>
-                  {#snippet item(item)}
-                    <div class="basic-row compact-row multi-container-row">
-                      <span>{item.label}</span>
-                      <button
-                        class="column-move-button"
-                        type="button"
-                        aria-label="Move {item.label} to the other column"
-                        onpointerdown={(event) => event.stopPropagation()}
-                        onclick={(event) => {
-                          event.stopPropagation();
-                          moveItemToOppositeColumn(item.id);
-                        }}
-                      >
-                        {column.direction === "right" ? ">" : "<"}
-                      </button>
-                    </div>
+                  {#snippet before()}<h3>{column.title}</h3>{/snippet}
+                  {#snippet entry(item)}
+                    <Item itemId={item.id}>
+                      <div class="basic-row compact-row multi-container-row">
+                        <span>{item.label}</span>
+                        <button
+                          class="column-move-button"
+                          type="button"
+                          aria-label="Move {item.label} to the other column"
+                          onpointerdown={(event) => event.stopPropagation()}
+                          onclick={(event) => {
+                            event.stopPropagation();
+                            moveItemToOppositeColumn(item.id);
+                          }}
+                        >
+                          {column.direction === "right" ? ">" : "<"}
+                        </button>
+                      </div>
+                    </Item>
                   {/snippet}
                 </Container>
               {/snippet}

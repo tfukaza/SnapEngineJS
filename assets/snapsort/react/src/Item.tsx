@@ -21,6 +21,7 @@ export const ItemObjectContext = createContext<ItemObject | null>(null);
 export interface ItemProps {
   children: ReactNode;
   className?: string;
+  itemId?: string;
   itemObject?: ItemObject | null;
   metadata?: ItemSnapshotMetadata;
   /** Consumer-owned selection flag — see `Item.selected` in `@snap-engine/snapsort`. */
@@ -29,7 +30,7 @@ export interface ItemProps {
 }
 
 export const Item = forwardRef<ItemObject, ItemProps>(function SnapSortItem(
-  { children, className = "", itemObject = null, metadata = {}, selected = false, style },
+  { children, className = "", itemId, itemObject = null, metadata = {}, selected = false, style },
   ref,
 ) {
   const engine = useSnapSortEngine();
@@ -41,6 +42,11 @@ export const Item = forwardRef<ItemObject, ItemProps>(function SnapSortItem(
     itemRef.current = new ItemObject(engine, null);
   }
   const item = itemRef.current;
+  const resolvedItemId =
+    itemId ?? (typeof metadata.itemId === "string" ? metadata.itemId : undefined);
+  if (resolvedItemId !== undefined) {
+    item.itemId = resolvedItemId;
+  }
   item.metadata = metadata;
   item.selected = selected;
 
@@ -57,7 +63,9 @@ export const Item = forwardRef<ItemObject, ItemProps>(function SnapSortItem(
   );
 
   useEffect(() => {
-    container?.addItem(item);
+    if (container && item.parent !== container) {
+      container.addItem(item);
+    }
     return () => {
       if (ownsItemRef.current) {
         item.destroy();

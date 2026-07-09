@@ -248,8 +248,10 @@ export class DragSession {
           root.callbacks?.onDragStart?.({
             session: this,
             item: primary,
+            itemId: primary.resolvedItemId,
             itemMetadata: primary.metadata,
             items: this.items,
+            itemIds: this.items.map((i) => i.resolvedItemId),
             itemsMetadata: this.items.map((i) => i.metadata),
             element: primary.element,
             source: this.sources[0],
@@ -377,8 +379,10 @@ export class DragSession {
     this.root.callbacks?.onDropTargetChange?.({
       session: this,
       item,
+      itemId: item.resolvedItemId,
       itemMetadata: item.metadata,
       items: this.items,
+      itemIds: this.items.map((i) => i.resolvedItemId),
       itemsMetadata: this.items.map((i) => i.metadata),
       previous: toLocation(previous),
       current: toLocation(current),

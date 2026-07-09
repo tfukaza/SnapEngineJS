@@ -38,9 +38,17 @@
             <h3>SnapSort</h3>
           </div>
           <p>Drag and drop any element</p>
-          <div class="framework-list" aria-label="Supported frameworks">
+          <div class="framework-list" aria-label="Framework availability">
             <span class="chip framework-chip">Vanilla JS</span>
             <span class="chip framework-chip">Svelte</span>
+            <span class="chip framework-chip framework-logo-chip" aria-label="Vue WIP">
+              <img src="/icon/vue.svg" alt="" aria-hidden="true" />
+              <small>WIP</small>
+            </span>
+            <span class="chip framework-chip framework-logo-chip" aria-label="Angular WIP">
+              <img src="/icon/angular.svg" alt="" aria-hidden="true" />
+              <small>WIP</small>
+            </span>
           </div>
         </div>
 
@@ -207,6 +215,37 @@
   .framework-chip {
     background: #f0f2f2;
     color: #3f4548;
+  }
+
+  .framework-logo-chip {
+    position: relative;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 3rem;
+    height: 2rem;
+    padding: var(--size-4) var(--size-8);
+  }
+
+  .framework-logo-chip img {
+    display: block;
+    max-width: 2.25rem;
+    max-height: 1.5rem;
+    object-fit: contain;
+  }
+
+  .framework-logo-chip small {
+    position: absolute;
+    top: -0.4rem;
+    right: -0.45rem;
+    padding: 0.16rem 0.32rem;
+    border: 1px solid #d9dddf;
+    border-radius: 999px;
+    background: #ffffff;
+    color: #697074;
+    font-size: 0.58rem;
+    font-weight: 700;
+    line-height: 1;
   }
 
   .asset-preview {

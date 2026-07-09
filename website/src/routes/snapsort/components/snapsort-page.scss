@@ -487,6 +487,7 @@
   .closing-frameworks {
     display: flex;
     align-items: center;
+    flex-wrap: wrap;
     gap: var(--size-24);
     margin: 0;
     padding: 0;
@@ -502,6 +503,33 @@
     width: 2.5rem;
     height: 2.5rem;
     object-fit: contain;
+  }
+
+  .framework-wip-logo {
+    position: relative;
+    align-items: center;
+    justify-content: center;
+    width: 3.5rem;
+    height: 2.5rem;
+  }
+
+  .framework-wip-logo img {
+    width: 3.25rem;
+    height: 2.5rem;
+  }
+
+  .framework-wip-logo span {
+    position: absolute;
+    top: -0.55rem;
+    right: -0.65rem;
+    padding: 0.18rem 0.36rem;
+    border: 1px solid #d9dddf;
+    border-radius: 999px;
+    background: #ffffff;
+    color: #697074;
+    font-size: 0.62rem;
+    font-weight: 700;
+    line-height: 1;
   }
 
   .closing-button {

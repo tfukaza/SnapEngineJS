@@ -73,34 +73,36 @@
     }}
     locked={false}
     selected={isSelected}
+    itemId={node.id}
     metadata={{
-      itemId: node.id,
       containerId: node.id,
       insertionDepth: depth + 1,
       insertionMarkerInsetLeft: 8 + (depth + 1) * 14,
       insertionMarkerInsetRight: 8,
     }}
     items={node.open !== false ? (node.children ?? []) : []}
-    getId={(child) => child.id}
+    getItemId={(child) => child.id}
   >
-    <div
-      class="tree-row folder-row"
-      class:selected={isSelected}
-      style={`--depth: ${depth}`}
-      onclick={handleRowClick}
-    >
-      <span class="indent" aria-hidden="true"></span>
-      <button
-        type="button"
-        class:open={node.open !== false}
-        class="chevron"
-        aria-label={node.open !== false ? `Collapse ${node.name}` : `Expand ${node.name}`}
-        onpointerdown={handleChevronPointerDown}
-        onclick={handleChevronClick}
-      ></button>
-      <span class="folder-icon" aria-hidden="true"></span>
-      <span class="row-name">{node.name}</span>
-    </div>
+    {#snippet before()}
+      <div
+        class="tree-row folder-row"
+        class:selected={isSelected}
+        style={`--depth: ${depth}`}
+        onclick={handleRowClick}
+      >
+        <span class="indent" aria-hidden="true"></span>
+        <button
+          type="button"
+          class:open={node.open !== false}
+          class="chevron"
+          aria-label={node.open !== false ? `Collapse ${node.name}` : `Expand ${node.name}`}
+          onpointerdown={handleChevronPointerDown}
+          onclick={handleChevronClick}
+        ></button>
+        <span class="folder-icon" aria-hidden="true"></span>
+        <span class="row-name">{node.name}</span>
+      </div>
+    {/snippet}
 
     {#snippet entry(child)}
       <FileExplorerNode node={child} depth={depth + 1} {callbacks} {onToggleFolder} {selectedIds} {onSelectNode} />
@@ -108,8 +110,8 @@
   </Container>
 {:else}
   <Item
+    itemId={node.id}
     className={`tree-row file-row depth-${depth}${node.active ? " active" : ""}${isSelected ? " selected" : ""}`}
-    metadata={{ itemId: node.id }}
     selected={isSelected}
     onclick={handleRowClick}
     style={`--depth: ${depth}`}

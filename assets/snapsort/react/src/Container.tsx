@@ -28,6 +28,7 @@ export interface ContainerProps {
   className?: string;
   config: ContainerConfig;
   containerObject?: ContainerObject | null;
+  itemId?: string;
   locked?: boolean;
   /** Consumer-owned selection flag — see `Item.selected` in `@snap-engine/snapsort`. Only meaningful when `locked` is `false`. */
   selected?: boolean;
@@ -96,6 +97,7 @@ export const Container = forwardRef<ContainerObject, ContainerProps>(
       className = "",
       config,
       containerObject = null,
+      itemId,
       locked = true,
       selected = false,
       metadata = {},
@@ -112,9 +114,12 @@ export const Container = forwardRef<ContainerObject, ContainerProps>(
       containerRef.current = new ContainerObject(engine, null, { ...config });
     }
     const container = containerRef.current;
+    const resolvedItemId =
+      itemId ?? (typeof metadata.itemId === "string" ? metadata.itemId : undefined);
     const direction = config.direction ?? "column";
     const mainAxisAlign = config.mainAxisAlign ?? "start";
     const defaultAwaitMutation = useSnapSortAwaitMutation();
+    container.itemId = resolvedItemId;
     container.locked = locked;
     container.selected = selected;
     container.metadata = metadata;
@@ -148,7 +153,9 @@ export const Container = forwardRef<ContainerObject, ContainerProps>(
     );
 
     useEffect(() => {
-      parentContainer?.addItem(container as unknown as Item);
+      if (parentContainer && container.parent !== parentContainer) {
+        parentContainer.addItem(container as unknown as Item);
+      }
       return () => {
         if (ownsContainerRef.current) {
           container.destroy();

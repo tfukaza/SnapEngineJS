@@ -1,13 +1,15 @@
 <script lang="ts">
-  import { onMount } from "svelte";
+  import { onMount, tick } from "svelte";
   import ClientDemoFrame from "$lib/components/ClientDemoFrame.svelte";
   import { Engine } from "@snap-engine/asset-base-svelte";
-  import { Container } from "@snap-engine/snapsort-svelte";
+  import { Container, Item } from "@snap-engine/snapsort-svelte";
+  import type { ItemMoveEvent } from "@snap-engine/snapsort";
   import * as Tone from "tone";
   import HeroToneJoystick from "./hero/HeroToneJoystick.svelte";
 
   const recessedPadIndices = new Set([5, 6, 9, 10]);
   const padIndices = Array.from({ length: 16 }, (_, index) => index);
+  let padOrder = $state<number[]>(padIndices.slice());
   const waveShapes = ["sine", "triangle8", "square8", "sawtooth8"] as const;
   type WaveShape = (typeof waveShapes)[number];
 
@@ -49,7 +51,6 @@
     "C6",
   ];
 
-  let heroButtonBed: HTMLDivElement | null = null;
   let waveformCanvas: HTMLCanvasElement | null = null;
   let toneInstrument: ReturnType<typeof createToneInstrument> | null = null;
   let sequenceTimer: number | null = null;
@@ -131,6 +132,19 @@
     applyToneControls();
   }
 
+  function handlePadMove(event: ItemMoveEvent) {
+    const itemId = event.itemId;
+    if (typeof itemId !== "string" || !itemId.startsWith("pad-")) return;
+
+    const movedPad = Number(itemId.slice("pad-".length));
+    if (!Number.isInteger(movedPad)) return;
+
+    const nextOrder = padOrder.filter((index) => index !== movedPad);
+    const targetIndex = Math.max(0, Math.min(event.to.index, nextOrder.length));
+    nextOrder.splice(targetIndex, 0, movedPad);
+    padOrder = nextOrder;
+  }
+
   async function playPad(index: number) {
     const instrument = await getToneInstrument();
     if (!instrument) return;
@@ -150,9 +164,7 @@
   }
 
   function currentPadOrder() {
-    if (!heroButtonBed) return padNotes.map((_, index) => index);
-    const pads = heroButtonBed.querySelectorAll<HTMLElement>(".hero-synth-button");
-    return Array.from(pads).map((pad) => Number(pad.dataset.padIndex ?? 0));
+    return padOrder;
   }
 
   function stopSequencer() {
@@ -311,7 +323,7 @@
             </div>
             <HeroToneJoystick bind:x={toneX} bind:y={toneY} onValueChange={updateToneControls} />
           </div>
-          <div class="hero-button-bed slot" bind:this={heroButtonBed}>
+          <div class="hero-button-bed slot">
             <div class="hero-button-slots" aria-hidden="true">
               {#each Array(16) as _}
                 <div class="hero-button-slot"></div>
@@ -319,24 +331,29 @@
             </div>
             <div class="hero-button-grid" aria-hidden="true">
               <Container
-                config={{ direction: "row", groupID: "hero-synth-pads" }}
-                items={padIndices}
-                getId={(index) => `pad-${index}`}
-                getClassName={() => "hero-synth-item"}
+                config={{
+                  direction: "row",
+                  groupID: "hero-synth-pads",
+                  callbacks: { onItemMove: handlePadMove, awaitMutation: tick },
+                }}
+                items={padOrder}
+                getItemId={(index) => `pad-${index}`}
               >
-                {#snippet item(index)}
-                  <div
-                    class={`hero-synth-button ${padColorClasses[index]} ${activePadIndex === index ? "is-active" : ""}`}
-                    data-pad-index={index}
-                    onpointerdown={() => playPad(index)}
-                  >
-                    <span class="hero-synth-button-number" aria-hidden="true">{index + 1}</span>
-                    {#if recessedPadIndices.has(index)}
-                      <div class="hero-synth-button-indent"></div>
-                    {:else}
-                      <div class="hero-synth-button-bump"></div>
-                    {/if}
-                  </div>
+                {#snippet entry(index)}
+                  <Item itemId={`pad-${index}`} className="hero-synth-item">
+                    <div
+                      class={`hero-synth-button ${padColorClasses[index]} ${activePadIndex === index ? "is-active" : ""}`}
+                      data-pad-index={index}
+                      onpointerdown={() => playPad(index)}
+                    >
+                      <span class="hero-synth-button-number" aria-hidden="true">{index + 1}</span>
+                      {#if recessedPadIndices.has(index)}
+                        <div class="hero-synth-button-indent"></div>
+                      {:else}
+                        <div class="hero-synth-button-bump"></div>
+                      {/if}
+                    </div>
+                  </Item>
                 {/snippet}
               </Container>
             </div>
@@ -509,6 +526,8 @@
     font-family: "Geist Pixel Square", "Geist Pixel Circle", monospace;
     font-size: 0.55rem;
     letter-spacing: 0;
+    user-select: none;
+    -webkit-user-select: none;
   }
 
   .hero-transport-icon {
@@ -608,6 +627,8 @@
     cursor: pointer;
     font-family: "Lato", sans-serif;
     font-size: 1rem;
+    user-select: none;
+    -webkit-user-select: none;
     position: relative;
     display: grid;
     place-items: center;

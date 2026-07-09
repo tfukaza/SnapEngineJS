@@ -1328,12 +1328,14 @@ function filterCandidatesByCanDrop(
           : undefined;
       const groupItems = session?.items ?? [item];
       allowed = canDrop
-        ? canDrop({
-            session,
-            item,
-            itemMetadata: item.metadata,
-            items: groupItems,
-            itemsMetadata: groupItems.map((member) => member.metadata),
+          ? canDrop({
+              session,
+              item,
+              itemId: item.resolvedItemId,
+              itemMetadata: item.metadata,
+              items: groupItems,
+              itemIds: groupItems.map((member) => member.resolvedItemId),
+              itemsMetadata: groupItems.map((member) => member.metadata),
             container,
             containerMetadata: (container as any).metadata,
             index: candidate.index,

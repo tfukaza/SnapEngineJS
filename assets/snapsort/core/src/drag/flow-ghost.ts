@@ -227,8 +227,10 @@ async function startCopyHandoff(session: DragSession): Promise<boolean> {
   const event: DragCloneEvent = {
     session,
     item: origins[0],
+    itemId: origins[0].resolvedItemId,
     itemMetadata: origins[0].metadata,
     items: origins,
+    itemIds: origins.map((o) => o.resolvedItemId),
     itemsMetadata: origins.map((o) => o.metadata),
     sources: session.sources,
     cloneItems,
@@ -478,8 +480,10 @@ function drop(session: DragSession): void {
       root.callbacks?.onDragEnd?.({
         session,
         item,
+        itemId: item.resolvedItemId,
         itemMetadata: item.metadata,
         items,
+        itemIds: items.map((member) => member.resolvedItemId),
         itemsMetadata: items.map((member) => member.metadata),
         element: item.element,
         source: session.sources[0],

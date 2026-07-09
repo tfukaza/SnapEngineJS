@@ -206,9 +206,7 @@
 
     let nextTree = tree;
     const extractedNodes: FileExplorerNodeData[] = [];
-    for (const itemMetadata of event.itemsMetadata) {
-      const itemId = itemMetadata.itemId;
-      if (typeof itemId !== "string") continue;
+    for (const itemId of event.itemIds) {
       const extracted = extractNode(nextTree, itemId);
       if (!extracted.node) continue;
       nextTree = extracted.nodes;
@@ -228,9 +226,7 @@
     const containerId = event.containerMetadata.containerId;
     if (typeof containerId !== "string") return true;
 
-    for (const itemMetadata of event.itemsMetadata) {
-      const itemId = itemMetadata.itemId;
-      if (typeof itemId !== "string") continue;
+    for (const itemId of event.itemIds) {
       const draggedNode = findNode(tree, itemId);
       if (draggedNode && containsNode(draggedNode, containerId)) return false;
     }
@@ -294,7 +290,7 @@
         insertionMarkerInsetRight: 8,
       }}
       items={tree}
-      getId={(node) => node.id}
+      getItemId={(node) => node.id}
     >
       {#snippet entry(node)}
         <FileExplorerNode
