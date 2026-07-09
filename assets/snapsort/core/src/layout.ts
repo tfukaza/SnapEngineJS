@@ -191,6 +191,38 @@ function median(values: number[]): number {
     : sorted[mid];
 }
 
+/**
+ * Size a virtual insertion entry for its *destination* container. The single
+ * source of entry sizing for candidate simulation and the real flow spacer.
+ *
+ * For a `stretchItems` container the entry fills the container's cross axis
+ * (width in column lists, height in row lists): content-box cross size minus
+ * the entry's own cross margins, clamped to >= 0. The main-axis size always
+ * stays the dragged item's own — a todo item's height is content-driven.
+ * Without `stretchItems` the base size passes through unchanged (today's
+ * behavior). Keeping ghost rects destination-sized is what makes candidate
+ * center points correct when dragging between containers of different
+ * widths (e.g. from a parent list into a narrower nested list).
+ */
+export function virtualEntrySizeFor<T>(
+  container: ItemSnapshot<T>,
+  base: { width: number; height: number; margin: DomProperty["margin"] },
+): { width: number; height: number } {
+  if (!container.stretchItems) {
+    return { width: base.width, height: base.height };
+  }
+  const axes = flowAxesForDirection(container.direction);
+  const content = contentBoxSize(container.box);
+  const crossMargins =
+    axes.cross === "x"
+      ? base.margin.left + base.margin.right
+      : base.margin.top + base.margin.bottom;
+  const cross = Math.max(0, content[axes.crossSize] - crossMargins);
+  return axes.cross === "x"
+    ? { width: cross, height: base.height }
+    : { width: base.width, height: cross };
+}
+
 export function inferFlowLayoutMetrics<T>(
   container: ItemSnapshot<T>,
   axes: FlowAxes,
@@ -527,7 +559,9 @@ export function flowLayoutPositions<T>(
   >();
   const origin = { x: startX, y: startY };
   const lineCrossStart = origin[axes.cross] + metrics.crossStart;
-  const canWrap = axes.direction === "row" || metrics.lineCount > 1;
+  const canWrap =
+    container.wrap !== "nowrap" &&
+    (axes.direction === "row" || metrics.lineCount > 1);
   const lines: FlowLine<T>[] = [];
   let currentLine: FlowLine<T> = { entries: [], mainSize: 0, crossSize: 0 };
 

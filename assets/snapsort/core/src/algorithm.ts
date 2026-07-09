@@ -13,6 +13,7 @@ import {
   flowAxesForDirection,
   flowLayoutPositions,
   inferFlowLayoutMetrics,
+  virtualEntrySizeFor,
   layoutItems,
   pointFromAxes,
   virtualDimensions as layoutVirtualDimensions,
@@ -423,14 +424,16 @@ function layoutInsertionFromGhost(
   if (!ghost) return undefined;
   const container = byItem.get(ghost.container);
   if (!container) return undefined;
+  const margin = requireDragSnapshotBox(ghost.container).margin;
+  const size = virtualEntrySizeFor(container, {
+    width: ghost.width,
+    height: ghost.height,
+    margin,
+  });
   return {
     container,
     index: ghost.index,
-    entry: {
-      width: ghost.width,
-      height: ghost.height,
-      margin: requireDragSnapshotBox(ghost.container).margin,
-    },
+    entry: { ...size, margin },
   };
 }
 
@@ -454,14 +457,15 @@ function activeGhostInsertionFromPendingTarget(
   const container = byItem.get(pendingTarget.container);
   if (!container) return undefined;
 
+  const size = virtualEntrySizeFor(container, {
+    width: dragGhostW,
+    height: dragGhostH,
+    margin: draggedBox.margin,
+  });
   return {
     container,
     index: pendingTarget.index,
-    entry: {
-      width: dragGhostW,
-      height: dragGhostH,
-      margin: draggedBox.margin,
-    },
+    entry: { ...size, margin: draggedBox.margin },
   };
 }
 
@@ -634,20 +638,29 @@ function virtualLayoutRecursiveFromSnapshot(
   // (and thus the candidate's placement rect) should be the whole group's
   // direction-aware size for this container, not just the pressed item's —
   // the collapsed run occupies one contiguous group-sized slot. Degenerates
-  // to the plain drag ghost size for a single-item drag.
+  // to the plain drag ghost size for a single-item drag. Either way the
+  // entry is then re-sized for THIS destination container: a `stretchItems`
+  // container overrides the cross-axis size with its own content width or
+  // height, so ghost rects and center points stay correct when the
+  // destination is narrower or wider than the source.
   const groupDims = session?.groupDims;
-  const entryWidth =
-    groupDims && session && session.items.length > 1
-      ? isColumn
-        ? groupDims.maxW
-        : groupDims.sumW
-      : dragGhostW;
-  const entryHeight =
-    groupDims && session && session.items.length > 1
-      ? isColumn
-        ? groupDims.sumH
-        : groupDims.maxH
-      : dragGhostH;
+  const entrySize = virtualEntrySizeFor(containerSnapshot, {
+    width:
+      groupDims && session && session.items.length > 1
+        ? isColumn
+          ? groupDims.maxW
+          : groupDims.sumW
+        : dragGhostW,
+    height:
+      groupDims && session && session.items.length > 1
+        ? isColumn
+          ? groupDims.sumH
+          : groupDims.maxH
+        : dragGhostH,
+    margin: draggedBox.margin,
+  });
+  const entryWidth = entrySize.width;
+  const entryHeight = entrySize.height;
 
   const makeCandidate = (
     index: number,

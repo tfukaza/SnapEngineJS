@@ -333,6 +333,8 @@
   itemContainer.metadata = metadata;
   itemContainer.direction = config.direction ?? "column";
   itemContainer.mainAxisAlign = config.mainAxisAlign ?? "start";
+  itemContainer.wrap = config.wrap ?? "auto";
+  itemContainer.stretchItems = config.stretchItems ?? false;
   itemContainer.dropArea = config.dropArea ?? false;
   itemContainer.noDrop = config.noDrop ?? false;
   const justifyContent = $derived(config.mainAxisAlign === "center" ? "center" : "flex-start");
@@ -344,6 +346,8 @@
     itemContainer.metadata = metadata;
     itemContainer.direction = config.direction ?? "column";
     itemContainer.mainAxisAlign = config.mainAxisAlign ?? "start";
+    itemContainer.wrap = config.wrap ?? "auto";
+    itemContainer.stretchItems = config.stretchItems ?? false;
     itemContainer.dropArea = config.dropArea ?? false;
     itemContainer.noDrop = config.noDrop ?? false;
   });

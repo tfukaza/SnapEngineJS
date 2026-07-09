@@ -158,6 +158,19 @@
   ];
   const nestedGroupChildren = ["Sub A1", "Sub A2", "Sub A3"];
 
+  // Stretch demo: items are genuinely 100% width (align-self: stretch), so
+  // the containers declare `stretchItems` and the layout engine re-sizes
+  // drop entries to each destination — the nested sub-list is markedly
+  // narrower than its parent.
+  type StretchEntry = { kind: "item"; label: string } | { kind: "group" };
+  const stretchEntries: StretchEntry[] = [
+    { kind: "item", label: "Task 1" },
+    { kind: "item", label: "Task 2" },
+    { kind: "group" },
+    { kind: "item", label: "Task 3" },
+  ];
+  const stretchGroupChildren = ["Sub task 1", "Sub task 2", "Sub task 3"];
+
   type CompactEntry = { kind: "item"; label: string } | { kind: "group" };
   const compactEntries: CompactEntry[] = [
     { kind: "item", label: "Overview" },
@@ -322,6 +335,35 @@
                     items={nestedGroupChildren}
                     getId={(label) => label}
                     getClassName={() => "demo-item sub-item"}
+                  >
+                    {#snippet item(label)}<p>{label}</p>{/snippet}
+                  </Container>
+                {/if}
+              {/snippet}
+            </Container>
+          </article>
+
+          <article class="demo-cell stretch-nested-demo">
+            <h2>Stretch Nested</h2>
+            <p class="demo-hint">Items fill their container (100% width); the nested list is narrower.</p>
+            <Container
+              className="stretch-list"
+              config={{ direction: "column", wrap: "nowrap", stretchItems: true, groupID: "stretch-nested", ...nestedAnimationConfig }}
+              locked={true}
+              items={stretchEntries}
+              getId={(e) => (e.kind === "item" ? e.label : "stretch-sub-group")}
+            >
+              {#snippet entry(e)}
+                {#if e.kind === "item"}
+                  <Item className="demo-item stretch-item" metadata={{ itemId: e.label }}><p>{e.label}</p></Item>
+                {:else}
+                  <Container
+                    className="stretch-sublist"
+                    config={{ direction: "column", wrap: "nowrap", stretchItems: true, groupID: "stretch-nested", ...nestedAnimationConfig }}
+                    metadata={{ itemId: "stretch-sub-group" }}
+                    items={stretchGroupChildren}
+                    getId={(label) => label}
+                    getClassName={() => "demo-item stretch-item"}
                   >
                     {#snippet item(label)}<p>{label}</p>{/snippet}
                   </Container>
@@ -616,6 +658,20 @@
 
   :global(.demo-item.sub-item) {
     opacity: 0.6;
+  }
+
+  .stretch-nested-demo :global(.stretch-list) {
+    width: 300px;
+  }
+
+  .stretch-nested-demo :global(.snapsort-container .stretch-sublist) {
+    width: 55%;
+    align-self: flex-start;
+  }
+
+  .stretch-nested-demo :global(.demo-item.stretch-item) {
+    width: auto;
+    align-self: stretch;
   }
 
   .compact-nested-demo :global(.compact-basic-list) {
