@@ -28,6 +28,18 @@ Common foundational components used across all SnapEngine products. Essential bu
 - `getEngine()` - Engine instance manager
 - `ObjectData` - Type definition
 
+### @snap-engine/asset-base-react
+**Location:** `react/src/`
+**Language:** React (TSX)
+**Dependencies:** `@snap-engine/asset-base`, `@snap-engine/core`, `react` (peer)
+
+**Exports:**
+- `Engine` - Shared React Engine wrapper and context provider
+- `Camera` - Camera control wrapper
+- `Background` - Infinite grid wrapper
+- `useSnapEngine()` - Access the Engine from descendants
+- `useCameraControl()` - Access the CameraControl from descendants
+
 ## File Structure
 
 ```
@@ -39,7 +51,7 @@ asset-base/
 │       ├── index.ts
 │       ├── camera.ts           # CameraControl class
 │       └── background.ts       # Background class
-└── svelte/
+├── svelte/
     ├── package.json
     ├── tsconfig.json
     └── src/
@@ -48,6 +60,14 @@ asset-base/
         ├── Camera.svelte       # Camera wrapper (was CameraControl)
         ├── Background.svelte   # Background wrapper
         └── engine.svelte.ts    # Engine utilities
+└── react/
+    ├── package.json
+    ├── tsconfig.json
+    └── src/
+        ├── index.ts
+        ├── Engine.tsx
+        ├── Camera.tsx
+        └── Background.tsx
 ```
 
 ## Core Classes
@@ -113,6 +133,13 @@ asset-base/
 - **Camera.svelte** was renamed from `CameraControl.svelte` for brevity
 - TypeScript class remains `CameraControl` to avoid conflicts with @snap-engine/core's `Camera` class
 
+## React Components
+
+React exports the same `Engine`, `Camera`, and `Background` concepts. Components
+accept standard `className` and `style` props and forward refs to their
+underlying SnapEngine objects. SnapSort React and SnapLine React reuse this
+package's Engine context.
+
 ## Typical Usage Pattern
 
 ```svelte
@@ -128,6 +155,16 @@ asset-base/
 </Engine>
 ```
 
+```tsx
+import { Background, Camera, Engine } from "@snap-engine/asset-base-react";
+
+<Engine id="app">
+  <Camera>
+    <Background />
+  </Camera>
+</Engine>;
+```
+
 ## Dependencies
 
 ```
@@ -135,5 +172,5 @@ asset-base/
     ↓
 @snap-engine/asset-base
     ↓
-@snap-engine/asset-base-svelte
+@snap-engine/asset-base-svelte   @snap-engine/asset-base-react
 ```

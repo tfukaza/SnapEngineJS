@@ -27,7 +27,8 @@
   "author": "Tomoki Fukazawa",
   "license": "MIT",
   "dependencies": {
-    "@snap-engine/core": "^0.4.0",
+    "@snap-engine/asset-base-react": "^0.1.0",
+    "@snap-engine/core": "^0.4.1",
     "@snap-engine/snapline": "^0.2.0"
   },
   "files": [
@@ -38,6 +39,6 @@
     "access": "public"
   },
   "peerDependencies": {
-    "react": "^18.0.0"
+    "react": "^18.0.0 || ^19.0.0"
   }
 }

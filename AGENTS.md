@@ -45,10 +45,10 @@ See `src/AGENTS.md` for module details.
 Organized as npm workspaces following a consistent pattern:
 - `core/` - TypeScript classes extending snap-engine
 - `svelte/` - Svelte component wrappers
-- `react/` - React component wrappers (future)
+- `react/` - React component wrappers
 
 ### 1. SnapEngine Asset Base
-- **Packages:** `@snap-engine/asset-base`, `@snap-engine/asset-base-svelte`
+- **Packages:** `@snap-engine/asset-base`, `@snap-engine/asset-base-svelte`, `@snap-engine/asset-base-react`
 - **Purpose:** Common components (Engine, Camera, Background)
 - **Status:** Active
 - See `assets/asset-base/AGENTS.md`
@@ -75,7 +75,7 @@ Organized as npm workspaces following a consistent pattern:
 All packages use the `@snap-engine` organization:
 
 - **Core engine:** `@snap-engine/core`
-- **Asset base:** `@snap-engine/asset-base`, `@snap-engine/asset-base-svelte`
+- **Asset base:** `@snap-engine/asset-base`, `@snap-engine/asset-base-svelte`, `@snap-engine/asset-base-react`
 - **Products:** `@snap-engine/{product}`, `@snap-engine/{product}-svelte`, `@snap-engine/{product}-react`
 
 ## Import Patterns
@@ -177,6 +177,7 @@ git push origin core-v{version}
 ```bash
 git tag asset-base-v{version}
 git tag asset-base-svelte-v{version}
+git tag asset-base-react-v{version}
 git tag snapsort-v{version}
 git tag snapsort-svelte-v{version}
 git tag snapline-v{version}

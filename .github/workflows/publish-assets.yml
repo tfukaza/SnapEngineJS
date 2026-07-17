@@ -5,6 +5,7 @@ on:
     tags:
       - 'asset-base-v*'
       - 'asset-base-svelte-v*'
+      - 'asset-base-react-v*'
       - 'snapsort-v*'
       - 'snapsort-svelte-v*'
       - 'snapsort-react-v*'
@@ -36,6 +37,10 @@ jobs:
             asset-base-svelte-v*)
               package_dir="assets/asset-base/svelte"
               tag_version="${GITHUB_REF_NAME#asset-base-svelte-v}"
+              ;;
+            asset-base-react-v*)
+              package_dir="assets/asset-base/react"
+              tag_version="${GITHUB_REF_NAME#asset-base-react-v}"
               ;;
             snapsort-v*)
               package_dir="assets/snapsort/core"
