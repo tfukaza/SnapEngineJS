@@ -1,7 +1,6 @@
 <script lang="ts">
 	import { onMount } from 'svelte';
 	import CodeBlock from '@components/CodeBlock.svelte';
-	import './code.scss';
 
 	let { class: className = '', children = () => null } = $props();
 	let code = $state('');

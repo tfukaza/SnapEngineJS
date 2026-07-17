@@ -3,9 +3,10 @@ import type { Item } from "../item";
 import { resetDropSnapshotDebugDump, type DropCandidate } from "../algorithm";
 import type { DragLocation, GhostRect, GhostRole } from "../events";
 import {
-  fireAwaitMutation,
   fireGhostInsert,
   fireGhostRemove,
+  fireMutation,
+  settleMutation,
 } from "../mutation";
 import type { DragLifecycleStrategy } from "./lifecycle";
 import type { DragSession } from "./session";
@@ -82,7 +83,7 @@ async function moveGhost(
   // The marker is intentionally never attached to the container's item list
   // (see module doc); it always "appends" from the DOM's perspective.
   fireGhostInsert(container, item, ghostItem, index, null, ghostRect, session, "marker");
-  await fireAwaitMutation(container);
+  await settleMutation();
 
   // Core-created markers own their DOM element and are positioned/animated
   // directly; framework-managed markers get geometry solely via `ghostRect`
@@ -117,7 +118,7 @@ async function removeGhost(
 
   if (previousTarget?.container) {
     fireGhostRemove(previousTarget.container, item, ghostItem, session, "marker", role);
-    await fireAwaitMutation(previousTarget.container);
+    await settleMutation();
   } else {
     // No known container to route onGhostRemove through (e.g. drag ended
     // before a target was ever resolved) — fall back to a direct removal.
@@ -165,7 +166,7 @@ function drop(session: DragSession): void {
             pendingGhostTarget.index,
             session,
           );
-          await fireAwaitMutation(destinationContainer);
+          await settleMutation();
         } else if (session.dropEffect === "copy") {
           // The originals never leave their source slots in insertion mode
           // (unlike flow mode, they're never detached) — there's no floating
@@ -187,7 +188,7 @@ function drop(session: DragSession): void {
             session,
             items,
           );
-          await fireAwaitMutation(destinationContainer);
+          await settleMutation();
         }
         // "none": no mutation events — the items already sit where they always were.
       }
@@ -199,18 +200,20 @@ function drop(session: DragSession): void {
       }
       session.status = "ended";
       root.dragSession = null;
-      root.callbacks?.onDragEnd?.({
-        session,
-        item,
-        itemId: item.resolvedItemId,
-        itemMetadata: item.metadata,
-        items,
-        itemIds: items.map((member) => member.resolvedItemId),
-        itemsMetadata: items.map((member) => member.metadata),
-        element: item.element,
-        source: session.sources[0],
-        sources: session.sources,
-        destination,
+      fireMutation(root, () => {
+        root.callbacks?.onDragEnd?.({
+          session,
+          item,
+          itemId: item.resolvedItemId,
+          itemMetadata: item.metadata,
+          items,
+          itemIds: items.map((member) => member.resolvedItemId),
+          itemsMetadata: items.map((member) => member.metadata),
+          element: item.element,
+          source: session.sources[0],
+          sources: session.sources,
+          destination,
+        });
       });
     },
     { stage: "WRITE_1", queueId: `drag-end-insertion-${session.pressedItem.id}` },

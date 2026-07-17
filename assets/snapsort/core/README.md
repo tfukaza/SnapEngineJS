@@ -3,8 +3,8 @@
 Core TypeScript logic for SnapEngine drag-and-drop interactions.
 
 A single `Container`/`Item` class pair; each container picks its drag
-behavior with `config.mode`: `"euclidean"` (default), `"progressive"`, or
-`"insertion"`.
+behavior with `config.mode`: `"euclidean"` (default), `"progressive"`,
+`"insertion"`, or `"swap"`.
 
 ## Install
 
@@ -17,7 +17,7 @@ npm install @snap-engine/snapsort @snap-engine/core
 - `Container`
 - `Item`
 - `DragSession`
-- Event types: `ItemInsertEvent`, `ItemRemoveEvent`, `ItemMoveEvent`, `GhostCreateEvent`, `GhostInsertEvent`, `GhostRemoveEvent`, `DragStartEvent`, `DragEndEvent`, `DropTargetChangeEvent`, `CanDropEvent`, `DragLocation`
+- Event types: `ItemInsertEvent`, `ItemRemoveEvent`, `ItemMoveEvent`, `ItemSwapEvent`, `GhostCreateEvent`, `GhostInsertEvent`, `GhostRemoveEvent`, `DragStartEvent`, `DragEndEvent`, `DropTargetChangeEvent`, `CanDropEvent`, `DragLocation`
 - `ContainerCallbacks`, `ContainerConfig`, `SortMode`, `SortStrategy`
 
 ## Usage
@@ -44,15 +44,17 @@ never fight over the same DOM nodes. The contract:
 2. **Core writes only non-structural properties on the dragged element** —
    `transform`, `position`/`z-index` styles. Every framework tolerates that;
    none diffs inline styles it didn't set.
-3. **Core never trusts an element across an await point.** Elements are
-   resolved lazily from item identity (`findItemByKey`) and revalidated
-   (`isConnected`) after every `awaitMutation`, since an async framework may
-   destroy and recreate the DOM node between the callback firing and the next
-   read.
-4. **After `awaitMutation`, the framework's DOM is the truth.** Core verifies
-   placement (a dev-mode `console.warn` if an adapter didn't place the element
-   where `onItemMove`/`onItemInsert` specified) — it never silently repairs
-   it. A silent fixup would mask an adapter bug instead of surfacing it.
+3. **Framework mutations commit synchronously.** Core runs structural
+   callbacks inside `flushMutation(mutation)`. React and Svelte adapters
+   provide this transaction automatically, committing state and DOM before
+   core performs its final geometry read and writes the inverse FLIP transform.
+4. **After `flushMutation`, the framework's DOM is the truth.** Core resolves
+   elements lazily from item identity (`findItemByKey`), revalidates them with
+   `isConnected`, and verifies placement. It never silently repairs adapter
+   output, since that would mask an integration bug.
+
+`awaitMutation` remains deprecated for compatibility. Promise-returning
+mutation waits are not paint-atomic and are not supported by the FLIP path.
 
 A concrete consequence: **the dragged element stays in its original DOM
 parent for the entire drag.** It never gets reparented into whichever

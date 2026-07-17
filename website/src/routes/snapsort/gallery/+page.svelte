@@ -1,7 +1,6 @@
 <script lang="ts">
   import SeoHead from "$lib/components/SeoHead.svelte";
   import ClientDemoFrame from "$lib/components/ClientDemoFrame.svelte";
-  import { tick } from "svelte";
   import { Engine } from "@snap-engine/asset-base-svelte";
   import type { Engine as SnapEngine } from "@snap-engine/core";
   import {
@@ -583,7 +582,7 @@
     cloneItem.metadata = { blockType: type };
     // Materialize the clone in state; the #if below renders it inside the
     // canvas container, binding its element via `itemObject`. Once its element
-    // exists (after awaitMutation), the core hands the drag off to it.
+    // exists (after the adapter's synchronous flush), core hands the drag off to it.
     draggingClone = { id, type: type as PaletteBlockType, item: cloneItem };
   }
 
@@ -1133,7 +1132,6 @@
                       callbacks: {
                         onItemMove: handleSentenceMove,
                         onItemRemove: handleSentenceRemove,
-                        awaitMutation: tick,
                       },
                     }}
                     locked={true}
@@ -1181,7 +1179,6 @@
                       callbacks: {
                         onItemMove: handleSentenceMove,
                         onItemRemove: handleSentenceRemove,
-                        awaitMutation: tick,
                       },
                     }}
                     locked={true}
@@ -1255,7 +1252,6 @@
               callbacks: {
                 onDragStart: handleCloneDragStart,
                 onDragClone: handleDragClone,
-                awaitMutation: tick,
               },
             }}
             locked={true}
@@ -1273,7 +1269,6 @@
                     name: "clone-palette",
                     noDrop: true,
                     callbacks: {
-                      awaitMutation: tick,
                     },
                   }}
                   locked={true}
@@ -1301,7 +1296,6 @@
                     callbacks: {
                       onItemMove: handleCanvasMove,
                       onItemRemove: handleCanvasRemove,
-                      awaitMutation: tick,
                     },
                   }}
                   locked={true}
@@ -1389,7 +1383,6 @@
                     name: "trash-list",
                     callbacks: {
                       onItemMove: handleTrashListMove,
-                      awaitMutation: tick,
                     },
                   }}
                   locked={true}
@@ -1458,7 +1451,6 @@
                 onDragItemEnter: handleSwapHoverEnter,
                 onDragItemLeave: handleSwapHoverLeave,
                 createGhost: createSwapGhost,
-                awaitMutation: tick,
               },
             }}
             locked={true}
@@ -1552,7 +1544,6 @@
                               callbacks: {
                                 onItemMove: handleEditorOptionMove,
                                 onItemRemove: handleEditorOptionRemove,
-                                awaitMutation: tick,
                               },
                             }}
                             locked={true}
@@ -1622,7 +1613,6 @@
                               callbacks: {
                                 onItemMove: handleEditorOptionMove,
                                 onItemRemove: handleEditorOptionRemove,
-                                awaitMutation: tick,
                               },
                             }}
                             locked={true}
@@ -1692,7 +1682,6 @@
                               callbacks: {
                                 onItemMove: handleEditorOptionMove,
                                 onItemRemove: handleEditorOptionRemove,
-                                awaitMutation: tick,
                               },
                             }}
                             locked={true}

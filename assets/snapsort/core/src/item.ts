@@ -18,13 +18,13 @@ import type {
   GhostRole,
 } from "./events";
 import {
-  fireAwaitMutation,
   fireCreateGhost,
   fireGhostInsert,
   fireGhostRemove,
   fireItemInsert,
   fireItemMove,
   fireItemRemove,
+  settleMutation,
 } from "./mutation";
 import { resolveSortStrategy } from "./drag/drop-strategy";
 import { DragSession } from "./drag/session";
@@ -1205,7 +1205,7 @@ export class Item extends ElementObject {
           item.element!.style.transform = "";
         }
         mutate();
-        await fireAwaitMutation(container);
+        await settleMutation();
       },
       { stage: "WRITE_2", queueId: `${queuePrefix}-mutate` },
     );

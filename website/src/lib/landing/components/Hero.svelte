@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { onMount, tick } from "svelte";
+  import { onMount } from "svelte";
   import ClientDemoFrame from "$lib/components/ClientDemoFrame.svelte";
   import { Engine } from "@snap-engine/asset-base-svelte";
   import { Container, Item } from "@snap-engine/snapsort-svelte";
@@ -334,7 +334,7 @@
                 config={{
                   direction: "row",
                   groupID: "hero-synth-pads",
-                  callbacks: { onItemMove: handlePadMove, awaitMutation: tick },
+                  callbacks: { onItemMove: handlePadMove },
                 }}
                 items={padOrder}
                 getItemId={(index) => `pad-${index}`}

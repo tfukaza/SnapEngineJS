@@ -4,12 +4,12 @@ import type { GhostKind, GhostRect, GhostRole } from "../events";
 import type { DragSession } from "./session";
 
 /**
- * The drag/ghost lifecycle for a sort mode. There are exactly two today:
- * a flow-layout spacer ghost that lives in the item list and is FLIP-animated
- * (euclidean/progressive), and a floating insertion marker tracked only via
- * `DragSession.pendingGhostTarget` (insertion). Drop-target *resolution*
- * (which algorithm picks the candidate) is a separate axis — see
- * `DropTargetStrategy` in drop-strategy.ts.
+ * The drag/ghost lifecycle for a sort mode. Built-ins include a flow-layout
+ * spacer ghost that lives in the item list and is FLIP-animated
+ * (euclidean/progressive), a floating insertion marker tracked only via
+ * `DragSession.pendingGhostTarget` (insertion), and a pointer ghost with no
+ * target marker (swap). Drop-target *resolution* (which algorithm picks the
+ * candidate) is a separate axis — see `DropTargetStrategy` in drop-strategy.ts.
  */
 export interface DragLifecycleStrategy {
   readonly ghostKind: GhostKind;
@@ -37,7 +37,7 @@ export interface DragLifecycleStrategy {
     container: Container,
     index: number,
     ghostRect: GhostRect | null | undefined,
-  ): Promise<void>;
+  ): void | Promise<void>;
 
   /** Called after the ghost has been synced to
    * the (possibly unchanged) drop target. */
@@ -49,7 +49,7 @@ export interface DragLifecycleStrategy {
    * every valid drop target, or when a drop effect change no longer needs a
    * source-role ghost) — ghosts can be added, moved, or removed independently.
    */
-  removeGhost(session: DragSession, role: GhostRole): Promise<void>;
+  removeGhost(session: DragSession, role: GhostRole): void | Promise<void>;
 
   /** WRITE_1 work for dropping: remove the ghost/marker
    * and move the item to its final position. */

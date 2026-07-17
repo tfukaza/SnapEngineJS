@@ -1,5 +1,4 @@
 <script lang="ts">
-  import { tick } from "svelte";
   import { Container } from "@snap-engine/snapsort-svelte";
   import type {
     CanDropEvent,
@@ -258,7 +257,6 @@
     onItemMove: handleMove,
     canDrop: canDropInFolder,
     createGhost: createFileTreeGhost,
-    awaitMutation: tick,
   };
 </script>
 

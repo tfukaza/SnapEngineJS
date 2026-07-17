@@ -1,6 +1,6 @@
 # SnapSort - Drag and Drop System
 
-A single `Container`/`Item` class pair (per framework) whose drag/drop behavior is picked with a `mode` config field (`"euclidean"` | `"progressive"` | `"insertion"`, default `"euclidean"`) instead of separate per-mode classes.
+A single `Container`/`Item` class pair (per framework) whose drag/drop behavior is picked with a `mode` config field (`"euclidean"` | `"progressive"` | `"insertion"` | `"swap"`, default `"euclidean"`) instead of separate per-mode classes.
 
 ### @snap-engine/snapsort
 **Location:** `core/src/`
@@ -11,7 +11,7 @@ A single `Container`/`Item` class pair (per framework) whose drag/drop behavior 
 - `Container` - The only container class. `new Container(engine, parent, { mode, ... })`.
 - `Item` - The only item class (including ghosts/markers). Never needs a mode.
 - `DragSession` - Owns all per-drag state (pointer, ghost, drop target); lives at `container.dragSession` on the root while a drag is active.
-- Event types: `ItemInsertEvent`, `ItemRemoveEvent`, `ItemMoveEvent`, `GhostCreateEvent`, `GhostInsertEvent`, `GhostRemoveEvent`, `DragStartEvent`, `DragEndEvent`, `DropTargetChangeEvent`, `CanDropEvent`, `DragLocation`.
+- Event types: `ItemInsertEvent`, `ItemRemoveEvent`, `ItemMoveEvent`, `ItemSwapEvent`, `GhostCreateEvent`, `GhostInsertEvent`, `GhostRemoveEvent`, `DragStartEvent`, `DragEndEvent`, `DropTargetChangeEvent`, `CanDropEvent`, `DragLocation`.
 - `ContainerCallbacks`, `ContainerConfig`, `SortMode`, `SortStrategy`, `DropTargetStrategy`, `DragLifecycleStrategy`.
 
 ### @snap-engine/snapsort-svelte
@@ -26,7 +26,7 @@ A single `Container`/`Item` class pair (per framework) whose drag/drop behavior 
 **Language:** React (TSX)
 **Dependencies:** `@snap-engine/snapsort`, `@snap-engine/core`, `react`, `react-dom` (peer)
 
-**Exports:** `Engine`/`SnapSortEngine`, `Container`, `Item`, `Handle`, `useSnapSortEngine`, `useSnapSortAwaitMutation`, `ContainerObjectContext`, `ItemObjectContext`.
+**Exports:** `Engine`/`SnapSortEngine`, `Container`, `Item`, `Handle`, `useSnapSortEngine`, deprecated `useSnapSortAwaitMutation`, `ContainerObjectContext`, `ItemObjectContext`.
 
 ## File Structure
 
@@ -41,7 +41,7 @@ snapsort/
 │       ├── item.ts             # Item class: tree membership, FLIP animation, dispatchers
 │       ├── events.ts           # All callback event interfaces + ContainerCallbacks
 │       ├── mutation.ts         # Mutator: single dispatch point for ContainerCallbacks + defaults
-│       ├── algorithm.ts        # Drop-target candidate resolution (3 modes) + canDrop filtering
+│       ├── algorithm.ts        # Drop-target candidate resolution (4 modes) + canDrop filtering
 │       ├── layout.ts           # Pure flow-layout simulation used by algorithm.ts
 │       ├── snapshot.ts         # ItemSnapshot / ItemSnapshotMetadata types
 │       └── drag/
@@ -49,7 +49,8 @@ snapsort/
 │           ├── lifecycle.ts          # DragLifecycleStrategy interface
 │           ├── drop-strategy.ts      # DropTargetStrategy interface + builtinStrategies map
 │           ├── flow-ghost.ts         # Euclidean/progressive lifecycle (flow-layout spacer ghost)
-│           └── insertion-marker.ts   # Insertion lifecycle (floating marker line)
+│           ├── insertion-marker.ts   # Insertion lifecycle (floating marker line)
+│           └── swap.ts               # Swap lifecycle (pointer ghost + pairwise exchange)
 ├── svelte/
 │   ├── package.json
 │   ├── tsconfig.json
@@ -74,8 +75,8 @@ snapsort/
 
 ### Two independent axes
 Sort mode is really two orthogonal choices, each resolved once per drag from the root container's config:
-- **Drop-target resolution** (`DropTargetStrategy`, `drag/drop-strategy.ts`): which algorithm (`determineDropTarget` / `determineProgressiveDropTarget` / `determineInsertionDropTarget` in `algorithm.ts`) picks the winning candidate.
-- **Drag/ghost lifecycle** (`DragLifecycleStrategy`, `drag/lifecycle.ts`): how the ghost is created/moved/removed and whether the dragged item itself is hoisted out of flow. Two implementations: `FlowGhostLifecycle` (full-size spacer, FLIP-animated; euclidean + progressive) and `InsertionMarkerLifecycle` (floating absolutely-positioned line; insertion).
+- **Drop-target resolution** (`DropTargetStrategy`, `drag/drop-strategy.ts`): which algorithm (`determineDropTarget` / `determineProgressiveDropTarget` / `determineInsertionDropTarget` / `determineSwapDropTarget` in `algorithm.ts`) picks the winning candidate.
+- **Drag/ghost lifecycle** (`DragLifecycleStrategy`, `drag/lifecycle.ts`): how the ghost is created/moved/removed and whether the dragged item itself is hoisted out of flow. Three implementations: `FlowGhostLifecycle` (full-size spacer, FLIP-animated; euclidean + progressive), `InsertionMarkerLifecycle` (floating absolutely-positioned line; insertion), and `SwapLifecycle` (pointer ghost + pairwise exchange; swap).
 
 `ContainerConfig.mode` picks a built-in pair from `builtinStrategies`; `ContainerConfig.strategy` overrides with a custom pair.
 
@@ -86,7 +87,7 @@ Created on `dragStart` and stored at `root.dragSession`; holds pointer/offset/st
 Every `ContainerCallbacks` invocation goes through one of the `fire*` functions here (`fireItemInsert`, `fireItemRemove`, `fireItemMove`, `fireGhostInsert`, `fireGhostRemove`, `fireCreateGhost`, `fireAwaitMutation`). `fireItemMove` fires `onItemMove` on the destination container if defined, else falls back to `fireItemInsert` (today's default DOM behavior is insert-only — a plain `insertBefore` inherently moves the node). Default DOM callback implementations (`defaultCallbacks`) also live here.
 
 ### Callbacks (`events.ts`)
-- Primitives: `onItemInsert`, `onItemRemove`, `onGhostInsert`, `onGhostRemove`, `createGhost` (was `createItemGhost`; dispatches on `event.kind: "flow" | "marker"`), `awaitMutation`.
+- Primitives: `onItemInsert`, `onItemRemove`, `onGhostInsert`, `onGhostRemove`, `createGhost` (was `createItemGhost`; dispatches on `event.kind: "flow" | "marker"`), synchronous `flushMutation`; `awaitMutation` is deprecated.
 - Semantic: `onItemMove` (preferred — carries `from`/`to` `DragLocation`s).
 - Lifecycle: `onDragStart` (return `false` to veto before any state changes), `onDragEnd`, `onDropTargetChange` (fires only when the prospective container/index actually changes).
 - Validation: `canDrop` — consulted once per container per drop-target resolution (not per candidate slot); must be cheap.

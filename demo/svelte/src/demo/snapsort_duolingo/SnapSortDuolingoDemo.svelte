@@ -1,5 +1,4 @@
 <script lang="ts">
-  import { tick } from "svelte";
   import { Engine } from "@snap-engine/asset-base-svelte";
   import { Container, Ghost, Item } from "@snap-engine/snapsort-svelte";
   import type {
@@ -222,7 +221,6 @@
                   callbacks: {
                     onItemMove: handleSnapSortDomMove,
                     onItemRemove: handleSnapSortDomRemove,
-                    awaitMutation: tick,
                   },
                 }}
                 locked={true}
@@ -278,7 +276,6 @@
                   callbacks: {
                     onItemMove: handleSnapSortDomMove,
                     onItemRemove: handleSnapSortDomRemove,
-                    awaitMutation: tick,
                   },
                 }}
                 locked={true}

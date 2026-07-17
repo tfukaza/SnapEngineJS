@@ -4,7 +4,7 @@ Svelte components for SnapEngine drag-and-drop interactions.
 
 `Container`, `Item`, `Ghost`, and `Handle` are the Svelte primitives. Every
 container picks its drag behavior with a `mode` config field (`"euclidean"`
-default, `"progressive"`, or `"insertion"`). `Item` never needs a mode.
+default, `"progressive"`, `"insertion"`, or `"swap"`). `Item` never needs a mode.
 
 ## Install
 
@@ -41,3 +41,10 @@ npm install @snap-engine/snapsort-svelte @snap-engine/snapsort
   {/snippet}
 </Container>
 ```
+
+## Svelte Mutation Callbacks
+
+Use normal synchronous assignments to `$state` from SnapSort callbacks. The
+adapter automatically runs each structural mutation inside Svelte's
+`flushSync`, so the DOM is committed before SnapEngine measures final geometry
+and writes FLIP's inverse transform. No `tick()` callback is required.

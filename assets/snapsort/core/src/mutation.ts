@@ -21,6 +21,43 @@ import type {
  * exactly one place.
  */
 
+const warnedAsyncMutationCallbacks = new WeakSet<() => void | Promise<void>>();
+
+/** Run a consumer mutation inside its framework adapter's synchronous commit boundary. */
+export function fireMutation(
+  container: Container | null,
+  mutation: () => void,
+): void {
+  const flushMutation = container?.callbacks?.flushMutation;
+  if (flushMutation) {
+    flushMutation(mutation);
+    return;
+  }
+
+  mutation();
+
+  // Compatibility only: async results are intentionally not awaited because
+  // that would let the browser paint between DOM commit and FLIP inversion.
+  const awaitMutation = container?.callbacks?.awaitMutation;
+  if (!awaitMutation) return;
+  const result = awaitMutation();
+  if (
+    result &&
+    typeof (result as Promise<void>).then === "function" &&
+    !warnedAsyncMutationCallbacks.has(awaitMutation)
+  ) {
+    warnedAsyncMutationCallbacks.add(awaitMutation);
+    console.warn(
+      "SnapSort: callbacks.awaitMutation returned a promise. Async framework commits are not paint-atomic; use the framework adapter's synchronous flushMutation hook instead.",
+    );
+  }
+}
+
+/** Yield to framework commit/effect microtasks without crossing a paint. */
+export async function settleMutation(): Promise<void> {
+  await Promise.resolve();
+}
+
 function itemIds(items: Item[]): string[] {
   return items.map((item) => item.resolvedItemId);
 }
@@ -59,7 +96,7 @@ export function fireItemInsert(
     beforeElement,
     phase,
   };
-  onInsert(event);
+  fireMutation(container, () => onInsert(event));
 }
 
 export function fireItemRemove(
@@ -84,7 +121,7 @@ export function fireItemRemove(
     containerMetadata: container.metadata,
     phase,
   };
-  onRemove(event);
+  fireMutation(container, () => onRemove(event));
 }
 
 /**
@@ -128,7 +165,7 @@ export function fireItemMove(
       beforeElement,
       phase,
     };
-    onMove(event);
+    fireMutation(to.container, () => onMove(event));
     return;
   }
   fireItemInsert(to.container, items, to.index, beforeElement, session, phase);
@@ -168,7 +205,7 @@ export function fireItemSwap(
       },
       phase,
     };
-    onSwap(event);
+    fireMutation(a.container, () => onSwap(event));
     return;
   }
 
@@ -308,7 +345,7 @@ export function fireGhostInsert(
     beforeElement,
     ghostRect,
   };
-  onInsert(event);
+  fireMutation(container, () => onInsert(event));
 }
 
 export function fireGhostRemove(
@@ -342,19 +379,13 @@ export function fireGhostRemove(
         ? session.pendingGhostTarget.ghostRect
         : undefined,
   };
-  onRemove(event);
+  fireMutation(container, () => onRemove(event));
 }
 
 export function fireCreateGhost(
   event: GhostCreateEvent,
 ): HTMLElement | void | null {
   return event.container.callbacks?.createGhost?.(event);
-}
-
-export async function fireAwaitMutation(
-  container: Container | null,
-): Promise<void> {
-  await container?.callbacks?.awaitMutation?.();
 }
 
 // --- Default DOM implementations, merged with user config in Container's constructor. ---

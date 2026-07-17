@@ -12,7 +12,7 @@
     GhostRemoveEvent,
   } from "@snap-engine/snapsort";
 
-  import { getContext, setContext, onMount, onDestroy, tick } from "svelte";
+  import { flushSync, getContext, setContext, onMount, onDestroy } from "svelte";
   import type { Snippet } from "svelte";
   import type { Engine } from "@snap-engine/core";
   import Ghost from "./Ghost.svelte";
@@ -139,7 +139,9 @@
     createGhost: handleItemsModeCreateGhost,
     onGhostInsert: handleItemsModeGhostInsert,
     onGhostRemove: handleItemsModeGhostRemove,
-    awaitMutation: config.callbacks?.awaitMutation ?? tick,
+    // Commit the state mutation before core advances to its final geometry
+    // read and inverse-transform write in this rendering opportunity.
+    flushMutation: (mutation) => flushSync(mutation),
   };
 
   let itemContainer: SnapSortContainer = new SnapSortContainer(engine, parentContainer, {

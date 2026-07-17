@@ -1,0 +1,74 @@
+---
+title: Svelte Overview
+order: 0
+project: snapsort
+projectTitle: SnapSort
+section: reference
+sectionTitle: Reference
+sectionOrder: 3
+framework: svelte
+frameworkKey: overview
+---
+
+The Svelte package wraps SnapSort's core objects in Svelte 5 components. Use it when Svelte owns the DOM and your component state remains the source of truth for item order.
+
+## Install
+
+```bash
+npm install @snap-engine/core @snap-engine/asset-base-svelte @snap-engine/snapsort @snap-engine/snapsort-svelte
+```
+
+## Import
+
+```svelte
+<script lang="ts">
+  import { Engine } from "@snap-engine/asset-base-svelte";
+  import { Container, Ghost, Handle, Item } from "@snap-engine/snapsort-svelte";
+</script>
+```
+
+Wrap the sortable tree in an `Engine`, then compose containers and items:
+
+```svelte
+<Engine id="tasks">
+  <Container
+    config={{ direction: "column", groupID: "tasks" }}
+    items={tasks}
+    getItemId={(task) => task.id}
+  >
+    {#snippet entry(task)}
+      <Item itemId={task.id}>
+        <Handle className="drag-handle">Drag</Handle>
+        {task.label}
+      </Item>
+    {/snippet}
+  </Container>
+</Engine>
+```
+
+## Components
+
+- [Container](/docs/snapsort/reference/svelte/container) — props, modes, callbacks, custom ghosts, and the bindable core API.
+- [Item](/docs/snapsort/reference/svelte/item) — props, identity, metadata, selection, and drag handles.
+
+`Ghost` is used inside a `Container`'s custom `ghost` snippet. `Handle` belongs inside an `Item` and limits where a drag can begin.
+
+## Core Types
+
+Import callback events, configuration, metadata, and bindable object types from the framework-agnostic package:
+
+```ts
+import type {
+  CanDropEvent,
+  Container as SnapSortContainer,
+  ContainerCallbacks,
+  ContainerConfig,
+  DragEndEvent,
+  DragStartEvent,
+  ItemMoveEvent,
+  ItemSnapshotMetadata,
+  ItemSwapEvent,
+} from "@snap-engine/snapsort";
+```
+
+For the application-state pattern shared by both adapters, see [State-Backed Lists](/docs/snapsort/guides/03_state_backed_lists).

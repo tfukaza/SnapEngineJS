@@ -3212,6 +3212,175 @@ test.describe("Snapsort drag-start snapshot layout", () => {
     ).toHaveText(["Profile fields", "Board polish"]);
   });
 
+  test("resets pooled animation variables before a channel is reused", async ({
+    page,
+  }) => {
+    await page.goto("/?demo=snapsort_components", {
+      waitUntil: "networkidle",
+    });
+
+    const animationModuleUrl = `/@fs${process.cwd()}/src/animation.ts`;
+    const result = await page.evaluate(async (moduleUrl) => {
+      const { AnimationObject } = await import(/* @vite-ignore */ moduleUrl);
+      const target = document.createElement("div");
+      document.body.appendChild(target);
+
+      const first = new AnimationObject(
+        target,
+        { $value: [0, 1] },
+        { duration: 40 },
+      );
+      first.play();
+      for (let frame = 0; frame < 20 && !first.requestDelete; frame++) {
+        await new Promise<void>((resolve) => requestAnimationFrame(() => resolve()));
+      }
+
+      const propertiesAfterFinish = Array.from(target.style).filter((name) =>
+        name.startsWith("--snap-var-"),
+      );
+      const samples: number[] = [];
+      const second = new AnimationObject(
+        target,
+        { $value: [0.25, 0.75] },
+        {
+          duration: 800,
+          tick: (values: Record<string, number>) => samples.push(values.$value),
+        },
+      );
+      const acquiredProperties = Array.from(target.style)
+        .filter((name) => name.startsWith("--snap-var-"))
+        .map((name) => target.style.getPropertyValue(name));
+      second.play();
+      second.progress = 0;
+      second.calculateFrame(performance.now());
+      second.cancel();
+      target.remove();
+
+      return {
+        acquiredProperties,
+        firstSample: samples[0] ?? null,
+        propertiesAfterFinish,
+      };
+    }, animationModuleUrl);
+
+    expect(result.propertiesAfterFinish).toEqual([]);
+    expect(result.acquiredProperties).toHaveLength(1);
+    expect(Number(result.acquiredProperties[0])).toBeCloseTo(0.25);
+    expect(result.firstSample).toBeCloseTo(0.25);
+  });
+
+  test("installs the drop inverse before the first post-release paint", async ({
+    page,
+  }) => {
+    await page.goto("/?demo=snapsort_components&slowFlip=1", {
+      waitUntil: "networkidle",
+    });
+
+    const moveComponentItem = async (direction: -1 | 1) => {
+      await page.evaluate((nextDirection) => {
+        const win = window as typeof window & {
+          __snapsortMoveComponentItem?: (
+            itemId: string,
+            direction: -1 | 1,
+          ) => void;
+        };
+        win.__snapsortMoveComponentItem?.("item-1", nextDirection);
+      }, direction);
+    };
+    await moveComponentItem(1);
+    await page.waitForTimeout(900);
+    await moveComponentItem(-1);
+    await page.waitForTimeout(900);
+
+    const card = page
+      .locator(".task-card:not(.ghost)")
+      .filter({ hasText: "Profile fields" });
+    const target = page
+      .locator(".task-card:not(.ghost)")
+      .filter({ hasText: "Board polish" });
+    const start = center(await itemRect(card.locator(".task-drag-handle")));
+    const targetRect = await itemRect(target);
+    const releasePoint = {
+      x: targetRect.x + targetRect.width / 2,
+      y: targetRect.y + targetRect.height * 0.8,
+    };
+
+    await page.mouse.move(start.x, start.y);
+    await page.mouse.down();
+    await page.mouse.move(start.x + 5, start.y);
+    await page.waitForTimeout(16);
+    await page.mouse.move(releasePoint.x, releasePoint.y, { steps: 24 });
+    await page.waitForTimeout(80);
+    const releaseRect = await itemRect(card);
+
+    await page.evaluate(() => {
+      const win = window as typeof window & {
+        __dropFlipSamples?: Array<{
+          column: string;
+          transform: string;
+          x: number;
+          y: number;
+        }>;
+      };
+      win.__dropFlipSamples = [];
+      window.addEventListener("pointerup", () => {
+        let frame = 0;
+        const sample = () => {
+          const card = [...document.querySelectorAll<HTMLElement>(
+            ".task-card:not(.ghost)",
+          )].find((element) => element.textContent?.includes("Profile fields"));
+          if (card) {
+            const rect = card.getBoundingClientRect();
+            win.__dropFlipSamples?.push({
+              column:
+                card.closest(".list-panel")?.querySelector("h2")?.textContent?.trim() ??
+                "",
+              transform: card.style.transform,
+              x: rect.x,
+              y: rect.y,
+            });
+          }
+          frame++;
+          if (frame < 12) requestAnimationFrame(sample);
+        };
+        requestAnimationFrame(sample);
+      }, { capture: true, once: true });
+    });
+
+    await page.mouse.up();
+    await page.waitForTimeout(250);
+    const samples = await page.evaluate(() => {
+      const win = window as typeof window & {
+        __dropFlipSamples?: Array<{
+          column: string;
+          transform: string;
+          x: number;
+          y: number;
+        }>;
+      };
+      return win.__dropFlipSamples ?? [];
+    });
+    await page.waitForTimeout(700);
+    const finalRect = await itemRect(card);
+    const activeSamples = samples.filter((sample) => sample.column === "Active");
+    expect(activeSamples.length).toBeGreaterThan(1);
+    expect(activeSamples[0].transform).toMatch(/^translate3d\(/);
+
+    const distanceTo = (sample: { x: number; y: number }, rect: Rect) =>
+      Math.hypot(sample.x - rect.x, sample.y - rect.y);
+    expect(distanceTo(activeSamples[0], releaseRect)).toBeLessThan(8);
+    expect(distanceTo(activeSamples[0], finalRect)).toBeGreaterThan(12);
+
+    const distancesToFinal = activeSamples.map((sample) =>
+      distanceTo(sample, finalRect),
+    );
+    for (let index = 1; index < distancesToFinal.length; index++) {
+      expect(distancesToFinal[index]).toBeLessThanOrEqual(
+        distancesToFinal[index - 1] + 3,
+      );
+    }
+  });
+
   test("does not flicker the spacer backward while dragging down a vertical column", async ({
     page,
   }, testInfo) => {
