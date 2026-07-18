@@ -94,6 +94,8 @@ export const Container = forwardRef<ContainerObject, ContainerProps>(
     };
     container.direction = direction;
     container.mainAxisAlign = mainAxisAlign;
+    container.wrap = config.wrap ?? "auto";
+    container.stretchItems = config.stretchItems ?? false;
     container.dropArea = config.dropArea ?? false;
     container.noDrop = config.noDrop ?? false;
 

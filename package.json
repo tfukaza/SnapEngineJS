@@ -48,6 +48,7 @@
     "test:asset-base-react": "playwright test -c tests/e2e/asset-base-react.playwright.config.ts",
     "test:snapline": "playwright test -c tests/e2e/snapline.playwright.config.ts",
     "test:snapline-react": "playwright test -c tests/e2e/snapline-react.playwright.config.ts",
+    "test:layout": "playwright test -c tests/e2e/snapsort-layout.playwright.config.ts",
     "test:snapsort": "playwright test -c tests/e2e/snapsort.playwright.config.ts",
     "test:snapsort-svelte": "playwright test -c tests/e2e/snapsort.playwright.config.ts --project=svelte-chromium",
     "test:snapsort-react": "playwright test -c tests/e2e/snapsort.playwright.config.ts --project=react-chromium",
@@ -81,7 +82,7 @@
   },
   "devDependencies": {
     "@eslint/js": "^9.6.0",
-    "@playwright/test": "^1.45.2",
+    "@playwright/test": "^1.61.1",
     "@sveltejs/vite-plugin-svelte": "^5.0.3",
     "@types/eslint__js": "^8.42.3",
     "@types/node": "^20.14.11",

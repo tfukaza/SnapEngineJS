@@ -4,6 +4,7 @@ import { dirname } from "node:path";
 import {
   contentBoxOrigin,
   flowLayoutPositions,
+  virtualEntrySizeFor,
 } from "../../assets/snapsort/core/src/layout";
 import type { ItemSnapshot } from "../../assets/snapsort/core/src/snapshot";
 import {
@@ -11,6 +12,12 @@ import {
   determineInsertionDropTarget,
   determineProgressiveDropTarget,
 } from "../../assets/snapsort/core/src/algorithm";
+import {
+  makeContainerSnapshot,
+  makeItemSnapshot,
+  rowCounts,
+  simulatedRowCounts,
+} from "../helpers/layout-grid";
 
 type Rect = { x: number; y: number; width: number; height: number };
 type Box = Rect & {
@@ -293,6 +300,9 @@ function itemSnapshot<T>(
     metadata: {},
     direction,
     mainAxisAlign: "start",
+    layoutModel: "flow",
+    wrap: "auto",
+    stretchItems: false,
     locked: false,
     box,
     children,
@@ -301,11 +311,20 @@ function itemSnapshot<T>(
 
 type SnapshotFixture<T> = Omit<
   ItemSnapshot<T>,
-  "key" | "metadata" | "mainAxisAlign" | "children"
+  | "key"
+  | "metadata"
+  | "mainAxisAlign"
+  | "layoutModel"
+  | "wrap"
+  | "stretchItems"
+  | "children"
 > & {
   key?: string;
   metadata?: ItemSnapshot<T>["metadata"];
   mainAxisAlign?: ItemSnapshot<T>["mainAxisAlign"];
+  layoutModel?: ItemSnapshot<T>["layoutModel"];
+  wrap?: ItemSnapshot<T>["wrap"];
+  stretchItems?: ItemSnapshot<T>["stretchItems"];
   children: SnapshotFixture<T>[];
 };
 
@@ -315,6 +334,9 @@ function snapshotFixture<T>(fixture: SnapshotFixture<T>): ItemSnapshot<T> {
     key: fixture.key ?? String(fixture.value),
     metadata: fixture.metadata ?? {},
     mainAxisAlign: fixture.mainAxisAlign ?? "start",
+    layoutModel: fixture.layoutModel ?? "flow",
+    wrap: fixture.wrap ?? "auto",
+    stretchItems: fixture.stretchItems ?? false,
     children: fixture.children.map(snapshotFixture),
   };
 }
@@ -2150,6 +2172,1248 @@ test.describe("Snapsort drag-start snapshot layout", () => {
     ).toHaveLength(0);
   });
 
+  test("keeps a zero-slack hero grid at 4 columns across sub-pixel container widths", async ({
+    page,
+  }, testInfo) => {
+    // The landing-page hero pad grid is the worst case for wrap prediction:
+    // 4 columns of calc((100% - 12px) / 4) with a 4px gap sum *exactly* to
+    // the container width, leaving zero slack for measurement error. Each
+    // browser quantizes layout differently (Blink/WebKit on a 1/64px grid;
+    // Gecko in 1/60px app units whose getBoundingClientRect doubles carry
+    // ~1e-5px conversion noise), which historically over-wrapped the 4th
+    // column onto the 2nd row at fractional container widths. Sweep integer
+    // width bases crossed with increasingly granular sub-pixel offsets and
+    // assert the simulation keeps 4 items per row with a same-size ghost at
+    // every insertion index.
+    const bases = [356, 380, 397, 414, 430, 434, 443];
+    const offsets = [
+      0,
+      0.5,
+      0.25, 0.75,
+      0.33, 0.67, 1 / 3, 2 / 3,
+      0.1, 0.2, 0.4, 0.6, 0.8, 0.9,
+      0.125, 0.375, 0.625, 0.875,
+      0.0625, 0.03125, 0.015625, 0.0078125,
+    ];
+    const widths = bases.flatMap((base) => offsets.map((offset) => base + offset));
+
+    await page.setContent('<main id="hero-grid-fixture"></main>');
+    const measuredGrids = await page.evaluate((caseWidths) => {
+      const fixture = document.querySelector(
+        "#hero-grid-fixture",
+      ) as HTMLElement;
+      const boxOf = (element: HTMLElement) => {
+        const rect = element.getBoundingClientRect();
+        const style = getComputedStyle(element);
+        const number = (value: string) => parseFloat(value) || 0;
+        return {
+          x: rect.x,
+          y: rect.y,
+          width: rect.width,
+          height: rect.height,
+          scaleX: 1,
+          scaleY: 1,
+          screenX: rect.x,
+          screenY: rect.y,
+          margin: {
+            top: number(style.marginTop),
+            right: number(style.marginRight),
+            bottom: number(style.marginBottom),
+            left: number(style.marginLeft),
+          },
+          padding: {
+            top: number(style.paddingTop),
+            right: number(style.paddingRight),
+            bottom: number(style.paddingBottom),
+            left: number(style.paddingLeft),
+          },
+          border: {
+            top: number(style.borderTopWidth),
+            right: number(style.borderRightWidth),
+            bottom: number(style.borderBottomWidth),
+            left: number(style.borderLeftWidth),
+          },
+        };
+      };
+      return caseWidths.map((width) => {
+        fixture.innerHTML = "";
+        const container = document.createElement("section");
+        container.style.cssText =
+          "box-sizing:border-box;display:flex;flex-direction:row;flex-wrap:wrap;" +
+          `align-items:flex-start;align-content:flex-start;gap:4px;width:${width}px;`;
+        fixture.appendChild(container);
+        for (let index = 0; index < 16; index++) {
+          const item = document.createElement("div");
+          item.style.cssText =
+            "box-sizing:border-box;width:calc((100% - 12px) / 4);height:40px;" +
+            "background:#dbeafe;";
+          container.appendChild(item);
+        }
+        return {
+          width,
+          container: boxOf(container),
+          items: [...container.children].map((element) =>
+            boxOf(element as HTMLElement),
+          ),
+        };
+      });
+    }, widths);
+
+    const failures: Array<{
+      width: number;
+      index: number | null;
+      rows: number[];
+    }> = [];
+    for (const grid of measuredGrids) {
+      const root = makeContainerSnapshot(
+        grid.container as Box,
+        grid.items.map((box, index) =>
+          makeItemSnapshot(`item-${index}`, box as Box),
+        ),
+      );
+      const rowStep = root.children[4].box.y - root.children[0].box.y;
+      // Browser ground truth first: the real flex layout must show 4 rows
+      // of 4 before the simulation is held to the same shape.
+      const browserRows = rowCounts(
+        root.children.map((child) => child.box.y),
+        rowStep,
+      );
+      if (browserRows.join() !== "4,4,4,4") {
+        failures.push({ width: grid.width, index: null, rows: browserRows });
+        continue;
+      }
+
+      const dragged = root.children[0];
+      for (let index = 0; index <= 15; index++) {
+        const rows = simulatedRowCounts(root, {
+          rowStep,
+          insertion: {
+            container: root,
+            index,
+            entry: {
+              width: dragged.box.width,
+              height: dragged.box.height,
+              margin: dragged.box.margin,
+            },
+          },
+          filter: { excludeSnapshots: new Set([dragged]) },
+        });
+        if (rows.join() !== "4,4,4,4") {
+          failures.push({ width: grid.width, index, rows });
+        }
+      }
+    }
+
+    await writeJson(testInfo.outputPath("hero-grid-subpixel-matrix.json"), {
+      widthCount: measuredGrids.length,
+      insertionChecks: measuredGrids.length * 16,
+      failures: failures.slice(0, 40),
+    });
+    expect(
+      failures.slice(0, 8),
+      "the 4th column must stay in the 4th column (not wrap to the 2nd row) at every sub-pixel width",
+    ).toHaveLength(0);
+  });
+
+  test("matches browser grid placements across template variants (slot layout model)", async ({
+    page,
+  }, testInfo) => {
+    // Ground truth for the slot layout model: for each grid template
+    // variant, remove the dragged item from a real `display:grid` DOM,
+    // insert a real spacer (with the dragged item's explicit size, as
+    // flow-ghost does) at several indices, and require the slot simulation
+    // to match the browser's placement of every entry within 1.25px. The
+    // unequal-track, auto-flow-column, and auto-rows variants are exactly
+    // the shapes the flow model cannot represent.
+    const scenarios = [
+      {
+        name: "fixed equal tracks",
+        container:
+          "display:grid;grid-template-columns:repeat(4, 88px);gap:4px;width:380px;",
+        itemHeight: () => 40,
+      },
+      {
+        name: "fractional tracks",
+        container:
+          "display:grid;grid-template-columns:repeat(4, 1fr);gap:4px;width:380.33px;",
+        itemHeight: () => 40,
+      },
+      {
+        name: "unequal tracks",
+        container:
+          "display:grid;grid-template-columns:60px 140px 80px 88.33px;gap:4px;width:380.33px;",
+        itemHeight: () => 40,
+      },
+      {
+        name: "auto-fill minmax",
+        container:
+          "display:grid;grid-template-columns:repeat(auto-fill, minmax(80px, 1fr));gap:4px;width:380.33px;",
+        itemHeight: () => 40,
+      },
+      {
+        name: "auto-flow column",
+        container:
+          "display:grid;grid-auto-flow:column;grid-template-rows:repeat(4, 44px);gap:4px;width:max-content;",
+        itemHeight: () => 40,
+      },
+      {
+        name: "auto rows with mixed item heights",
+        container:
+          "display:grid;grid-template-columns:repeat(4, 88px);grid-auto-rows:auto;gap:4px;width:380px;align-items:start;",
+        // item 0 (the dragged one) is tall: removing it shrinks its row in
+        // the real layout, which only the content-sized row variant tracks.
+        itemHeight: (index: number) => (index % 5 === 0 ? 80 : 40),
+      },
+    ];
+    const spacerIndices = [0, 3, 7, 14];
+    const draggedIndex = 0;
+
+    await page.setContent('<main id="grid-slot-fixture"></main>');
+    const measured = await page.evaluate(
+      ({ cases, spacerIndices, draggedIndex }) => {
+        const fixture = document.querySelector(
+          "#grid-slot-fixture",
+        ) as HTMLElement;
+        const boxOf = (element: HTMLElement) => {
+          const rect = element.getBoundingClientRect();
+          const style = getComputedStyle(element);
+          const number = (value: string) => parseFloat(value) || 0;
+          return {
+            x: rect.x,
+            y: rect.y,
+            width: rect.width,
+            height: rect.height,
+            scaleX: 1,
+            scaleY: 1,
+            screenX: rect.x,
+            screenY: rect.y,
+            margin: {
+              top: number(style.marginTop),
+              right: number(style.marginRight),
+              bottom: number(style.marginBottom),
+              left: number(style.marginLeft),
+            },
+            padding: {
+              top: number(style.paddingTop),
+              right: number(style.paddingRight),
+              bottom: number(style.paddingBottom),
+              left: number(style.paddingLeft),
+            },
+            border: {
+              top: number(style.borderTopWidth),
+              right: number(style.borderRightWidth),
+              bottom: number(style.borderBottomWidth),
+              left: number(style.borderLeftWidth),
+            },
+          };
+        };
+        const build = (
+          entry: { container: string; itemHeights: number[] },
+          spacer: { index: number; width: number; height: number } | null,
+        ) => {
+          fixture.innerHTML = "";
+          const container = document.createElement("section");
+          container.style.cssText = "box-sizing:border-box;" + entry.container;
+          fixture.appendChild(container);
+          const nodes: HTMLElement[] = [];
+          for (let i = 0; i < 16; i++) {
+            if (spacer && i === draggedIndex) continue; // dragged item lifted
+            const item = document.createElement("div");
+            item.style.cssText = `box-sizing:border-box;background:#dbeafe;height:${entry.itemHeights[i]}px;`;
+            item.dataset.i = String(i);
+            nodes.push(item);
+          }
+          if (spacer) {
+            const spacerEl = document.createElement("div");
+            spacerEl.id = "spacer";
+            spacerEl.style.cssText = `box-sizing:border-box;background:#fecaca;width:${spacer.width}px;height:${spacer.height}px;`;
+            nodes.splice(Math.min(spacer.index, nodes.length), 0, spacerEl);
+          }
+          for (const node of nodes) container.appendChild(node);
+          return container;
+        };
+
+        return cases.map((entry) => {
+          const pristine = build(entry, null);
+          const containerBox = boxOf(pristine);
+          const itemBoxes = [...pristine.children].map((element) =>
+            boxOf(element as HTMLElement),
+          );
+          const dragged = itemBoxes[draggedIndex];
+          const truths = spacerIndices.map((index) => {
+            const container = build(entry, {
+              index,
+              width: dragged.width,
+              height: dragged.height,
+            });
+            let ghost: { x: number; y: number } | null = null;
+            const items: Array<{ id: string; x: number; y: number }> = [];
+            for (const element of container.children) {
+              const rect = element.getBoundingClientRect();
+              if (element.id === "spacer") {
+                ghost = { x: rect.x, y: rect.y };
+              } else {
+                items.push({
+                  id: (element as HTMLElement).dataset.i!,
+                  x: rect.x,
+                  y: rect.y,
+                });
+              }
+            }
+            return { spacerIndex: index, ghost, items };
+          });
+          return { name: entry.name, container: containerBox, itemBoxes, truths };
+        });
+      },
+      {
+        cases: scenarios.map((scenario) => ({
+          name: scenario.name,
+          container: scenario.container,
+          itemHeights: Array.from({ length: 16 }, (_, i) =>
+            scenario.itemHeight(i),
+          ),
+        })),
+        spacerIndices,
+        draggedIndex,
+      },
+    );
+
+    const failures: Array<{
+      name: string;
+      spacerIndex: number;
+      entry: string;
+      delta: number;
+    }> = [];
+    for (const grid of measured) {
+      const root = makeContainerSnapshot(
+        grid.container as Box,
+        grid.itemBoxes.map((box, index) =>
+          makeItemSnapshot(`${index}`, box as Box),
+        ),
+        "row",
+        "start",
+        "slots",
+      );
+      const dragged = root.children[draggedIndex];
+      for (const truth of grid.truths) {
+        const insertion = {
+          container: root,
+          index: truth.spacerIndex,
+          entry: {
+            width: dragged.box.width,
+            height: dragged.box.height,
+            margin: dragged.box.margin,
+          },
+        };
+        const origin = contentBoxOrigin(root.box);
+        const result = flowLayoutPositions(root, origin.x, origin.y, {
+          filter: { excludeSnapshots: new Set([dragged]) },
+          insertions: [insertion],
+        });
+        const actualById = new Map(
+          truth.items.map((item) => [item.id, item]),
+        );
+        for (const [snapshotItem, position] of result.itemPositions) {
+          const actual = actualById.get(snapshotItem.value);
+          if (!actual) continue;
+          const delta = Math.max(
+            Math.abs(position.x - actual.x),
+            Math.abs(position.y - actual.y),
+          );
+          if (delta > 1.25) {
+            failures.push({
+              name: grid.name,
+              spacerIndex: truth.spacerIndex,
+              entry: `item-${snapshotItem.value}`,
+              delta: +delta.toFixed(2),
+            });
+          }
+        }
+        const ghost = result.virtualPositions.get(insertion);
+        expect(
+          ghost,
+          `ghost position for ${grid.name}[${truth.spacerIndex}]`,
+        ).toBeTruthy();
+        const ghostDelta = truth.ghost
+          ? Math.max(
+              Math.abs(ghost!.x - truth.ghost.x),
+              Math.abs(ghost!.y - truth.ghost.y),
+            )
+          : Infinity;
+        if (ghostDelta > 1.25) {
+          failures.push({
+            name: grid.name,
+            spacerIndex: truth.spacerIndex,
+            entry: "ghost",
+            delta: +ghostDelta.toFixed(2),
+          });
+        }
+      }
+    }
+
+    await writeJson(testInfo.outputPath("grid-slot-model-ground-truth.json"), {
+      scenarioCount: measured.length,
+      failures: failures.slice(0, 40),
+    });
+    expect(
+      failures.slice(0, 8),
+      "slot layout simulation should match browser grid placement within 1.25px",
+    ).toHaveLength(0);
+  });
+
+  test("layout simulation invariants hold across randomized containers (property fuzz)", async ({
+    page,
+  }, testInfo) => {
+    // Property-based ground truth: instead of hand-picked scenarios, build
+    // seeded-random containers and assert invariants that must hold for ANY
+    // layout the engine claims to support:
+    //
+    // - identity: simulating with no exclusions/insertions reproduces the
+    //   browser's measured positions;
+    // - away-and-back: excluding item k and inserting a same-size ghost at
+    //   index k is a no-op — every other item stays put and the ghost lands
+    //   on item k's measured rect;
+    // - locality: a ghost at index k never moves an entry before index k
+    //   (compared against the identity simulation, so the bound is exact).
+    //
+    // The generator stays inside the engine's stated envelope (uniform gaps,
+    // no per-item margins, LTR, no spans); failures record their seed for
+    // deterministic repro.
+    const TOLERANCE = 1.25;
+    const caseCount = 36;
+
+    await page.setContent('<main id="property-fixture"></main>');
+    const measured = await page.evaluate((caseCount) => {
+      const fixture = document.querySelector(
+        "#property-fixture",
+      ) as HTMLElement;
+      let seed = 20260708;
+      const rand = () => {
+        seed = (seed * 1664525 + 1013904223) % 4294967296;
+        return seed / 4294967296;
+      };
+      const between = (lo: number, hi: number) => lo + rand() * (hi - lo);
+      const int = (lo: number, hi: number) => Math.floor(between(lo, hi + 1));
+      const boxOf = (element: HTMLElement) => {
+        const rect = element.getBoundingClientRect();
+        const style = getComputedStyle(element);
+        const number = (value: string) => parseFloat(value) || 0;
+        return {
+          x: rect.x,
+          y: rect.y,
+          width: rect.width,
+          height: rect.height,
+          scaleX: 1,
+          scaleY: 1,
+          screenX: rect.x,
+          screenY: rect.y,
+          margin: {
+            top: number(style.marginTop),
+            right: number(style.marginRight),
+            bottom: number(style.marginBottom),
+            left: number(style.marginLeft),
+          },
+          padding: {
+            top: number(style.paddingTop),
+            right: number(style.paddingRight),
+            bottom: number(style.paddingBottom),
+            left: number(style.paddingLeft),
+          },
+          border: {
+            top: number(style.borderTopWidth),
+            right: number(style.borderRightWidth),
+            bottom: number(style.borderBottomWidth),
+            left: number(style.borderLeftWidth),
+          },
+        };
+      };
+
+      const cases = [];
+      for (let index = 0; index < caseCount; index++) {
+        const caseSeed = seed;
+        const kind = rand() < 0.6 ? "flow" : "slots";
+        const width = between(240, 520);
+        const gap = int(2, 12);
+        const pad = int(0, 12);
+        const border = int(0, 3);
+        const count = int(8, 16);
+
+        fixture.innerHTML = "";
+        const container = document.createElement("section");
+        let containerCss =
+          `box-sizing:border-box;width:${width}px;padding:${pad}px;` +
+          `border:${border}px solid #111;`;
+        if (kind === "flow") {
+          containerCss +=
+            "display:flex;flex-direction:row;flex-wrap:wrap;" +
+            `align-items:flex-start;align-content:flex-start;gap:${gap}px;`;
+        } else {
+          const templates = [
+            `repeat(${int(3, 5)}, 1fr)`,
+            `repeat(auto-fill, minmax(${int(60, 90)}px, 1fr))`,
+            Array.from({ length: int(3, 4) }, () => `${int(50, 120)}px`).join(
+              " ",
+            ),
+          ];
+          containerCss +=
+            `display:grid;grid-template-columns:${templates[int(0, 2)]};` +
+            `gap:${gap}px;`;
+        }
+        container.style.cssText = containerCss;
+        fixture.appendChild(container);
+        for (let i = 0; i < count; i++) {
+          const item = document.createElement("div");
+          let itemCss = `box-sizing:border-box;height:${int(24, 64)}px;background:#dbeafe;`;
+          if (kind === "flow") itemCss += `width:${between(30, 110)}px;`;
+          item.style.cssText = itemCss;
+          container.appendChild(item);
+        }
+        cases.push({
+          caseSeed,
+          kind,
+          container: boxOf(container),
+          items: [...container.children].map((element) =>
+            boxOf(element as HTMLElement),
+          ),
+        });
+      }
+      return cases;
+    }, caseCount);
+
+    const failures: Array<{
+      caseSeed: number;
+      kind: string;
+      property: string;
+      detail: string;
+      delta: number;
+    }> = [];
+    const distance = (
+      a: { x: number; y: number },
+      b: { x: number; y: number },
+    ) => Math.max(Math.abs(a.x - b.x), Math.abs(a.y - b.y));
+
+    for (const propertyCase of measured) {
+      const root = makeContainerSnapshot(
+        propertyCase.container as Box,
+        propertyCase.items.map((box, index) =>
+          makeItemSnapshot(`${index}`, box as Box),
+        ),
+        "row",
+        "start",
+        propertyCase.kind as "flow" | "slots",
+      );
+      const origin = contentBoxOrigin(root.box);
+      const record = (property: string, detail: string, delta: number) =>
+        failures.push({
+          caseSeed: propertyCase.caseSeed,
+          kind: propertyCase.kind,
+          property,
+          detail,
+          delta: +delta.toFixed(2),
+        });
+
+      // Identity: the simulation of the unmodified container must reproduce
+      // the measured layout.
+      const identity = flowLayoutPositions(root, origin.x, origin.y);
+      for (const child of root.children) {
+        const delta = distance(identity.itemPositions.get(child)!, child.box);
+        if (delta > TOLERANCE) record("identity", `item-${child.value}`, delta);
+      }
+
+      const count = root.children.length;
+      for (const k of [0, Math.floor(count / 2), count - 1]) {
+        const target = root.children[k];
+
+        // Away-and-back: excluding item k and inserting an identical ghost
+        // at index k must be a no-op.
+        const insertion = {
+          container: root,
+          index: k,
+          entry: {
+            width: target.box.width,
+            height: target.box.height,
+            margin: target.box.margin,
+          },
+        };
+        const roundTrip = flowLayoutPositions(root, origin.x, origin.y, {
+          filter: { excludeSnapshots: new Set([target]) },
+          insertions: [insertion],
+        });
+        for (const child of root.children) {
+          if (child === target) continue;
+          const delta = distance(
+            roundTrip.itemPositions.get(child)!,
+            child.box,
+          );
+          if (delta > TOLERANCE) {
+            record("away-and-back", `k=${k} item-${child.value}`, delta);
+          }
+        }
+        const ghost = roundTrip.virtualPositions.get(insertion)!;
+        const ghostDelta = distance(ghost, target.box);
+        if (ghostDelta > TOLERANCE) {
+          record("away-and-back", `k=${k} ghost`, ghostDelta);
+        }
+
+        // Locality: inserting at index k (no exclusion) must not move any
+        // entry before k. Compared against the identity simulation, so this
+        // bound is exact rather than tolerance-based.
+        const inserted = flowLayoutPositions(root, origin.x, origin.y, {
+          insertions: [
+            {
+              container: root,
+              index: k,
+              entry: {
+                width: target.box.width,
+                height: target.box.height,
+                margin: target.box.margin,
+              },
+            },
+          ],
+        });
+        for (let i = 0; i < k; i++) {
+          const child = root.children[i];
+          const delta = distance(
+            inserted.itemPositions.get(child)!,
+            identity.itemPositions.get(child)!,
+          );
+          if (delta > 0.01) record("locality", `k=${k} item-${i}`, delta);
+        }
+      }
+    }
+
+    await writeJson(testInfo.outputPath("layout-property-fuzz.json"), {
+      caseCount: measured.length,
+      failures: failures.slice(0, 40),
+    });
+    expect(
+      failures.slice(0, 8),
+      "identity / away-and-back / locality invariants should hold for every generated container",
+    ).toHaveLength(0);
+  });
+
+  test("drops land where the drag preview predicted (drift oracle)", async ({
+    page,
+  }, testInfo) => {
+    // The mid-drag preview IS the layout engine's prediction: displaced
+    // items sit at simulated positions and the spacer marks the dragged
+    // item's landing slot. After the drop, the framework re-renders and the
+    // browser performs the real layout — the authoritative ground truth.
+    // Comparing the settled DOM against the last preview turns any real
+    // drag into a layout-engine oracle: drift means the simulation and the
+    // browser disagreed about the committed arrangement.
+    const TOLERANCE = 1.5;
+    await page.goto("/?demo=drop_snap_nested", { waitUntil: "networkidle" });
+
+    const verticalColumn = await demoBoxByHeading(page, "Vertical Column");
+
+    const dragWithOracle = async (
+      sourceText: string,
+      target: { x: number; y: number },
+      label: string,
+    ) => {
+      const source = await itemByTextIn(verticalColumn, sourceText);
+      const start = center(await itemRect(source));
+      await page.mouse.move(start.x, start.y);
+      await page.mouse.down();
+      for (let step = 1; step <= 14; step++) {
+        await page.mouse.move(
+          start.x + ((target.x - start.x) * step) / 14,
+          start.y + ((target.y - start.y) * step) / 14,
+        );
+        await page.waitForTimeout(16);
+      }
+      // Let the preview settle so captured rects are the engine's final
+      // prediction, not a mid-animation frame.
+      await page.waitForTimeout(350);
+
+      const texts = (element: Element) =>
+        element.textContent?.trim().replace(/\s+/g, " ") ?? "";
+      const prediction = await verticalColumn.evaluate(
+        (box, dragged) => {
+          const out: Record<string, { x: number; y: number }> = {};
+          for (const element of box.querySelectorAll(".snapsort-item")) {
+            const text =
+              element.textContent?.trim().replace(/\s+/g, " ") ?? "";
+            if (element.id === "spacer" || text.includes(dragged)) continue;
+            const rect = element.getBoundingClientRect();
+            out[text] = { x: rect.x, y: rect.y };
+          }
+          const spacer = box.querySelector("#spacer");
+          if (spacer) {
+            const rect = spacer.getBoundingClientRect();
+            out["__dragged__"] = { x: rect.x, y: rect.y };
+          }
+          return out;
+        },
+        sourceText,
+      );
+
+      await page.mouse.up();
+      await page.waitForTimeout(500);
+
+      const settled = await verticalColumn.evaluate((box, dragged) => {
+        const out: Record<string, { x: number; y: number }> = {};
+        for (const element of box.querySelectorAll(".snapsort-item")) {
+          const text = element.textContent?.trim().replace(/\s+/g, " ") ?? "";
+          const rect = element.getBoundingClientRect();
+          out[text.includes(dragged) ? "__dragged__" : text] = {
+            x: rect.x,
+            y: rect.y,
+          };
+        }
+        return out;
+      }, sourceText);
+
+      const drifts: Array<{ label: string; entry: string; delta: number }> =
+        [];
+      let compared = 0;
+      for (const [entry, predicted] of Object.entries(prediction)) {
+        const actual = settled[entry];
+        if (!actual) continue;
+        compared++;
+        const delta = Math.max(
+          Math.abs(predicted.x - actual.x),
+          Math.abs(predicted.y - actual.y),
+        );
+        if (delta > TOLERANCE) drifts.push({ label, entry, delta: +delta.toFixed(2) });
+      }
+      // Guard against a vacuous pass: the oracle must have compared the
+      // dragged item's landing slot plus the displaced items.
+      expect(
+        compared,
+        `oracle should compare several entries for ${label}`,
+      ).toBeGreaterThanOrEqual(4);
+      expect(
+        prediction.__dragged__,
+        `spacer prediction should exist for ${label}`,
+      ).toBeTruthy();
+      return drifts;
+    };
+
+    const item3 = await itemByTextIn(verticalColumn, "Item 3");
+    const item3Center = center(await itemRect(item3));
+    const item4 = await itemByTextIn(verticalColumn, "Item 4");
+    const item4Rect = await itemRect(item4);
+
+    const allDrifts = [
+      // Reorder downward past two slots.
+      ...(await dragWithOracle("Item 1", item3Center, "item1-to-item3")),
+      // Reach the final slot (past the last item's bottom edge).
+      ...(await dragWithOracle(
+        "Item 2",
+        {
+          x: item4Rect.x + item4Rect.width / 2,
+          y: item4Rect.y + item4Rect.height * 1.05,
+        },
+        "item2-to-final-slot",
+      )),
+    ];
+
+    await writeJson(testInfo.outputPath("drop-drift-oracle.json"), {
+      drifts: allDrifts,
+    });
+    expect(
+      allDrifts,
+      "settled post-drop positions should match the drag preview's prediction",
+    ).toHaveLength(0);
+  });
+
+  test("keeps the spacer stable while dragging into a narrower nested container (stretch flicker regression)", async ({
+    page,
+  }, testInfo) => {
+    // Before `stretchItems`, insertion entries kept the dragged item's
+    // source-container size everywhere, so nested candidates' ghost rects
+    // and centers were computed at parent width — candidate scoring
+    // flip-flopped between parent and nested slots as the pointer moved and
+    // the spacer visibly oscillated between containers. The Stretch Nested
+    // demo cell's items are genuinely 100% width and its containers declare
+    // `stretchItems`, so the spacer host must settle: at most a couple of
+    // transitions on the way in, ending inside the nested sub-list, with
+    // the drop committing there.
+    await page.goto("/?demo=drop_snap_nested", { waitUntil: "networkidle" });
+
+    const nested = await demoBoxByHeading(page, "Stretch Nested");
+    const source = await itemByTextIn(nested, "Task 1");
+    const target = await itemByTextIn(nested, "Sub task 2");
+    const start = center(await itemRect(source));
+    const end = center(await itemRect(target));
+
+    const spacerHost = () =>
+      nested.evaluate((box) => {
+        const spacer = box.querySelector("#spacer");
+        if (!spacer) return "none";
+        const container = spacer.closest(".snapsort-container");
+        if (!container) return "unknown";
+        return container.classList.contains("stretch-sublist")
+          ? "nested"
+          : "parent";
+      });
+
+    await page.mouse.move(start.x, start.y);
+    await page.mouse.down();
+    const hosts: string[] = [];
+    const steps = 24;
+    for (let step = 1; step <= steps; step++) {
+      await page.mouse.move(
+        start.x + ((end.x - start.x) * step) / steps,
+        start.y + ((end.y - start.y) * step) / steps,
+      );
+      await page.waitForTimeout(16);
+      hosts.push(await spacerHost());
+    }
+    await page.waitForTimeout(350);
+    hosts.push(await spacerHost());
+
+    // The core of the fix: once the spacer is hosted by the narrower
+    // sublist, it must be re-sized to the sublist's content width (minus
+    // its own margins) rather than keeping the parent-container width it
+    // was measured at.
+    const spacerSizing = await nested.evaluate((box) => {
+      const spacer = box.querySelector("#spacer") as HTMLElement | null;
+      const sublist = box.querySelector(".stretch-sublist") as HTMLElement | null;
+      if (!spacer || !sublist) return null;
+      const spacerRect = spacer.getBoundingClientRect();
+      const style = getComputedStyle(sublist);
+      const spacerStyle = getComputedStyle(spacer);
+      const number = (value: string) => parseFloat(value) || 0;
+      const contentWidth =
+        sublist.getBoundingClientRect().width -
+        number(style.borderLeftWidth) -
+        number(style.borderRightWidth) -
+        number(style.paddingLeft) -
+        number(style.paddingRight);
+      const expected =
+        contentWidth -
+        number(spacerStyle.marginLeft) -
+        number(spacerStyle.marginRight);
+      return { spacerWidth: spacerRect.width, expected };
+    });
+    expect(spacerSizing, "spacer should be inside the sublist").toBeTruthy();
+    expect(
+      Math.abs(spacerSizing!.spacerWidth - spacerSizing!.expected),
+      `spacer width ${spacerSizing!.spacerWidth} should match the sublist's content width ${spacerSizing!.expected}`,
+    ).toBeLessThanOrEqual(1.5);
+
+    // Drift oracle for the nested drop: preview rects just before release
+    // vs the settled DOM afterward.
+    const prediction = await nested.evaluate((box) => {
+      const out: Record<string, { x: number; y: number }> = {};
+      for (const element of box.querySelectorAll(".snapsort-item")) {
+        const text = element.textContent?.trim().replace(/\s+/g, " ") ?? "";
+        if (element.id === "spacer" || text === "Task 1") continue;
+        if (!/^Sub task \d$/.test(text)) continue;
+        const rect = element.getBoundingClientRect();
+        out[text] = { x: rect.x, y: rect.y };
+      }
+      const spacer = box.querySelector("#spacer");
+      if (spacer) {
+        const rect = spacer.getBoundingClientRect();
+        out["__dragged__"] = { x: rect.x, y: rect.y };
+      }
+      return out;
+    });
+    await page.mouse.up();
+    await page.waitForTimeout(500);
+    const settled = await nested.evaluate((box) => {
+      const out: Record<string, { x: number; y: number }> = {};
+      for (const element of box.querySelectorAll(".snapsort-item")) {
+        const text = element.textContent?.trim().replace(/\s+/g, " ") ?? "";
+        const rect = element.getBoundingClientRect();
+        if (text === "Task 1") out["__dragged__"] = { x: rect.x, y: rect.y };
+        else if (/^Sub task \d$/.test(text)) out[text] = { x: rect.x, y: rect.y };
+      }
+      return out;
+    });
+    const drifts: Array<{ entry: string; delta: number }> = [];
+    for (const [entry, predicted] of Object.entries(prediction)) {
+      const actual = settled[entry];
+      if (!actual) continue;
+      const delta = Math.max(
+        Math.abs(predicted.x - actual.x),
+        Math.abs(predicted.y - actual.y),
+      );
+      if (delta > 1.5) drifts.push({ entry, delta: +delta.toFixed(2) });
+    }
+
+    const transitions = hosts.filter(
+      (host, index) => index > 0 && host !== hosts[index - 1],
+    ).length;
+    const subGroupTexts = await nested.evaluate(
+      (box) =>
+        [...box.querySelectorAll(".stretch-sublist .snapsort-item")].map(
+          (element) => element.textContent?.trim().replace(/\s+/g, " ") ?? "",
+        ),
+    );
+
+    await writeJson(testInfo.outputPath("nested-stretch-flicker.json"), {
+      hosts,
+      transitions,
+      drifts,
+      subGroupTexts,
+    });
+    expect(hosts[hosts.length - 1], "spacer should end in the nested sub-list").toBe(
+      "nested",
+    );
+    expect(
+      transitions,
+      "spacer host must not oscillate between parent and nested containers",
+    ).toBeLessThanOrEqual(2);
+    expect(drifts, "nested drop should land where the preview predicted").toHaveLength(0);
+    expect(
+      subGroupTexts.some((text) => text.includes("Task 1")),
+      "the dragged item should commit into the nested sub-list",
+    ).toBe(true);
+  });
+
+  test("stretch entry sizing matches a real width-100% spacer (ground truth)", async ({
+    page,
+  }) => {
+    // A stretchItems container's simulated entry must match what the browser
+    // does with an unsized (stretch) flex child: fill the content box minus
+    // the entry's own margins — including fractional container widths,
+    // padding, and borders.
+    await page.setContent('<main id="stretch-fixture"></main>');
+    const measured = await page.evaluate(() => {
+      const fixture = document.querySelector("#stretch-fixture") as HTMLElement;
+      const boxOf = (element: HTMLElement) => {
+        const rect = element.getBoundingClientRect();
+        const style = getComputedStyle(element);
+        const number = (value: string) => parseFloat(value) || 0;
+        return {
+          x: rect.x,
+          y: rect.y,
+          width: rect.width,
+          height: rect.height,
+          scaleX: 1,
+          scaleY: 1,
+          screenX: rect.x,
+          screenY: rect.y,
+          margin: {
+            top: number(style.marginTop),
+            right: number(style.marginRight),
+            bottom: number(style.marginBottom),
+            left: number(style.marginLeft),
+          },
+          padding: {
+            top: number(style.paddingTop),
+            right: number(style.paddingRight),
+            bottom: number(style.paddingBottom),
+            left: number(style.paddingLeft),
+          },
+          border: {
+            top: number(style.borderTopWidth),
+            right: number(style.borderRightWidth),
+            bottom: number(style.borderBottomWidth),
+            left: number(style.borderLeftWidth),
+          },
+        };
+      };
+      const build = (withSpacer: boolean) => {
+        fixture.innerHTML = "";
+        const container = document.createElement("section");
+        container.style.cssText =
+          "box-sizing:border-box;display:flex;flex-direction:column;" +
+          "width:222.33px;padding:9px;border:2px solid #111;gap:6px;";
+        fixture.appendChild(container);
+        for (let i = 0; i < 3; i++) {
+          const item = document.createElement("div");
+          item.style.cssText =
+            "box-sizing:border-box;height:40px;background:#dbeafe;";
+          item.dataset.i = String(i);
+          container.appendChild(item);
+          if (withSpacer && i === 0) {
+            // Unsized stretch flex child with margins: the browser's own
+            // notion of a "100% width" entry.
+            const spacer = document.createElement("div");
+            spacer.id = "spacer";
+            spacer.style.cssText =
+              "box-sizing:border-box;height:40px;margin:0 4px;background:#fecaca;";
+            container.appendChild(spacer);
+          }
+        }
+        return container;
+      };
+      const pristine = build(false);
+      const containerBox = boxOf(pristine);
+      const itemBoxes = [...pristine.children].map((element) =>
+        boxOf(element as HTMLElement),
+      );
+      const truth = build(true);
+      const spacer = truth.querySelector("#spacer") as HTMLElement;
+      const spacerRect = spacer.getBoundingClientRect();
+      return {
+        container: containerBox,
+        itemBoxes,
+        spacer: {
+          x: spacerRect.x,
+          y: spacerRect.y,
+          width: spacerRect.width,
+          height: spacerRect.height,
+        },
+      };
+    });
+
+    const root = makeContainerSnapshot(
+      measured.container as Box,
+      measured.itemBoxes.map((box, index) =>
+        makeItemSnapshot(`${index}`, box as Box),
+      ),
+      "column",
+      "start",
+      "flow",
+      { wrap: "nowrap", stretchItems: true },
+    );
+    const margin = { top: 0, right: 4, bottom: 0, left: 4 };
+    const insertion = {
+      container: root,
+      index: 1,
+      entry: {
+        // Deliberately oversized base: the source container was wider.
+        ...virtualEntrySizeFor(root, { width: 500, height: 40, margin }),
+        margin,
+      },
+    };
+    const origin = contentBoxOrigin(root.box);
+    const result = flowLayoutPositions(root, origin.x, origin.y, {
+      insertions: [insertion],
+    });
+    const rect = result.virtualRects.get(insertion)!;
+    expect(Math.abs(rect.width - measured.spacer.width)).toBeLessThanOrEqual(1.25);
+    expect(Math.abs(rect.y - measured.spacer.y)).toBeLessThanOrEqual(1.25);
+  });
+
+  // Documented-unsupported layout shapes, encoded as expected failures so
+  // the boundary is visible in the test report and any accidental fix or
+  // regression flips the result. Each builds a real DOM, inserts a real
+  // spacer, and counts entries where the simulation misses the browser's
+  // placement by more than 1.25px.
+  async function unsupportedShapeMismatches(
+    page: Page,
+    config: {
+      containerCss: string;
+      itemCss: string[];
+      itemInnerHeights?: number[];
+      layoutModel: "flow" | "slots";
+      spacerIndices: number[];
+    },
+  ): Promise<number> {
+    await page.setContent('<main id="unsupported-fixture"></main>');
+    const measured = await page.evaluate((cfg) => {
+      const fixture = document.querySelector(
+        "#unsupported-fixture",
+      ) as HTMLElement;
+      const boxOf = (element: HTMLElement) => {
+        const rect = element.getBoundingClientRect();
+        const style = getComputedStyle(element);
+        const number = (value: string) => parseFloat(value) || 0;
+        return {
+          x: rect.x,
+          y: rect.y,
+          width: rect.width,
+          height: rect.height,
+          scaleX: 1,
+          scaleY: 1,
+          screenX: rect.x,
+          screenY: rect.y,
+          margin: {
+            top: number(style.marginTop),
+            right: number(style.marginRight),
+            bottom: number(style.marginBottom),
+            left: number(style.marginLeft),
+          },
+          padding: {
+            top: number(style.paddingTop),
+            right: number(style.paddingRight),
+            bottom: number(style.paddingBottom),
+            left: number(style.paddingLeft),
+          },
+          border: {
+            top: number(style.borderTopWidth),
+            right: number(style.borderRightWidth),
+            bottom: number(style.borderBottomWidth),
+            left: number(style.borderLeftWidth),
+          },
+        };
+      };
+      const build = (
+        spacer: { index: number; width: number; height: number } | null,
+      ) => {
+        fixture.innerHTML = "";
+        const container = document.createElement("section");
+        container.style.cssText = "box-sizing:border-box;" + cfg.containerCss;
+        fixture.appendChild(container);
+        const nodes: HTMLElement[] = [];
+        for (let i = 0; i < cfg.itemCss.length; i++) {
+          if (spacer && i === 0) continue; // dragged item lifted
+          const item = document.createElement("div");
+          item.style.cssText =
+            "box-sizing:border-box;background:#dbeafe;" + cfg.itemCss[i];
+          item.dataset.i = String(i);
+          const innerHeight = cfg.itemInnerHeights?.[i];
+          if (innerHeight != null) {
+            const inner = document.createElement("div");
+            inner.style.cssText = `height:${innerHeight}px;`;
+            item.appendChild(inner);
+          }
+          nodes.push(item);
+        }
+        if (spacer) {
+          const spacerEl = document.createElement("div");
+          spacerEl.id = "spacer";
+          spacerEl.style.cssText = `box-sizing:border-box;background:#fecaca;width:${spacer.width}px;height:${spacer.height}px;`;
+          nodes.splice(Math.min(spacer.index, nodes.length), 0, spacerEl);
+        }
+        for (const node of nodes) container.appendChild(node);
+        return container;
+      };
+
+      const pristine = build(null);
+      const containerBox = boxOf(pristine);
+      const itemBoxes = [...pristine.children].map((element) =>
+        boxOf(element as HTMLElement),
+      );
+      const dragged = itemBoxes[0];
+      const truths = cfg.spacerIndices.map((index) => {
+        const container = build({
+          index,
+          width: dragged.width,
+          height: dragged.height,
+        });
+        let ghost: { x: number; y: number } | null = null;
+        const items: Array<{ id: string; x: number; y: number }> = [];
+        for (const element of container.children) {
+          const rect = element.getBoundingClientRect();
+          if (element.id === "spacer") ghost = { x: rect.x, y: rect.y };
+          else {
+            items.push({
+              id: (element as HTMLElement).dataset.i!,
+              x: rect.x,
+              y: rect.y,
+            });
+          }
+        }
+        return { spacerIndex: index, ghost, items };
+      });
+      return { container: containerBox, itemBoxes, truths };
+    }, config);
+
+    const root = makeContainerSnapshot(
+      measured.container as Box,
+      measured.itemBoxes.map((box, index) =>
+        makeItemSnapshot(`${index}`, box as Box),
+      ),
+      "row",
+      "start",
+      config.layoutModel,
+    );
+    const dragged = root.children[0];
+    let mismatches = 0;
+    for (const truth of measured.truths) {
+      const insertion = {
+        container: root,
+        index: truth.spacerIndex,
+        entry: {
+          width: dragged.box.width,
+          height: dragged.box.height,
+          margin: dragged.box.margin,
+        },
+      };
+      const origin = contentBoxOrigin(root.box);
+      const result = flowLayoutPositions(root, origin.x, origin.y, {
+        filter: { excludeSnapshots: new Set([dragged]) },
+        insertions: [insertion],
+      });
+      const actualById = new Map(truth.items.map((item) => [item.id, item]));
+      for (const [snapshotItem, position] of result.itemPositions) {
+        const actual = actualById.get(snapshotItem.value);
+        if (!actual) continue;
+        if (
+          Math.max(
+            Math.abs(position.x - actual.x),
+            Math.abs(position.y - actual.y),
+          ) > 1.25
+        ) {
+          mismatches++;
+        }
+      }
+      const ghost = result.virtualPositions.get(insertion);
+      if (
+        !ghost ||
+        !truth.ghost ||
+        Math.max(
+          Math.abs(ghost.x - truth.ghost.x),
+          Math.abs(ghost.y - truth.ghost.y),
+        ) > 1.25
+      ) {
+        mismatches++;
+      }
+    }
+    return mismatches;
+  }
+
+  test("documents unsupported: RTL flex containers", async ({ page }) => {
+    test.fail(
+      true,
+      "The flow model assumes LTR main-axis growth: RTL offsets regress per item, so line detection and positions are mirrored. Slot mode covers RTL grids; RTL flex is out of scope.",
+    );
+    const mismatches = await unsupportedShapeMismatches(page, {
+      containerCss:
+        "display:flex;flex-wrap:wrap;direction:rtl;width:380.33px;gap:4px;" +
+        "align-items:flex-start;align-content:flex-start;",
+      itemCss: Array.from(
+        { length: 16 },
+        () => "width:calc((100% - 12px)/4);height:40px;",
+      ),
+      layoutModel: "flow",
+      spacerIndices: [0, 3, 7],
+    });
+    expect(mismatches).toBe(0);
+  });
+
+  test("documents unsupported: grid items spanning multiple tracks", async ({
+    page,
+  }) => {
+    test.fail(
+      true,
+      "Slot mode assumes one entry per slot: a span-2 item makes slot geometry depend on placement, which reordering invalidates.",
+    );
+    const mismatches = await unsupportedShapeMismatches(page, {
+      containerCss:
+        "display:grid;grid-template-columns:repeat(4, 88px);gap:4px;width:380px;",
+      itemCss: Array.from({ length: 14 }, (_, i) =>
+        i === 5 ? "height:40px;grid-column:span 2;" : "height:40px;",
+      ),
+      layoutModel: "slots",
+      spacerIndices: [0, 3, 7],
+    });
+    expect(mismatches).toBe(0);
+  });
+
+  test("documents unsupported: stretch items with intrinsic heights across content-sized rows", async ({
+    page,
+  }) => {
+    test.fail(
+      true,
+      "Items with align-self:stretch and no explicit height measure at their row's height, not their intrinsic height; when displaced across content-sized rows the simulation carries the stale stretched height. Predicting the true height would require intrinsic sizing per destination track.",
+    );
+    const mismatches = await unsupportedShapeMismatches(page, {
+      containerCss:
+        "display:grid;grid-template-columns:repeat(3, 110px);grid-auto-rows:auto;gap:4px;width:346px;",
+      // No explicit item heights: each stretches to its row. Item 0's inner
+      // content is 90px tall, making row 1's track 90 and stretching its
+      // short siblings to 90 as measured. Removing item 0 shrinks row 1 to
+      // 30 in the real layout; the simulation keeps the stale 90.
+      itemCss: Array.from({ length: 9 }, () => ""),
+      itemInnerHeights: Array.from({ length: 9 }, (_, i) =>
+        i === 0 ? 90 : 30,
+      ),
+      layoutModel: "slots",
+      spacerIndices: [8],
+    });
+    expect(mismatches).toBe(0);
+  });
+
   test("does not crash when drag movement arrives before snapshot capture", async ({
     page,
   }, testInfo) => {
@@ -2310,10 +3574,11 @@ test.describe("Snapsort drag-start snapshot layout", () => {
 
   test("does not throw when a leaked dragged item is grabbed again", async ({
     page,
+    browserName,
   }, testInfo) => {
     test.fail(
-      true,
-      "Known repro: re-grabbing the leaked item reaches detachItemFromContainer with a null current container.",
+      browserName !== "firefox",
+      "Known repro: re-grabbing the leaked item reaches detachItemFromContainer with a null current container. Firefox's release-near-origin timing does not leak the item, so the repro (and the failure) is Blink/WebKit-only.",
     );
     const consoleMessages: string[] = [];
     const pageErrors: string[] = [];
@@ -2376,17 +3641,56 @@ test.describe("Snapsort drag-start snapshot layout", () => {
 
     await page.mouse.move(item1Center.x, item1Center.y);
     await page.mouse.down();
-    await page.mouse.move(item1Center.x, item4Center.y, { steps: 12 });
 
-    const animated = await page.waitForFunction(() => {
-      const items = [...document.querySelectorAll(".snapsort-item")].filter(
-        (element) =>
-          element.id !== "spacer" && !/Item 1/.test(element.textContent ?? ""),
-      );
-      return items.some((element) =>
-        /^translate3d\(/.test((element as HTMLElement).style.transform),
-      );
+    // Arm a style-attribute observer before the reorder: polling for the
+    // inline transform can miss a FLIP that starts and settles between polls
+    // (WebKit clears the transform quickly on fast machines).
+    await page.evaluate(() => {
+      const win = window as unknown as {
+        __sawDisplacedTransform?: boolean;
+        __displacedObserver?: MutationObserver;
+      };
+      win.__sawDisplacedTransform = false;
+      const isDisplaced = (element: Element) =>
+        element.id !== "spacer" && !/Item 1/.test(element.textContent ?? "");
+      const check = (element: Element) => {
+        if (
+          isDisplaced(element) &&
+          /^translate3d\(/.test((element as HTMLElement).style.transform)
+        ) {
+          win.__sawDisplacedTransform = true;
+        }
+      };
+      const observer = new MutationObserver((mutations) => {
+        for (const mutation of mutations) check(mutation.target as Element);
+      });
+      for (const element of document.querySelectorAll(".snapsort-item")) {
+        observer.observe(element, {
+          attributes: true,
+          attributeFilter: ["style"],
+        });
+        check(element);
+      }
+      win.__displacedObserver = observer;
     });
+
+    // Pace the moves like a human drag: a single burst of interpolated moves
+    // can be delivered entirely before the drag session finishes activating
+    // (observed on WebKit), leaving no post-activation pointermove and thus
+    // no reorder to animate.
+    for (let step = 1; step <= 12; step++) {
+      await page.mouse.move(
+        item1Center.x,
+        item1Center.y + ((item4Center.y - item1Center.y) * step) / 12,
+      );
+      await page.waitForTimeout(16);
+    }
+
+    const animated = await page.waitForFunction(
+      () =>
+        (window as unknown as { __sawDisplacedTransform?: boolean })
+          .__sawDisplacedTransform === true,
+    );
     await page.mouse.up();
     await page.waitForTimeout(120);
 

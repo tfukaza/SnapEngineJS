@@ -2,6 +2,7 @@ import { Item } from "./item";
 import type { ContainerCallbacks } from "./events";
 import { defaultCallbacks } from "./mutation";
 import type { LayoutMainAxisAlign } from "./layout";
+import type { LayoutWrap } from "./snapshot";
 import type { SortMode, SortStrategy } from "./drag/drop-strategy";
 import type { DragSession } from "./drag/session";
 
@@ -24,6 +25,10 @@ export interface ContainerConfig {
   groupID?: string;
   direction?: "column" | "row";
   mainAxisAlign?: LayoutMainAxisAlign;
+  /** `"nowrap"`: this list never wraps, it just keeps growing along its main axis. Default `"auto"` (inferred from measurements). */
+  wrap?: LayoutWrap;
+  /** Entries fill this container's cross axis (width in column lists, height in row lists) minus their own margins — CSS `align-items: stretch` analogy. Keeps drop previews sized to THIS container when items are dragged in from larger/smaller ones. */
+  stretchItems?: boolean;
   name?: string;
   animation?: ContainerAnimations | null;
   disableFlip?: boolean;
@@ -104,6 +109,22 @@ export class Container extends Item {
 
   set mainAxisAlign(value: LayoutMainAxisAlign) {
     this.#config.mainAxisAlign = value;
+  }
+
+  get wrap() {
+    return this.#config.wrap ?? "auto";
+  }
+
+  set wrap(value: LayoutWrap) {
+    this.#config.wrap = value;
+  }
+
+  get stretchItems() {
+    return this.#config.stretchItems ?? false;
+  }
+
+  set stretchItems(value: boolean) {
+    this.#config.stretchItems = value;
   }
 
   get dropArea() {

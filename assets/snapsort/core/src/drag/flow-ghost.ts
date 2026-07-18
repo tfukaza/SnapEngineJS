@@ -3,6 +3,7 @@ import type { Container } from "../container";
 import { Item } from "../item";
 import { resetDropSnapshotDebugDump, type DropCandidate } from "../algorithm";
 import type { DragCloneEvent, DragLocation, GhostRect, GhostRole } from "../events";
+import { virtualEntrySizeFor } from "../layout";
 import { fireItemRemove, fireMutation, settleMutation } from "../mutation";
 import type { DragLifecycleStrategy } from "./lifecycle";
 import type { DragSession } from "./session";
@@ -60,19 +61,34 @@ function liveIndexFromSnapshotIndex(
 }
 
 /**
+ * Size a run anchor's spacer rect for its *destination* container: the
+ * member's own snapshot box, cross-axis-stretched when the destination
+ * declares `stretchItems` (so a spacer entering a narrower nested list
+ * reserves the nested width, not the source container's).
+ */
+function anchorRectFor(container: Container, member: Item): GhostRect | null {
+  const box = member.dragSnapshot?.box;
+  if (!box) return null;
+  const containerSnapshot = container.dragSnapshot;
+  if (!containerSnapshot) {
+    return { x: 0, y: 0, width: box.width, height: box.height };
+  }
+  const size = virtualEntrySizeFor(containerSnapshot, box);
+  return { x: 0, y: 0, width: size.width, height: size.height };
+}
+
+/**
  * Ensure the target ghost run has one anchor per dragged member. Each anchor
  * is created for its own member (so `createGhost` sees `original = member`
- * and can size/skip per member), sized to that member's snapshot box. Newly
- * created anchors are not yet attached to any container.
+ * and can size/skip per member), sized to that member's snapshot box for the
+ * destination container. Newly created anchors are not yet attached to any
+ * container.
  */
 function ensureFlowGhostRun(session: DragSession, container: Container): Item[] {
   const run = session.flowGhostRun;
   for (let i = run.length; i < session.items.length; i++) {
     const member = session.items[i];
-    const box = member.dragSnapshot?.box;
-    const rect: GhostRect | null = box
-      ? { x: 0, y: 0, width: box.width, height: box.height }
-      : null;
+    const rect = anchorRectFor(container, member);
     const ghost = member.createGhostItem(session, "flow", container, rect, "target");
     if (!ghost) break;
     run.push(ghost);
@@ -136,10 +152,8 @@ async function moveGhost(
       }
     });
     run.forEach((ghost, i) => {
-      const box = session.items[i]?.dragSnapshot?.box;
-      const rect: GhostRect | null = box
-        ? { x: 0, y: 0, width: box.width, height: box.height }
-        : null;
+      const member = session.items[i] ?? item;
+      const rect = anchorRectFor(container, member);
       container.insertGhostAt(
         session.items[i] ?? item,
         container,
