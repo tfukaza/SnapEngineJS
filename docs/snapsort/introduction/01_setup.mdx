@@ -23,6 +23,24 @@ npm install @snap-engine/core @snap-engine/snapsort @snap-engine/snapsort-react 
 npm install @snap-engine/core @snap-engine/snapsort
 ```
 
+### SvelteKit / SSR
+
+SnapEngine asset packages publish TypeScript source. SvelteKit must bundle the
+framework-agnostic asset packages during SSR instead of externalizing them to
+Node. Add them to `ssr.noExternal` in `vite.config.js`:
+
+```javascript framework=Svelte
+import { sveltekit } from "@sveltejs/kit/vite";
+import { defineConfig } from "vite";
+
+export default defineConfig({
+  plugins: [sveltekit()],
+  ssr: {
+    noExternal: ["@snap-engine/asset-base", "@snap-engine/snapsort"],
+  },
+});
+```
+
 
 ## Your First Sortable List
 

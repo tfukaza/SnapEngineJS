@@ -1,7 +1,7 @@
 <script lang="ts">
   import { onMount } from "svelte";
   import { setContext } from "svelte";
-  import { getEngine } from "./engineState.svelte";
+  import { getEngine } from "./engineState.svelte.js";
   import type { Engine } from "@snap-engine/core";
   import { DebugRenderer } from "@snap-engine/core/debug";
   import { CollisionEngine } from "@snap-engine/core/collision";
@@ -22,13 +22,15 @@
   let mounted = $state(false);
   let pendingDebugEnable = $state(false);
 
-  const resolvedEngine = (engine ?? getEngine(id)) as Engine;
+  const resolvedEngine =
+    typeof document === "undefined" ? null : ((engine ?? getEngine(id)) as Engine);
   engine = resolvedEngine;
   setContext("engine", resolvedEngine);
 
-  resolvedEngine.setCollisionEngine(new CollisionEngine());
+  resolvedEngine?.setCollisionEngine(new CollisionEngine());
 
   onMount(() => {
+    if (!resolvedEngine) return;
     resolvedEngine.assignDom(canvas as HTMLElement);
     resolvedEngine.camera?.setCameraPosition(0, 0);
     mounted = true;
@@ -41,6 +43,7 @@
   });
 
   $effect(() => {
+    if (!resolvedEngine) return;
     if (debug) {
       if (mounted) {
         resolvedEngine.setDebugRenderer(new DebugRenderer());
@@ -54,6 +57,7 @@
   });
 
   export function enableDebug() {
+    if (!resolvedEngine) return;
     if (mounted) {
       resolvedEngine.setDebugRenderer(new DebugRenderer());
     } else {
@@ -62,6 +66,7 @@
   }
 
   export function disableDebug() {
+    if (!resolvedEngine) return;
     resolvedEngine.disableDebug();
     pendingDebugEnable = false;
   }
@@ -72,7 +77,9 @@
   bind:this={canvas}
   style="height: 100%; overflow: hidden; position: relative;"
 >
-  {@render children()}
+  {#if mounted}
+    {@render children()}
+  {/if}
 </div>
 
 <style lang="scss">

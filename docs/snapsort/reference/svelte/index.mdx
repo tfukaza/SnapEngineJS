@@ -18,6 +18,21 @@ The Svelte package wraps SnapSort's core objects in Svelte 5 components. Use it 
 npm install @snap-engine/core @snap-engine/asset-base-svelte @snap-engine/snapsort @snap-engine/snapsort-svelte
 ```
 
+For SvelteKit, bundle the raw TypeScript asset packages during SSR:
+
+```javascript
+// vite.config.js
+import { sveltekit } from "@sveltejs/kit/vite";
+import { defineConfig } from "vite";
+
+export default defineConfig({
+  plugins: [sveltekit()],
+  ssr: {
+    noExternal: ["@snap-engine/asset-base", "@snap-engine/snapsort"],
+  },
+});
+```
+
 ## Import
 
 ```svelte
