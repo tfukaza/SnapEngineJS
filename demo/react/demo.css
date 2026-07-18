@@ -18,6 +18,50 @@ body {
   font-family: "Inter", sans-serif;
 }
 
+main.asset-base-react-demo {
+  box-sizing: border-box;
+  height: 100vh;
+  padding: 32px;
+  position: relative;
+}
+
+.asset-base-react-canvas {
+  border: 1px solid #dbe3ee;
+  height: 100%;
+}
+
+.asset-base-react-camera {
+  overflow: visible;
+}
+
+.asset-base-react-toolbar {
+  display: flex;
+  gap: 8px;
+  left: 48px;
+  position: absolute;
+  top: 48px;
+  z-index: 1200;
+}
+
+.asset-base-react-world {
+  height: 100%;
+  left: 50%;
+  position: absolute;
+  top: 50%;
+  width: 100%;
+}
+
+.asset-base-react-tile {
+  align-items: center;
+  background: #fff;
+  border: 2px solid #111827;
+  display: flex;
+  height: 96px;
+  justify-content: center;
+  position: absolute;
+  width: 144px;
+}
+
 main {
   display: flex;
   flex-direction: column;

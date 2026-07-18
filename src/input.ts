@@ -338,7 +338,10 @@ class InputControl {
   unregisterObjectElement(object: ElementObject, element?: HTMLElement) {
     const registeredElement =
       element ?? this.#elementByObjectId.get(object.id) ?? null;
-    if (registeredElement) {
+    if (
+      registeredElement &&
+      this.#objectByElement.get(registeredElement) === object
+    ) {
       this.#objectByElement.delete(registeredElement);
     }
 

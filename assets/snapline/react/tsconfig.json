@@ -8,6 +8,8 @@
       "@snap-engine/core/animation": ["../../../src/animation.ts"],
       "@snap-engine/core/collision": ["../../../src/collision.ts"],
       "@snap-engine/core/debug": ["../../../src/debug.ts"],
+      "@snap-engine/asset-base": ["../../asset-base/core/src/index.ts"],
+      "@snap-engine/asset-base-react": ["../../asset-base/react/src/index.ts"],
       "@snap-engine/snapline": ["../core/src/index.ts"]
     }
   },
