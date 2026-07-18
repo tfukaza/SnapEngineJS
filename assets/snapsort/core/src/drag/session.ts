@@ -8,6 +8,7 @@ import {
   fireDragItemEnter,
   fireDragItemLeave,
   fireDragItemMove,
+  fireMutation,
 } from "../mutation";
 import type { SortStrategy } from "./drop-strategy";
 
@@ -248,8 +249,10 @@ export class DragSession {
           root.callbacks?.onDragStart?.({
             session: this,
             item: primary,
+            itemId: primary.resolvedItemId,
             itemMetadata: primary.metadata,
             items: this.items,
+            itemIds: this.items.map((i) => i.resolvedItemId),
             itemsMetadata: this.items.map((i) => i.metadata),
             element: primary.element,
             source: this.sources[0],
@@ -374,14 +377,18 @@ export class DragSession {
             index: loc.index,
           }
         : null;
-    this.root.callbacks?.onDropTargetChange?.({
-      session: this,
-      item,
-      itemMetadata: item.metadata,
-      items: this.items,
-      itemsMetadata: this.items.map((i) => i.metadata),
-      previous: toLocation(previous),
-      current: toLocation(current),
+    fireMutation(this.root, () => {
+      this.root.callbacks?.onDropTargetChange?.({
+        session: this,
+        item,
+        itemId: item.resolvedItemId,
+        itemMetadata: item.metadata,
+        items: this.items,
+        itemIds: this.items.map((i) => i.resolvedItemId),
+        itemsMetadata: this.items.map((i) => i.metadata),
+        previous: toLocation(previous),
+        current: toLocation(current),
+      });
     });
   }
 

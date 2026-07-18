@@ -6,7 +6,6 @@
     GhostCreateEvent,
     ItemMoveEvent,
   } from "@snap-engine/snapsort";
-  import { tick } from "svelte";
   import FileTreeNode from "./FileTreeNode.svelte";
   import type { TreeNodeData } from "./FileTreeNode.svelte";
 
@@ -168,7 +167,7 @@
       return;
     }
 
-    const nodeId = event.itemMetadata.itemId;
+    const nodeId = event.itemId;
     const containerId = event.to.containerMetadata.containerId;
     if (typeof nodeId !== "string" || typeof containerId !== "string") return;
 
@@ -221,7 +220,6 @@
   const callbacks: ContainerCallbacks = {
     onItemMove: handleMove,
     createGhost: createFileTreeGhost,
-    awaitMutation: tick,
   };
 </script>
 
@@ -263,7 +261,7 @@
           insertionMarkerInsetRight: 8,
         }}
         items={tree}
-        getId={(node) => node.id}
+        getItemId={(node) => node.id}
       >
         {#snippet entry(node)}
           <FileTreeNode {node} depth={0} {callbacks} onToggleFolder={toggleFolderOpen} />

@@ -1051,8 +1051,8 @@ export class ElementObject extends BaseObject {
     }
   }
 
-  destroy() {
-    this.destroyDom();
+  destroy(removeElement: boolean = true) {
+    this.destroyDom(removeElement);
     super.destroy();
   }
 
@@ -1296,7 +1296,7 @@ export class ElementObject extends BaseObject {
     super.writeTransform();
   }
 
-  destroyDom() {
+  destroyDom(removeElement: boolean = true) {
     this.#resizeObserver?.disconnect();
     this.#mutationObserver?.disconnect();
     if (this.#inputAlias) {
@@ -1305,7 +1305,9 @@ export class ElementObject extends BaseObject {
     }
     if (this.#element) {
       this.engine?.input.unregisterObjectElement(this, this.#element);
-      this.#element.remove();
+      if (removeElement) {
+        this.#element.remove();
+      }
     }
     this.#element = null;
     super.destroyDom();

@@ -1,11 +1,10 @@
 <script lang="ts">
   import { Engine } from "@snap-engine/asset-base-svelte";
-  import { tick } from "svelte";
   import SnapSortDuolingoDemo from "../snapsort_duolingo/SnapSortDuolingoDemo.svelte";
-  import { Container, Handle } from "@snap-engine/snapsort-svelte";
+  import { Container, Ghost, Handle, Item } from "@snap-engine/snapsort-svelte";
   import type {
     Container as SortContainer,
-    GhostCreateEvent,
+    GhostInsertEvent,
     ItemMoveEvent,
     ItemRemoveEvent,
   } from "@snap-engine/snapsort";
@@ -34,6 +33,8 @@
     answerTiles: ProgressiveTile[];
     bankTiles: ProgressiveTile[];
   };
+  type ProgressiveZone = "answer" | "bank";
+  const progressiveZones: ProgressiveZone[] = ["answer", "bank"];
 
   const initialColumns: DemoColumn[] = [
     {
@@ -59,10 +60,14 @@
       items: [{ id: "item-6", label: "Audit export", detail: "CSV polish" }],
     },
   ];
-  const snapSortCubicAnimation = {
-    duration: 180,
-    timing_function: "cubic-bezier(0.2, 0, 0, 1)",
-  };
+  const snapSortCubicAnimation = new URLSearchParams(window.location.search).has(
+    "slowFlip",
+  )
+    ? { duration: 800, timing_function: "linear" }
+    : {
+        duration: 180,
+        timing_function: "cubic-bezier(0.2, 0, 0, 1)",
+      };
 
   const progressiveExamples: ProgressiveExample[] = [
     {
@@ -220,13 +225,13 @@
   }
 
   /** Ghost snippet content: looks up the dragged item's label/detail via its itemId. */
-  function ghostItemContent(event: GhostCreateEvent): DemoItem | null {
-    const itemId = event.originalMetadata.itemId;
+  function ghostItemContent(event: GhostInsertEvent): DemoItem | null {
+    const itemId = event.originalItemId;
     return typeof itemId === "string" ? findDemoItem(itemId) : null;
   }
 
   function handleSnapSortDomMove(event: ItemMoveEvent) {
-    const itemId = event.itemMetadata.itemId;
+    const itemId = event.itemId;
     if (typeof itemId !== "string") return;
     const targetColumnId = event.to.containerMetadata.columnId;
     if (typeof targetColumnId !== "string") return;
@@ -263,7 +268,7 @@
   }
 
   function handleSnapSortDomRemove(event: ItemRemoveEvent) {
-    const itemId = event.itemMetadata.itemId;
+    const itemId = event.itemId;
     if (typeof itemId !== "string") return;
 
     deleteItem(itemId);
@@ -341,9 +346,12 @@
                 }}
                 locked={true}
                 metadata={{ boardId: "component-kanban" }}
+                items={columns}
+                getItemId={(column) => column.id}
               >
-                {#each columns as column (column.id)}
+                {#snippet entry(column)}
                   <Container
+                    itemId={column.id}
                     className={column.id === "backlog" ? "list-panel array-list" : "list-panel"}
                     bind:container={column.container}
                     config={{
@@ -357,60 +365,63 @@
                       callbacks: {
                         onItemMove: handleSnapSortDomMove,
                         onItemRemove: handleSnapSortDomRemove,
-                        awaitMutation: tick,
                       },
                     }}
                     locked={true}
                     metadata={{ columnId: column.id }}
                     items={column.items}
-                    getId={(item) => item.id}
-                    getClassName={() => "task-card"}
-                    getMetadata={(item) => ({ label: item.label, detail: item.detail })}
+                    getItemId={(item) => item.id}
                   >
-                    <div class="list-header">
-                      <h2>{column.title}</h2>
-                      <span>{column.items.length}</span>
-                    </div>
-                    {#snippet item(entry)}
-                      <div class="task-content">
-                        <Handle className="task-drag-handle">
-                          <span class="material-symbols-outlined" aria-hidden="true">drag_indicator</span>
-                        </Handle>
-                        <div class="task-main">
-                          <strong>{entry.label}</strong>
-                          <span>{entry.detail}</span>
-                        </div>
-                        <div class="card-actions">
-                          <button
-                            class="icon-button"
-                            aria-label={`Delete ${entry.label}`}
-                            use:controlButton={() => deleteItem(entry.id)}
-                          ><span class="material-symbols-outlined" aria-hidden="true">delete</span></button>
-                          <button
-                            class="icon-button"
-                            aria-label={`Move ${entry.label} left`}
-                            disabled={columns.findIndex((candidate) => candidate.id === column.id) === 0}
-                            use:controlButton={() => moveItemAcrossColumns(entry.id, -1)}
-                          ><span class="material-symbols-outlined" aria-hidden="true">arrow_left_alt</span></button>
-                          <button
-                            class="icon-button"
-                            aria-label={`Move ${entry.label} right`}
-                            disabled={columns.findIndex((candidate) => candidate.id === column.id) === columns.length - 1}
-                            use:controlButton={() => moveItemAcrossColumns(entry.id, 1)}
-                          ><span class="material-symbols-outlined" aria-hidden="true">arrow_right_alt</span></button>
-                        </div>
+                    {#snippet before()}
+                      <div class="list-header">
+                        <h2>{column.title}</h2>
+                        <span>{column.items.length}</span>
                       </div>
+                    {/snippet}
+                    {#snippet entry(entry)}
+                      <Item itemId={entry.id} className="task-card" metadata={{ label: entry.label, detail: entry.detail }}>
+                        <div class="task-content">
+                          <Handle className="task-drag-handle">
+                            <span class="material-symbols-outlined" aria-hidden="true">drag_indicator</span>
+                          </Handle>
+                          <div class="task-main">
+                            <strong>{entry.label}</strong>
+                            <span>{entry.detail}</span>
+                          </div>
+                          <div class="card-actions">
+                            <button
+                              class="icon-button"
+                              aria-label={`Delete ${entry.label}`}
+                              use:controlButton={() => deleteItem(entry.id)}
+                            ><span class="material-symbols-outlined" aria-hidden="true">delete</span></button>
+                            <button
+                              class="icon-button"
+                              aria-label={`Move ${entry.label} left`}
+                              disabled={columns.findIndex((candidate) => candidate.id === column.id) === 0}
+                              use:controlButton={() => moveItemAcrossColumns(entry.id, -1)}
+                            ><span class="material-symbols-outlined" aria-hidden="true">arrow_left_alt</span></button>
+                            <button
+                              class="icon-button"
+                              aria-label={`Move ${entry.label} right`}
+                              disabled={columns.findIndex((candidate) => candidate.id === column.id) === columns.length - 1}
+                              use:controlButton={() => moveItemAcrossColumns(entry.id, 1)}
+                            ><span class="material-symbols-outlined" aria-hidden="true">arrow_right_alt</span></button>
+                          </div>
+                        </div>
+                      </Item>
                     {/snippet}
                     {#snippet ghost(event)}
-                      <div class="task-content">
-                        <div class="task-main">
-                          <strong>{ghostItemContent(event)?.label ?? ""}</strong>
-                          <span>{ghostItemContent(event)?.detail ?? ""}</span>
+                      <Ghost {event}>
+                        <div class="task-content">
+                          <div class="task-main">
+                            <strong>{ghostItemContent(event)?.label ?? ""}</strong>
+                            <span>{ghostItemContent(event)?.detail ?? ""}</span>
+                          </div>
                         </div>
-                      </div>
+                      </Ghost>
                     {/snippet}
                   </Container>
-                {/each}
+                {/snippet}
               </Container>
             </div>
           </Engine>
@@ -438,10 +449,11 @@
           locked={true}
           metadata={{ boardId: "progressive-components" }}
           items={progressiveExamples}
-          getId={(example) => example.id}
+          getItemId={(example) => example.id}
         >
           {#snippet entry(example)}
             <Container
+              itemId={example.id}
               className="progressive-example"
               config={{
                 mode: "progressive",
@@ -450,61 +462,73 @@
                 noDrop: true,
               }}
               locked={true}
-              metadata={{ itemId: example.id, exampleId: example.id }}
+              metadata={{ exampleId: example.id }}
+              items={progressiveZones}
+              getItemId={(zone) => `${example.id}-${zone}`}
             >
-              <div class="progressive-prompt">
-                <span>{example.prompt}</span>
-              </div>
+              {#snippet before()}
+                <div class="progressive-prompt">
+                  <span>{example.prompt}</span>
+                </div>
+              {/snippet}
 
-              <Container
-                className="sentence-answer-line"
-                config={{
-                  mode: "progressive",
-                  direction: "row",
-                  name: `progressive-answer-${example.id}`,
-                  groupID: `progressive-${example.id}`,
-                  dropArea: true,
-                  gap: 8,
-                  animation: {
-                    reorder: snapSortCubicAnimation,
-                    drop: snapSortCubicAnimation,
-                  },
-                }}
-                locked={true}
-                metadata={{ zone: "answer", exampleId: example.id }}
-                items={example.answerTiles}
-                getId={(tile) => tile.id}
-                getClassName={() => "sentence-tile-wrapper"}
-              >
-                {#snippet item(tile)}
-                  <button type="button" class="sentence-tile">{tile.text}</button>
-                {/snippet}
-              </Container>
-
-              <Container
-                className="sentence-bank-line"
-                config={{
-                  mode: "progressive",
-                  direction: "row",
-                  name: `progressive-bank-${example.id}`,
-                  groupID: `progressive-${example.id}`,
-                  dropArea: true,
-                  gap: 8,
-                  animation: {
-                    reorder: snapSortCubicAnimation,
-                    drop: snapSortCubicAnimation,
-                  },
-                }}
-                locked={true}
-                metadata={{ zone: "bank", exampleId: example.id }}
-                items={example.bankTiles}
-                getId={(tile) => tile.id}
-                getClassName={() => "sentence-tile-wrapper"}
-              >
-                {#snippet item(tile)}
-                  <button type="button" class="sentence-tile muted">{tile.text}</button>
-                {/snippet}
-              </Container>
+              {#snippet entry(zone)}
+                {#if zone === "answer"}
+                  <Container
+                    itemId={`${example.id}-answer`}
+                    className="sentence-answer-line"
+                    config={{
+                      mode: "progressive",
+                      direction: "row",
+                      name: `progressive-answer-${example.id}`,
+                      groupID: `progressive-${example.id}`,
+                      dropArea: true,
+                      gap: 8,
+                      animation: {
+                        reorder: snapSortCubicAnimation,
+                        drop: snapSortCubicAnimation,
+                      },
+                    }}
+                    locked={true}
+                    metadata={{ zone: "answer", exampleId: example.id }}
+                    items={example.answerTiles}
+                    getItemId={(tile) => tile.id}
+                  >
+                    {#snippet entry(tile)}
+                      <Item itemId={tile.id} className="sentence-tile-wrapper">
+                        <button type="button" class="sentence-tile">{tile.text}</button>
+                      </Item>
+                    {/snippet}
+                  </Container>
+                {:else}
+                  <Container
+                    itemId={`${example.id}-bank`}
+                    className="sentence-bank-line"
+                    config={{
+                      mode: "progressive",
+                      direction: "row",
+                      name: `progressive-bank-${example.id}`,
+                      groupID: `progressive-${example.id}`,
+                      dropArea: true,
+                      gap: 8,
+                      animation: {
+                        reorder: snapSortCubicAnimation,
+                        drop: snapSortCubicAnimation,
+                      },
+                    }}
+                    locked={true}
+                    metadata={{ zone: "bank", exampleId: example.id }}
+                    items={example.bankTiles}
+                    getItemId={(tile) => tile.id}
+                  >
+                    {#snippet entry(tile)}
+                      <Item itemId={tile.id} className="sentence-tile-wrapper">
+                        <button type="button" class="sentence-tile muted">{tile.text}</button>
+                      </Item>
+                    {/snippet}
+                  </Container>
+                {/if}
+              {/snippet}
             </Container>
           {/snippet}
         </Container>

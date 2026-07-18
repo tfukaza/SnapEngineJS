@@ -21,6 +21,55 @@ import type {
  * exactly one place.
  */
 
+const warnedAsyncMutationCallbacks = new WeakSet<() => void | Promise<void>>();
+
+/** Run a consumer mutation inside its framework adapter's synchronous commit boundary. */
+export function fireMutation(
+  container: Container | null,
+  mutation: () => void,
+): void {
+  const flushMutation = container?.callbacks?.flushMutation;
+  if (flushMutation) {
+    flushMutation(mutation);
+    return;
+  }
+
+  mutation();
+
+  // Compatibility only: async results are intentionally not awaited because
+  // that would let the browser paint between DOM commit and FLIP inversion.
+  const awaitMutation = container?.callbacks?.awaitMutation;
+  if (!awaitMutation) return;
+  const result = awaitMutation();
+  if (
+    result &&
+    typeof (result as Promise<void>).then === "function" &&
+    !warnedAsyncMutationCallbacks.has(awaitMutation)
+  ) {
+    warnedAsyncMutationCallbacks.add(awaitMutation);
+    console.warn(
+      "SnapSort: callbacks.awaitMutation returned a promise. Async framework commits are not paint-atomic; use the framework adapter's synchronous flushMutation hook instead.",
+    );
+  }
+}
+
+/** Yield to framework commit/effect microtasks without crossing a paint. */
+export async function settleMutation(): Promise<void> {
+  await Promise.resolve();
+}
+
+function itemIds(items: Item[]): string[] {
+  return items.map((item) => item.resolvedItemId);
+}
+
+function ghostItems(session: DragSession): Item[] {
+  return session.items;
+}
+
+function ghostItemIds(session: DragSession): string[] {
+  return session.items.map((item) => item.resolvedItemId);
+}
+
 export function fireItemInsert(
   container: Container,
   items: Item[],
@@ -36,8 +85,10 @@ export function fireItemInsert(
   const event: ItemInsertEvent = {
     session,
     item: items[0],
+    itemId: items[0].resolvedItemId,
     itemMetadata: items[0].metadata,
     items,
+    itemIds: itemIds(items),
     itemsMetadata: items.map((item) => item.metadata),
     container,
     containerMetadata: container.metadata,
@@ -45,7 +96,7 @@ export function fireItemInsert(
     beforeElement,
     phase,
   };
-  onInsert(event);
+  fireMutation(container, () => onInsert(event));
 }
 
 export function fireItemRemove(
@@ -61,14 +112,16 @@ export function fireItemRemove(
   const event: ItemRemoveEvent = {
     session,
     item: items[0],
+    itemId: items[0].resolvedItemId,
     itemMetadata: items[0].metadata,
     items,
+    itemIds: itemIds(items),
     itemsMetadata: items.map((item) => item.metadata),
     container,
     containerMetadata: container.metadata,
     phase,
   };
-  onRemove(event);
+  fireMutation(container, () => onRemove(event));
 }
 
 /**
@@ -95,20 +148,24 @@ export function fireItemMove(
     const event: ItemMoveEvent = {
       session,
       item: items[0],
+      itemId: items[0].resolvedItemId,
       itemMetadata: items[0].metadata,
       items,
+      itemIds: itemIds(items),
       itemsMetadata: items.map((item) => item.metadata),
       from: froms[0] ?? null,
       to,
       froms,
       originItem: origins[0] ?? null,
+      originItemId: origins[0]?.resolvedItemId ?? null,
       originItemMetadata: origins[0]?.metadata ?? null,
       origins,
+      originItemIds: origins.map((origin) => origin?.resolvedItemId ?? null),
       originsMetadata: origins.map((origin) => origin?.metadata ?? null),
       beforeElement,
       phase,
     };
-    onMove(event);
+    fireMutation(to.container, () => onMove(event));
     return;
   }
   fireItemInsert(to.container, items, to.index, beforeElement, session, phase);
@@ -132,6 +189,7 @@ export function fireItemSwap(
       session,
       a: {
         item: a.item,
+        itemId: a.item.resolvedItemId,
         itemMetadata: a.item.metadata,
         container: a.container,
         containerMetadata: a.container.metadata,
@@ -139,6 +197,7 @@ export function fireItemSwap(
       },
       b: {
         item: b.item,
+        itemId: b.item.resolvedItemId,
         itemMetadata: b.item.metadata,
         container: b.container,
         containerMetadata: b.container.metadata,
@@ -146,7 +205,7 @@ export function fireItemSwap(
       },
       phase,
     };
-    onSwap(event);
+    fireMutation(a.container, () => onSwap(event));
     return;
   }
 
@@ -209,8 +268,10 @@ function buildDragItemHoverEvent(
   return {
     session,
     item,
+    itemId: item.resolvedItemId,
     itemMetadata: item.metadata,
     overItem,
+    overItemId: overItem.resolvedItemId,
     overItemMetadata: overItem.metadata,
     container,
     containerMetadata: container.metadata,
@@ -271,8 +332,12 @@ export function fireGhostInsert(
     kind,
     role,
     original,
+    originalItemId: original.resolvedItemId,
     originalMetadata: original.metadata,
+    items: ghostItems(session),
+    itemIds: ghostItemIds(session),
     ghostItem,
+    ghostItemId: ghostItem.resolvedItemId,
     ghostMetadata: ghostItem.metadata,
     container,
     containerMetadata: container.metadata,
@@ -280,7 +345,7 @@ export function fireGhostInsert(
     beforeElement,
     ghostRect,
   };
-  onInsert(event);
+  fireMutation(container, () => onInsert(event));
 }
 
 export function fireGhostRemove(
@@ -300,25 +365,27 @@ export function fireGhostRemove(
     kind,
     role,
     original,
+    originalItemId: original.resolvedItemId,
     originalMetadata: original.metadata,
+    items: ghostItems(session),
+    itemIds: ghostItemIds(session),
     ghostItem,
+    ghostItemId: ghostItem.resolvedItemId,
     ghostMetadata: ghostItem.metadata,
     container,
     containerMetadata: container.metadata,
+    ghostRect:
+      session.pendingGhostTarget?.ghostItem === ghostItem
+        ? session.pendingGhostTarget.ghostRect
+        : undefined,
   };
-  onRemove(event);
+  fireMutation(container, () => onRemove(event));
 }
 
 export function fireCreateGhost(
   event: GhostCreateEvent,
 ): HTMLElement | void | null {
   return event.container.callbacks?.createGhost?.(event);
-}
-
-export async function fireAwaitMutation(
-  container: Container | null,
-): Promise<void> {
-  await container?.callbacks?.awaitMutation?.();
 }
 
 // --- Default DOM implementations, merged with user config in Container's constructor. ---

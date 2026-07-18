@@ -1,4 +1,5 @@
-import { Engine, ContainerBounds } from "./engine";
+import { Engine } from "./engine";
+import type { ContainerBounds } from "./engine";
 
 export interface CameraConfig {
   enableZoom?: boolean;

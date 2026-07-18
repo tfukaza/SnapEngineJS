@@ -1,7 +1,7 @@
 import type { Container } from "./container";
 import type { Item } from "./item";
 import type { DragSession } from "./drag/session";
-import type { ItemSnapshotMetadata } from "./snapshot";
+import type { ItemId, ItemSnapshotMetadata } from "./snapshot";
 
 /**
  * A container + index location, used both for drag sources/destinations and
@@ -48,9 +48,11 @@ export type MutationPhase = "preview" | "commit";
 export interface ItemRemoveEvent {
   session: DragSession | null;
   item: Item;
+  itemId: ItemId;
   itemMetadata: ItemSnapshotMetadata;
   /** The full removed run, ordered. `item === items[0]` (single-item case: length 1). */
   items: Item[];
+  itemIds: ItemId[];
   itemsMetadata: ItemSnapshotMetadata[];
   container: Container;
   containerMetadata: Record<string, unknown>;
@@ -60,9 +62,11 @@ export interface ItemRemoveEvent {
 export interface ItemInsertEvent {
   session: DragSession | null;
   item: Item;
+  itemId: ItemId;
   itemMetadata: ItemSnapshotMetadata;
   /** The full inserted run, ordered. `item === items[0]` (single-item case: length 1). */
   items: Item[];
+  itemIds: ItemId[];
   itemsMetadata: ItemSnapshotMetadata[];
   container: Container;
   containerMetadata: Record<string, unknown>;
@@ -75,6 +79,7 @@ export interface ItemInsertEvent {
 
 export interface ItemSwapParticipant {
   item: Item;
+  itemId: ItemId;
   itemMetadata: ItemSnapshotMetadata;
   container: Container;
   containerMetadata: Record<string, unknown>;
@@ -121,9 +126,11 @@ export interface ItemSwapEvent {
 export interface ItemMoveEvent {
   session: DragSession | null;
   item: Item;
+  itemId: ItemId;
   itemMetadata: ItemSnapshotMetadata;
   /** The full moved run, ordered by original (document) index. `item === items[0]` (single-item case: length 1). */
   items: Item[];
+  itemIds: ItemId[];
   itemsMetadata: ItemSnapshotMetadata[];
   /** Null when `item` was spawned (copy), not moved from anywhere. */
   from: DragLocation | null;
@@ -132,9 +139,11 @@ export interface ItemMoveEvent {
   froms: (DragLocation | null)[];
   /** The original item `item` was spawned from (copy), or null for a genuinely moved item. */
   originItem: Item | null;
+  originItemId: ItemId | null;
   originItemMetadata: ItemSnapshotMetadata | null;
   /** Parallel to `items`/`froms`. */
   origins: (Item | null)[];
+  originItemIds: (ItemId | null)[];
   originsMetadata: (ItemSnapshotMetadata | null)[];
   /** Element the whole run is inserted before (all items share one insertion point). */
   beforeElement: HTMLElement | null;
@@ -153,33 +162,30 @@ export interface GhostRect {
 /** Which drag lifecycle produced a ghost: a flow-layout spacer, or a floating insertion marker. */
 export type GhostKind = "flow" | "marker";
 
-export interface GhostCreateEvent {
+export interface GhostEventBase {
   session: DragSession;
   kind: GhostKind;
   /** Which role this ghost plays in the current drag; see `GhostRole`. */
   role: GhostRole;
   container: Container;
+  containerMetadata: Record<string, unknown>;
   original: Item;
+  originalItemId: ItemId;
   originalMetadata: ItemSnapshotMetadata;
   /** The full dragged run this ghost represents, ordered. `original === items[0]` (single-item case: length 1). */
   items: Item[];
+  itemIds: ItemId[];
   ghostItem: Item;
+  ghostItemId: ItemId;
+  ghostMetadata: ItemSnapshotMetadata;
   ghostRect?: GhostRect | null;
 }
 
-export interface GhostInsertEvent {
-  session: DragSession;
-  kind: GhostKind;
-  role: GhostRole;
-  original: Item;
-  originalMetadata: ItemSnapshotMetadata;
-  ghostItem: Item;
-  ghostMetadata: ItemSnapshotMetadata;
-  container: Container;
-  containerMetadata: Record<string, unknown>;
+export interface GhostCreateEvent extends GhostEventBase {}
+
+export interface GhostInsertEvent extends GhostEventBase {
   index: number;
   beforeElement: HTMLElement | null;
-  ghostRect?: GhostRect | null;
 }
 
 /**
@@ -189,17 +195,9 @@ export interface GhostInsertEvent {
  * anchor is LEAVING, so an adapter keeping per-container ghost state must
  * treat this as "this container's ghost is gone," not only "the drag ended."
  */
-export interface GhostRemoveEvent {
-  session: DragSession;
-  kind: GhostKind;
-  role: GhostRole;
-  original: Item;
-  originalMetadata: ItemSnapshotMetadata;
-  ghostItem: Item;
-  ghostMetadata: ItemSnapshotMetadata;
-  container: Container;
-  containerMetadata: Record<string, unknown>;
-}
+export interface GhostRemoveEvent extends GhostEventBase {}
+
+export type GhostEvent = GhostCreateEvent | GhostInsertEvent | GhostRemoveEvent;
 
 /** @internal Passed between a lifecycle strategy and the Mutator; not part of the public callback surface. */
 export interface GhostUpdateEvent {
@@ -214,9 +212,11 @@ export interface GhostUpdateEvent {
 export interface DragStartEvent {
   session: DragSession;
   item: Item;
+  itemId: ItemId;
   itemMetadata: ItemSnapshotMetadata;
   /** The full dragged run, ordered. `item === items[0]` (single-item case: length 1). */
   items: Item[];
+  itemIds: ItemId[];
   itemsMetadata: ItemSnapshotMetadata[];
   element: HTMLElement | null;
   source: DragLocation;
@@ -227,9 +227,11 @@ export interface DragStartEvent {
 export interface DragEndEvent {
   session: DragSession;
   item: Item;
+  itemId: ItemId;
   itemMetadata: ItemSnapshotMetadata;
   /** The full dragged run, ordered. `item === items[0]` (single-item case: length 1). */
   items: Item[];
+  itemIds: ItemId[];
   itemsMetadata: ItemSnapshotMetadata[];
   element: HTMLElement | null;
   source: DragLocation;
@@ -243,8 +245,9 @@ export interface DragEndEvent {
  * Fired on the source (root) container at drag start when
  * `session.dropEffect === "copy"`, BEFORE the drag is hoisted. The consumer
  * must materialize a clone in their own state for each `cloneItems` entry and
- * render it (bound via `itemObject`) inside a drop container, then flush
- * (`awaitMutation`) so each clone has a DOM element. The core then hands the
+ * render it (bound via `itemObject`) inside a drop container. The framework
+ * adapter's synchronous `flushMutation` transaction ensures each clone has a
+ * DOM element before core hands the
  * drag off to the clones (`DragSession.handoff`) — the original items stay
  * exactly where they are, untouched and un-ghosted. If the consumer binds no
  * element, the copy drag is vetoed.
@@ -262,8 +265,10 @@ export interface DragCloneEvent {
   session: DragSession;
   /** The original items (never moved). `item === items[0]`. */
   item: Item;
+  itemId: ItemId;
   itemMetadata: ItemSnapshotMetadata;
   items: Item[];
+  itemIds: ItemId[];
   itemsMetadata: ItemSnapshotMetadata[];
   sources: DragLocation[];
   /** Fresh clone items, parallel to `items`; the consumer binds each one's element. */
@@ -273,9 +278,11 @@ export interface DragCloneEvent {
 export interface DropTargetChangeEvent {
   session: DragSession;
   item: Item;
+  itemId: ItemId;
   itemMetadata: ItemSnapshotMetadata;
   /** The full dragged run, ordered. `item === items[0]` (single-item case: length 1). */
   items: Item[];
+  itemIds: ItemId[];
   itemsMetadata: ItemSnapshotMetadata[];
   previous: DragLocation | null;
   current: DragLocation | null;
@@ -284,9 +291,11 @@ export interface DropTargetChangeEvent {
 export interface CanDropEvent {
   session: DragSession | null;
   item: Item;
+  itemId: ItemId;
   itemMetadata: ItemSnapshotMetadata;
   /** The full dragged run, ordered. `item === items[0]` (single-item case: length 1). */
   items: Item[];
+  itemIds: ItemId[];
   itemsMetadata: ItemSnapshotMetadata[];
   container: Container;
   containerMetadata: Record<string, unknown>;
@@ -311,8 +320,10 @@ export interface CanDropEvent {
 export interface DragItemHoverEvent {
   session: DragSession;
   item: Item;
+  itemId: ItemId;
   itemMetadata: ItemSnapshotMetadata;
   overItem: Item;
+  overItemId: ItemId;
   overItemMetadata: ItemSnapshotMetadata;
   container: Container;
   containerMetadata: Record<string, unknown>;
@@ -363,6 +374,17 @@ export interface ContainerCallbacks {
   onGhostInsert?: (event: GhostInsertEvent) => void;
   onGhostRemove?: (event: GhostRemoveEvent) => void;
 
-  /** Wait for the caller's framework to flush DOM after SnapSort mutates data. */
+  /**
+   * Run a state mutation inside the framework adapter's synchronous DOM
+   * commit boundary. Framework adapters provide this automatically.
+   */
+  flushMutation?: (mutation: () => void) => void;
+
+  /**
+   * Wait for the caller's framework to flush DOM after SnapSort mutates data.
+   *
+   * @deprecated Use `flushMutation`. Promise-returning mutation waits cannot
+   * guarantee that FLIP's inverse transform is installed before paint.
+   */
   awaitMutation?: () => void | Promise<void>;
 }

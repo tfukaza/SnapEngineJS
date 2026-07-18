@@ -1,0 +1,176 @@
+import {
+  createContext,
+  forwardRef,
+  useContext,
+  useEffect,
+  useImperativeHandle,
+  useLayoutEffect,
+  useRef,
+  useState,
+  type HTMLAttributes,
+  type ReactNode,
+} from "react";
+import { CameraControl } from "@snap-engine/asset-base";
+import { useSnapEngine } from "./Engine";
+
+const useClientLayoutEffect =
+  typeof window === "undefined" ? useEffect : useLayoutEffect;
+
+export const CameraControlContext = createContext<CameraControl | null>(null);
+
+export function useCameraControl(): CameraControl {
+  const cameraControl = useContext(CameraControlContext);
+  if (!cameraControl) {
+    throw new Error(
+      "SnapEngine React camera consumers must be rendered inside <Camera>.",
+    );
+  }
+  return cameraControl;
+}
+
+export interface CameraProps
+  extends Omit<HTMLAttributes<HTMLDivElement>, "children"> {
+  cameraControl?: CameraControl | null;
+  children: ReactNode;
+  panLock?: boolean;
+  zoomLock?: boolean;
+}
+
+type PendingCameraDestroy = {
+  cameraControl: CameraControl;
+  element: HTMLDivElement;
+  timer: number;
+};
+
+const pendingCameraDestroyByElement = new WeakMap<
+  HTMLDivElement,
+  PendingCameraDestroy
+>();
+const cameraControlElements = new WeakMap<CameraControl, HTMLDivElement>();
+
+export const Camera = forwardRef<CameraControl, CameraProps>(function Camera(
+  {
+    cameraControl: providedCameraControl = null,
+    children,
+    className,
+    id = "snap-camera-control",
+    panLock = false,
+    style,
+    zoomLock = false,
+    ...divProps
+  },
+  ref,
+) {
+  const engine = useSnapEngine();
+  const elementRef = useRef<HTMLDivElement>(null);
+  const ownedCameraControlRef = useRef<CameraControl | null>(null);
+  const [activeCameraControl, setActiveCameraControl] =
+    useState<CameraControl | null>(null);
+
+  useClientLayoutEffect(() => {
+    const element = elementRef.current;
+    if (!element) {
+      return;
+    }
+    const pendingDestroy = pendingCameraDestroyByElement.get(element);
+    let cameraControl =
+      providedCameraControl ??
+      ownedCameraControlRef.current ??
+      pendingDestroy?.cameraControl;
+    const ownsCameraControl = providedCameraControl == null;
+
+    if (!cameraControl) {
+      cameraControl = new CameraControl(engine, { panLock, zoomLock });
+      ownedCameraControlRef.current = cameraControl;
+    }
+
+    if (pendingDestroy?.cameraControl === cameraControl) {
+      window.clearTimeout(pendingDestroy.timer);
+      pendingCameraDestroyByElement.delete(element);
+      ownedCameraControlRef.current = cameraControl;
+    }
+
+    if (cameraControl.engine !== engine) {
+      throw new Error("The injected CameraControl belongs to another Engine.");
+    }
+    cameraControl.config = {
+      ...cameraControl.config,
+      panLock,
+      zoomLock,
+    };
+    if (cameraControlElements.get(cameraControl) !== element) {
+      cameraControl.element = element;
+      cameraControlElements.set(cameraControl, element);
+    }
+    setActiveCameraControl(cameraControl);
+
+    return () => {
+      if (!ownsCameraControl) {
+        return;
+      }
+
+      const pending: PendingCameraDestroy = {
+        cameraControl,
+        element,
+        timer: 0,
+      };
+      pending.timer = window.setTimeout(() => {
+        if (pendingCameraDestroyByElement.get(element) !== pending) {
+          return;
+        }
+        if (engine.camera === cameraControl.camera) {
+          engine.unsubscribeEvent("containerResized", "camera");
+          engine.unsubscribeEvent("containerMoved", "camera");
+          engine.camera = null;
+        }
+        cameraControl.destroy(false);
+        cameraControlElements.delete(cameraControl);
+        if (ownedCameraControlRef.current === cameraControl) {
+          ownedCameraControlRef.current = null;
+        }
+        pendingCameraDestroyByElement.delete(element);
+      }, 0);
+      pendingCameraDestroyByElement.set(element, pending);
+    };
+  }, [engine, providedCameraControl]);
+
+  useEffect(() => {
+    if (!activeCameraControl) {
+      return;
+    }
+    activeCameraControl.config = {
+      ...activeCameraControl.config,
+      panLock,
+      zoomLock,
+    };
+  }, [activeCameraControl, panLock, zoomLock]);
+
+  useImperativeHandle(
+    ref,
+    () => activeCameraControl as CameraControl,
+    [activeCameraControl],
+  );
+
+  return (
+    <div
+      {...divProps}
+      id={id}
+      className={className}
+      ref={elementRef}
+      style={{
+        backgroundColor: "#fff",
+        height: "100%",
+        transformOrigin: "0 0",
+        userSelect: "none",
+        width: "100%",
+        ...style,
+      }}
+    >
+      {activeCameraControl ? (
+        <CameraControlContext.Provider value={activeCameraControl}>
+          {children}
+        </CameraControlContext.Provider>
+      ) : null}
+    </div>
+  );
+});

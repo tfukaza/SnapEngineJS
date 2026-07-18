@@ -1,7 +1,15 @@
 
 <script lang="ts">
 	import "./doc.scss";
+	import { onMount } from "svelte";
+	import FrameworkSelect from "$lib/components/FrameworkSelect.svelte";
 	import SeoHead from "$lib/components/SeoHead.svelte";
+	import {
+		initializeFrameworkPreference,
+		selectedFramework,
+		setSelectedFramework,
+		type Framework
+	} from "$lib/stores/frameworkState.svelte";
 	let { data } = $props();
 
 	// Import the grouped entries function from +page.ts for sidebar
@@ -49,8 +57,24 @@
 			? `${data.metadata.title} | ${currentProjectTitle} Docs`
 			: `${currentProjectTitle} Docs`
 	);
-	const visibleDocSections = $derived(docSections.filter((section) => section.project === currentProject));
-	const currentProjectEntries = $derived(allEntries.filter((entry) => entry.project === currentProject));
+	const visibleDocSections = $derived(
+		docSections
+			.filter((section) => section.project === currentProject)
+			.map((section) => ({
+				...section,
+				entries: section.entries.filter(
+					(entry) => !entry.framework || entry.framework === $selectedFramework
+				)
+			}))
+			.filter((section) => section.entries.length > 0)
+	);
+	const currentProjectEntries = $derived(
+		allEntries.filter(
+			(entry) =>
+				entry.project === currentProject &&
+				(!entry.framework || entry.framework === $selectedFramework)
+		)
+	);
 	const currentIndex = $derived(currentProjectEntries.findIndex(e => e.slug === currentSlug));
 	const prevEntry = $derived(currentIndex > 0 ? currentProjectEntries[currentIndex - 1] : null);
 	const nextEntry = $derived(currentIndex < currentProjectEntries.length - 1 ? currentProjectEntries[currentIndex + 1] : null);
@@ -66,15 +90,33 @@
 		mobileMenuOpen = false;
 	}
 
-	function handleProjectChange(event: Event) {
-		const selectedProject = projectOptions.find(
-			(project) => project.slug === (event.currentTarget as HTMLSelectElement).value
-		);
+	function handleFrameworkChange(framework: Framework) {
+		const currentEntry = allEntries.find((entry) => entry.slug === currentSlug);
+		const equivalentEntry = currentEntry?.frameworkKey
+			? allEntries.find(
+					(entry) =>
+						entry.project === currentProject &&
+						entry.section === currentEntry.section &&
+						entry.framework === framework &&
+						entry.frameworkKey === currentEntry.frameworkKey
+				)
+			: null;
 
-		if (selectedProject && selectedProject.slug !== currentProject) {
-			window.location.href = selectedProject.href;
+		setSelectedFramework(framework, !equivalentEntry);
+
+		if (equivalentEntry) {
+			window.location.href = `/docs/${equivalentEntry.slug}?framework=${framework}`;
 		}
 	}
+
+	onMount(() => {
+		initializeFrameworkPreference(window.location.search);
+
+		const currentEntry = allEntries.find((entry) => entry.slug === currentSlug);
+		if (currentEntry?.framework) {
+			setSelectedFramework(currentEntry.framework as Framework, false);
+		}
+	});
 </script>
 
 <SeoHead
@@ -103,16 +145,13 @@
 	<!-- Mobile dropdown menu -->
 	<div class="mobile-menu-dropdown" class:open={mobileMenuOpen}>
 		<nav>
-			<div class="form-control-group form-group">
-				<label for="mobile-doc-project">Project</label>
-				<select id="mobile-doc-project" onchange={handleProjectChange} aria-label="Select docs project">
-					{#each projectOptions as project}
-						<option value={project.slug} selected={project.slug === currentProject}>
-							{project.label}
-						</option>
-					{/each}
-				</select>
-			</div>
+			{#if currentProject === 'snapsort'}
+				<FrameworkSelect
+					id="mobile-doc-framework"
+					value={$selectedFramework}
+					onFrameworkChange={handleFrameworkChange}
+				/>
+			{/if}
 			{#each visibleDocSections as section}
 				<div class="sidebar-section">
 					{#if section.name}
@@ -146,15 +185,13 @@
 
 <div class="doc-layout">
 	<aside class="doc-sidebar">
-		<div class="form-control-group form-group">
-			<select id="desktop-doc-project" onchange={handleProjectChange} aria-label="Select docs project">
-				{#each projectOptions as project}
-					<option value={project.slug} selected={project.slug === currentProject}>
-						{project.label}
-					</option>
-				{/each}
-			</select>
-		</div>
+		{#if currentProject === 'snapsort'}
+			<FrameworkSelect
+				id="desktop-doc-framework"
+				value={$selectedFramework}
+				onFrameworkChange={handleFrameworkChange}
+			/>
+		{/if}
 		<nav>
 			{#each visibleDocSections as section}
 				<div class="sidebar-section">
@@ -194,7 +231,9 @@
 				{/if}
 			{/if}
 		</div>
-		<data.component />
+		<article class="doc-article" data-framework={$selectedFramework}>
+			<data.component />
+		</article>
 
 		<nav class="doc-pagination">
 			{#if prevEntry}
@@ -372,13 +411,16 @@ p.description {
 	padding: var(--size-20);
 	border-radius: var(--ui-radius);
 	text-decoration: none;
-	transition:
-		background-color 0.15s ease,
-		transform 0.2s;
 
-	&:hover {
-		background: var(--color-background-tint);
-		transform: translateY(-1px);
+	&:hover,
+	&:focus-visible {
+		background: transparent;
+
+		.pagination-label,
+		.pagination-title {
+			color: var(--color-primary);
+			text-shadow: 0 0 6px rgba(255, 117, 58, 0.5);
+		}
 	}
 
 	&.prev {
@@ -398,6 +440,9 @@ p.description {
 	font-weight: 300;
 	line-height: 1;
 	margin-bottom: var(--size-8);
+	transition:
+		color 0.15s ease,
+		text-shadow 0.15s ease;
 }
 
 .pagination-title {
@@ -406,6 +451,9 @@ p.description {
 	font-size: 1rem;
 	font-weight: 500;
 	line-height: 1.3;
+	transition:
+		color 0.15s ease,
+		text-shadow 0.15s ease;
 }
 
 // Mobile navbar (hidden on desktop)

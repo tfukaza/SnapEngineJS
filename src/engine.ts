@@ -102,6 +102,14 @@ class Engine {
   };
 
   #resizeObserver: ResizeObserver | null = null;
+  #scrollHandler = () => {
+    const element = this.#containerElement;
+    if (!element) {
+      return;
+    }
+    this.#updateContainerBounds(element);
+    this.#publishEvent("containerMoved", element);
+  };
 
   constructor(config: EngineConfig = {}) {
     this.#global = GlobalManager.getInstance();
@@ -272,6 +280,10 @@ class Engine {
    * @param element: The element acting as the container.
    */
   assignDom(element: HTMLElement) {
+    this.#resizeObserver?.disconnect();
+    this.#resizeObserver = null;
+    window.removeEventListener("scroll", this.#scrollHandler);
+
     this.#containerElement = element;
     // Camera may not be set if cameraControl was not used
     if (!this.#camera) {
@@ -285,16 +297,16 @@ class Engine {
 
     // Set up resize observer
     this.#resizeObserver = new ResizeObserver(() => {
-      this.#updateContainerBounds(this.#containerElement!);
-      this.#publishEvent("containerResized", this.#containerElement!);
+      const containerElement = this.#containerElement;
+      if (!containerElement) {
+        return;
+      }
+      this.#updateContainerBounds(containerElement);
+      this.#publishEvent("containerResized", containerElement);
     });
     this.#resizeObserver?.observe(element);
     this.#resizeObserver?.observe(window.document.body);
-    // Set up scroll listener
-    window.addEventListener("scroll", () => {
-      this.#updateContainerBounds(this.#containerElement!);
-      this.#publishEvent("containerMoved", this.#containerElement!);
-    });
+    window.addEventListener("scroll", this.#scrollHandler);
 
     this.#publishEvent("containerAssigned", element);
   }
@@ -447,17 +459,13 @@ class Engine {
    * no longer participates in global rendering.
    */
   destroy() {
+    this.#resizeObserver?.disconnect();
+    this.#resizeObserver = null;
+    window.removeEventListener("scroll", this.#scrollHandler);
     this.#input.destroy();
 
     // Unregister from global manager
     this.#global!.unregisterEngine(this);
-
-    // Clean up resize observer
-    if (this.#resizeObserver && this.#containerElement) {
-      this.#resizeObserver.unobserve(this.#containerElement);
-      this.#resizeObserver.unobserve(window.document.body);
-      this.#resizeObserver = null;
-    }
 
     // Disable debug renderer
     if (this.#debugRenderer) {

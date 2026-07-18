@@ -13,6 +13,8 @@ export type {
   GhostRole,
   GhostKind,
   GhostRect,
+  GhostEventBase,
+  GhostEvent,
   GhostCreateEvent,
   GhostInsertEvent,
   GhostRemoveEvent,

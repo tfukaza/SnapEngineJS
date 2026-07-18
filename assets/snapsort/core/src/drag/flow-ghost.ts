@@ -4,7 +4,7 @@ import { Item } from "../item";
 import { resetDropSnapshotDebugDump, type DropCandidate } from "../algorithm";
 import type { DragCloneEvent, DragLocation, GhostRect, GhostRole } from "../events";
 import { virtualEntrySizeFor } from "../layout";
-import { fireAwaitMutation, fireItemRemove } from "../mutation";
+import { fireItemRemove, fireMutation, settleMutation } from "../mutation";
 import type { DragLifecycleStrategy } from "./lifecycle";
 import type { DragSession } from "./session";
 
@@ -172,7 +172,7 @@ async function moveGhost(
     container.withReorderAnimation(container, session.items, doMove);
   } else {
     doMove();
-    await fireAwaitMutation(container);
+    await settleMutation();
   }
 }
 
@@ -190,17 +190,13 @@ async function removeGhost(
   const run = session.flowGhostRun;
   if (run.length === 0) return;
 
-  const containers = new Set<Container>();
   for (const ghost of run) {
     const ghostContainer = ghost.parent as unknown as Container | null;
     if (ghostContainer) {
       item.removeGhostFrom(item, ghostContainer, ghost, session, "flow", "target");
-      containers.add(ghostContainer);
     }
   }
-  for (const c of containers) {
-    await fireAwaitMutation(c);
-  }
+  await settleMutation();
   for (const ghost of run) {
     ghost.destroy();
   }
@@ -241,14 +237,16 @@ async function startCopyHandoff(session: DragSession): Promise<boolean> {
   const event: DragCloneEvent = {
     session,
     item: origins[0],
+    itemId: origins[0].resolvedItemId,
     itemMetadata: origins[0].metadata,
     items: origins,
+    itemIds: origins.map((o) => o.resolvedItemId),
     itemsMetadata: origins.map((o) => o.metadata),
     sources: session.sources,
     cloneItems,
   };
-  root.callbacks?.onDragClone?.(event);
-  await fireAwaitMutation(root);
+  fireMutation(root, () => root.callbacks?.onDragClone?.(event));
+  await settleMutation();
 
   // Every clone must have been given an element by the consumer.
   if (cloneItems.some((c) => !c.element)) {
@@ -428,8 +426,7 @@ function drop(session: DragSession): void {
           session,
           origins,
         );
-        await fireAwaitMutation(destinationContainer);
-
+        await settleMutation();
         // Skip for copy: the dragged clone's element is *expected* to go
         // stale here, once the consumer's state-driven re-render replaces it
         // with a fresh, permanent Item instance sharing the same itemId (see
@@ -449,7 +446,7 @@ function drop(session: DragSession): void {
               runTailElement?.nextElementSibling !== expectedBefore
             ) {
               console.warn(
-                "SnapSort: the adapter did not place the dropped item(s) where onItemMove/onItemInsert specified. Check the adapter's callback/awaitMutation wiring.",
+                "SnapSort: the adapter did not place the dropped item(s) where onItemMove/onItemInsert specified. Check the adapter's callback/flushMutation wiring.",
                 {
                   items,
                   container: destinationContainer,
@@ -464,19 +461,15 @@ function drop(session: DragSession): void {
         // clone was never a real list member, so there is nothing to return
         // home to — remove it from wherever the consumer rendered it and let
         // them delete it from state.
-        const containersToFlush = new Set<Container>();
         for (const clone of items) {
           const cloneContainer = cloneContainers.get(clone) as
             | Container
             | undefined;
           if (cloneContainer) {
             fireItemRemove(cloneContainer, [clone], session);
-            containersToFlush.add(cloneContainer);
           }
         }
-        for (const container of containersToFlush) {
-          await fireAwaitMutation(container);
-        }
+        await settleMutation();
         for (const clone of items) {
           clone.destroy();
         }
@@ -489,16 +482,20 @@ function drop(session: DragSession): void {
       }
       session.status = "ended";
       root.dragSession = null;
-      root.callbacks?.onDragEnd?.({
-        session,
-        item,
-        itemMetadata: item.metadata,
-        items,
-        itemsMetadata: items.map((member) => member.metadata),
-        element: item.element,
-        source: session.sources[0],
-        sources: session.sources,
-        destination,
+      fireMutation(root, () => {
+        root.callbacks?.onDragEnd?.({
+          session,
+          item,
+          itemId: item.resolvedItemId,
+          itemMetadata: item.metadata,
+          items,
+          itemIds: items.map((member) => member.resolvedItemId),
+          itemsMetadata: items.map((member) => member.metadata),
+          element: item.element,
+          source: session.sources[0],
+          sources: session.sources,
+          destination,
+        });
       });
     },
     { stage: "WRITE_1", queueId: `drag-end-${session.pressedItem.id}` },

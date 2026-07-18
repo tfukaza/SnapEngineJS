@@ -1,0 +1,101 @@
+---
+title: Setup
+order: 1
+project: snapsort
+projectTitle: SnapSort
+section: introduction
+sectionTitle: Introduction
+sectionOrder: 1
+---
+
+## Install
+
+SnapSort consists of SnapSort package itself,
+the SnapEngine core it's built on, and the frontend framework bindings (if applicable).
+
+```bash framework=Svelte
+npm install @snap-engine/core @snap-engine/asset-base-svelte @snap-engine/snapsort @snap-engine/snapsort-svelte
+```
+```bash framework=React
+npm install @snap-engine/core @snap-engine/snapsort @snap-engine/snapsort-react react react-dom
+```
+```bash framework=Vanilla
+npm install @snap-engine/core @snap-engine/snapsort
+```
+
+
+## Your First Sortable List
+
+Wrap SnapSort components in an `Engine`, give a `Container` a group,
+and render one `Item` per entry. This creates a working drag-and-drop list:
+
+```svelte framework=Svelte
+<script lang="ts">
+  import { Engine } from "@snap-engine/asset-base-svelte";
+  import { Container, Item } from "@snap-engine/snapsort-svelte";
+
+  const tasks = [
+    { id: "design", label: "Design" },
+    { id: "build", label: "Build" },
+    { id: "ship", label: "Ship" },
+  ];
+</script>
+
+<Engine id="quick-start">
+  <Container config={{ direction: "column", groupID: "tasks" }} items={tasks}>
+    {#snippet entry(task)}
+      <Item itemId={task.id}>{task.label}</Item>
+    {/snippet}
+  </Container>
+</Engine>
+```
+
+```tsx framework=React
+import { Engine, Container, Item } from "@snap-engine/snapsort-react";
+
+const tasks = [
+  { id: "design", label: "Design" },
+  { id: "build", label: "Build" },
+  { id: "ship", label: "Ship" },
+];
+
+export function QuickStart() {
+  return (
+    <Engine id="quick-start">
+      <Container config={{ direction: "column", groupID: "tasks" }}>
+        {tasks.map((task) => (
+          <Item key={task.id} itemId={task.id}>
+            {task.label}
+          </Item>
+        ))}
+      </Container>
+    </Engine>
+  );
+}
+```
+```javascript framework=Vanilla
+import { Engine } from "@snap-engine/core";
+import { CollisionEngine } from "@snap-engine/core/collision";
+import { Container, Item } from "@snap-engine/snapsort";
+
+const root = document.querySelector("#quick-start");
+const list = root.querySelector("[data-snapsort-container]");
+const engine = new Engine();
+
+engine.setCollisionEngine(new CollisionEngine());
+engine.assignDom(root);
+
+const container = new Container(engine, null, {
+  direction: "column",
+  groupID: "tasks",
+});
+container.element = list;
+
+for (const element of list.querySelectorAll("[data-item-id]")) {
+  const item = new Item(engine, container);
+  item.itemId = element.dataset.itemId;
+  item.element = element;
+}
+```
+
+Items can now be dragged to reorder, with FLIP animations included by default. The list on screen updates, but your `tasks` array does not — wiring drops back into framework state is covered in [State-Backed Lists](/docs/snapsort/guides/03_state_backed_lists).

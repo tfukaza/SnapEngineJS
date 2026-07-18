@@ -1,11 +1,11 @@
 <script lang="ts">
   import SeoHead from "$lib/components/SeoHead.svelte";
   import ClientDemoFrame from "$lib/components/ClientDemoFrame.svelte";
-  import { tick } from "svelte";
   import { Engine } from "@snap-engine/asset-base-svelte";
   import type { Engine as SnapEngine } from "@snap-engine/core";
   import {
     Container,
+    Ghost,
     Handle,
     Item,
   } from "@snap-engine/snapsort-svelte";
@@ -19,6 +19,7 @@
     DragStartEvent,
     DropTargetChangeEvent,
     GhostCreateEvent,
+    GhostInsertEvent,
     Item as SortItem,
     ItemMoveEvent,
     ItemRemoveEvent,
@@ -213,6 +214,20 @@
     },
   ];
 
+  type KanbanCard = (typeof kanbanTodo)[number];
+  type KanbanColumn = {
+    id: string;
+    title: string;
+    target: string;
+    cards: KanbanCard[];
+  };
+
+  const kanbanColumns: KanbanColumn[] = [
+    { id: "kanban-todo", title: "To Do", target: "kanban-review", cards: kanbanTodo },
+    { id: "kanban-review", title: "Review", target: "kanban-done", cards: kanbanReview },
+    { id: "kanban-done", title: "Done", target: "kanban-todo", cards: kanbanDone },
+  ];
+
   const sentenceWords: SentenceTile[] = [
     { id: "sw-1", text: "あり" },
     { id: "sw-2", text: "の" },
@@ -283,6 +298,7 @@
   let sentenceResult = $state("");
   let sentencePointerStart: { x: number; y: number } | null = null;
   let suppressSentenceClick = false;
+  const sentenceZones: SentenceZone[] = ["answer", "bank"];
   let debug = $state(false);
   let canvasComponent: Engine | null = null;
 
@@ -368,7 +384,7 @@
     }
 
     const fieldId = event.to.containerMetadata.fieldId;
-    const optionId = event.itemMetadata.itemId;
+    const optionId = event.itemId;
     if (typeof fieldId !== "string" || typeof optionId !== "string") return;
 
     reorderEditorOption(fieldId, optionId, event.to.index);
@@ -406,8 +422,7 @@
   }
 
   function handleSentenceMove(event: ItemMoveEvent) {
-    const itemId = event.itemMetadata.itemId;
-    if (typeof itemId !== "string") return;
+    const itemId = event.itemId;
 
     const targetZone = event.to.containerMetadata.zone;
     if (targetZone !== "answer" && targetZone !== "bank") return;
@@ -416,17 +431,15 @@
   }
 
   function handleSentenceRemove(event: ItemRemoveEvent) {
-    const itemId = event.itemMetadata.itemId;
-    if (typeof itemId !== "string") return;
+    const itemId = event.itemId;
 
     sentenceAnswerTiles = sentenceAnswerTiles.filter((tile) => tile.id !== itemId);
     sentenceBankTiles = sentenceBankTiles.filter((tile) => tile.id !== itemId);
   }
 
   /** Ghost snippet content for both sentence zones — looks up the dragged tile's text via its itemId. */
-  function sentenceGhostTileText(event: GhostCreateEvent): string {
-    const itemId = event.originalMetadata.itemId;
-    return typeof itemId === "string" ? (findSentenceTile(itemId)?.text ?? "") : "";
+  function sentenceGhostTileText(event: GhostInsertEvent): string {
+    return findSentenceTile(event.originalItemId)?.text ?? "";
   }
 
   function moveSentenceTileToZone(tile: SentenceTile, targetZone: SentenceZone) {
@@ -508,6 +521,8 @@
     { type: "divider", label: "Divider", icon: "horizontal_rule" },
     { type: "spacer", label: "Spacer", icon: "space_bar" },
   ];
+  type CloneZone = "palette" | "canvas";
+  const cloneZones: CloneZone[] = ["palette", "canvas"];
 
   const blockIcon: Record<PaletteBlockType, string> = {
     button: "smart_button",
@@ -535,6 +550,15 @@
   // palette block, rendered inside the canvas and following the pointer. The
   // palette block itself is never touched.
   let draggingClone: DraggingClone | null = $state(null);
+  type CanvasEntry =
+    | { kind: "clone"; id: string; type: PaletteBlockType; item: SortItem }
+    | { kind: "block"; id: string; block: CanvasBlock };
+  const canvasEntries = $derived.by((): CanvasEntry[] => [
+    ...(draggingClone
+      ? [{ kind: "clone" as const, id: draggingClone.id, type: draggingClone.type, item: draggingClone.item }]
+      : []),
+    ...canvasBlocks.map((block) => ({ kind: "block" as const, id: block.id, block })),
+  ]);
 
   function handleCloneDragStart(event: DragStartEvent) {
     // Only dragging out of the palette should clone — reordering an
@@ -554,16 +578,16 @@
     // {#each canvasBlocks} render below takes over rendering it for real).
     const id = `canvas-block-${cloneBlockCount}`;
     const cloneItem = event.cloneItems[0];
-    cloneItem.metadata = { itemId: id, blockType: type };
+    cloneItem.itemId = id;
+    cloneItem.metadata = { blockType: type };
     // Materialize the clone in state; the #if below renders it inside the
     // canvas container, binding its element via `itemObject`. Once its element
-    // exists (after awaitMutation), the core hands the drag off to it.
+    // exists (after the adapter's synchronous flush), core hands the drag off to it.
     draggingClone = { id, type: type as PaletteBlockType, item: cloneItem };
   }
 
   function handleCanvasMove(event: ItemMoveEvent) {
-    const blockId = event.itemMetadata.itemId;
-    if (typeof blockId !== "string") return;
+    const blockId = event.itemId;
 
     if (event.from === null) {
       // A copy drag committing: this itemId has never been in canvasBlocks
@@ -594,7 +618,7 @@
   function handleCanvasRemove(event: ItemRemoveEvent) {
     // Fired only when a copy drag cancels (dropped outside any drop
     // container): the floating clone was never a real block, so discard it.
-    if (draggingClone && event.itemMetadata.itemId === draggingClone.id) {
+    if (draggingClone && event.itemId === draggingClone.id) {
       draggingClone = null;
     }
   }
@@ -617,6 +641,9 @@
     { id: "trash-task-4", text: "Clean up unused feature flags" },
     { id: "trash-task-5", text: "Update the onboarding checklist" },
   ]);
+  type TrashZone = "list" | "bin";
+  const trashZones: TrashZone[] = ["list", "bin"];
+  const emptyTrashTasks: TrashTask[] = [];
   let trashHovered = $state(false);
 
   function handleTrashDropTargetChange(event: DropTargetChangeEvent) {
@@ -626,8 +653,7 @@
   }
 
   function handleTrashListMove(event: ItemMoveEvent) {
-    const taskId = event.itemMetadata.itemId;
-    if (typeof taskId !== "string") return;
+    const taskId = event.itemId;
     const task = trashTasks.find((candidate) => candidate.id === taskId);
     if (!task) return;
     const next = trashTasks.filter((candidate) => candidate.id !== taskId);
@@ -639,8 +665,7 @@
   function handleTrashDragEnd(event: DragEndEvent) {
     trashHovered = false;
     if (event.destination?.containerMetadata.role !== "trash") return;
-    const taskId = event.itemMetadata.itemId;
-    if (typeof taskId !== "string") return;
+    const taskId = event.itemId;
     trashTasks = trashTasks.filter((task) => task.id !== taskId);
   }
 
@@ -666,9 +691,8 @@
   let swapHoveredId: string | null = $state(null);
 
   function handleSwapCommit(event: ItemSwapEvent) {
-    const aId = event.a.itemMetadata.itemId;
-    const bId = event.b.itemMetadata.itemId;
-    if (typeof aId !== "string" || typeof bId !== "string") return;
+    const aId = event.a.itemId;
+    const bId = event.b.itemId;
     const aIndex = swapTiles.findIndex((tile) => tile.id === aId);
     const bIndex = swapTiles.findIndex((tile) => tile.id === bId);
     if (aIndex === -1 || bIndex === -1) return;
@@ -678,12 +702,11 @@
   }
 
   function handleSwapHoverEnter(event: DragItemHoverEvent) {
-    const id = event.overItemMetadata.itemId;
-    swapHoveredId = typeof id === "string" ? id : null;
+    swapHoveredId = event.overItemId;
   }
 
   function handleSwapHoverLeave(event: DragItemHoverEvent) {
-    const id = event.overItemMetadata.itemId;
+    const id = event.overItemId;
     if (swapHoveredId === id) {
       swapHoveredId = null;
     }
@@ -971,25 +994,27 @@
           <Container
             config={{ direction: "column", groupID: "project-list" }}
             items={todoItems}
-            getId={(todo) => todo.id}
+            getItemId={(todo) => todo.id}
           >
-            {#snippet item(todo)}
-              <div class="project-card" class:checked={todo.checked}>
-                <Handle className="project-drag-handle">
-                  <i class="material-symbols-rounded" aria-hidden="true">drag_indicator</i>
-                </Handle>
-                <label>
-                  <input type="checkbox" bind:checked={todo.checked} />
-                  <span></span>
-                </label>
-                <span class="project-text">{todo.text}</span>
-                <div class="project-meta" aria-label="Task metadata">
-                  <span class="project-meta-item">
-                    <i class="material-symbols-rounded" aria-hidden="true">schedule</i>
-                    {todo.due}
-                  </span>
+            {#snippet entry(todo)}
+              <Item itemId={todo.id}>
+                <div class="project-card" class:checked={todo.checked}>
+                  <Handle className="project-drag-handle">
+                    <i class="material-symbols-rounded" aria-hidden="true">drag_indicator</i>
+                  </Handle>
+                  <label>
+                    <input type="checkbox" bind:checked={todo.checked} />
+                    <span></span>
+                  </label>
+                  <span class="project-text">{todo.text}</span>
+                  <div class="project-meta" aria-label="Task metadata">
+                    <span class="project-meta-item">
+                      <i class="material-symbols-rounded" aria-hidden="true">schedule</i>
+                      {todo.due}
+                    </span>
+                  </div>
                 </div>
-              </div>
+              </Item>
             {/snippet}
           </Container>
         </div>
@@ -1007,133 +1032,58 @@
           <Container
             config={{ direction: "row", name: "kanban-root", noDrop: true }}
             locked={true}
+            items={kanbanColumns}
+            getItemId={(column) => column.id}
           >
-            <Container
-              className="kanban-column"
-              config={{
-                direction: "column",
-                name: "kanban-todo",
-                onClickAction: { action: "moveTo", target: "kanban-review" },
-              }}
-              locked={true}
-            >
-              <h4>To Do</h4>
-              {#each kanbanTodo as { id, text, desc, assignee, avatar, avatarColor, due, tag, activity } (id)}
-                <Item>
-                  <div class="kanban-card">
-                    <div class="kanban-header">
-                      <span class="kanban-title">{text}</span>
-                      <span class="kanban-tag">{tag}</span>
-                    </div>
-                    <p class="kanban-desc">{desc}</p>
-                    <div class="kanban-footer">
-                      <span
-                        class="kanban-avatar"
-                        style={`--avatar-color: ${avatarColor};`}
-                        title={assignee}
-                        aria-label={assignee}
-                      >
-                        {avatar}
-                      </span>
-                      <div class="kanban-meta" aria-label="Task metadata">
-                        <span class="kanban-meta-item">
-                          <i class="material-symbols-rounded" aria-hidden="true">event</i>
-                          {due}
+            {#snippet entry(column)}
+              <Container
+                className="kanban-column"
+                itemId={column.id}
+                config={{
+                  direction: "column",
+                  name: column.id,
+                  ...({ onClickAction: { action: "moveTo", target: column.target } } as object),
+                }}
+                locked={true}
+                items={column.cards}
+                getItemId={(card) => card.id}
+              >
+                {#snippet before()}
+                  <h4>{column.title}</h4>
+                {/snippet}
+                {#snippet entry(card)}
+                  <Item itemId={card.id}>
+                    <div class="kanban-card">
+                      <div class="kanban-header">
+                        <span class="kanban-title">{card.text}</span>
+                        <span class="kanban-tag">{card.tag}</span>
+                      </div>
+                      <p class="kanban-desc">{card.desc}</p>
+                      <div class="kanban-footer">
+                        <span
+                          class="kanban-avatar"
+                          style={`--avatar-color: ${card.avatarColor};`}
+                          title={card.assignee}
+                          aria-label={card.assignee}
+                        >
+                          {card.avatar}
                         </span>
-                        <span class="kanban-meta-item">
-                          <i class="material-symbols-rounded" aria-hidden="true">forum</i>
-                          {activity}
-                        </span>
+                        <div class="kanban-meta" aria-label="Task metadata">
+                          <span class="kanban-meta-item">
+                            <i class="material-symbols-rounded" aria-hidden="true">event</i>
+                            {card.due}
+                          </span>
+                          <span class="kanban-meta-item">
+                            <i class="material-symbols-rounded" aria-hidden="true">forum</i>
+                            {card.activity}
+                          </span>
+                        </div>
                       </div>
                     </div>
-                  </div>
-                </Item>
-              {/each}
-            </Container>
-            <Container
-              className="kanban-column"
-              config={{
-                direction: "column",
-                name: "kanban-review",
-                onClickAction: { action: "moveTo", target: "kanban-done" },
-              }}
-              locked={true}
-            >
-              <h4>Review</h4>
-              {#each kanbanReview as { id, text, desc, assignee, avatar, avatarColor, due, tag, activity } (id)}
-                <Item>
-                  <div class="kanban-card">
-                    <div class="kanban-header">
-                      <span class="kanban-title">{text}</span>
-                      <span class="kanban-tag">{tag}</span>
-                    </div>
-                    <p class="kanban-desc">{desc}</p>
-                    <div class="kanban-footer">
-                      <span
-                        class="kanban-avatar"
-                        style={`--avatar-color: ${avatarColor};`}
-                        title={assignee}
-                        aria-label={assignee}
-                      >
-                        {avatar}
-                      </span>
-                      <div class="kanban-meta" aria-label="Task metadata">
-                        <span class="kanban-meta-item">
-                          <i class="material-symbols-rounded" aria-hidden="true">event</i>
-                          {due}
-                        </span>
-                        <span class="kanban-meta-item">
-                          <i class="material-symbols-rounded" aria-hidden="true">forum</i>
-                          {activity}
-                        </span>
-                      </div>
-                    </div>
-                  </div>
-                </Item>
-              {/each}
-            </Container>
-            <Container
-              className="kanban-column"
-              config={{
-                direction: "column",
-                name: "kanban-done",
-                onClickAction: { action: "moveTo", target: "kanban-todo" },
-              }}
-              locked={true}
-            >
-              <h4>Done</h4>
-              {#each kanbanDone as { id, text, desc, assignee, avatar, avatarColor, due, tag, activity } (id)}
-                <Item>
-                  <div class="kanban-card">
-                    <div class="kanban-header">
-                      <span class="kanban-title">{text}</span>
-                      <span class="kanban-tag">{tag}</span>
-                    </div>
-                    <p class="kanban-desc">{desc}</p>
-                    <div class="kanban-footer">
-                      <span
-                        class="kanban-avatar"
-                        style={`--avatar-color: ${avatarColor};`}
-                        title={assignee}
-                        aria-label={assignee}
-                      >
-                        {avatar}
-                      </span>
-                      <div class="kanban-meta" aria-label="Task metadata">
-                        <span class="kanban-meta-item">
-                          <i class="material-symbols-rounded" aria-hidden="true">event</i>
-                          {due}
-                        </span>
-                        <span class="kanban-meta-item">
-                          <i class="material-symbols-rounded" aria-hidden="true">forum</i>
-                          {activity}
-                        </span>
-                      </div>
-                    </div>
-                  </div>
-                </Item>
-              {/each}
-            </Container>
+                  </Item>
+                {/snippet}
+              </Container>
+            {/snippet}
           </Container>
         </div>
       </div>
@@ -1159,92 +1109,105 @@
               className="sentence-workspace-root"
               config={{ mode: "progressive", direction: "column", name: "sentence-root", noDrop: true }}
               locked={true}
+              items={sentenceZones}
+              getItemId={(zone) => `sentence-zone-${zone}`}
             >
-              <Container
-                className="sentence-drop-zone"
-                bind:container={sentenceAnswerContainer}
-                config={{
-                  mode: "progressive",
-                  direction: "row",
-                  groupID: "sentence",
-                  name: "sentence-target",
-                  dropArea: true,
-                  animation: {
-                    reorder: sentenceAnimation,
-                    drop: sentenceAnimation,
-                    clickMove: sentenceAnimation,
-                  },
-                  callbacks: {
-                    onItemMove: handleSentenceMove,
-                    onItemRemove: handleSentenceRemove,
-                    awaitMutation: tick,
-                  },
-                }}
-                locked={true}
-                metadata={{ zone: "answer" }}
-                items={sentenceAnswerTiles}
-                getId={(tile) => tile.id}
-                getClassName={() => "sentence-tile-wrapper"}
-              >
-                {#snippet item(tile)}
-                  <button
-                    type="button"
-                    class="word-card sentence-word selected"
-                    onpointerdown={handleSentenceTilePointerDown}
-                    onpointermove={handleSentenceTilePointerMove}
-                    onclick={(event) => handleSentenceTileClick(event, () => moveSentenceTileToZone(tile, "bank"))}
-                    aria-label={`Move ${tile.text} to bank`}
+              {#snippet entry(zone)}
+                {#if zone === "answer"}
+                  <Container
+                    className="sentence-drop-zone"
+                    itemId="sentence-zone-answer"
+                    bind:container={sentenceAnswerContainer}
+                    config={{
+                      mode: "progressive",
+                      direction: "row",
+                      groupID: "sentence",
+                      name: "sentence-target",
+                      dropArea: true,
+                      animation: {
+                        reorder: sentenceAnimation,
+                        drop: sentenceAnimation,
+                        clickMove: sentenceAnimation,
+                      },
+                      callbacks: {
+                        onItemMove: handleSentenceMove,
+                        onItemRemove: handleSentenceRemove,
+                      },
+                    }}
+                    locked={true}
+                    metadata={{ zone: "answer" }}
+                    items={sentenceAnswerTiles}
+                    getItemId={(tile) => tile.id}
                   >
-                    {tile.text}
-                  </button>
-                {/snippet}
-                {#snippet ghost(event)}
-                  <button type="button" class="word-card sentence-word sentence-tile-ghost selected" tabindex="-1">{sentenceGhostTileText(event)}</button>
-                {/snippet}
-              </Container>
-              <Container
-                className="sentence-source-zone"
-                bind:container={sentenceBankContainer}
-                config={{
-                  mode: "progressive",
-                  direction: "row",
-                  mainAxisAlign: "center",
-                  groupID: "sentence",
-                  name: "sentence-source",
-                  dropArea: true,
-                  animation: {
-                    reorder: sentenceAnimation,
-                    drop: sentenceAnimation,
-                    clickMove: sentenceAnimation,
-                  },
-                  callbacks: {
-                    onItemMove: handleSentenceMove,
-                    onItemRemove: handleSentenceRemove,
-                    awaitMutation: tick,
-                  },
-                }}
-                locked={true}
-                metadata={{ zone: "bank" }}
-                items={sentenceBankTiles}
-                getId={(tile) => tile.id}
-                getClassName={() => "sentence-tile-wrapper"}
-              >
-                {#snippet item(tile)}
-                  <button
-                    type="button"
-                    class="word-card sentence-word"
-                    onpointerdown={handleSentenceTilePointerDown}
-                    onpointermove={handleSentenceTilePointerMove}
-                    onclick={(event) => handleSentenceTileClick(event, () => moveSentenceTileToZone(tile, "answer"))}
-                    aria-label={`Move ${tile.text} to answer`}
+                    {#snippet entry(tile)}
+                      <Item itemId={tile.id} className="sentence-tile-wrapper">
+                        <button
+                          type="button"
+                          class="word-card sentence-word selected"
+                          onpointerdown={handleSentenceTilePointerDown}
+                          onpointermove={handleSentenceTilePointerMove}
+                          onclick={(event) => handleSentenceTileClick(event, () => moveSentenceTileToZone(tile, "bank"))}
+                          aria-label={`Move ${tile.text} to bank`}
+                        >
+                          {tile.text}
+                        </button>
+                      </Item>
+                    {/snippet}
+                    {#snippet ghost(event)}
+                      <Ghost {event}>
+                        <button type="button" class="word-card sentence-word sentence-tile-ghost selected" tabindex="-1">{sentenceGhostTileText(event)}</button>
+                      </Ghost>
+                    {/snippet}
+                  </Container>
+                {:else}
+                  <Container
+                    className="sentence-source-zone"
+                    itemId="sentence-zone-bank"
+                    bind:container={sentenceBankContainer}
+                    config={{
+                      mode: "progressive",
+                      direction: "row",
+                      mainAxisAlign: "center",
+                      groupID: "sentence",
+                      name: "sentence-source",
+                      dropArea: true,
+                      animation: {
+                        reorder: sentenceAnimation,
+                        drop: sentenceAnimation,
+                        clickMove: sentenceAnimation,
+                      },
+                      callbacks: {
+                        onItemMove: handleSentenceMove,
+                        onItemRemove: handleSentenceRemove,
+                      },
+                    }}
+                    locked={true}
+                    metadata={{ zone: "bank" }}
+                    items={sentenceBankTiles}
+                    getItemId={(tile) => tile.id}
                   >
-                    {tile.text}
-                  </button>
-                {/snippet}
-                {#snippet ghost(event)}
-                  <button type="button" class="word-card sentence-word sentence-tile-ghost" tabindex="-1">{sentenceGhostTileText(event)}</button>
-                {/snippet}
-              </Container>
+                    {#snippet entry(tile)}
+                      <Item itemId={tile.id} className="sentence-tile-wrapper">
+                        <button
+                          type="button"
+                          class="word-card sentence-word"
+                          onpointerdown={handleSentenceTilePointerDown}
+                          onpointermove={handleSentenceTilePointerMove}
+                          onclick={(event) => handleSentenceTileClick(event, () => moveSentenceTileToZone(tile, "answer"))}
+                          aria-label={`Move ${tile.text} to answer`}
+                        >
+                          {tile.text}
+                        </button>
+                      </Item>
+                    {/snippet}
+                    {#snippet ghost(event)}
+                      <Ghost {event}>
+                        <button type="button" class="word-card sentence-word sentence-tile-ghost" tabindex="-1">{sentenceGhostTileText(event)}</button>
+                      </Ghost>
+                    {/snippet}
+                  </Container>
+                {/if}
+              {/snippet}
             </Container>
           </div>
           <div class="controls">
@@ -1289,84 +1252,97 @@
               callbacks: {
                 onDragStart: handleCloneDragStart,
                 onDragClone: handleDragClone,
-                awaitMutation: tick,
               },
             }}
             locked={true}
+            items={cloneZones}
+            getItemId={(zone) => `clone-${zone}`}
           >
-            <Container
-              className="clone-palette"
-              config={{
-                direction: "column",
-                groupID: "clone-demo",
-                name: "clone-palette",
-                noDrop: true,
-                callbacks: {
-                  awaitMutation: tick,
-                },
-              }}
-              locked={true}
-              items={paletteBlockTemplates}
-              getId={(template) => `palette-${template.type}`}
-              getMetadata={(template) => ({ blockType: template.type })}
-            >
-              {#snippet item(template)}
-                <div class="clone-block clone-block-{template.type} clone-palette-block">
-                  <i class="material-symbols-rounded" aria-hidden="true">{template.icon}</i>
-                  <span>{template.label}</span>
-                </div>
-              {/snippet}
-            </Container>
-            <Container
-              className="clone-canvas"
-              config={{
-                direction: "column",
-                groupID: "clone-demo",
-                name: "clone-canvas",
-                dropArea: true,
-                callbacks: {
-                  onItemMove: handleCanvasMove,
-                  onItemRemove: handleCanvasRemove,
-                  awaitMutation: tick,
-                },
-              }}
-              locked={true}
-              items={canvasBlocks}
-              getId={(block) => block.id}
-            >
-              {#if canvasBlocks.length === 0 && !draggingClone}
-                <p class="clone-canvas-empty">Drop blocks here</p>
-              {/if}
-              {#if draggingClone}
-                <Item
-                  itemObject={draggingClone.item}
-                  metadata={{ itemId: draggingClone.id, blockType: draggingClone.type }}
+            {#snippet entry(zone)}
+              {#if zone === "palette"}
+                <Container
+                  className="clone-palette"
+                  itemId="clone-palette"
+                  config={{
+                    direction: "column",
+                    groupID: "clone-demo",
+                    name: "clone-palette",
+                    noDrop: true,
+                    callbacks: {
+                    },
+                  }}
+                  locked={true}
+                  items={paletteBlockTemplates}
+                  getItemId={(template) => `palette-${template.type}`}
                 >
-                  <div class="clone-block clone-block-{draggingClone.type} clone-canvas-block clone-dragging">
-                    <i class="material-symbols-rounded" aria-hidden="true">{blockIcon[draggingClone.type]}</i>
-                    <span>{blockLabel[draggingClone.type]}</span>
-                  </div>
-                </Item>
+                  {#snippet entry(template)}
+                    <Item itemId={`palette-${template.type}`} metadata={{ blockType: template.type }}>
+                      <div class="clone-block clone-block-{template.type} clone-palette-block">
+                        <i class="material-symbols-rounded" aria-hidden="true">{template.icon}</i>
+                        <span>{template.label}</span>
+                      </div>
+                    </Item>
+                  {/snippet}
+                </Container>
+              {:else}
+                <Container
+                  className="clone-canvas"
+                  itemId="clone-canvas"
+                  config={{
+                    direction: "column",
+                    groupID: "clone-demo",
+                    name: "clone-canvas",
+                    dropArea: true,
+                    callbacks: {
+                      onItemMove: handleCanvasMove,
+                      onItemRemove: handleCanvasRemove,
+                    },
+                  }}
+                  locked={true}
+                  items={canvasEntries}
+                  getItemId={(entry) => entry.id}
+                >
+                  {#snippet before()}
+                    {#if canvasBlocks.length === 0 && !draggingClone}
+                      <p class="clone-canvas-empty">Drop blocks here</p>
+                    {/if}
+                  {/snippet}
+                  {#snippet entry(entry)}
+                    {#if entry.kind === "clone"}
+                      <Item
+                        itemId={entry.id}
+                        itemObject={entry.item}
+                        metadata={{ blockType: entry.type }}
+                      >
+                        <div class="clone-block clone-block-{entry.type} clone-canvas-block clone-dragging">
+                          <i class="material-symbols-rounded" aria-hidden="true">{blockIcon[entry.type]}</i>
+                          <span>{blockLabel[entry.type]}</span>
+                        </div>
+                      </Item>
+                    {:else}
+                      <Item itemId={entry.block.id} metadata={{ blockType: entry.block.type }}>
+                        <div class="clone-block clone-block-{entry.block.type} clone-canvas-block">
+                          <i class="material-symbols-rounded" aria-hidden="true">{blockIcon[entry.block.type]}</i>
+                          <span>{blockLabel[entry.block.type]}</span>
+                          <button
+                            type="button"
+                            class="clone-block-remove"
+                            aria-label={`Remove ${blockLabel[entry.block.type]}`}
+                            onpointerdown={(event) => event.stopPropagation()}
+                            onclick={(event) => {
+                              event.stopPropagation();
+                              removeCanvasBlock(entry.block.id);
+                            }}
+                          >
+                            <i class="material-symbols-rounded" aria-hidden="true">close</i>
+                          </button>
+                        </div>
+                      </Item>
+                    {/if}
+                  {/snippet}
+                </Container>
               {/if}
-              {#snippet item(block)}
-                <div class="clone-block clone-block-{block.type} clone-canvas-block">
-                  <i class="material-symbols-rounded" aria-hidden="true">{blockIcon[block.type]}</i>
-                  <span>{blockLabel[block.type]}</span>
-                  <button
-                    type="button"
-                    class="clone-block-remove"
-                    aria-label={`Remove ${blockLabel[block.type]}`}
-                    onpointerdown={(event) => event.stopPropagation()}
-                    onclick={(event) => {
-                      event.stopPropagation();
-                      removeCanvasBlock(block.id);
-                    }}
-                  >
-                    <i class="material-symbols-rounded" aria-hidden="true">close</i>
-                  </button>
-                </div>
-              {/snippet}
-            </Container>
+            {/snippet}
           </Container>
         </div>
       </div>
@@ -1393,47 +1369,64 @@
               },
             }}
             locked={true}
+            items={trashZones}
+            getItemId={(zone) => `trash-zone-${zone}`}
           >
-            <Container
-              className="trash-list"
-              config={{
-                direction: "column",
-                groupID: "trash-demo",
-                name: "trash-list",
-                callbacks: {
-                  onItemMove: handleTrashListMove,
-                  awaitMutation: tick,
-                },
-              }}
-              locked={true}
-              items={trashTasks}
-              getId={(task) => task.id}
-            >
-              {#snippet item(task)}
-                <div class="trash-task">
-                  <i class="material-symbols-rounded trash-task-grip" aria-hidden="true">drag_indicator</i>
-                  <span>{task.text}</span>
+            {#snippet entry(zone)}
+              {#if zone === "list"}
+                <Container
+                  className="trash-list"
+                  itemId="trash-zone-list"
+                  config={{
+                    direction: "column",
+                    groupID: "trash-demo",
+                    name: "trash-list",
+                    callbacks: {
+                      onItemMove: handleTrashListMove,
+                    },
+                  }}
+                  locked={true}
+                  items={trashTasks}
+                  getItemId={(task) => task.id}
+                >
+                  {#snippet entry(task)}
+                    <Item itemId={task.id}>
+                      <div class="trash-task">
+                        <i class="material-symbols-rounded trash-task-grip" aria-hidden="true">drag_indicator</i>
+                        <span>{task.text}</span>
+                      </div>
+                    </Item>
+                  {/snippet}
+                </Container>
+              {:else}
+                <div class="trash-zone" class:trash-zone-active={trashHovered}>
+                  <Container
+                    className="trash-drop-target"
+                    itemId="trash-zone-bin"
+                    config={{
+                      direction: "column",
+                      groupID: "trash-demo",
+                      name: "trash-bin",
+                      dropArea: true,
+                    }}
+                    locked={true}
+                    metadata={{ role: "trash" }}
+                    items={emptyTrashTasks}
+                    getItemId={(task) => task.id}
+                  >
+                    {#snippet before()}
+                      <div class="trash-zone-content">
+                        <i class="material-symbols-rounded" aria-hidden="true">delete</i>
+                        <span>Drop to delete</span>
+                      </div>
+                    {/snippet}
+                    {#snippet entry()}
+                      <!-- Trash bin has no rendered child items. -->
+                    {/snippet}
+                  </Container>
                 </div>
-              {/snippet}
-            </Container>
-            <div class="trash-zone" class:trash-zone-active={trashHovered}>
-              <Container
-                className="trash-drop-target"
-                config={{
-                  direction: "column",
-                  groupID: "trash-demo",
-                  name: "trash-bin",
-                  dropArea: true,
-                }}
-                locked={true}
-                metadata={{ role: "trash" }}
-              >
-                <div class="trash-zone-content">
-                  <i class="material-symbols-rounded" aria-hidden="true">delete</i>
-                  <span>Drop to delete</span>
-                </div>
-              </Container>
-            </div>
+              {/if}
+            {/snippet}
           </Container>
         </div>
       </div>
@@ -1458,30 +1451,30 @@
                 onDragItemEnter: handleSwapHoverEnter,
                 onDragItemLeave: handleSwapHoverLeave,
                 createGhost: createSwapGhost,
-                awaitMutation: tick,
               },
             }}
             locked={true}
             items={swapTiles}
-            getId={(tile) => tile.id}
-            getMetadata={(tile) => ({ color: tile.color, label: tile.label })}
+            getItemId={(tile) => tile.id}
           >
-            {#snippet item(tile)}
-              <div
-                class="swap-tile card"
-                class:swap-tile-hovered={swapHoveredId === tile.id}
-                style={`--tile-color: ${tile.color};`}
-              >
-                <span class="swap-tile-grip" aria-hidden="true">
-                  <i></i>
-                  <i></i>
-                  <i></i>
-                  <i></i>
-                  <i></i>
-                  <i></i>
-                </span>
-                <span class="swap-tile-label">{tile.label}</span>
-              </div>
+            {#snippet entry(tile)}
+              <Item itemId={tile.id} metadata={{ color: tile.color, label: tile.label }}>
+                <div
+                  class="swap-tile card"
+                  class:swap-tile-hovered={swapHoveredId === tile.id}
+                  style={`--tile-color: ${tile.color};`}
+                >
+                  <span class="swap-tile-grip" aria-hidden="true">
+                    <i></i>
+                    <i></i>
+                    <i></i>
+                    <i></i>
+                    <i></i>
+                    <i></i>
+                  </span>
+                  <span class="swap-tile-label">{tile.label}</span>
+                </div>
+              </Item>
             {/snippet}
           </Container>
         </div>
@@ -1516,9 +1509,10 @@
               className="editor-field-list"
               config={{ direction: "column", groupID: "editor-fields" }}
               items={editorFields}
-              getId={(field) => field.id}
+              getItemId={(field) => field.id}
             >
-              {#snippet item(field)}
+              {#snippet entry(field)}
+                <Item itemId={field.id}>
                   <div class="editor-field">
                     <Handle className="editor-field-handle">
                       <i class="material-symbols-rounded editor-field-grip" aria-hidden="true">drag_indicator</i>
@@ -1550,16 +1544,15 @@
                               callbacks: {
                                 onItemMove: handleEditorOptionMove,
                                 onItemRemove: handleEditorOptionRemove,
-                                awaitMutation: tick,
                               },
                             }}
                             locked={true}
                             metadata={{ fieldId: field.id }}
                             items={field.options ?? []}
-                            getId={(option) => option.id}
-                            getClassName={() => "editor-option-item"}
+                            getItemId={(option) => option.id}
                           >
-                            {#snippet item(option)}
+                            {#snippet entry(option)}
+                              <Item itemId={option.id} className="editor-option-item">
                                 <div class="editor-option-row">
                                   <Handle className="editor-option-handle">
                                     <i class="material-symbols-rounded editor-option-grip" aria-hidden="true">drag_indicator</i>
@@ -1592,6 +1585,7 @@
                                     <i class="material-symbols-rounded" aria-hidden="true">delete</i>
                                   </button>
                                 </div>
+                              </Item>
                             {/snippet}
                           </Container>
                         </SnapSortContextBoundary>
@@ -1619,16 +1613,15 @@
                               callbacks: {
                                 onItemMove: handleEditorOptionMove,
                                 onItemRemove: handleEditorOptionRemove,
-                                awaitMutation: tick,
                               },
                             }}
                             locked={true}
                             metadata={{ fieldId: field.id }}
                             items={field.options ?? []}
-                            getId={(option) => option.id}
-                            getClassName={() => "editor-option-item"}
+                            getItemId={(option) => option.id}
                           >
-                            {#snippet item(option)}
+                            {#snippet entry(option)}
+                              <Item itemId={option.id} className="editor-option-item">
                                 <div class="editor-option-row">
                                   <Handle className="editor-option-handle">
                                     <i class="material-symbols-rounded editor-option-grip" aria-hidden="true">drag_indicator</i>
@@ -1661,6 +1654,7 @@
                                     <i class="material-symbols-rounded" aria-hidden="true">delete</i>
                                   </button>
                                 </div>
+                              </Item>
                             {/snippet}
                           </Container>
                         </SnapSortContextBoundary>
@@ -1688,16 +1682,15 @@
                               callbacks: {
                                 onItemMove: handleEditorOptionMove,
                                 onItemRemove: handleEditorOptionRemove,
-                                awaitMutation: tick,
                               },
                             }}
                             locked={true}
                             metadata={{ fieldId: field.id }}
                             items={field.options ?? []}
-                            getId={(option) => option.id}
-                            getClassName={() => "editor-option-item"}
+                            getItemId={(option) => option.id}
                           >
-                            {#snippet item(option)}
+                            {#snippet entry(option)}
+                              <Item itemId={option.id} className="editor-option-item">
                                 <div class="editor-option-row">
                                   <Handle className="editor-option-handle">
                                     <i class="material-symbols-rounded editor-option-grip" aria-hidden="true">drag_indicator</i>
@@ -1727,6 +1720,7 @@
                                     <i class="material-symbols-rounded" aria-hidden="true">delete</i>
                                   </button>
                                 </div>
+                              </Item>
                             {/snippet}
                           </Container>
                         </SnapSortContextBoundary>
@@ -1753,6 +1747,7 @@
                       {/if}
                     </div>
                   </div>
+                </Item>
               {/snippet}
             </Container>
           </div>

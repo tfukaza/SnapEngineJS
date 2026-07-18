@@ -11,7 +11,6 @@ import {
 } from "react";
 import {
   Container as ContainerObject,
-  type ContainerCallbacks,
   type ContainerConfig,
   type Item,
 } from "@snap-engine/snapsort";
@@ -28,65 +27,12 @@ export interface ContainerProps {
   className?: string;
   config: ContainerConfig;
   containerObject?: ContainerObject | null;
+  itemId?: string;
   locked?: boolean;
   /** Consumer-owned selection flag — see `Item.selected` in `@snap-engine/snapsort`. Only meaningful when `locked` is `false`. */
   selected?: boolean;
   metadata?: Record<string, unknown>;
   style?: CSSProperties;
-}
-
-/**
- * Wrap the callbacks whose only job is to notify/mutate (no synchronous
- * return value the caller depends on) in flushSync, so a consumer's React
- * state update is committed before SnapSort reads DOM geometry for FLIP.
- * `onDragStart` (can veto by returning `false`), `canDrop` (returns a
- * boolean), and `createGhost` (returns an element) all need their return
- * value read synchronously and are deliberately left unwrapped — and are
- * called far more often per drag, so forcing a React flush on every call
- * would be wasteful.
- */
-function wrapReactMutationCallbacks(
-  callbacks: ContainerCallbacks | undefined,
-): ContainerCallbacks {
-  if (!callbacks) return {};
-
-  const wrappedCallbacks: ContainerCallbacks = { ...callbacks };
-  if (callbacks.onItemMove) {
-    wrappedCallbacks.onItemMove = (event) => {
-      flushSync(() => callbacks.onItemMove?.(event));
-    };
-  }
-  if (callbacks.onItemInsert) {
-    wrappedCallbacks.onItemInsert = (event) => {
-      flushSync(() => callbacks.onItemInsert?.(event));
-    };
-  }
-  if (callbacks.onItemRemove) {
-    wrappedCallbacks.onItemRemove = (event) => {
-      flushSync(() => callbacks.onItemRemove?.(event));
-    };
-  }
-  if (callbacks.onGhostInsert) {
-    wrappedCallbacks.onGhostInsert = (event) => {
-      flushSync(() => callbacks.onGhostInsert?.(event));
-    };
-  }
-  if (callbacks.onGhostRemove) {
-    wrappedCallbacks.onGhostRemove = (event) => {
-      flushSync(() => callbacks.onGhostRemove?.(event));
-    };
-  }
-  if (callbacks.onDragEnd) {
-    wrappedCallbacks.onDragEnd = (event) => {
-      flushSync(() => callbacks.onDragEnd?.(event));
-    };
-  }
-  if (callbacks.onDropTargetChange) {
-    wrappedCallbacks.onDropTargetChange = (event) => {
-      flushSync(() => callbacks.onDropTargetChange?.(event));
-    };
-  }
-  return wrappedCallbacks;
 }
 
 export const Container = forwardRef<ContainerObject, ContainerProps>(
@@ -96,6 +42,7 @@ export const Container = forwardRef<ContainerObject, ContainerProps>(
       className = "",
       config,
       containerObject = null,
+      itemId,
       locked = true,
       selected = false,
       metadata = {},
@@ -112,9 +59,22 @@ export const Container = forwardRef<ContainerObject, ContainerProps>(
       containerRef.current = new ContainerObject(engine, null, { ...config });
     }
     const container = containerRef.current;
+    const resolvedItemId =
+      itemId ?? (typeof metadata.itemId === "string" ? metadata.itemId : undefined);
     const direction = config.direction ?? "column";
     const mainAxisAlign = config.mainAxisAlign ?? "start";
-    const defaultAwaitMutation = useSnapSortAwaitMutation();
+    const flushCommittedMutation = useSnapSortAwaitMutation();
+    const flushMutation = useCallback(
+      (mutation: () => void) => {
+        flushSync(mutation);
+        // A state mutation can mount new Item/Container adapters. Flush once
+        // more so their attachment effects run before core resumes its layout
+        // reads, while remaining in the same pre-paint transaction.
+        flushCommittedMutation();
+      },
+      [flushCommittedMutation],
+    );
+    container.itemId = resolvedItemId;
     container.locked = locked;
     container.selected = selected;
     container.metadata = metadata;
@@ -127,8 +87,10 @@ export const Container = forwardRef<ContainerObject, ContainerProps>(
       config.disableFlip ?? container.config.disableFlip;
     container.config.callbacks = {
       ...container.config.callbacks,
-      ...wrapReactMutationCallbacks(config.callbacks),
-      awaitMutation: config.callbacks?.awaitMutation ?? defaultAwaitMutation,
+      ...config.callbacks,
+      // Commit the actual consumer mutation before SnapSort reads final
+      // geometry and installs FLIP's inverse transform.
+      flushMutation,
     };
     container.direction = direction;
     container.mainAxisAlign = mainAxisAlign;
@@ -150,7 +112,9 @@ export const Container = forwardRef<ContainerObject, ContainerProps>(
     );
 
     useEffect(() => {
-      parentContainer?.addItem(container as unknown as Item);
+      if (parentContainer && container.parent !== parentContainer) {
+        parentContainer.addItem(container as unknown as Item);
+      }
       return () => {
         if (ownsContainerRef.current) {
           container.destroy();

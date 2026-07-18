@@ -43,6 +43,7 @@ dist-ssr
 *.mjs
 *.umd.js
 demo/svelte/src/snapengine/
+.svelte-kit
 
 # Local design notes / plans
 /plan-*.md

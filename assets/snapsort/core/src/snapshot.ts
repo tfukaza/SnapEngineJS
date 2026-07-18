@@ -30,7 +30,6 @@ export type LayoutModel = "flow" | "slots";
 export type LayoutWrap = "auto" | "nowrap";
 
 export interface ItemSnapshotMetadata extends Record<string, unknown> {
-  itemId?: ItemId;
   insertionMarkerInsetLeft?: number;
   insertionMarkerInsetRight?: number;
   /**
@@ -49,6 +48,7 @@ export interface ItemSnapshotMetadata extends Record<string, unknown> {
 export interface ItemSnapshot<T> {
   value: T;
   key: string;
+  itemId: ItemId;
   metadata: ItemSnapshotMetadata;
   direction: LayoutDirection;
   mainAxisAlign: LayoutMainAxisAlign;

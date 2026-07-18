@@ -20,13 +20,13 @@ import type {
   GhostRole,
 } from "./events";
 import {
-  fireAwaitMutation,
   fireCreateGhost,
   fireGhostInsert,
   fireGhostRemove,
   fireItemInsert,
   fireItemMove,
   fireItemRemove,
+  settleMutation,
 } from "./mutation";
 import { resolveSortStrategy } from "./drag/drop-strategy";
 import { DragSession } from "./drag/session";
@@ -62,14 +62,7 @@ interface ElementRectAnimationOptions {
 }
 
 /**
- * Gather the ordered drag group for a press on `pressed`. Walks the tree in
- * document order (pre-order DFS = original index order) and collects every
- * selected item; a selected item's own subtree is never recursed into, so a
- * selected descendant of a selected container travels with its ancestor
- * instead of being collected separately. Locked items and ghosts are never
- * collected (matching the single-item `dragStart` guard). Pressing an
- * unselected item always drags just that item, regardless of any ancestor's
- * selection state.
+ * Gathers all selected items in the tree for a drag operation.
  */
 function collectSelectedDragGroup(root: Item, pressed: Item): Item[] {
   if (!pressed.selected) return [pressed];
@@ -90,9 +83,8 @@ function collectSelectedDragGroup(root: Item, pressed: Item): Item[] {
 }
 
 /**
- * Resolve the pointer-follow anchor for a drag group: `pressed` itself when
- * it made it into the group, or its nearest ancestor that did (see
- * `collectSelectedDragGroup`'s nested-selection rule).
+ * Traverses the tree of selected items to identify
+ * the nearest ancestor of `pressed` that is in the selection group.
  */
 function findGroupAnchor(group: Item[], pressed: Item): Item {
   let current: BaseObject | null = pressed;
@@ -105,6 +97,7 @@ function findGroupAnchor(group: Item[], pressed: Item): Item {
 
 export class Item extends ElementObject {
   #rootContainer: Container | null = null;
+  #itemId: ItemId | null = null;
   #metadata: ItemSnapshotMetadata = {};
   #locked: boolean = false;
   #selected: boolean = false;
@@ -137,8 +130,9 @@ export class Item extends ElementObject {
   /**
    * Create and return a new instance of the ghost item for the given drag
    * session/lifecycle kind. This also invokes the `createGhost` callback,
-   * which is responsible for creating the DOM element in vanilla JS mode, or
-   * signalling that a frontend framework owns the element instead.
+   * which:
+   * - In vanilla JS mode, is responsible for creating the DOM element.
+   * - In a frontend framework, signals that the ghost element should be created by the framework.
    */
   createGhostItem(
     session: DragSession,
@@ -148,16 +142,22 @@ export class Item extends ElementObject {
     role: GhostRole = "target",
   ): Item | null {
     const ghostItem = new Item(this.engine, null, true);
+    ghostItem.itemId = this.itemId;
     ghostItem.metadata = { ...this.metadata };
     const createEvent: GhostCreateEvent = {
       session,
       kind,
       role,
       container,
+      containerMetadata: container.metadata,
       original: this,
+      originalItemId: this.resolvedItemId,
       originalMetadata: this.metadata,
       items: session.items,
+      itemIds: session.items.map((item) => item.resolvedItemId),
       ghostItem,
+      ghostItemId: ghostItem.resolvedItemId,
+      ghostMetadata: ghostItem.metadata,
       ghostRect,
     };
 
@@ -215,7 +215,7 @@ export class Item extends ElementObject {
 
   /**
    * Returns the unique identifier for an item.
-   * If a unique ID was not assigned to the item, it will fall back to
+   * If a stable itemId was not assigned to the item, it will fall back to
    * the item's engine's object ID.
    *
    * Ghost items are always prefixed with `ghost:` so they can never be
@@ -224,14 +224,14 @@ export class Item extends ElementObject {
    * @internal
    */
   itemKey(item: Item): string {
-    const id = item.metadata.itemId ?? item.id;
+    const id = item.resolvedItemId;
     return item.isGhost ? `ghost:${id}` : id;
   }
 
   /**
    * Find an item by its item id within this container.
    *
-   * @param id Stable item id from `metadata.itemId`.
+   * @param id Stable item id from `itemId`.
    * @returns Matching item object, or null when the tree has no matching item.
    * @internal
    */
@@ -259,7 +259,7 @@ export class Item extends ElementObject {
    * an id instead of an `Item` so callers do not need to retain engine
    * object references.
    *
-   * @param id Stable item id from `metadata.itemId`.
+   * @param id Stable item id from `itemId`.
    * @param container Destination SnapSort container.
    * @param index Destination index in the target container.
    * @returns True when a matching item was found and a move was requested.
@@ -326,6 +326,18 @@ export class Item extends ElementObject {
 
   set metadata(value: ItemSnapshotMetadata) {
     this.#metadata = value;
+  }
+
+  get itemId(): ItemId | null {
+    return this.#itemId;
+  }
+
+  set itemId(value: ItemId | null | undefined) {
+    this.#itemId = value ?? null;
+  }
+
+  get resolvedItemId(): ItemId {
+    return this.#itemId ?? this.id;
   }
 
   get container(): Container {
@@ -627,6 +639,7 @@ export class Item extends ElementObject {
     const snapshot: ItemSnapshot<Item> = {
       value: this,
       key: this.itemKey(this),
+      itemId: this.resolvedItemId,
       metadata: { ...this.#metadata },
       direction: this.#snapshotDirection(),
       mainAxisAlign: this.#snapshotMainAxisAlign(),
@@ -659,6 +672,7 @@ export class Item extends ElementObject {
     this.#dragSnapshot = {
       value: this,
       key: this.itemKey(this),
+      itemId: this.resolvedItemId,
       metadata: { ...this.#metadata },
       direction: src.direction,
       mainAxisAlign: src.mainAxisAlign,
@@ -772,12 +786,16 @@ export class Item extends ElementObject {
    * @param exclude Item that should not be animated.
    * @returns Items with current visual rectangles captured as first positions.
    */
-  #captureFlipSnapshot(root: Item, exclude: Set<Item> | null): FlipAnimationState[] {
+  #captureFlipSnapshot(
+    root: Item,
+    exclude: Set<Item> | null,
+  ): FlipAnimationState[] {
     return root.#collectFlipItems(root, exclude).map((item) => {
       const parentItem = item.#parentItem();
       return {
         item,
         key: this.itemKey(item),
+        // TODO: These should be done via readDom
         first: item.element!.getBoundingClientRect(),
         firstParent: parentItem?.element?.getBoundingClientRect() ?? null,
         firstParentItem: parentItem,
@@ -797,6 +815,7 @@ export class Item extends ElementObject {
    * @returns Nothing.
    */
   #captureFlipLast(snapshot: FlipAnimationState[], root: Item) {
+    root.#updateState();
     const currentItems = new Map(
       root
         .#collectFlipItems(root, null)
@@ -1210,7 +1229,7 @@ export class Item extends ElementObject {
           item.element!.style.transform = "";
         }
         mutate();
-        await fireAwaitMutation(container);
+        await settleMutation();
       },
       { stage: "WRITE_2", queueId: `${queuePrefix}-mutate` },
     );
@@ -1418,7 +1437,7 @@ export class Item extends ElementObject {
       return;
     }
 
-    this.withReorderAnimation(container, items, move);
+    this.withReorderAnimation(container, session ? items : null, move);
   }
 
   /**
@@ -1514,18 +1533,9 @@ export class Item extends ElementObject {
    * `index`) and fire one semantic `onItemMove` event for the whole run
    * (falling back to `onItemInsert` when no `onItemMove` is registered).
    *
-   * A `froms[i] === null` member is spawned (copy), never a member of any
-   * container's list. It is deliberately NOT attached here: the consumer's
-   * `onItemMove` handler is expected to materialize a separate, *permanent*
-   * entry for it (reusing its `itemId`, per `ItemMoveEvent`'s doc), which
-   * registers itself with `container` when the consumer's framework mounts
-   * it. Eagerly attaching the transient dragged instance here would leave a
-   * stale bookkeeping entry in `container.itemOrderedList` once that
-   * permanent instance takes over rendering — corrupting later index math.
-   *
-   * @note This function assumes none of the non-spawned `items` are
-   * currently in the target container. Call `detachItemFromContainer` on
-   * each first.
+   * @note This function assumes none of the non-cloned `items` are
+   * currently in the target container. If it is, call
+   * `detachItemFromContainer` on each first.
    * @internal
    */
   moveItemsAt(
@@ -1538,6 +1548,8 @@ export class Item extends ElementObject {
   ) {
     let attachedCount = 0;
     items.forEach((member, i) => {
+      // Skip container attach for cloned items for now.
+      // Cloned items should be attached _after_ they are instantiated.
       if (froms[i] === null) return;
       this.attachItemToContainer(container, member, index + attachedCount);
       attachedCount++;

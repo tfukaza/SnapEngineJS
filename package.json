@@ -1,6 +1,6 @@
 {
   "name": "@snap-engine/core",
-  "version": "0.4.0",
+  "version": "0.4.1",
   "description": "Interactivity engine for the web",
   "type": "module",
   "workspaces": [
@@ -44,6 +44,8 @@
     "dev:all": "concurrently --kill-others \"npm run dev:vanilla\" \"npm run dev:react\"",
     "test": "start-server-and-test server:vanilla http://localhost:3001 'playwright test'",
     "test:camera-control": "playwright test -c tests/e2e/camera-control.playwright.config.ts",
+    "test:camera-control-react": "playwright test -c tests/e2e/camera-control-react.playwright.config.ts",
+    "test:asset-base-react": "playwright test -c tests/e2e/asset-base-react.playwright.config.ts",
     "test:snapline": "playwright test -c tests/e2e/snapline.playwright.config.ts",
     "test:snapline-react": "playwright test -c tests/e2e/snapline-react.playwright.config.ts",
     "test:layout": "playwright test -c tests/e2e/snapsort-layout.playwright.config.ts",

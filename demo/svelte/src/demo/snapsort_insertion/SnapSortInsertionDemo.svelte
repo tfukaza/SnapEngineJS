@@ -1,13 +1,12 @@
 <script lang="ts">
   import { Engine } from "@snap-engine/asset-base-svelte";
-  import { Container } from "@snap-engine/snapsort-svelte";
+  import { Container, Item } from "@snap-engine/snapsort-svelte";
   import type {
     Container as SortContainer,
     DragStartEvent,
     ItemMoveEvent,
     ItemRemoveEvent,
   } from "@snap-engine/snapsort";
-  import { tick } from "svelte";
 
   type DemoItem = {
     id: string;
@@ -128,7 +127,7 @@
   }
 
   function handleMove(event: ItemMoveEvent) {
-    const itemId = event.itemMetadata.itemId;
+    const itemId = event.itemId;
     const targetColumnId = event.to.containerMetadata.columnId;
     if (typeof itemId !== "string" || typeof targetColumnId !== "string") {
       return;
@@ -152,7 +151,7 @@
   }
 
   function handleRemove(event: ItemRemoveEvent) {
-    const itemId = event.itemMetadata.itemId;
+    const itemId = event.itemId;
     if (typeof itemId !== "string") return;
     pendingRemovedItem = removeItemById(itemId);
   }
@@ -203,10 +202,11 @@
       locked={true}
       metadata={{ boardId: "insertion-demo" }}
       items={columns}
-      getId={(column) => column.id}
+      getItemId={(column) => column.id}
     >
       {#snippet entry(column)}
         <Container
+          itemId={column.id}
           className="insertion-list"
           bind:container={column.container}
           config={{
@@ -217,30 +217,32 @@
             callbacks: {
               onItemMove: handleMove,
               onItemRemove: handleRemove,
-              awaitMutation: tick,
             },
           }}
           locked={true}
-          metadata={{ itemId: column.id, columnId: column.id }}
+          metadata={{ columnId: column.id }}
           items={column.items}
-          getId={(item) => item.id}
-          getClassName={() => "insertion-card"}
+          getItemId={(item) => item.id}
         >
-          <div class="list-header">
-            <h2>{column.title}</h2>
-            <span>{column.items.length}</span>
-          </div>
-
-          {#snippet item(item)}
-            <span
-              class="material-symbols-outlined file-icon"
-              class:folder-icon={item.kind === "folder"}
-              aria-hidden="true"
-            >{item.kind === "folder" ? "folder" : "description"}</span>
-            <div class="card-copy">
-              <strong>{item.title}</strong>
-              <span>{item.detail}</span>
+          {#snippet before()}
+            <div class="list-header">
+              <h2>{column.title}</h2>
+              <span>{column.items.length}</span>
             </div>
+          {/snippet}
+
+          {#snippet entry(item)}
+            <Item itemId={item.id} className="insertion-card">
+              <span
+                class="material-symbols-outlined file-icon"
+                class:folder-icon={item.kind === "folder"}
+                aria-hidden="true"
+              >{item.kind === "folder" ? "folder" : "description"}</span>
+              <div class="card-copy">
+                <strong>{item.title}</strong>
+                <span>{item.detail}</span>
+              </div>
+            </Item>
           {/snippet}
         </Container>
       {/snippet}

@@ -1,7 +1,15 @@
 .doc-content {
+  --doc-reading-width: 700px;
+
   color: var(--color-text);
   font-size: 1rem;
   line-height: 1.62;
+
+  .doc-article > :where(h2, h3, h4, p, ul, ol, blockquote) {
+    width: 100%;
+    max-width: var(--doc-reading-width);
+    box-sizing: border-box;
+  }
 
   h2 {
     margin: var(--size-80) 0 var(--size-16);
@@ -20,12 +28,6 @@
     margin: var(--size-32) 0 var(--size-8);
     font-size: 1.12rem;
     line-height: 1.25;
-  }
-
-  p,
-  ul,
-  ol {
-    max-width: 72ch;
   }
 
   p {
@@ -64,18 +66,103 @@
     text-decoration: none;
   }
 
+  /* pre {
+    margin: 0 0 var(--size-32);
+    padding: var(--size-16) var(--size-20);
+    border-radius: var(--ui-radius);
+    max-width: 100%;
+    overflow-x: auto;
+    font-size: 0.9rem;
+    line-height: 1.55;
+
+    code {
+      font-family: "Geist Mono", monospace;
+    } */
+  /* } */
+/*
+  .display {
+    margin: 0;
+    max-width: 100%;
+    overflow: hidden;
+    scrollbar-color: var(--color-background-dark) transparent;
+    scrollbar-width: thin;
+
+    &,
+    :is(.overflow-auto, [id^='svhighlight-']) {
+      scrollbar-color: var(--color-background-dark) transparent;
+      scrollbar-width: thin;
+    }
+
+    &::-webkit-scrollbar,
+    :is(.overflow-auto, [id^='svhighlight-'])::-webkit-scrollbar {
+      height: 4px;
+    }
+
+    &::-webkit-scrollbar-track,
+    :is(.overflow-auto, [id^='svhighlight-'])::-webkit-scrollbar-track {
+      background: transparent;
+    }
+
+    &::-webkit-scrollbar-thumb,
+    :is(.overflow-auto, [id^='svhighlight-'])::-webkit-scrollbar-thumb {
+      min-width: var(--size-32);
+      border-radius: 999px;
+      background: var(--color-background-dark);
+    }
+
+    &::-webkit-scrollbar-thumb:hover,
+    :is(.overflow-auto, [id^='svhighlight-'])::-webkit-scrollbar-thumb:hover {
+      background: var(--color-background-dark);
+    }
+
+    code {
+      display: block;
+      overflow-x: auto;
+      overflow-y: hidden;
+      white-space: pre;
+    } */
+  /* } */
+
+  table {
+    display: block;
+    max-width: 100%;
+    overflow-x: auto;
+    margin: 0 0 var(--size-32);
+    border-collapse: collapse;
+    font-size: 0.92rem;
+    line-height: 1.5;
+  }
+
+  th,
+  td {
+    padding: var(--size-8) var(--size-16) var(--size-8) 0;
+    border-bottom: 1px solid
+      color-mix(in srgb, var(--color-background-dark) 18%, transparent);
+    text-align: left;
+    vertical-align: top;
+  }
+
+  th {
+    color: var(--color-background-dark);
+    font-family: "Bitcount Grid Single", monospace;
+    font-size: 0.82rem;
+    font-weight: 300;
+    white-space: nowrap;
+  }
+
   p > code,
-  li > code {
-    background: var(--color-background);
+  li > code,
+  td > code {
+    background: var(--color-background-tint);
+    border: 1px solid
+      color-mix(in srgb, var(--color-background-dark) 20%, transparent);
     border-radius: var(--size-4);
-    padding: 0 var(--size-4);
+    margin: 0 var(--size-2);
+    padding: 1px var(--size-4);
     color: var(--color-text);
     font-family: "Geist Mono", monospace;
     font-size: 0.86em;
     font-weight: 400;
-    box-shadow:
-      1px 1px 2px -1px rgba(31, 30, 41, 0.18),
-      -1px -1px 2px -1px rgba(255, 255, 255, 0.9);
   }
 
   blockquote {
@@ -93,30 +180,64 @@
     margin: var(--size-48) 0;
   }
 
-  > .display,
-  > .code-tabs {
+  .doc-article > .display {
     margin: var(--size-24) 0 var(--size-48);
   }
 
-  > .doc-callout {
+  .doc-article > .doc-callout {
+    width: 100%;
+    max-width: var(--doc-reading-width);
     margin: var(--size-24) 0 var(--size-32);
   }
 }
 
-.code-tabs {
-  --card-color: var(--color-background-tint);
-  padding: var(--size-8);
-  border-radius: var(--ui-radius);
-  background: var(--card-color);
-}
+.doc-article {
+  display: flex;
+  align-items: center;
+  flex-direction: column;
+  width: 100%;
 
-.code-tabs-header {
-  padding-left: var(--size-4);
-  h3 {
-    margin: var(--size-8) 0 var(--size-4) 0;
-    font-size: 1rem;
+  > :where(figure, .display, .doc-prototype-grid, table, hr) {
+    width: 100%;
   }
 }
+
+.framework-code-block {
+  display: none;
+  width: 100%;
+  margin: var(--size-24) 0 var(--size-48);
+}
+
+.doc-article[data-framework="svelte"] .framework-code-block[data-framework="svelte"],
+.doc-article[data-framework="react"] .framework-code-block[data-framework="react"],
+.doc-article[data-framework="vanilla"] .framework-code-block[data-framework="vanilla"] {
+  display: block;
+}
+
+.framework-code-block .display {
+  margin: 0;
+}
+
+.placement-mode-comparison {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: var(--size-16);
+  width: min(100%, var(--doc-reading-width));
+  margin: var(--size-24) 0 var(--size-32);
+
+  > div {
+    min-width: 0;
+  }
+}
+
+.placement-mode-comparison-label {
+  margin: 0;
+  color: var(--color-background-dark);
+  font-family: "Bitcount Grid Single", monospace;
+  font-size: 0.8rem;
+  font-weight: 350;
+}
+
 
 .doc-prototype-grid {
   display: grid;
@@ -149,6 +270,125 @@
   align-items: center;
   gap: var(--size-8);
   min-height: var(--size-24);
+}
+
+.snapsort-concepts-diagram {
+  margin: var(--size-32) 0 var(--size-48);
+  -webkit-user-select: none;
+  user-select: none;
+
+  figcaption {
+    margin-bottom: var(--size-12);
+    color: var(--color-background-dark);
+    font-size: 0.88rem;
+  }
+}
+
+.snapsort-concepts-surface {
+  padding: var(--size-24);
+  border-radius: var(--ui-radius);
+  background: var(--color-background-tint);
+}
+
+.snapsort-concepts-engine {
+  position: relative;
+  width: 100%;
+  max-width: 32rem;
+  margin: 0 auto;
+  padding: var(--size-48) var(--size-12) var(--size-12);
+  box-sizing: border-box;
+  background: var(--color-background);
+}
+
+.snapsort-concepts-engine-label {
+  position: absolute;
+  top: var(--size-12);
+  left: var(--size-16);
+}
+
+.snapsort-concepts-engine-label,
+.snapsort-concepts-container header strong,
+.snapsort-concepts-item span {
+  color: var(--color-text);
+  font-family: "Bitcount Grid Single", monospace;
+  font-size: 0.84rem;
+  font-weight: 350;
+}
+
+.snapsort-concepts-containers {
+  max-width: 28rem;
+  margin: 0 auto;
+}
+
+.snapsort-concepts-container {
+  width: 100%;
+  min-width: 0;
+  margin: 0;
+  padding: var(--size-12);
+  box-sizing: border-box;
+  background: var(--color-background-tint);
+
+  header {
+    display: flex;
+    align-items: baseline;
+    justify-content: space-between;
+    gap: var(--size-8);
+    margin-bottom: var(--size-4);
+  }
+
+  header strong {
+    line-height: 1.2;
+  }
+
+  header code {
+    white-space: nowrap;
+  }
+
+  &.is-nested {
+    margin-top: var(--size-12);
+    padding: var(--size-4) var(--size-8) var(--size-8);
+  }
+
+}
+
+.snapsort-concepts-container .snapsort-concepts-item {
+  display: flex;
+  flex-direction: row;
+  align-items: center;
+  justify-content: space-between;
+  width: 100%;
+  gap: var(--size-12);
+  min-height: var(--size-32);
+  margin-top: var(--size-8);
+  padding: var(--size-4) var(--size-8);
+  --card-radius: var(--size-8);
+
+}
+
+.snapsort-concepts-container header code,
+.snapsort-concepts-item code {
+  color: var(--color-background-dark);
+  font-family: "Geist Mono", monospace;
+  font-size: 0.68rem;
+  font-weight: 400;
+}
+
+.snapsort-concepts-ghost {
+  display: flex;
+  align-items: center;
+  padding: var(--size-4) var(--size-8);
+  border-radius: var(--size-8);
+  background: color-mix(in srgb, var(--color-primary) 8%, transparent);
+  outline: 1px dashed
+    color-mix(in srgb, var(--color-primary) 38%, transparent);
+  outline-offset: -2px;
+
+  span {
+    color: var(--color-primary);
+    font-family: "Bitcount Grid Single", monospace;
+    font-size: 0.78rem;
+    font-weight: 350;
+  }
 }
 
 .doc-callout-icon {
@@ -418,5 +658,9 @@
   .doc-engine-silos,
   .doc-kanban-board {
     grid-template-columns: 1fr;
+  }
+
+  .snapsort-concepts-surface {
+    padding: var(--size-16);
   }
 }

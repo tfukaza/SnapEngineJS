@@ -5,7 +5,7 @@ import { fileURLToPath } from "url";
 import { dirname, join } from "path";
 import { createHighlighter } from "shiki";
 import { remarkAlerts } from "./src/lib/markdown/remarkAlerts.js";
-import { remarkCodeTabs } from "./src/lib/markdown/remarkCodeTabs.js";
+import { remarkFrameworkCodeBlocks } from "./src/lib/markdown/remarkFrameworkCodeBlocks.js";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const mdsvexLayout = join(__dirname, "src/lib/markdown/MdsvexLayout.svelte");
@@ -15,7 +15,7 @@ const customTheme = {
   name: "custom-theme",
   type: "dark",
   colors: {
-    "editor.background": "#1f1f2200",
+    // "editor.background": "#1f1f2200",
     "editor.foreground": "#e1e4e8",
   },
   tokenColors: [
@@ -98,13 +98,17 @@ const config = {
     mdsvex({
       extensions: [".md", ".mdx"],
       layout: mdsvexLayout,
-      remarkPlugins: [remarkAlerts, remarkCodeTabs],
+      remarkPlugins: [remarkAlerts, remarkFrameworkCodeBlocks],
       highlight: {
         highlighter: (code, lang = "plaintext") => {
+          const highlighted = highlighter.codeToHtml(code, {
+            lang,
+            theme: "custom-theme",
+          });
           const html = escapeSvelte(
-            highlighter.codeToHtml(code, { lang, theme: "custom-theme" }),
+            highlighted.replace('<pre class="', '<pre class="display '),
           );
-          return `<div class="display">{@html \`${html}\`}</div>`;
+          return `{@html \`${html}\`}`;
         },
       },
     }),

@@ -5,6 +5,7 @@ on:
     tags:
       - 'asset-base-v*'
       - 'asset-base-svelte-v*'
+      - 'asset-base-react-v*'
       - 'snapsort-v*'
       - 'snapsort-svelte-v*'
       - 'snapsort-react-v*'
@@ -37,6 +38,10 @@ jobs:
               package_dir="assets/asset-base/svelte"
               tag_version="${GITHUB_REF_NAME#asset-base-svelte-v}"
               ;;
+            asset-base-react-v*)
+              package_dir="assets/asset-base/react"
+              tag_version="${GITHUB_REF_NAME#asset-base-react-v}"
+              ;;
             snapsort-v*)
               package_dir="assets/snapsort/core"
               tag_version="${GITHUB_REF_NAME#snapsort-v}"
@@ -68,6 +73,7 @@ jobs:
           esac
 
           package_version=$(node -p "require('./$package_dir/package.json').version")
+          package_name=$(node -p "require('./$package_dir/package.json').name")
 
           if [ "$package_version" != "$tag_version" ]; then
             echo "Tag version $tag_version does not match $package_dir/package.json version $package_version"
@@ -75,5 +81,17 @@ jobs:
           fi
 
           echo "package_dir=$package_dir" >> "$GITHUB_OUTPUT"
+          echo "package_name=$package_name" >> "$GITHUB_OUTPUT"
+          echo "package_version=$package_version" >> "$GITHUB_OUTPUT"
 
-      - run: npm publish "./${{ steps.package.outputs.package_dir }}" --access public --provenance
+      - name: Check whether version is already published
+        id: registry
+        run: |
+          if npm view "${{ steps.package.outputs.package_name }}@${{ steps.package.outputs.package_version }}" version >/dev/null 2>&1; then
+            echo "already_published=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "already_published=false" >> "$GITHUB_OUTPUT"
+          fi
+
+      - if: steps.registry.outputs.already_published != 'true'
+        run: npm publish "./${{ steps.package.outputs.package_dir }}" --access public --provenance

@@ -1,10 +1,9 @@
 <script lang="ts">
-  import { tick } from "svelte";
   import { Engine } from "@snap-engine/asset-base-svelte";
-  import { Container } from "@snap-engine/snapsort-svelte";
+  import { Container, Ghost, Item } from "@snap-engine/snapsort-svelte";
   import type {
     Container as SortContainer,
-    GhostCreateEvent,
+    GhostInsertEvent,
     ItemMoveEvent,
     ItemRemoveEvent,
   } from "@snap-engine/snapsort";
@@ -40,6 +39,7 @@
   let bankContainer: SortContainer | undefined = $state();
   let answerTiles: TileData[] = $state([]);
   let bankTiles: TileData[] = $state(toTileData(exercise.tiles));
+  const tileZones: TileZone[] = ["answer", "bank"];
   let result: { correct: boolean; expected: string } | null = $state(null);
   let lookupTarget: string | null = $state(null);
   let tilePointerStart: { x: number; y: number } | null = null;
@@ -74,7 +74,7 @@
   }
 
   function handleSnapSortDomMove(event: ItemMoveEvent) {
-    const itemId = event.itemMetadata.itemId;
+    const itemId = event.itemId;
     if (typeof itemId !== "string") return;
 
     const targetZone = event.to.containerMetadata.zone;
@@ -84,7 +84,7 @@
   }
 
   function handleSnapSortDomRemove(event: ItemRemoveEvent) {
-    const itemId = event.itemMetadata.itemId;
+    const itemId = event.itemId;
     if (typeof itemId !== "string") return;
 
     answerTiles = answerTiles.filter((tile) => tile.id !== itemId);
@@ -97,8 +97,8 @@
   }
 
   /** Ghost snippet content for both zones — looks up the dragged tile's text via its itemId. */
-  function ghostTileText(event: GhostCreateEvent): string {
-    const itemId = event.originalMetadata.itemId;
+  function ghostTileText(event: GhostInsertEvent): string {
+    const itemId = event.originalItemId;
     return typeof itemId === "string" ? (findTile(itemId)?.text ?? "") : "";
   }
 
@@ -198,102 +198,116 @@
           config={{ mode: "progressive", direction: "column", name: "sentence-builder-root", noDrop: true }}
           locked={true}
           metadata={{ purpose: "sentence-builder" }}
+          items={tileZones}
+          getItemId={(zone) => `sentence-zone-${zone}`}
         >
-          <Container
-            className="answer-area answer-box"
-            bind:container={answerContainer}
-            config={{
-              mode: "progressive",
-              direction: "row",
-              name: "sentence-answer",
-              groupID: "sentence-builder",
-              dropArea: true,
-              animation: {
-                reorder: snapSortAnimation,
-                drop: snapSortAnimation,
-                clickMove: snapSortAnimation,
-              },
-              callbacks: {
-                onItemMove: handleSnapSortDomMove,
-                onItemRemove: handleSnapSortDomRemove,
-                awaitMutation: tick,
-              },
-            }}
-            locked={true}
-            metadata={{ zone: "answer" }}
-            items={answerTiles}
-            getId={(tile) => tile.id}
-            getClassName={() => "tile-wrapper"}
-          >
-            {#if answerTiles.length === 0}
-              <span class="placeholder">Drag tiles here or click to add</span>
+          {#snippet entry(zone)}
+            {#if zone === "answer"}
+              <Container
+                itemId="sentence-zone-answer"
+                className="answer-area answer-box"
+                bind:container={answerContainer}
+                config={{
+                  mode: "progressive",
+                  direction: "row",
+                  name: "sentence-answer",
+                  groupID: "sentence-builder",
+                  dropArea: true,
+                  animation: {
+                    reorder: snapSortAnimation,
+                    drop: snapSortAnimation,
+                    clickMove: snapSortAnimation,
+                  },
+                  callbacks: {
+                    onItemMove: handleSnapSortDomMove,
+                    onItemRemove: handleSnapSortDomRemove,
+                  },
+                }}
+                locked={true}
+                metadata={{ zone: "answer" }}
+                items={answerTiles}
+                getItemId={(tile) => tile.id}
+              >
+                {#snippet before()}
+                  {#if answerTiles.length === 0}
+                    <span class="placeholder">Drag tiles here or click to add</span>
+                  {/if}
+                {/snippet}
+                {#snippet entry(tile)}
+                  <Item itemId={tile.id} className="tile-wrapper">
+                    <button
+                      type="button"
+                      class="tile selected"
+                      onpointerdown={handleTilePointerDown}
+                      onpointermove={handleTilePointerMove}
+                      onclick={(event) => handleTileClick(event, () => moveTileToZone(tile, "bank"))}
+                      ondblclick={() => openLookup(tile.text)}
+                      onkeydown={(event) => handleTileKeydown(event, tile, "bank")}
+                      aria-label={tile.text}
+                      title="Click to remove"
+                    >
+                      {tile.text}
+                    </button>
+                  </Item>
+                {/snippet}
+                {#snippet ghost(event)}
+                  <Ghost {event}>
+                    <button type="button" class="tile tile-ghost selected" tabindex="-1">{ghostTileText(event)}</button>
+                  </Ghost>
+                {/snippet}
+              </Container>
+            {:else}
+              <Container
+                itemId="sentence-zone-bank"
+                className="tile-bank-container tile-bank"
+                bind:container={bankContainer}
+                config={{
+                  mode: "progressive",
+                  direction: "row",
+                  mainAxisAlign: "center",
+                  name: "sentence-bank",
+                  groupID: "sentence-builder",
+                  dropArea: true,
+                  animation: {
+                    reorder: snapSortAnimation,
+                    drop: snapSortAnimation,
+                    clickMove: snapSortAnimation,
+                  },
+                  callbacks: {
+                    onItemMove: handleSnapSortDomMove,
+                    onItemRemove: handleSnapSortDomRemove,
+                  },
+                }}
+                locked={true}
+                metadata={{ zone: "bank" }}
+                items={bankTiles}
+                getItemId={(tile) => tile.id}
+              >
+                {#snippet entry(tile)}
+                  <Item itemId={tile.id} className="tile-wrapper">
+                    <button
+                      type="button"
+                      class="tile"
+                      onpointerdown={handleTilePointerDown}
+                      onpointermove={handleTilePointerMove}
+                      onclick={(event) => handleTileClick(event, () => moveTileToZone(tile, "answer"))}
+                      ondblclick={() => openLookup(tile.text)}
+                      onkeydown={(event) => handleTileKeydown(event, tile, "answer")}
+                      aria-label={tile.text}
+                      title="Click to add"
+                    >
+                      {tile.text}
+                    </button>
+                  </Item>
+                {/snippet}
+                {#snippet ghost(event)}
+                  <Ghost {event}>
+                    <button type="button" class="tile tile-ghost" tabindex="-1">{ghostTileText(event)}</button>
+                  </Ghost>
+                {/snippet}
+              </Container>
             {/if}
-            {#snippet item(tile)}
-              <button
-                type="button"
-                class="tile selected"
-                onpointerdown={handleTilePointerDown}
-                onpointermove={handleTilePointerMove}
-                onclick={(event) => handleTileClick(event, () => moveTileToZone(tile, "bank"))}
-                ondblclick={() => openLookup(tile.text)}
-                onkeydown={(event) => handleTileKeydown(event, tile, "bank")}
-                aria-label={tile.text}
-                title="Click to remove"
-              >
-                {tile.text}
-              </button>
-            {/snippet}
-            {#snippet ghost(event)}
-              <button type="button" class="tile tile-ghost selected" tabindex="-1">{ghostTileText(event)}</button>
-            {/snippet}
-          </Container>
-
-          <Container
-            className="tile-bank-container tile-bank"
-            bind:container={bankContainer}
-            config={{
-              mode: "progressive",
-              direction: "row",
-              mainAxisAlign: "center",
-              name: "sentence-bank",
-              groupID: "sentence-builder",
-              dropArea: true,
-              animation: {
-                reorder: snapSortAnimation,
-                drop: snapSortAnimation,
-                clickMove: snapSortAnimation,
-              },
-              callbacks: {
-                onItemMove: handleSnapSortDomMove,
-                onItemRemove: handleSnapSortDomRemove,
-                awaitMutation: tick,
-              },
-            }}
-            locked={true}
-            metadata={{ zone: "bank" }}
-            items={bankTiles}
-            getId={(tile) => tile.id}
-            getClassName={() => "tile-wrapper"}
-          >
-            {#snippet item(tile)}
-              <button
-                type="button"
-                class="tile"
-                onpointerdown={handleTilePointerDown}
-                onpointermove={handleTilePointerMove}
-                onclick={(event) => handleTileClick(event, () => moveTileToZone(tile, "answer"))}
-                ondblclick={() => openLookup(tile.text)}
-                onkeydown={(event) => handleTileKeydown(event, tile, "answer")}
-                aria-label={tile.text}
-                title="Click to add"
-              >
-                {tile.text}
-              </button>
-            {/snippet}
-            {#snippet ghost(event)}
-              <button type="button" class="tile tile-ghost" tabindex="-1">{ghostTileText(event)}</button>
-            {/snippet}
-          </Container>
+          {/snippet}
         </Container>
       </Engine>
     </div>

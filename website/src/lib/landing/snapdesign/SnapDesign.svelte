@@ -299,6 +299,30 @@ object.schedule(() => &#123;
               </select>
             </div>
             <div class="form-group">
+              <label for="select-icons">Options with Logos</label>
+              <select id="select-icons" class="select-with-icons">
+                <button>
+                  <selectedcontent></selectedcontent>
+                </button>
+                <option value="javascript">
+                  <img src="/icon/javascript.svg" alt="" />
+                  <span>JavaScript</span>
+                </option>
+                <option value="svelte">
+                  <img src="/icon/svelte.svg" alt="" />
+                  <span>Svelte</span>
+                </option>
+                <option value="react">
+                  <img src="/icon/react.svg" alt="" />
+                  <span>React</span>
+                </option>
+                <option value="vue">
+                  <img src="/icon/vue.svg" alt="" />
+                  <span>Vue</span>
+                </option>
+              </select>
+            </div>
+            <div class="form-group">
               <label for="select-disabled">Disabled Select</label>
               <select id="select-disabled" disabled>
                 <option>Cannot change this</option>

@@ -3,14 +3,12 @@ import {
   Engine,
   Handle,
   Item,
-  useSnapSortAwaitMutation,
 } from "@snap-engine/snapsort-react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
-const snapSortCubicAnimation = {
-  duration: 180,
-  timing_function: "cubic-bezier(0.2, 0, 0, 1)",
-};
+const snapSortCubicAnimation = new URLSearchParams(window.location.search).has("slowFlip")
+  ? { duration: 800, timing_function: "linear" }
+  : { duration: 180, timing_function: "cubic-bezier(0.2, 0, 0, 1)" };
 
 function queryFlag(name) {
   return new URLSearchParams(window.location.search).get(name) === "1";
@@ -562,7 +560,6 @@ function cloneColumns() {
 }
 
 export function SnapSortComponentsDemo() {
-  const awaitMutation = useSnapSortAwaitMutation();
   const containerRefs = useRef(new Map());
   const [columns, setColumns] = useState(cloneColumns);
   const [nextItemNumber, setNextItemNumber] = useState(7);
@@ -667,10 +664,8 @@ export function SnapSortComponentsDemo() {
       onGhostInsert: handleGhostInsert,
       onGhostRemove: handleGhostRemove,
       createGhost: () => undefined,
-      awaitMutation,
     }),
     [
-      awaitMutation,
       handleGhostInsert,
       handleGhostRemove,
       handleMove,
@@ -1018,7 +1013,6 @@ function toTileData(texts) {
 }
 
 export function SnapSortDuolingoDemo({ embedded = false }) {
-  const awaitMutation = useSnapSortAwaitMutation();
   const answerRef = useRef(null);
   const bankRef = useRef(null);
   const pointerStartRef = useRef(null);
@@ -1151,10 +1145,8 @@ export function SnapSortDuolingoDemo({ embedded = false }) {
       onGhostInsert: handleGhostInsert,
       onGhostRemove: handleGhostRemove,
       createGhost: () => undefined,
-      awaitMutation,
     }),
     [
-      awaitMutation,
       handleGhostInsert,
       handleGhostRemove,
       handleMove,
@@ -1383,7 +1375,6 @@ function cloneInsertionColumns() {
 }
 
 export function SnapSortInsertionDemo() {
-  const awaitMutation = useSnapSortAwaitMutation();
   const [columns, setColumns] = useState(cloneInsertionColumns);
   const pendingRemovedItem = useRef(null);
   const itemCount = columns.reduce(
@@ -1437,9 +1428,8 @@ export function SnapSortInsertionDemo() {
           return columnsWithoutItem;
         });
       },
-      awaitMutation,
     }),
-    [awaitMutation, removeItemById],
+    [removeItemById],
   );
 
   const reset = () => {
