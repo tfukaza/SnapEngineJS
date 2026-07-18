@@ -1,6 +1,6 @@
 {
   "name": "@snap-engine/snapsort-svelte",
-  "version": "0.4.0",
+  "version": "0.4.1",
   "repository": {
     "type": "git",
     "url": "git+https://github.com/tfukaza/SnapEngineJS.git",
@@ -32,7 +32,7 @@
   "author": "Tomoki Fukazawa",
   "license": "MIT",
   "dependencies": {
-    "@snap-engine/snapsort": "^0.4.0"
+    "@snap-engine/snapsort": "^0.4.1"
   },
   "files": [
     "src",

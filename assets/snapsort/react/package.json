@@ -1,6 +1,6 @@
 {
   "name": "@snap-engine/snapsort-react",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "repository": {
     "type": "git",
     "url": "git+https://github.com/tfukaza/SnapEngineJS.git",
@@ -27,9 +27,9 @@
   "author": "Tomoki Fukazawa",
   "license": "MIT",
   "dependencies": {
-    "@snap-engine/asset-base-react": "^0.1.0",
+    "@snap-engine/asset-base-react": "^0.1.1",
     "@snap-engine/core": "^0.4.1",
-    "@snap-engine/snapsort": "^0.4.0"
+    "@snap-engine/snapsort": "^0.4.1"
   },
   "files": [
     "src",
