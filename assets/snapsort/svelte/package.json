@@ -1,6 +1,6 @@
 {
   "name": "@snap-engine/snapsort-svelte",
-  "version": "0.4.1",
+  "version": "0.4.2",
   "repository": {
     "type": "git",
     "url": "git+https://github.com/tfukaza/SnapEngineJS.git",
@@ -9,9 +9,12 @@
   "description": "Svelte components for drag-and-drop system",
   "type": "module",
   "svelte": "./src/index.ts",
+  "types": "./src/index.ts",
   "exports": {
     ".": {
-      "svelte": "./src/index.ts"
+      "types": "./src/index.ts",
+      "svelte": "./src/index.ts",
+      "default": "./src/index.ts"
     },
     "./Container.svelte": "./src/ContainerEuclidean.svelte",
     "./Item.svelte": "./src/ItemEuclidean.svelte",
