@@ -96,6 +96,17 @@ test("SnapSort asset preview pans and moves items through the imperative API", a
   await card.hover();
   await expect(card).toHaveAttribute("data-preview-active", "true");
   await expect(card).toHaveAttribute("data-preview-hovered", "true");
+  for (const selector of [
+    ".preview-file-tree .active",
+    ".preview-trash-list span:first-child",
+    ".preview-editor-tools span:first-child",
+    ".preview-clone-blocks .heading-block",
+  ]) {
+    await expect(card.locator(selector)).toHaveCSS(
+      "animation-play-state",
+      "running",
+    );
+  }
   await expect
     .poll(
       () =>

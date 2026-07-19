@@ -959,6 +959,8 @@
   .preview-file-tree .active {
     background: color-mix(in srgb, var(--color-primary) 14%, white);
     color: color-mix(in srgb, var(--color-primary) 74%, #222);
+    animation: preview-file-selection 3.8s ease-in-out infinite;
+    animation-play-state: paused;
   }
 
   .preview-swap-panel :global(.preview-tile-grid) {
@@ -1003,6 +1005,13 @@
     font-size: 0.9rem;
   }
 
+  .preview-trash-list span:first-child {
+    position: relative;
+    z-index: 1;
+    animation: preview-trash-drop 5.2s cubic-bezier(0.22, 1, 0.36, 1) infinite;
+    animation-play-state: paused;
+  }
+
   .preview-trash-list i {
     width: 10px;
     height: 28px;
@@ -1041,6 +1050,13 @@
     font-size: 0.9rem;
   }
 
+  .preview-editor-tools span:first-child {
+    position: relative;
+    z-index: 2;
+    animation: preview-editor-insert 4.6s cubic-bezier(0.22, 1, 0.36, 1) infinite;
+    animation-play-state: paused;
+  }
+
   .preview-editor-canvas {
     --card-radius: var(--ui-radius);
 
@@ -1058,6 +1074,8 @@
     border: 1px solid color-mix(in srgb, var(--color-background-dark) 22%, transparent);
     border-radius: var(--ui-radius);
     background: var(--color-background);
+    animation: preview-editor-target 4.6s ease-in-out infinite;
+    animation-play-state: paused;
   }
 
   .preview-choice-row {
@@ -1090,8 +1108,12 @@
   }
 
   .preview-clone-blocks .heading-block {
+    position: relative;
+    z-index: 2;
     background: color-mix(in srgb, var(--color-primary) 16%, white);
     color: color-mix(in srgb, var(--color-primary) 78%, #222);
+    animation: preview-clone-block 4.9s cubic-bezier(0.22, 1, 0.36, 1) infinite;
+    animation-play-state: paused;
   }
 
   .preview-clone-blocks .image-block {
@@ -1114,6 +1136,17 @@
     color: #9ba0a3;
     font-size: 0.85rem;
     text-align: center;
+    animation: preview-clone-target 4.9s ease-in-out infinite;
+    animation-play-state: paused;
+  }
+
+  .drop-snap-card[data-preview-active="true"] .preview-file-tree .active,
+  .drop-snap-card[data-preview-active="true"] .preview-trash-list span:first-child,
+  .drop-snap-card[data-preview-active="true"] .preview-editor-tools span:first-child,
+  .drop-snap-card[data-preview-active="true"] .preview-input-line,
+  .drop-snap-card[data-preview-active="true"] .preview-clone-blocks .heading-block,
+  .drop-snap-card[data-preview-active="true"] .preview-clone-canvas {
+    animation-play-state: running;
   }
 
   .preview-skeleton-mosaic > div {
@@ -1174,6 +1207,129 @@
   .pending-plus-grid span {
     margin: 0;
     color: inherit;
+  }
+
+  @keyframes preview-file-selection {
+    0%,
+    18%,
+    72%,
+    100% {
+      transform: translate3d(0, 0, 0);
+      box-shadow: inset 0 0 0 0 transparent;
+    }
+    34%,
+    56% {
+      transform: translate3d(12px, 0, 0);
+      box-shadow: inset 4px 0 0 var(--color-primary);
+    }
+  }
+
+  @keyframes preview-trash-drop {
+    0%,
+    16% {
+      opacity: 1;
+      transform: translate3d(0, 0, 0) scale(1);
+    }
+    42% {
+      opacity: 1;
+      transform: translate3d(0, 126px, 0) scale(0.92);
+    }
+    48%,
+    58% {
+      opacity: 0;
+      transform: translate3d(0, 126px, 0) scale(0.88);
+    }
+    59% {
+      opacity: 0;
+      transform: translate3d(0, 0, 0) scale(1);
+    }
+    72%,
+    100% {
+      opacity: 1;
+      transform: translate3d(0, 0, 0) scale(1);
+    }
+  }
+
+  @keyframes preview-editor-insert {
+    0%,
+    14% {
+      opacity: 1;
+      transform: translate3d(0, 0, 0) scale(1);
+    }
+    40% {
+      opacity: 1;
+      transform: translate3d(204px, 62px, 0) scale(0.92);
+    }
+    48%,
+    58% {
+      opacity: 0;
+      transform: translate3d(204px, 62px, 0) scale(0.88);
+    }
+    59% {
+      opacity: 0;
+      transform: translate3d(0, 0, 0) scale(1);
+    }
+    72%,
+    100% {
+      opacity: 1;
+      transform: translate3d(0, 0, 0) scale(1);
+    }
+  }
+
+  @keyframes preview-editor-target {
+    0%,
+    32%,
+    62%,
+    100% {
+      border-color: color-mix(in srgb, var(--color-background-dark) 22%, transparent);
+      box-shadow: 0 0 0 0 transparent;
+    }
+    42%,
+    54% {
+      border-color: var(--color-primary);
+      box-shadow: 0 0 0 4px color-mix(in srgb, var(--color-primary) 18%, transparent);
+    }
+  }
+
+  @keyframes preview-clone-block {
+    0%,
+    14% {
+      opacity: 1;
+      transform: translate3d(0, 0, 0) scale(1);
+    }
+    40% {
+      opacity: 1;
+      transform: translate3d(82px, 132px, 0) scale(0.94);
+    }
+    48%,
+    58% {
+      opacity: 0;
+      transform: translate3d(82px, 132px, 0) scale(0.9);
+    }
+    59% {
+      opacity: 0;
+      transform: translate3d(0, 0, 0) scale(1);
+    }
+    72%,
+    100% {
+      opacity: 1;
+      transform: translate3d(0, 0, 0) scale(1);
+    }
+  }
+
+  @keyframes preview-clone-target {
+    0%,
+    32%,
+    62%,
+    100% {
+      border-color: #c7cccf;
+      background: var(--color-background);
+    }
+    42%,
+    54% {
+      border-color: var(--color-primary);
+      background: color-mix(in srgb, var(--color-primary) 8%, white);
+    }
   }
 
   @keyframes preview-pan {
