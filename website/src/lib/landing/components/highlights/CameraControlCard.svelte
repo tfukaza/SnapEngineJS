@@ -69,6 +69,14 @@
     cameraControl.setCameraPosition(0, 0);
   }
 
+  function handleCameraWheel(event: WheelEvent) {
+    if (event.ctrlKey || event.metaKey) return;
+
+    // Let the browser perform its normal page-scroll default action, but keep
+    // the engine's wheel listener from treating this as camera input.
+    event.stopPropagation();
+  }
+
   function zoom(delta: number) {
     cameraControl?.zoomBy(delta);
   }
@@ -96,7 +104,10 @@
   onMount(initializeCamera);
 </script>
 
-<article class="camera-control-card theme-secondary-7">
+<article
+  class="camera-control-card theme-secondary-7"
+  onwheelcapture={handleCameraWheel}
+>
   <div class="camera-viewport">
     <ClientDemoFrame>
       {#snippet fallback()}
@@ -155,7 +166,7 @@
     border-radius: var(--ui-radius);
     overflow: hidden;
     isolation: isolate;
-    overscroll-behavior: contain;
+    overscroll-behavior: auto;
     touch-action: none;
 
     @media (max-width: 720px) {
@@ -170,7 +181,7 @@
     inset: 0;
     z-index: 0;
     cursor: grab;
-    overscroll-behavior: contain;
+    overscroll-behavior: auto;
     touch-action: none;
     user-select: none;
     -webkit-user-select: none;
@@ -184,7 +195,7 @@
     width: 100%;
     height: 100%;
     background: transparent;
-    overscroll-behavior: contain;
+    overscroll-behavior: auto;
     touch-action: inherit;
     user-select: inherit;
     -webkit-user-select: inherit;
@@ -197,7 +208,7 @@
     width: 100% !important;
     height: 100% !important;
     background: transparent;
-    overscroll-behavior: contain;
+    overscroll-behavior: auto;
     touch-action: inherit;
     transform-origin: 0 0;
     user-select: inherit;
