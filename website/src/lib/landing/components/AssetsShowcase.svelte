@@ -102,11 +102,16 @@
 
   let pointerInside = $state(false);
   let focusInside = $state(false);
+  let mobilePreviewMode = $state(false);
+  let previewInView = $state(false);
+  let previewCardElement: HTMLElement | undefined;
   let previewPanX = $state(-12);
   let previewPanY = $state(-104);
   let prefersReducedMotion = $state(false);
   let documentVisible = $state(true);
-  const previewRequested = $derived(pointerInside || focusInside);
+  const previewRequested = $derived(
+    pointerInside || focusInside || (mobilePreviewMode && previewInView),
+  );
   const previewMotionActive = $derived(
     previewRequested && !prefersReducedMotion && documentVisible,
   );
@@ -119,7 +124,7 @@
   let editorForward = true;
 
   function handlePreviewPointerMove(event: MouseEvent) {
-    if (prefersReducedMotion) return;
+    if (prefersReducedMotion || mobilePreviewMode) return;
 
     const card = event.currentTarget as HTMLElement;
     const rect = card.getBoundingClientRect();
@@ -388,22 +393,65 @@
 
   onMount(() => {
     const reducedMotionQuery = window.matchMedia("(prefers-reduced-motion: reduce)");
+    const mobilePreviewQuery = window.matchMedia("(hover: none) and (pointer: coarse)");
+    let scrollFrame: number | undefined;
+
+    const updateMobilePan = () => {
+      scrollFrame = undefined;
+      if (!mobilePreviewMode || !previewCardElement || prefersReducedMotion) return;
+
+      const rect = previewCardElement.getBoundingClientRect();
+      const scrollProgress = Math.max(
+        0,
+        Math.min(1, (window.innerHeight - rect.top) / (window.innerHeight + rect.height)),
+      );
+      previewPanX = -12;
+      previewPanY = -18 - scrollProgress * 234;
+    };
+    const scheduleMobilePan = () => {
+      if (scrollFrame !== undefined) return;
+      scrollFrame = requestAnimationFrame(updateMobilePan);
+    };
     const syncReducedMotion = () => {
       prefersReducedMotion = reducedMotionQuery.matches;
+      scheduleMobilePan();
+    };
+    const syncMobilePreviewMode = () => {
+      mobilePreviewMode = mobilePreviewQuery.matches;
+      if (!mobilePreviewMode) previewInView = false;
+      scheduleMobilePan();
     };
     const syncVisibility = () => {
       documentVisible = document.visibilityState === "visible";
     };
 
     syncReducedMotion();
+    syncMobilePreviewMode();
     syncVisibility();
+    const previewObserver = new IntersectionObserver(
+      ([entry]) => {
+        previewInView = entry.isIntersecting;
+        if (entry.isIntersecting) scheduleMobilePan();
+      },
+      { threshold: 0.15 },
+    );
+    if (previewCardElement) previewObserver.observe(previewCardElement);
+
     reducedMotionQuery.addEventListener("change", syncReducedMotion);
+    mobilePreviewQuery.addEventListener("change", syncMobilePreviewMode);
     document.addEventListener("visibilitychange", syncVisibility);
+    window.addEventListener("scroll", scheduleMobilePan, { passive: true });
+    window.addEventListener("resize", scheduleMobilePan, { passive: true });
 
     return () => {
       stopAutomation();
+      if (scrollFrame !== undefined) cancelAnimationFrame(scrollFrame);
+      previewObserver.disconnect();
       reducedMotionQuery.removeEventListener("change", syncReducedMotion);
+      mobilePreviewQuery.removeEventListener("change", syncMobilePreviewMode);
       document.removeEventListener("visibilitychange", syncVisibility);
+      window.removeEventListener("scroll", scheduleMobilePan);
+      window.removeEventListener("resize", scheduleMobilePan);
     };
   });
 </script>
@@ -419,6 +467,7 @@
 
   <div class="assets-grid">
     <article
+      bind:this={previewCardElement}
       class="asset-card drop-snap-card"
       data-preview-active={previewMotionActive}
       data-preview-hovered={previewRequested}

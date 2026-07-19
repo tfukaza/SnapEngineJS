@@ -243,6 +243,42 @@ test("SnapSort asset preview honors reduced motion", async ({ page }) => {
   expect(reducedPanAfter).toBe(reducedPanBefore);
 });
 
+test("SnapSort asset preview activates and pans with scroll on touch screens", async ({
+  browser,
+}) => {
+  const context = await browser.newContext({
+    viewport: { width: 390, height: 844 },
+    isMobile: true,
+    hasTouch: true,
+  });
+  const page = await context.newPage();
+  await page.goto("/");
+
+  const card = page.locator(".drop-snap-card");
+  const pan = card.locator(".snapsort-preview-pan");
+  const firstKanbanColumn = card.locator(".preview-kanban-column").first();
+  await card.scrollIntoViewIfNeeded();
+  await expect(card).toHaveAttribute("data-preview-active", "true");
+  await expect(card).toHaveAttribute("data-preview-hovered", "true");
+
+  const panBeforeScroll = await pan.evaluate((element) =>
+    new DOMMatrix(getComputedStyle(element).transform).m42,
+  );
+  await page.evaluate(() => window.scrollBy(0, 140));
+  await expect
+    .poll(() =>
+      pan.evaluate((element) =>
+        new DOMMatrix(getComputedStyle(element).transform).m42,
+      ),
+    )
+    .toBeLessThan(panBeforeScroll - 15);
+  await expect
+    .poll(() => firstKanbanColumn.locator(":scope > .snapsort-item").count())
+    .toBe(1);
+
+  await context.close();
+});
+
 test("camera card reserves modified wheel input for zoom", async ({ page }) => {
   await page.goto("/");
 
