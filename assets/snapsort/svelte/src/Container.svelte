@@ -12,12 +12,13 @@
     GhostRemoveEvent,
   } from "@snap-engine/snapsort";
 
-  import { flushSync, getContext, setContext, onMount, onDestroy } from "svelte";
+  import { flushSync, getContext, setContext, onMount, onDestroy, untrack } from "svelte";
   import type { Snippet } from "svelte";
+  import type { HTMLAttributes } from "svelte/elements";
   import type { Engine } from "@snap-engine/core";
   import Ghost from "./Ghost.svelte";
 
-  type ContainerProps<T> = {
+  type ContainerProps<T> = Omit<HTMLAttributes<HTMLDivElement>, "children"> & {
     config: ContainerConfig;
     before?: Snippet<[]>;
     after?: Snippet<[]>;
@@ -45,20 +46,25 @@
     container = $bindable(),
     locked = true,
     selected = false,
+    class: classValue = "",
     className = "",
     metadata = {},
-  }: ContainerProps<T> & Record<string, unknown> = $props();
+    style = "",
+    ...divProps
+  }: ContainerProps<T> = $props();
   const engine: Engine = getContext("engine");
   const parentContainer: SnapSortContainer | null = getContext("container");
+  const initial = untrack(() => ({ config, entrySnippet, itemId, locked, metadata, selected }));
 
-  if (!entrySnippet) {
+  if (!initial.entrySnippet) {
     throw new Error("SnapSort Container: missing required `entry` snippet.");
   }
+  const renderEntry: Snippet<[T]> = initial.entrySnippet;
 
   if (
-    config.callbacks?.createGhost ||
-    config.callbacks?.onGhostInsert ||
-    config.callbacks?.onGhostRemove
+    initial.config.callbacks?.createGhost ||
+    initial.config.callbacks?.onGhostInsert ||
+    initial.config.callbacks?.onGhostRemove
   ) {
     console.warn(
       "SnapSort Container: ghost callbacks (createGhost/onGhostInsert/onGhostRemove) passed " +
@@ -135,7 +141,7 @@
   });
 
   const callbacks: ContainerCallbacks = {
-    ...config.callbacks,
+    ...initial.config.callbacks,
     createGhost: handleItemsModeCreateGhost,
     onGhostInsert: handleItemsModeGhostInsert,
     onGhostRemove: handleItemsModeGhostRemove,
@@ -145,20 +151,26 @@
   };
 
   let itemContainer: SnapSortContainer = new SnapSortContainer(engine, parentContainer, {
-    ...config,
+    ...initial.config,
     callbacks,
   });
-  itemContainer.itemId = itemId;
-  itemContainer.locked = locked;
-  itemContainer.selected = selected;
-  itemContainer.metadata = metadata;
-  itemContainer.direction = config.direction ?? "column";
-  itemContainer.mainAxisAlign = config.mainAxisAlign ?? "start";
-  itemContainer.wrap = config.wrap ?? "auto";
-  itemContainer.stretchItems = config.stretchItems ?? false;
-  itemContainer.dropArea = config.dropArea ?? false;
-  itemContainer.noDrop = config.noDrop ?? false;
+  itemContainer.itemId = initial.itemId;
+  itemContainer.locked = initial.locked;
+  itemContainer.selected = initial.selected;
+  itemContainer.metadata = initial.metadata;
+  itemContainer.direction = initial.config.direction ?? "column";
+  itemContainer.mainAxisAlign = initial.config.mainAxisAlign ?? "start";
+  itemContainer.wrap = initial.config.wrap ?? "auto";
+  itemContainer.stretchItems = initial.config.stretchItems ?? false;
+  itemContainer.dropArea = initial.config.dropArea ?? false;
+  itemContainer.noDrop = initial.config.noDrop ?? false;
   const justifyContent = $derived(config.mainAxisAlign === "center" ? "center" : "flex-start");
+  const mergedClass = $derived(
+    `snapsort-container snapsort-mode-${itemContainer.mode} ${classValue} ${className}`.trim(),
+  );
+  const mergedStyle = $derived(
+    `flex-direction:${config.direction};justify-content:${justifyContent};${style ?? ""}`,
+  );
   setContext("container", itemContainer);
   setContext("item", itemContainer);
 
@@ -192,8 +204,9 @@
 {/snippet}
 
 <div
-  class="snapsort-container snapsort-mode-{itemContainer.mode} {className}"
-  style="flex-direction: {config.direction}; justify-content: {justifyContent}"
+  {...divProps}
+  class={mergedClass}
+  style={mergedStyle}
   bind:this={itemContainer.element}
 >
   {@render before?.()}
@@ -201,7 +214,7 @@
     {#if re.kind === "ghost"}
       {@render (ghostSnippet ?? defaultGhost)(re.ghost.event)}
     {:else}
-      {@render entrySnippet(re.entry)}
+      {@render renderEntry(re.entry)}
     {/if}
   {/each}
   {@render after?.()}

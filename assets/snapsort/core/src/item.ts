@@ -1713,10 +1713,10 @@ export class Item extends ElementObject {
     void prop;
   }
 
-  destroy() {
+  destroy(removeElement: boolean = true) {
     if (this.parent) {
       this.detachItemFromContainer(this.parent as unknown as Container, this);
     }
-    super.destroy();
+    super.destroy(removeElement);
   }
 }

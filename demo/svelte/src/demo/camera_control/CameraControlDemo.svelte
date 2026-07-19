@@ -36,7 +36,7 @@
   });
 </script>
 
-<Engine id="camera-control-demo-canvas">
+<Engine id="camera-control-demo-canvas" data-testid="camera-engine">
   <div class:scroll-enabled={browserScrollEnabled} class="camera-control-demo">
     <div
       class="camera-toolbar"

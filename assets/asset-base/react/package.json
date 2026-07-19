@@ -1,6 +1,6 @@
 {
   "name": "@snap-engine/asset-base-react",
-  "version": "0.1.1",
+  "version": "0.1.2",
   "repository": {
     "type": "git",
     "url": "git+https://github.com/tfukaza/SnapEngineJS.git",
@@ -17,7 +17,7 @@
     "./Background": "./src/Background.tsx"
   },
   "dependencies": {
-    "@snap-engine/asset-base": "^0.4.1",
+    "@snap-engine/asset-base": "^0.4.2",
     "@snap-engine/core": "^0.4.1"
   },
   "files": [

@@ -1,5 +1,7 @@
 import { expect, test, type Page } from "@playwright/test";
 
+const engineSelector = '[data-testid="camera-engine"]';
+
 type Point = {
   x: number;
   y: number;
@@ -38,7 +40,7 @@ async function cameraScale(page: Page) {
 async function cameraWorldAt(page: Page, point: Point) {
   const [transform, canvasBox] = await Promise.all([
     cameraTransform(page),
-    page.locator("#snap-canvas").boundingBox(),
+    page.locator(engineSelector).boundingBox(),
   ]);
   expect(canvasBox).not.toBeNull();
 
@@ -58,7 +60,7 @@ async function dispatchTouchPointer(
   point: Point,
   options: { isPrimary?: boolean; buttons?: number } = {},
 ) {
-  await page.locator("#snap-canvas").evaluate(
+  await page.locator(engineSelector).evaluate(
     (
       element,
       {
@@ -105,11 +107,11 @@ test("stationary second touch after a one-finger pan does not zoom the camera", 
 }) => {
   await page.goto("/?demo=camera_control");
   await expect(page.locator("#snap-camera-control")).toBeAttached();
-  await expect(page.locator("#snap-canvas")).toBeVisible();
+  await expect(page.locator(engineSelector)).toBeVisible();
 
   await expect.poll(() => cameraScale(page)).toBeLessThan(0.95);
 
-  const canvasBox = await page.locator("#snap-canvas").boundingBox();
+  const canvasBox = await page.locator(engineSelector).boundingBox();
   expect(canvasBox).not.toBeNull();
 
   const y = canvasBox!.y + canvasBox!.height / 2;
@@ -158,11 +160,11 @@ test("pinch pans from the center point between two fingers", async ({
 }) => {
   await page.goto("/?demo=camera_control");
   await expect(page.locator("#snap-camera-control")).toBeAttached();
-  await expect(page.locator("#snap-canvas")).toBeVisible();
+  await expect(page.locator(engineSelector)).toBeVisible();
 
   await expect.poll(() => cameraScale(page)).toBeLessThan(0.95);
 
-  const canvasBox = await page.locator("#snap-canvas").boundingBox();
+  const canvasBox = await page.locator(engineSelector).boundingBox();
   expect(canvasBox).not.toBeNull();
 
   const y = canvasBox!.y + canvasBox!.height / 2;
@@ -236,11 +238,11 @@ test("pinch zoom keeps the original world points under both fingers", async ({
 }) => {
   await page.goto("/?demo=camera_control");
   await expect(page.locator("#snap-camera-control")).toBeAttached();
-  await expect(page.locator("#snap-canvas")).toBeVisible();
+  await expect(page.locator(engineSelector)).toBeVisible();
 
   await expect.poll(() => cameraScale(page)).toBeLessThan(0.95);
 
-  const canvasBox = await page.locator("#snap-canvas").boundingBox();
+  const canvasBox = await page.locator(engineSelector).boundingBox();
   expect(canvasBox).not.toBeNull();
 
   const x = Math.round(canvasBox!.x + canvasBox!.width / 2);

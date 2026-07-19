@@ -9,7 +9,7 @@ default, `"progressive"`, `"insertion"`, or `"swap"`). `Item` never needs a mode
 ## Install
 
 ```bash
-npm install @snap-engine/snapsort-svelte @snap-engine/snapsort
+npm install @snap-engine/core @snap-engine/asset-base-svelte @snap-engine/snapsort @snap-engine/snapsort-svelte svelte
 ```
 
 ## Includes
@@ -48,3 +48,9 @@ Use normal synchronous assignments to `$state` from SnapSort callbacks. The
 adapter automatically runs each structural mutation inside Svelte's
 `flushSync`, so the DOM is committed before SnapEngine measures final geometry
 and writes FLIP's inverse transform. No `tick()` callback is required.
+
+Use a stable `itemId` for every entry and update application arrays in
+`onItemMove`; SnapSort does not own Svelte state. Components forward normal
+`div` attributes. The only component subpaths are `Container.svelte`,
+`Item.svelte`, `Ghost.svelte`, and `Handle.svelte`; select placement behavior
+with `config.mode`.

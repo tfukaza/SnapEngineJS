@@ -6,7 +6,7 @@ import {
   useEffect,
   useImperativeHandle,
   useRef,
-  type CSSProperties,
+  type HTMLAttributes,
   type ReactNode,
 } from "react";
 import {
@@ -22,7 +22,8 @@ export const ContainerObjectContext = createContext<ContainerObject | null>(
   null,
 );
 
-export interface ContainerProps {
+export interface ContainerProps
+  extends Omit<HTMLAttributes<HTMLDivElement>, "children"> {
   children?: ReactNode;
   className?: string;
   config: ContainerConfig;
@@ -32,7 +33,6 @@ export interface ContainerProps {
   /** Consumer-owned selection flag — see `Item.selected` in `@snap-engine/snapsort`. Only meaningful when `locked` is `false`. */
   selected?: boolean;
   metadata?: Record<string, unknown>;
-  style?: CSSProperties;
 }
 
 export const Container = forwardRef<ContainerObject, ContainerProps>(
@@ -47,6 +47,7 @@ export const Container = forwardRef<ContainerObject, ContainerProps>(
       selected = false,
       metadata = {},
       style,
+      ...divProps
     },
     ref,
   ) {
@@ -56,7 +57,9 @@ export const Container = forwardRef<ContainerObject, ContainerProps>(
     const ownsContainerRef = useRef(containerObject == null);
     const containerRef = useRef<ContainerObject | null>(containerObject);
     if (!containerRef.current) {
-      containerRef.current = new ContainerObject(engine, null, { ...config });
+      containerRef.current = new ContainerObject(engine, parentContainer, {
+        ...config,
+      });
     }
     const container = containerRef.current;
     const resolvedItemId =
@@ -125,6 +128,7 @@ export const Container = forwardRef<ContainerObject, ContainerProps>(
     return (
       <ContainerObjectContext.Provider value={container}>
         <div
+          {...divProps}
           ref={setContainerElement}
           className={`snapsort-container snapsort-mode-${container.mode} ${className}`.trim()}
           style={{

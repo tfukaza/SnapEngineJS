@@ -39,7 +39,7 @@ function MountedScene({ debug, onBackground, onCamera, onEngine }) {
       ref={onEngine}
       debug={debug}
       className="asset-base-react-canvas"
-      data-testid="asset-base-engine"
+      data-testid="camera-engine"
       style={{ width: "100%" }}
     >
       <Camera ref={onCamera} className="asset-base-react-camera">

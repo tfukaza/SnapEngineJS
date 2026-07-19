@@ -68,6 +68,14 @@ Wrap the sortable tree in an `Engine`, then compose containers and items:
 
 `Ghost` is used inside a `Container`'s custom `ghost` snippet. `Handle` belongs inside an `Item` and limits where a drag can begin.
 
+Every wrapper forwards standard `div` attributes. Both Svelte's `class` prop
+and the legacy `className` alias are accepted, and consumer `style` values are
+appended after the structural defaults.
+
+The supported component subpaths are exactly `Container.svelte`, `Item.svelte`,
+`Ghost.svelte`, and `Handle.svelte`. Placement behavior is selected with
+`config.mode`; there are no mode-specific component exports.
+
 ## Core Types
 
 Import callback events, configuration, metadata, and bindable object types from the framework-agnostic package:

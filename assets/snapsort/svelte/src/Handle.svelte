@@ -1,21 +1,26 @@
 <script lang="ts">
-  import { getContext, onDestroy, onMount } from "svelte";
+  import { getContext, onDestroy, onMount, type Snippet } from "svelte";
+  import type { HTMLAttributes } from "svelte/elements";
   import type {
     Item,
   } from "@snap-engine/snapsort";
 
+  type HandleProps = Omit<HTMLAttributes<HTMLDivElement>, "children"> & {
+    children: Snippet;
+    className?: string;
+  };
+
   let {
     children,
     style = "",
+    class: classValue = "",
     className = "",
-  }: {
-    children: any;
-    style?: string;
-    className?: string;
-  } = $props();
+    ...divProps
+  }: HandleProps = $props();
 
   const itemObject: Item | null = getContext("item");
   let handleElement: HTMLElement | null = null;
+  const mergedClass = $derived(`snapsort-handle ${classValue} ${className}`.trim());
 
   onMount(() => {
     if (itemObject && handleElement) {
@@ -31,7 +36,8 @@
 </script>
 
 <div
-  class="snapsort-handle {className}"
+  {...divProps}
+  class={mergedClass}
   bind:this={handleElement}
   {style}
 >

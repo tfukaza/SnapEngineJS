@@ -25,8 +25,7 @@ Common foundational components used across all SnapEngine products. Essential bu
 - `Engine.svelte` - Main engine wrapper component
 - `Camera.svelte` - Camera control component
 - `Background.svelte` - Background component
-- `getEngine()` - Engine instance manager
-- `ObjectData` - Type definition
+- `getEngine()` / `destroyEngine()` - Legacy keyed Engine instance utilities
 
 ### @snap-engine/asset-base-react
 **Location:** `react/src/`
@@ -59,7 +58,7 @@ asset-base/
         ├── Engine.svelte       # Engine wrapper (was Canvas)
         ├── Camera.svelte       # Camera wrapper (was CameraControl)
         ├── Background.svelte   # Background wrapper
-        └── engine.svelte.ts    # Engine utilities
+        └── engineState.svelte.js # Legacy keyed Engine utilities
 └── react/
     ├── package.json
     ├── tsconfig.json
@@ -95,7 +94,7 @@ asset-base/
 **Purpose:** Main wrapper that creates and manages engine instance
 
 **Props:**
-- `id: string` - Unique engine ID (required)
+- `id?: string` - DOM ID (defaults to `snap-canvas`)
 - `engine?: Engine` (bindable) - Engine instance
 - `debug?: boolean` - Enable debug mode
 
@@ -104,6 +103,8 @@ asset-base/
 - Sets up collision engine
 - Provides context to children
 - Manages debug renderer
+- Forwards standard div attributes; consumer styles override defaults
+- Defaults to `overflow: visible`
 
 ### Camera.svelte
 **Purpose:** Camera control with pan/zoom

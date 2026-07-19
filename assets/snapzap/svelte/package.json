@@ -1,5 +1,6 @@
 {
   "name": "@snap-engine/snapzap-svelte",
+  "private": true,
   "version": "0.1.0",
   "repository": {
     "type": "git",

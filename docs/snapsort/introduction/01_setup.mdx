@@ -17,7 +17,7 @@ the SnapEngine core it's built on, and the frontend framework bindings (if appli
 npm install @snap-engine/core @snap-engine/asset-base-svelte @snap-engine/snapsort @snap-engine/snapsort-svelte
 ```
 ```bash framework=React
-npm install @snap-engine/core @snap-engine/snapsort @snap-engine/snapsort-react react react-dom
+npm install @snap-engine/core @snap-engine/asset-base-react @snap-engine/snapsort @snap-engine/snapsort-react react react-dom
 ```
 ```bash framework=Vanilla
 npm install @snap-engine/core @snap-engine/snapsort
@@ -117,3 +117,15 @@ for (const element of list.querySelectorAll("[data-item-id]")) {
 ```
 
 Items can now be dragged to reorder, with FLIP animations included by default. The list on screen updates, but your `tasks` array does not — wiring drops back into framework state is covered in [Session Lifecycle](/docs/snapsort/guides/03_session_lifecycle).
+
+## Production Checklist
+
+Before treating a list as complete:
+
+1. Give every item a stable, unique `itemId`; do not use its array index.
+2. Keep the framework array as the source of truth. Update it synchronously in `onItemMove` (and `onItemSwap` when using swap mode).
+3. Put containers that exchange items in the same `groupID` and attach identifying `metadata` to each container.
+4. Give the `Engine` and sortable container real dimensions. `Engine` defaults to `height: 100%`, `position: relative`, and `overflow: visible`; pass `style` or a class when the parent does not already establish a height.
+5. Render one framework component for each core object. Use `Ghost` for framework-owned flow placeholders instead of wrapping `event.ghostItem` in a normal `Item`.
+
+All wrapper components forward normal `div` attributes such as `class`, `className`, `style`, `id`, `data-*`, ARIA attributes, and event handlers. Consumer styles are merged after the structural defaults, so an explicit style can override them.

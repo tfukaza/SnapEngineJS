@@ -163,7 +163,7 @@
     return ids;
   }
 
-  function handleSelectNode(nodeId: string, event: MouseEvent) {
+  function handleSelectNode(nodeId: string, event: MouseEvent | KeyboardEvent) {
     if (event.shiftKey && lastClickedId) {
       const order = flattenVisibleIds(tree);
       const anchorIndex = order.indexOf(lastClickedId);

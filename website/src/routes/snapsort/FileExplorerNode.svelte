@@ -30,7 +30,7 @@
     callbacks: ContainerCallbacks;
     onToggleFolder: (nodeId: string) => void;
     selectedIds: Set<string>;
-    onSelectNode: (nodeId: string, event: MouseEvent) => void;
+    onSelectNode: (nodeId: string, event: MouseEvent | KeyboardEvent) => void;
   } = $props();
 
   const fileTreeAnimation = {
@@ -52,6 +52,12 @@
   }
 
   function handleRowClick(event: MouseEvent) {
+    onSelectNode(node.id, event);
+  }
+
+  function handleRowKeydown(event: KeyboardEvent) {
+    if (event.key !== "Enter" && event.key !== " ") return;
+    event.preventDefault();
     onSelectNode(node.id, event);
   }
 </script>
@@ -89,6 +95,9 @@
         class:selected={isSelected}
         style={`--depth: ${depth}`}
         onclick={handleRowClick}
+        onkeydown={handleRowKeydown}
+        role="button"
+        tabindex="0"
       >
         <span class="indent" aria-hidden="true"></span>
         <button

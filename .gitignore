@@ -12,6 +12,8 @@ dist
 dist-ssr
 *.local
 **/package-lock.json
+!package-lock.json
+!website/package-lock.json
 
 # Editor directories and files
 .vscode/*
@@ -52,3 +54,4 @@ TODO.md
 # Exceptions
 !vite.config.mjs
 !demo.mjs
+!scripts/*.mjs

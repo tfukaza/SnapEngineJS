@@ -30,3 +30,8 @@ export function Scene() {
 `Engine`, `Camera`, and `Background` forward refs to their underlying
 SnapEngine objects. Use `useSnapEngine()` or `useCameraControl()` from a child
 component when context access is more convenient.
+
+All components forward standard `div` attributes. `Engine` defaults to
+`height: 100%`, `position: relative`, and `overflow: visible`; consumer styles
+are merged afterward. A supplied `engine` remains consumer-owned, while an
+internally created engine is cleaned up when the component unmounts.

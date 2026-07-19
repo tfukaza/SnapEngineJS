@@ -1,44 +1,63 @@
 <script lang="ts">
-  import { onMount } from "svelte";
-  import { setContext } from "svelte";
-  import { getEngine } from "./engineState.svelte.js";
-  import type { Engine } from "@snap-engine/core";
+  import { onDestroy, onMount, setContext, type Snippet } from "svelte";
+  import type { HTMLAttributes } from "svelte/elements";
+  import { Engine as CoreEngine } from "@snap-engine/core";
   import { DebugRenderer } from "@snap-engine/core/debug";
   import { CollisionEngine } from "@snap-engine/core/collision";
 
-  let {
-    id,
-    children,
-    engine = $bindable<Engine | null>(null),
-    debug = false,
-  }: {
-    id: string;
-    style?: Record<string, string>;
-    children: any;
-    engine?: Engine | null;
+  type EngineProps = Omit<HTMLAttributes<HTMLDivElement>, "children"> & {
+    children: Snippet;
+    className?: string;
+    engine?: CoreEngine | null;
     debug?: boolean;
-  } = $props();
-  let canvas: HTMLDivElement | null = null;
-  let mounted = $state(false);
-  let pendingDebugEnable = $state(false);
+  };
 
+  let {
+    children,
+    class: classValue = "",
+    className = "",
+    debug = false,
+    engine = $bindable<CoreEngine | null>(null),
+    id = "snap-canvas",
+    style = "",
+    ...divProps
+  }: EngineProps = $props();
+
+  const ownsEngine = typeof document !== "undefined" && engine == null;
   const resolvedEngine =
-    typeof document === "undefined" ? null : ((engine ?? getEngine(id)) as Engine);
+    typeof document === "undefined" ? null : (engine ?? new CoreEngine());
   engine = resolvedEngine;
   setContext("engine", resolvedEngine);
 
-  resolvedEngine?.setCollisionEngine(new CollisionEngine());
+  if (resolvedEngine && !resolvedEngine.collisionEngine) {
+    resolvedEngine.setCollisionEngine(new CollisionEngine());
+  }
+
+  let canvas: HTMLDivElement | null = null;
+  let mounted = $state(false);
+  let pendingDebugEnable = $state(false);
+  const mergedClass = $derived(`${classValue} ${className}`.trim());
+  const mergedStyle = $derived(
+    `height:100%;overflow:visible;position:relative;${style ?? ""}`,
+  );
 
   onMount(() => {
-    if (!resolvedEngine) return;
-    resolvedEngine.assignDom(canvas as HTMLElement);
+    if (!resolvedEngine || !canvas) return;
+    resolvedEngine.assignDom(canvas);
     resolvedEngine.camera?.setCameraPosition(0, 0);
     mounted = true;
 
-    // Apply any debug state that was requested before mount
     if (pendingDebugEnable) {
       resolvedEngine.setDebugRenderer(new DebugRenderer());
       pendingDebugEnable = false;
+    }
+  });
+
+  onDestroy(() => {
+    if (!resolvedEngine) return;
+    resolvedEngine.disableDebug();
+    if (ownsEngine) {
+      resolvedEngine.destroy();
     }
   });
 
@@ -73,14 +92,13 @@
 </script>
 
 <div
-  id="snap-canvas"
+  {...divProps}
+  {id}
+  class={mergedClass || undefined}
   bind:this={canvas}
-  style="height: 100%; overflow: hidden; position: relative;"
+  style={mergedStyle}
 >
   {#if mounted}
     {@render children()}
   {/if}
 </div>
-
-<style lang="scss">
-</style>

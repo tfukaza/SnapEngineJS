@@ -198,7 +198,7 @@ async function removeGhost(
   }
   await settleMutation();
   for (const ghost of run) {
-    ghost.destroy();
+    ghost.destroy(!ghost.frameworkManagedGhostElement);
   }
   run.length = 0;
 }

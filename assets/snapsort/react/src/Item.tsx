@@ -6,7 +6,7 @@ import {
   useEffect,
   useImperativeHandle,
   useRef,
-  type CSSProperties,
+  type HTMLAttributes,
   type ReactNode,
 } from "react";
 import {
@@ -18,7 +18,8 @@ import { ContainerObjectContext } from "./Container";
 
 export const ItemObjectContext = createContext<ItemObject | null>(null);
 
-export interface ItemProps {
+export interface ItemProps
+  extends Omit<HTMLAttributes<HTMLDivElement>, "children"> {
   children: ReactNode;
   className?: string;
   itemId?: string;
@@ -26,11 +27,10 @@ export interface ItemProps {
   metadata?: ItemSnapshotMetadata;
   /** Consumer-owned selection flag — see `Item.selected` in `@snap-engine/snapsort`. */
   selected?: boolean;
-  style?: CSSProperties;
 }
 
 export const Item = forwardRef<ItemObject, ItemProps>(function SnapSortItem(
-  { children, className = "", itemId, itemObject = null, metadata = {}, selected = false, style },
+  { children, className = "", itemId, itemObject = null, metadata = {}, selected = false, style, ...divProps },
   ref,
 ) {
   const engine = useSnapSortEngine();
@@ -76,6 +76,7 @@ export const Item = forwardRef<ItemObject, ItemProps>(function SnapSortItem(
   return (
     <ItemObjectContext.Provider value={item}>
       <div
+        {...divProps}
         ref={setItemElement}
         className={`snapsort-item ${className}`.trim()}
         style={{

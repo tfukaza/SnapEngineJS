@@ -142,7 +142,7 @@ export const Engine = forwardRef<CoreEngine, EngineProps>(function Engine(
       ref={canvasRef}
       style={{
         height: "100%",
-        overflow: "hidden",
+        overflow: "visible",
         position: "relative",
         ...style,
       }}

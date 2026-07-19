@@ -19,14 +19,14 @@ A single `Container`/`Item` class pair (per framework) whose drag/drop behavior 
 **Language:** Svelte 5
 **Dependencies:** `@snap-engine/snapsort`, `@snap-engine/core`
 
-**Exports:** `Container.svelte`, `Item.svelte`, `Handle.svelte`.
+**Exports:** `Container.svelte`, `Item.svelte`, `Ghost.svelte`, `Handle.svelte`.
 
 ### @snap-engine/snapsort-react
 **Location:** `react/src/`
 **Language:** React (TSX)
 **Dependencies:** `@snap-engine/snapsort`, `@snap-engine/core`, `react`, `react-dom` (peer)
 
-**Exports:** `Engine`/`SnapSortEngine`, `Container`, `Item`, `Handle`, `useSnapSortEngine`, deprecated `useSnapSortAwaitMutation`, `ContainerObjectContext`, `ItemObjectContext`.
+**Exports:** `Engine`/`SnapSortEngine`, `Container`, `Item`, `Ghost`, `Handle`, `useSnapSortEngine`, deprecated `useSnapSortAwaitMutation`, `ContainerObjectContext`, `ItemObjectContext`.
 
 ## File Structure
 
@@ -58,6 +58,7 @@ snapsort/
 │       ├── index.ts
 │       ├── Container.svelte
 │       ├── Item.svelte
+│       ├── Ghost.svelte
 │       └── Handle.svelte
 └── react/
     ├── package.json
@@ -67,6 +68,7 @@ snapsort/
         ├── Engine.tsx
         ├── Container.tsx
         ├── Item.tsx
+        ├── Ghost.tsx
         ├── Handle.tsx
         └── useSnapSortAwaitMutation.ts
 ```
@@ -81,7 +83,7 @@ Sort mode is really two orthogonal choices, each resolved once per drag from the
 `ContainerConfig.mode` picks a built-in pair from `builtinStrategies`; `ContainerConfig.strategy` overrides with a custom pair.
 
 ### DragSession
-Created on `dragStart` and stored at `root.dragSession`; holds pointer/offset/start, the live ghost item, `pendingGhostTarget`, the resolved `SortStrategy`, and `status` (`pending → active → dropping → ended`). All per-drag state that used to live as `#private` fields on the dragged item now lives here so drag lifecycle strategies (separate classes) can read/write it without needing access to `Item`'s private fields. `items`/`sources` are arrays so multi-item drag can be added later without an API change — only length-1 is implemented today.
+Created on `dragStart` and stored at `root.dragSession`; holds pointer/offset/start, the live ghost item, `pendingGhostTarget`, the resolved `SortStrategy`, and `status` (`pending → active → dropping → ended`). All per-drag state that used to live as `#private` fields on the dragged item now lives here so drag lifecycle strategies (separate classes) can read/write it without needing access to `Item`'s private fields. `items`/`sources` represent the ordered multi-item drag run; selection is consumer-owned through each item's `selected` property.
 
 ### Mutator (`mutation.ts`)
 Every `ContainerCallbacks` invocation goes through one of the `fire*` functions here (`fireItemInsert`, `fireItemRemove`, `fireItemMove`, `fireGhostInsert`, `fireGhostRemove`, `fireCreateGhost`, `fireAwaitMutation`). `fireItemMove` fires `onItemMove` on the destination container if defined, else falls back to `fireItemInsert` (today's default DOM behavior is insert-only — a plain `insertBefore` inherently moves the node). Default DOM callback implementations (`defaultCallbacks`) also live here.

@@ -4,6 +4,9 @@
 
 Node-based graph UI system for creating visual programming interfaces, node editors, and flow-based applications.
 
+SnapLine is experimental. Its core, Svelte, and React workspace packages are
+private and are intentionally excluded from npm publish workflows.
+
 ## Packages
 
 ### @snap-engine/snapline

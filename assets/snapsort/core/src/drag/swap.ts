@@ -85,7 +85,7 @@ async function removeGhost(
     item.removeGhostFrom(item, ghostContainer, ghostItem, session, "marker", role);
     await settleMutation();
   }
-  ghostItem.destroy();
+  ghostItem.destroy(!ghostItem.frameworkManagedGhostElement);
   session.ghosts.delete(role);
 }
 

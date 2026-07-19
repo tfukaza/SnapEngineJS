@@ -345,6 +345,14 @@
                       class={`hero-synth-button ${padColorClasses[index]} ${activePadIndex === index ? "is-active" : ""}`}
                       data-pad-index={index}
                       onpointerdown={() => playPad(index)}
+                      onkeydown={(event) => {
+                        if (event.key === "Enter" || event.key === " ") {
+                          event.preventDefault();
+                          playPad(index);
+                        }
+                      }}
+                      role="button"
+                      tabindex="0"
                     >
                       <span class="hero-synth-button-number" aria-hidden="true">{index + 1}</span>
                       {#if recessedPadIndices.has(index)}

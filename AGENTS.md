@@ -18,7 +18,7 @@ SnapEngineJS/
 │   ├── svelte/
 │   ├── react/
 │   └── vanilla/
-├── doc/                    # Documentation
+├── docs/                   # Documentation
 ├── tests/                  # Test suites
 ├── dist/                   # Build output (generated)
 ├── package.json            # Root workspace config
@@ -54,7 +54,7 @@ Organized as npm workspaces following a consistent pattern:
 - See `assets/asset-base/AGENTS.md`
 
 ### 2. SnapSort
-- **Packages:** `@snap-engine/snapsort`, `@snap-engine/snapsort-svelte`
+- **Packages:** `@snap-engine/snapsort`, `@snap-engine/snapsort-svelte`, `@snap-engine/snapsort-react`
 - **Purpose:** Drag-and-drop list reordering
 - **Status:** Active
 - See `assets/snapsort/AGENTS.md`
@@ -62,7 +62,7 @@ Organized as npm workspaces following a consistent pattern:
 ### 3. SnapLine
 - **Packages:** `@snap-engine/snapline`, `@snap-engine/snapline-svelte`
 - **Purpose:** Node graph UI system
-- **Status:** Active
+- **Status:** Experimental and private (not published)
 - See `assets/snapline/AGENTS.md`
 
 ### 4. SnapZap
@@ -180,13 +180,15 @@ git tag asset-base-svelte-v{version}
 git tag asset-base-react-v{version}
 git tag snapsort-v{version}
 git tag snapsort-svelte-v{version}
-git tag snapline-v{version}
-git tag snapline-svelte-v{version}
-git push origin asset-base-v{version} asset-base-svelte-v{version} snapsort-v{version}
-git push origin snapsort-svelte-v{version} snapline-v{version} snapline-svelte-v{version}
+git push origin asset-base-v{version}
+git push origin asset-base-svelte-v{version}
+git push origin asset-base-react-v{version}
+git push origin snapsort-v{version}
+git push origin snapsort-svelte-v{version}
+git push origin snapsort-react-v{version}
 ```
 
-Push no more than three tags in a single `git push`; GitHub does not create push events when more than three tags are pushed at once.
+Push release tags one at a time and verify each publish workflow before sending the next tag.
 
 Tag versions must match each package's `package.json` version. The publish workflows live in `.github/workflows/publish.yml` and `.github/workflows/publish-assets.yml`.
 

@@ -1,27 +1,59 @@
 <script lang="ts">
-    import { onMount, setContext, getContext } from "svelte";
-    import { Background } from "@snap-engine/asset-base";
-    import type { Engine } from "@snap-engine/core";
-    let background: HTMLDivElement | null = null;
+  import { getContext, onDestroy, onMount, setContext } from "svelte";
+  import type { HTMLAttributes } from "svelte/elements";
+  import { Background as BackgroundObject } from "@snap-engine/asset-base";
+  import type { Engine } from "@snap-engine/core";
 
-    const engine:Engine = getContext("engine");
-    let bg = new Background(engine, null);
+  type BackgroundProps = HTMLAttributes<HTMLDivElement> & {
+    backgroundObject?: BackgroundObject | null;
+    className?: string;
+  };
 
-    setContext("bg", bg);
+  let {
+    backgroundObject = $bindable<BackgroundObject | null>(null),
+    class: classValue = "",
+    className = "",
+    id = "sl-background",
+    style = "",
+    ...divProps
+  }: BackgroundProps = $props();
 
-    onMount(() => {
-        bg.element = background as HTMLElement;
-    });
+  const engine: Engine | null = getContext("engine");
+  if (!engine) {
+    throw new Error("SnapEngine Svelte background consumers must be rendered inside <Engine>.");
+  }
+
+  const ownsBackground = backgroundObject == null;
+  const resolvedBackground = backgroundObject ?? new BackgroundObject(engine, null);
+  if (resolvedBackground.engine !== engine) {
+    throw new Error("The injected Background belongs to another Engine.");
+  }
+  backgroundObject = resolvedBackground;
+  setContext("bg", resolvedBackground);
+
+  let backgroundElement: HTMLDivElement | null = null;
+  const mergedClass = $derived(`${classValue} ${className}`.trim());
+  const mergedStyle = $derived(
+    `background-color:#fff;background-image:radial-gradient(circle, #cccccc 2px, transparent 1px);user-select:none;${style ?? ""}`,
+  );
+
+  onMount(() => {
+    if (backgroundElement) {
+      resolvedBackground.element = backgroundElement;
+    }
+  });
+
+  onDestroy(() => {
+    if (ownsBackground) {
+      resolvedBackground.destroy(false);
+    }
+  });
 </script>
 
-
-<div id="sl-background" bind:this={background}></div>
-
-
-<style lang="scss">
-    #sl-background {
-        background-color: #fff;
-        background-image: radial-gradient(circle, #cccccc 2px, transparent 1px);
-        user-select: none;
-    }
-</style>
+<div
+  {...divProps}
+  {id}
+  class={mergedClass || undefined}
+  bind:this={backgroundElement}
+  style={mergedStyle}
+></div>

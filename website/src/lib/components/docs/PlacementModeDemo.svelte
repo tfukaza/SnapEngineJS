@@ -9,6 +9,7 @@
     SortMode,
   } from "@snap-engine/snapsort";
   import { Container, Ghost, Item } from "@snap-engine/snapsort-svelte";
+  import { untrack } from "svelte";
 
   let {
     mode,
@@ -24,7 +25,7 @@
 
   type DemoItem = { id: string; label: string };
   let items = $state<DemoItem[]>(
-    comparison
+    untrack(() => comparison)
       ? [
           { id: "one", label: "Tiny" },
           { id: "two", label: "Longest token" },

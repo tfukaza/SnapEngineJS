@@ -1,10 +1,11 @@
 import {
   Container,
   Engine,
+  Ghost,
   Handle,
   Item,
 } from "@snap-engine/snapsort-react";
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useId, useMemo, useRef, useState } from "react";
 
 const snapSortCubicAnimation = new URLSearchParams(window.location.search).has("slowFlip")
   ? { duration: 800, timing_function: "linear" }
@@ -26,18 +27,18 @@ function controlButtonProps(action) {
   };
 }
 
-function DemoItem({ children, className = "demo-item", metadata }) {
+function DemoItem({ children, className = "demo-item", itemId, metadata, ...props }) {
+  const generatedItemId = useId();
   return (
-    <Item className={className} metadata={metadata}>
+    <Item className={className} itemId={itemId ?? generatedItemId} metadata={metadata} {...props}>
       {children}
-      <span aria-hidden="true" className="snapsort-text-separator"> </span>
     </Item>
   );
 }
 
 function NumberedItems({ count, className = "demo-item row-item" }) {
   return Array.from({ length: count }, (_, index) => index + 1).map((n) => (
-    <DemoItem className={className} key={n}>
+    <DemoItem className={className} itemId={`numbered-${count}-${n}`} key={n}>
       <p>Item {n}</p>
     </DemoItem>
   ));
@@ -163,7 +164,7 @@ export function SnapSortWebsiteCoreDemo() {
 
   const handleMultiContainerMove = useCallback(
     (event) => {
-      const itemId = event.itemMetadata.itemId;
+      const itemId = event.itemId;
       const targetColumnId = event.to.containerMetadata.columnId;
       if (typeof itemId !== "string" || typeof targetColumnId !== "string") {
         return;
@@ -321,7 +322,7 @@ export function SnapSortWebsiteCoreDemo() {
                     >
                       <h3>{column.title}</h3>
                       {column.items.map((item) => (
-                        <Item key={item.id} metadata={{ itemId: item.id }}>
+                        <Item itemId={item.id} key={item.id}>
                           <div className="basic-row compact-row multi-container-row">
                             <span>{item.label}</span>
                             <button
@@ -367,6 +368,67 @@ export function DropSnapNestedDemo() {
         }
       : {};
 
+  const [verticalItems, setVerticalItems] = useState([1, 2, 3, 4]);
+  const [selectedVertical, setSelectedVertical] = useState(() => new Set());
+  const [nestedZones, setNestedZones] = useState(() => ({
+    inner: ["sub-a1", "sub-a2", "sub-a3"],
+    outer: ["item-1", "item-1-5", "nested-sub-group", "item-2", "item-3"],
+  }));
+  const nestedLabels = {
+    "item-1": "Item 1",
+    "item-1-5": "Item 1.5",
+    "item-2": "Item 2",
+    "item-3": "Item 3",
+    "sub-a1": "Sub A1",
+    "sub-a2": "Sub A2",
+    "sub-a3": "Sub A3",
+  };
+
+  const handleVerticalMove = useCallback((event) => {
+    const movedItems = event.itemIds.map((id) =>
+      Number(String(id).replace("vertical-", "")),
+    );
+    if (movedItems.some((item) => !Number.isFinite(item))) return;
+    setVerticalItems((current) => {
+      const movedSet = new Set(movedItems);
+      const next = current.filter((item) => !movedSet.has(item));
+      next.splice(
+        Math.max(0, Math.min(event.to.index, next.length)),
+        0,
+        ...movedItems,
+      );
+      return next;
+    });
+  }, []);
+
+  const handleNestedMove = useCallback((event) => {
+    const itemId = String(event.itemId);
+    const targetZone = event.to.containerMetadata.zone;
+    if (targetZone !== "inner" && targetZone !== "outer") return;
+    setNestedZones((current) => {
+      const next = {
+        inner: current.inner.filter((id) => id !== itemId),
+        outer: current.outer.filter((id) => id !== itemId),
+      };
+      next[targetZone].splice(
+        Math.max(0, Math.min(event.to.index, next[targetZone].length)),
+        0,
+        itemId,
+      );
+      return next;
+    });
+  }, []);
+
+  function toggleVerticalSelection(item, event) {
+    setSelectedVertical((current) => {
+      if (!event.metaKey && !event.ctrlKey) return new Set([item]);
+      const next = new Set(current);
+      if (next.has(item)) next.delete(item);
+      else next.add(item);
+      return next;
+    });
+  }
+
   return (
     <div className="snapsort-fixture snapsort-demo dev-style">
       <h1>SnapSort</h1>
@@ -376,11 +438,19 @@ export function DropSnapNestedDemo() {
             <div className="demo-grid">
               <article className="demo-cell wide horizontal-row-demo">
                 <h2>Vertical Column</h2>
-                <Container config={{ direction: "column", groupID: "vertical-group" }}>
-                  <DemoItem><p>Item 1</p></DemoItem>
-                  <DemoItem><p>Item 2</p></DemoItem>
-                  <DemoItem><p>Item 3</p></DemoItem>
-                  <DemoItem><p>Item 4</p></DemoItem>
+                <p className="demo-hint">Cmd/ctrl-click to multi-select, then drag any selected item.</p>
+                <Container config={{ direction: "column", groupID: "vertical-group", callbacks: { onItemMove: handleVerticalMove } }}>
+                  {verticalItems.map((item) => (
+                    <DemoItem
+                      className={selectedVertical.has(item) ? "demo-item selected" : "demo-item"}
+                      itemId={`vertical-${item}`}
+                      key={item}
+                      onClick={(event) => toggleVerticalSelection(item, event)}
+                      selected={selectedVertical.has(item)}
+                    >
+                      <p>Item {item}</p>
+                    </DemoItem>
+                  ))}
                 </Container>
               </article>
 
@@ -431,16 +501,45 @@ export function DropSnapNestedDemo() {
 
               <article className="demo-cell">
                 <h2>Nested Container</h2>
-                <Container config={{ direction: "column", groupID: "nested-group", ...nestedAnimationConfig }} locked>
-                  <DemoItem><p>Item 1</p></DemoItem>
-                  <DemoItem><p>Item 1.5</p></DemoItem>
-                  <Container config={{ direction: "column", groupID: "nested-group", ...nestedAnimationConfig }} locked={lockNestedChild}>
-                    <DemoItem className="demo-item sub-item"><p>Sub A1</p></DemoItem>
-                    <DemoItem className="demo-item sub-item"><p>Sub A2</p></DemoItem>
-                    <DemoItem className="demo-item sub-item"><p>Sub A3</p></DemoItem>
+                <Container
+                  config={{ direction: "column", groupID: "nested-group", callbacks: { onItemMove: handleNestedMove }, ...nestedAnimationConfig }}
+                  locked
+                  metadata={{ zone: "outer" }}
+                >
+                  {nestedZones.outer.map((id) =>
+                    id === "nested-sub-group" ? (
+                      <Container
+                        config={{ direction: "column", groupID: "nested-group", callbacks: { onItemMove: handleNestedMove }, ...nestedAnimationConfig }}
+                        itemId={id}
+                        key={id}
+                        locked={lockNestedChild}
+                        metadata={{ zone: "inner" }}
+                      >
+                        {nestedZones.inner.map((childId) => (
+                          <DemoItem className="demo-item sub-item" itemId={childId} key={childId}>
+                            <p>{nestedLabels[childId]}</p>
+                          </DemoItem>
+                        ))}
+                      </Container>
+                    ) : (
+                      <DemoItem itemId={id} key={id}><p>{nestedLabels[id]}</p></DemoItem>
+                    ),
+                  )}
+                </Container>
+              </article>
+
+              <article className="demo-cell stretch-nested-demo">
+                <h2>Stretch Nested</h2>
+                <p className="demo-hint">Items fill their container (100% width); the nested list is narrower.</p>
+                <Container className="stretch-list" config={{ direction: "column", wrap: "nowrap", stretchItems: true, groupID: "stretch-nested", ...nestedAnimationConfig }} locked>
+                  <DemoItem className="demo-item stretch-item" itemId="stretch-task-1"><p>Task 1</p></DemoItem>
+                  <DemoItem className="demo-item stretch-item" itemId="stretch-task-2"><p>Task 2</p></DemoItem>
+                  <Container className="stretch-sublist" config={{ direction: "column", wrap: "nowrap", stretchItems: true, groupID: "stretch-nested", ...nestedAnimationConfig }} itemId="stretch-sub-group">
+                    {[1, 2, 3].map((item) => (
+                      <DemoItem className="demo-item stretch-item" itemId={`stretch-sub-${item}`} key={item}><p>Sub task {item}</p></DemoItem>
+                    ))}
                   </Container>
-                  <DemoItem><p>Item 2</p></DemoItem>
-                  <DemoItem><p>Item 3</p></DemoItem>
+                  <DemoItem className="demo-item stretch-item" itemId="stretch-task-3"><p>Task 3</p></DemoItem>
                 </Container>
               </article>
 
@@ -463,16 +562,16 @@ export function DropSnapNestedDemo() {
               <article className="demo-cell">
                 <h2>Draggable Sub-Containers</h2>
                 <Container config={{ direction: "column", groupID: "drag-nested-group" }} locked>
-                  <Container config={{ direction: "column", groupID: "drag-nested-group" }} locked={false}>
-                    <DemoItem className="demo-item sub-item"><p>Group 1 - A</p></DemoItem>
-                    <DemoItem className="demo-item sub-item"><p>Group 1 - B</p></DemoItem>
+                  <Container config={{ direction: "column", groupID: "drag-nested-group" }} itemId="drag-group-1" locked={false}>
+                    <DemoItem className="demo-item sub-item" itemId="drag-group-1-a"><p>Group 1 - A</p></DemoItem>
+                    <DemoItem className="demo-item sub-item" itemId="drag-group-1-b"><p>Group 1 - B</p></DemoItem>
                   </Container>
-                  <Container config={{ direction: "column", groupID: "drag-nested-group" }} locked={false}>
-                    <DemoItem className="demo-item sub-item"><p>Group 2 - A</p></DemoItem>
-                    <DemoItem className="demo-item sub-item"><p>Group 2 - B</p></DemoItem>
-                    <DemoItem className="demo-item sub-item"><p>Group 2 - C</p></DemoItem>
+                  <Container config={{ direction: "column", groupID: "drag-nested-group" }} itemId="drag-group-2" locked={false}>
+                    <DemoItem className="demo-item sub-item" itemId="drag-group-2-a"><p>Group 2 - A</p></DemoItem>
+                    <DemoItem className="demo-item sub-item" itemId="drag-group-2-b"><p>Group 2 - B</p></DemoItem>
+                    <DemoItem className="demo-item sub-item" itemId="drag-group-2-c"><p>Group 2 - C</p></DemoItem>
                   </Container>
-                  <DemoItem><p>Loose Item</p></DemoItem>
+                  <DemoItem itemId="drag-loose"><p>Loose Item</p></DemoItem>
                 </Container>
               </article>
 
@@ -592,7 +691,7 @@ export function SnapSortComponentsDemo() {
   }, []);
 
   const handleMove = useCallback((event) => {
-    const itemId = event.itemMetadata.itemId;
+    const itemId = event.itemId;
     const targetColumnId = event.to.containerMetadata.columnId;
     if (typeof itemId !== "string" || typeof targetColumnId !== "string") return;
 
@@ -629,17 +728,18 @@ export function SnapSortComponentsDemo() {
   }, []);
 
   const handleRemove = useCallback((event) => {
-    const itemId = event.itemMetadata.itemId;
+    const itemId = event.itemId;
     if (typeof itemId !== "string") return;
     deleteItem(itemId);
   }, [deleteItem]);
 
   const handleGhostInsert = useCallback((event) => {
-    const itemId = event.originalMetadata.itemId;
+    const itemId = event.originalItemId;
     const targetColumnId = event.containerMetadata.columnId;
     if (typeof itemId !== "string" || typeof targetColumnId !== "string") return;
     const sourceItem = findDemoItem(itemId);
     setGhostEntry({
+      event,
       id: `ghost-${event.ghostItem.id}`,
       isGhost: true,
       columnId: targetColumnId,
@@ -840,19 +940,19 @@ export function SnapSortComponentsDemo() {
                       </div>
                       {renderedColumnItems(column).map((entry) =>
                         entry.isGhost ? (
-                          <Item
+                          <Ghost
                             className="task-card ghost task-ghost"
-                            itemObject={entry.ghostItem}
+                            event={entry.event}
                             key={entry.id}
                           >
                             <TaskContent label={entry.label} detail={entry.detail} />
-                          </Item>
+                          </Ghost>
                         ) : (
                           <Item
                             className="task-card"
+                            itemId={entry.item.id}
                             key={entry.item.id}
                             metadata={{
-                              itemId: entry.item.id,
                               label: entry.item.label,
                               detail: entry.item.detail,
                             }}
@@ -940,7 +1040,7 @@ export function SnapSortComponentsDemo() {
                     metadata={{ zone: "answer", exampleId: example.id }}
                   >
                     {example.answerTiles.map((tile) => (
-                      <Item className="sentence-tile-wrapper" key={tile.id} metadata={{ itemId: tile.id }}>
+                      <Item className="sentence-tile-wrapper" itemId={tile.id} key={tile.id}>
                         <button className="sentence-tile" type="button">{tile.text}</button>
                       </Item>
                     ))}
@@ -959,7 +1059,7 @@ export function SnapSortComponentsDemo() {
                     metadata={{ zone: "bank", exampleId: example.id }}
                   >
                     {example.bankTiles.map((tile) => (
-                      <Item className="sentence-tile-wrapper" key={tile.id} metadata={{ itemId: tile.id }}>
+                      <Item className="sentence-tile-wrapper" itemId={tile.id} key={tile.id}>
                         <button className="sentence-tile muted" type="button">{tile.text}</button>
                       </Item>
                     ))}
@@ -1085,7 +1185,7 @@ export function SnapSortDuolingoDemo({ embedded = false }) {
   );
 
   const handleMove = useCallback((event) => {
-    const itemId = event.itemMetadata.itemId;
+    const itemId = event.itemId;
     const targetZone = event.to.containerMetadata.zone;
     if (
       typeof itemId !== "string" ||
@@ -1097,7 +1197,7 @@ export function SnapSortDuolingoDemo({ embedded = false }) {
   }, [updateTileZone]);
 
   const handleRemove = useCallback((event) => {
-    const itemId = event.itemMetadata.itemId;
+    const itemId = event.itemId;
     if (typeof itemId !== "string") return;
     setTileState((current) => {
       pendingRemovedTileRef.current =
@@ -1112,7 +1212,7 @@ export function SnapSortDuolingoDemo({ embedded = false }) {
   }, []);
 
   const handleGhostInsert = useCallback((event) => {
-    const itemId = event.originalMetadata.itemId;
+    const itemId = event.originalItemId;
     const targetZone = event.containerMetadata.zone;
     if (
       typeof itemId !== "string" ||
@@ -1122,6 +1222,7 @@ export function SnapSortDuolingoDemo({ embedded = false }) {
     }
     const sourceTile = allTiles.find((tile) => tile.id === itemId);
     setGhostEntry({
+      event,
       id: `ghost-${event.ghostItem.id}`,
       isGhost: true,
       zone: targetZone,
@@ -1263,17 +1364,18 @@ export function SnapSortDuolingoDemo({ embedded = false }) {
                   },
                   callbacks,
                 }}
+                itemId="sentence-zone-answer"
                 locked
                 metadata={{ zone: "answer" }}
                 ref={answerRef}
               >
                 {renderedTiles("answer").map((entry) =>
                   entry.isGhost ? (
-                    <Item className="tile-wrapper ghost tile-ghost" itemObject={entry.ghostItem} key={entry.id}>
+                    <Ghost className="tile-wrapper ghost tile-ghost" event={entry.event} key={entry.id}>
                       <button className="tile selected" tabIndex={-1} type="button">{entry.text}</button>
-                    </Item>
+                    </Ghost>
                   ) : (
-                    <Item className="tile-wrapper" key={entry.tile.id} metadata={{ itemId: entry.tile.id }}>
+                    <Item className="tile-wrapper" itemId={entry.tile.id} key={entry.tile.id}>
                       <button {...tileButtonProps(entry, "bank", true)}>{entry.tile.text}</button>
                     </Item>
                   ),
@@ -1299,17 +1401,18 @@ export function SnapSortDuolingoDemo({ embedded = false }) {
                   },
                   callbacks,
                 }}
+                itemId="sentence-zone-bank"
                 locked
                 metadata={{ zone: "bank" }}
                 ref={bankRef}
               >
                 {renderedTiles("bank").map((entry) =>
                   entry.isGhost ? (
-                    <Item className="tile-wrapper ghost tile-ghost" itemObject={entry.ghostItem} key={entry.id}>
+                    <Ghost className="tile-wrapper ghost tile-ghost" event={entry.event} key={entry.id}>
                       <button className="tile" tabIndex={-1} type="button">{entry.text}</button>
-                    </Item>
+                    </Ghost>
                   ) : (
-                    <Item className="tile-wrapper" key={entry.tile.id} metadata={{ itemId: entry.tile.id }}>
+                    <Item className="tile-wrapper" itemId={entry.tile.id} key={entry.tile.id}>
                       <button {...tileButtonProps(entry, "answer")}>{entry.tile.text}</button>
                     </Item>
                   ),
@@ -1398,7 +1501,7 @@ export function SnapSortInsertionDemo() {
   const callbacks = useMemo(
     () => ({
       onItemMove: (event) => {
-        const itemId = event.itemMetadata.itemId;
+        const itemId = event.itemId;
         const targetColumnId = event.to.containerMetadata.columnId;
         if (typeof itemId !== "string" || typeof targetColumnId !== "string") return;
         setColumns((current) => {
@@ -1420,7 +1523,7 @@ export function SnapSortInsertionDemo() {
         });
       },
       onItemRemove: (event) => {
-        const itemId = event.itemMetadata.itemId;
+        const itemId = event.itemId;
         if (typeof itemId !== "string") return;
         setColumns((current) => {
           const { removedItem, columnsWithoutItem } = removeItemById(itemId, current);
@@ -1496,7 +1599,7 @@ export function SnapSortInsertionDemo() {
                 <span>{column.items.length}</span>
               </div>
               {column.items.map((item) => (
-                <Item className="insertion-card" key={item.id} metadata={{ itemId: item.id }}>
+                <Item className="insertion-card" itemId={item.id} key={item.id}>
                   <span className={`file-icon ${item.kind === "folder" ? "folder-icon" : ""}`} aria-hidden="true">
                     {item.kind === "folder" ? "folder" : "description"}
                   </span>

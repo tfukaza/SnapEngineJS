@@ -16,7 +16,7 @@ The React package wraps SnapSort's core objects in React components. Use it when
 ## Install
 
 ```bash
-npm install @snap-engine/core @snap-engine/snapsort @snap-engine/snapsort-react react react-dom
+npm install @snap-engine/core @snap-engine/asset-base-react @snap-engine/snapsort @snap-engine/snapsort-react react react-dom
 ```
 
 `react` and `react-dom` are peer dependencies of `@snap-engine/snapsort-react`.
@@ -24,7 +24,7 @@ npm install @snap-engine/core @snap-engine/snapsort @snap-engine/snapsort-react 
 ## Import
 
 ```tsx
-import { Engine, Container, Handle, Item } from "@snap-engine/snapsort-react";
+import { Engine, Container, Ghost, Handle, Item } from "@snap-engine/snapsort-react";
 ```
 
 Wrap the sortable tree in an `Engine`, then compose containers and items:
@@ -48,6 +48,13 @@ Wrap the sortable tree in an `Engine`, then compose containers and items:
 - [Item](/docs/snapsort/reference/react/item) — props, identity, metadata, selection, refs, and drag handles.
 
 `Handle` belongs inside an `Item` and limits where a drag can begin.
+`Ghost` binds a framework-rendered flow placeholder to the `ghostItem` in an
+`onGhostInsert` event. Remove that rendered entry in `onGhostRemove`. Do not
+render a ghost with `Item`, because a ghost is already attached to the core
+container by the drag lifecycle.
+
+Every wrapper accepts standard `div` attributes and forwards them to its DOM
+element. `style` is merged after SnapSort's structural flex/position defaults.
 
 ## Core Types
 
@@ -76,5 +83,6 @@ For the application-state pattern shared by both adapters, see [Session Lifecycl
 |-------------|---------|
 | `@snap-engine/snapsort-react/Engine` | `Engine`, context, and `useSnapSortEngine` |
 | `@snap-engine/snapsort-react/Container` | Container components and context |
+| `@snap-engine/snapsort-react/Ghost` | Framework-owned flow ghost component |
 | `@snap-engine/snapsort-react/Item` | Item components and context |
 | `@snap-engine/snapsort-react/Handle` | `Handle` |

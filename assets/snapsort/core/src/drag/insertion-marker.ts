@@ -124,7 +124,7 @@ async function removeGhost(
     // before a target was ever resolved) — fall back to a direct removal.
     ghostItem.element?.remove();
   }
-  ghostItem.destroy();
+  ghostItem.destroy(!ghostItem.frameworkManagedGhostElement);
   session.ghosts.delete(role);
 }
 

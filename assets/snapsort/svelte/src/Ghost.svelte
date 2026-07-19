@@ -1,18 +1,23 @@
 <script lang="ts">
   import type { GhostInsertEvent } from "@snap-engine/snapsort";
   import type { Snippet } from "svelte";
+  import type { HTMLAttributes } from "svelte/elements";
+
+  type GhostProps = Omit<HTMLAttributes<HTMLDivElement>, "children"> & {
+    event: GhostInsertEvent;
+    children?: Snippet;
+    className?: string;
+  };
 
   let {
     event,
     children,
+    class: classValue = "",
     className = "",
     style = "",
-  }: {
-    event: GhostInsertEvent;
-    children?: Snippet<[]>;
-    className?: string;
-    style?: string;
-  } = $props();
+    id = "spacer",
+    ...divProps
+  }: GhostProps = $props();
 
   const footprintStyle = $derived.by(() => {
     const origProp = event.original.dragSnapshot?.box ?? event.original.currentDomProperty;
@@ -25,13 +30,14 @@
     );
   });
   const mergedStyle = $derived(`${footprintStyle}${style}`);
+  const mergedClass = $derived(`${classValue} ${className}`.trim());
 
   function bindGhostElement(node: HTMLElement) {
     event.ghostItem.element = node;
     return {
       destroy() {
         if (event.ghostItem.element === node) {
-          event.ghostItem.element = null;
+          event.ghostItem.destroyDom(false);
         }
       },
     };
@@ -39,8 +45,9 @@
 </script>
 
 <div
-  id="spacer"
-  class={className}
+  {...divProps}
+  {id}
+  class={mergedClass || undefined}
   data-snapsort-ghost-entry={event.kind}
   style={mergedStyle}
   use:bindGhostElement
