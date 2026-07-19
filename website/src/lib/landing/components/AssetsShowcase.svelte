@@ -150,11 +150,9 @@
     align-items: stretch;
     gap: var(--size-24);
     padding: clamp(1.5rem, 3vw, 2.5rem);
-    transition: transform 0.2s ease;
     text-decoration: none;
     color: inherit;
     background: var(--color-background-tint);
-    border: 1px solid rgba(0, 0, 0, 0.12);
     border-radius: var(--ui-radius);
     box-sizing: border-box;
 
@@ -174,10 +172,6 @@
       font-weight: 400;
       line-height: 1.6;
       max-width: 22rem;
-    }
-
-    &:hover {
-      transform: translateY(-2px);
     }
 
   }
