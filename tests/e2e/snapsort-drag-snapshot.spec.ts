@@ -4062,6 +4062,237 @@ test.describe("Snapsort drag-start snapshot layout", () => {
     expectGhostUpdatesStable(consoleMessages, 6);
   });
 
+  test("keeps the drop animation visible while a reorder animation is still active", async ({
+    page,
+  }, testInfo) => {
+    await page.goto("/?demo=drop_snap_nested&slowNestedFlip=1", {
+      waitUntil: "networkidle",
+    });
+
+    const nested = await demoBoxByHeading(page, "Nested Container");
+    const innerContainer = nested.locator(".snapsort-container").nth(1);
+    const source = await itemByTextIn(innerContainer, "Sub A1");
+    const target = await itemByTextIn(innerContainer, "Sub A3");
+    const sourceRect = await itemRect(source);
+    const targetRect = await itemRect(target);
+    const start = center(sourceRect);
+    const releasePoint = {
+      x: targetRect.x + targetRect.width / 2 + 18,
+      y: targetRect.y + targetRect.height * 0.85,
+    };
+
+    await page.mouse.move(start.x, start.y);
+    await page.mouse.down();
+    await page.mouse.move(start.x + 5, start.y);
+    await page.waitForTimeout(16);
+    for (let step = 1; step <= 14; step++) {
+      await page.mouse.move(
+        start.x + ((releasePoint.x - start.x) * step) / 14,
+        start.y + ((releasePoint.y - start.y) * step) / 14,
+      );
+      await page.waitForTimeout(12);
+    }
+
+    // Prove the release happens during the condition that caused the bug:
+    // at least one displaced sibling still has a reorder FLIP transform.
+    await expect
+      .poll(
+        () =>
+          innerContainer.locator(".snapsort-item").evaluateAll((nodes) =>
+            nodes.some(
+              (node) =>
+                !node.textContent?.includes("Sub A1") &&
+                (node as HTMLElement).style.transform !== "",
+            ),
+          ),
+        { intervals: [10, 20, 40], timeout: 300 },
+      )
+      .toBe(true);
+
+    const releaseRect = await itemRect(source);
+    await page.evaluate(() => {
+      type DropFrame = {
+        time: number;
+        rect: Rect;
+        inlineTransform: string;
+        computedTransform: string;
+        dragging: boolean;
+        displacedTransformCount: number;
+      };
+      type StyleMutation = {
+        time: number;
+        oldValue: string | null;
+        currentValue: string;
+      };
+      const win = window as unknown as {
+        __dropContinuityTrace?: {
+          done: boolean;
+          frames: DropFrame[];
+          styleMutations: StyleMutation[];
+        };
+      };
+      const trace = {
+        done: false,
+        frames: [] as DropFrame[],
+        styleMutations: [] as StyleMutation[],
+      };
+      win.__dropContinuityTrace = trace;
+
+      const nested = [...document.querySelectorAll(".demo-cell")].find(
+        (element) =>
+          element.querySelector("h2")?.textContent?.trim() ===
+          "Nested Container",
+      );
+      if (!nested) throw new Error("Nested Container fixture was not found.");
+      const itemText = (element: Element) =>
+        element.querySelector(":scope > p")?.textContent?.trim() ?? "";
+      const findDraggedItem = () =>
+        [...nested.querySelectorAll(".snapsort-item")].find(
+          (element) => itemText(element) === "Sub A1",
+        ) as HTMLElement | undefined;
+      const rectOf = (element: Element): Rect => {
+        const rect = element.getBoundingClientRect();
+        return {
+          x: rect.x,
+          y: rect.y,
+          width: rect.width,
+          height: rect.height,
+        };
+      };
+      const startedAt = performance.now();
+      const observer = new MutationObserver((mutations) => {
+        for (const mutation of mutations) {
+          if (
+            mutation.target instanceof Element &&
+            mutation.target.classList.contains("snapsort-item") &&
+            itemText(mutation.target) === "Sub A1"
+          ) {
+            trace.styleMutations.push({
+              time: performance.now() - startedAt,
+              oldValue: mutation.oldValue,
+              currentValue:
+                (mutation.target as HTMLElement).getAttribute("style") ?? "",
+            });
+          }
+        }
+      });
+      observer.observe(nested, {
+        attributes: true,
+        attributeFilter: ["style"],
+        attributeOldValue: true,
+        subtree: true,
+      });
+
+      const sample = () => {
+        const item = findDraggedItem();
+        if (item) {
+          trace.frames.push({
+            time: performance.now() - startedAt,
+            rect: rectOf(item),
+            inlineTransform: item.style.transform,
+            computedTransform: getComputedStyle(item).transform,
+            dragging: item.dataset.snapsortDragging === "true",
+            displacedTransformCount: [
+              ...nested.querySelectorAll<HTMLElement>(".snapsort-item"),
+            ].filter(
+              (element) =>
+                element !== item &&
+                !element.id.includes("spacer") &&
+                element.style.transform !== "",
+            ).length,
+          });
+        }
+        if (performance.now() - startedAt < 1_050) {
+          requestAnimationFrame(sample);
+          return;
+        }
+        observer.disconnect();
+        trace.done = true;
+      };
+      requestAnimationFrame(sample);
+    });
+
+    await page.mouse.up();
+    await expect
+      .poll(
+        () =>
+          page.evaluate(
+            () =>
+              (window as unknown as {
+                __dropContinuityTrace?: { done: boolean };
+              }).__dropContinuityTrace?.done ?? false,
+          ),
+        { timeout: 2_000 },
+      )
+      .toBe(true);
+
+    const trace = await page.evaluate(
+      () =>
+        (window as unknown as {
+          __dropContinuityTrace: {
+            done: boolean;
+            frames: Array<{
+              time: number;
+              rect: Rect;
+              inlineTransform: string;
+              computedTransform: string;
+              dragging: boolean;
+              displacedTransformCount: number;
+            }>;
+            styleMutations: Array<{
+              time: number;
+              oldValue: string | null;
+              currentValue: string;
+            }>;
+          };
+        }).__dropContinuityTrace,
+    );
+    await writeJson(
+      testInfo.outputPath("drop-animation-continuity-trace.json"),
+      { releaseRect, ...trace },
+    );
+
+    const postDropFrames = trace.frames.filter((frame) => !frame.dragging);
+    expect(postDropFrames.length).toBeGreaterThan(20);
+    const finalFrame = postDropFrames.at(-1)!;
+    const centerDistance = (a: Rect, b: Rect) => {
+      const aCenter = center(a);
+      const bCenter = center(b);
+      return Math.hypot(aCenter.x - bCenter.x, aCenter.y - bCenter.y);
+    };
+    const travel = centerDistance(releaseRect, finalFrame.rect);
+    expect(travel).toBeGreaterThan(12);
+
+    const firstPaintedDropFrame = postDropFrames[0];
+    expect(
+      centerDistance(firstPaintedDropFrame.rect, releaseRect),
+      "the first painted drop frame should remain at the pointer release position",
+    ).toBeLessThan(Math.max(4, travel * 0.15));
+    expect(
+      postDropFrames.some((frame) => frame.inlineTransform !== ""),
+      "the drop FLIP transform should remain visible after release",
+    ).toBe(true);
+
+    const distancesToFinal = postDropFrames.map((frame) =>
+      centerDistance(frame.rect, finalFrame.rect),
+    );
+    const firstSettledFrame = distancesToFinal.findIndex(
+      (distance) => distance <= 1,
+    );
+    if (firstSettledFrame !== -1) {
+      expect(
+        Math.max(...distancesToFinal.slice(firstSettledFrame)),
+        "the item must not reach its slot and then bounce away again",
+      ).toBeLessThanOrEqual(2);
+    }
+
+    expect(finalFrame.inlineTransform).toBe("");
+    await expect(source).not.toHaveAttribute("data-snapsort-dragging");
+    await expect
+      .poll(() => directSnapSortItemTexts(innerContainer))
+      .toEqual(["Sub A2", "Sub A3", "Sub A1"]);
+  });
+
   test("keeps nested dragged item aligned while moving in and out of its container", async ({
     page,
   }, testInfo) => {

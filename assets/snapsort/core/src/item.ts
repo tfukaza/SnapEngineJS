@@ -1278,7 +1278,8 @@ export class Item extends ElementObject {
    */
   scheduleWriteDrag() {
     const session = this.rootContainer.dragSession;
-    const parentItem = session?.dragCoordinateParent.get(this) ?? null;
+    if (!session || session.status !== "active") return;
+    const parentItem = session.dragCoordinateParent.get(this) ?? null;
     // There are some scenarios where the parent container
     // is moving. To account for this, we need to check the
     // latest positions of the dragged item and its ancestors,
@@ -1286,6 +1287,12 @@ export class Item extends ElementObject {
     // at the intended position.
     this.schedule(
       async () => {
+        if (
+          this.rootContainer.dragSession !== session ||
+          session.status !== "active"
+        ) {
+          return;
+        }
         if (!this.element?.isConnected) return;
         if (!parentItem?.element?.isConnected) return;
         // Read the container's current visual position (FLIP transforms
@@ -1295,18 +1302,16 @@ export class Item extends ElementObject {
         // container.
         const visual = parentItem.readDom();
         const ancestorOffset = this.#ancestorVisualOffset(parentItem);
-        if (session) {
-          session.dragLayoutPosition.set(this, {
-            x: visual.x - ancestorOffset.x,
-            y: visual.y - ancestorOffset.y,
-          });
-        }
+        session.dragLayoutPosition.set(this, {
+          x: visual.x - ancestorOffset.x,
+          y: visual.y - ancestorOffset.y,
+        });
       },
       { stage: "READ_3", queueId: `dragged-read-${this.id}` },
     );
     this.schedule(
       () => {
-        this.writeDraggedTransform();
+        this.writeDraggedTransform(session);
       },
       { stage: "WRITE_3", queueId: `dragged-transform-${this.id}` },
     );
@@ -1316,11 +1321,18 @@ export class Item extends ElementObject {
    * Render the final position of the dragged item.
    * @internal
    */
-  writeDraggedTransform() {
+  writeDraggedTransform(expectedSession: DragSession | null = null) {
     const session = this.rootContainer.dragSession;
-    const parentItem = session?.dragCoordinateParent.get(this) ?? null;
-    const layoutPosition = session?.dragLayoutPosition.get(this) ?? null;
-    if (!session || !layoutPosition) {
+    if (
+      !session ||
+      session.status !== "active" ||
+      (expectedSession && session !== expectedSession)
+    ) {
+      return;
+    }
+    const parentItem = session.dragCoordinateParent.get(this) ?? null;
+    const layoutPosition = session.dragLayoutPosition.get(this) ?? null;
+    if (!layoutPosition) {
       if (parentItem) return;
       this.writeTransform();
       return;
@@ -1709,6 +1721,8 @@ export class Item extends ElementObject {
       return;
     }
     session.status = "dropping";
+    session.dragTransformSyncAnimation?.cancel();
+    session.dragTransformSyncAnimation = null;
     session.strategy.lifecycle.drop(session);
     void prop;
   }
