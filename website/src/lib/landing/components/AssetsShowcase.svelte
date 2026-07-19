@@ -733,7 +733,7 @@
     min-height: 380px;
     padding: var(--size-32);
     border-radius: var(--ui-radius);
-    background: var(--color-background-tint);
+    background: var(--color-background);
     box-sizing: border-box;
     user-select: none;
   }
@@ -743,7 +743,7 @@
     min-height: 380px;
     padding: var(--size-32);
     border-radius: var(--ui-radius);
-    background: var(--color-background-tint);
+    background: var(--color-background);
     box-sizing: border-box;
   }
 
