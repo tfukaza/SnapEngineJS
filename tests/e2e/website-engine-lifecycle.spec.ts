@@ -52,23 +52,61 @@ test("SnapSort asset preview pans and moves items through the imperative API", a
   const card = page.locator(".drop-snap-card");
   const preview = page.locator("#assets-snapsort-preview-engine .preview-mosaic");
   const pan = card.locator(".snapsort-preview-pan");
+  const scale = card.locator(".snapsort-preview-scale");
   const firstKanbanColumn = card.locator(".preview-kanban-column").first();
   const sentenceAnswer = card.locator(".preview-sentence-zone").first();
   const firstTile = card.locator(".preview-tile-grid > .snapsort-item").first();
 
   await card.scrollIntoViewIfNeeded();
   await expect(preview).toBeVisible();
-  await expect(card.getByRole("img", { name: "React" })).toBeVisible();
-  await expect(card.locator(".framework-list > li")).toHaveCount(5);
+  await expect(card).toHaveJSProperty("tagName", "ARTICLE");
+  await expect(card.getByRole("link", { name: "Learn more" })).toBeVisible();
+  await expect(card.locator(".framework-list")).toHaveCount(0);
+  await expect(card.locator(".slot")).toHaveCount(0);
   await expect(firstKanbanColumn.locator(":scope > .snapsort-item")).toHaveCount(2);
   await expect(sentenceAnswer.locator(":scope > .snapsort-item")).toHaveCount(2);
   await expect(firstTile).toHaveText("01");
 
+  const nativeGridMetrics = await preview.evaluate((element) => ({
+    layoutWidth: (element as HTMLElement).offsetWidth,
+    renderedWidth: element.getBoundingClientRect().width,
+  }));
+  expect(nativeGridMetrics.layoutWidth).toBe(1084);
+  expect(nativeGridMetrics.renderedWidth).toBeLessThan(500);
+
+  const edgeMetrics = await card.evaluate((element) => {
+    const cardRect = element.getBoundingClientRect();
+    const previewRect = element
+      .querySelector(".snapsort-preview-window")!
+      .getBoundingClientRect();
+    return {
+      left: previewRect.left - cardRect.left,
+      right: cardRect.right - previewRect.right,
+      bottom: cardRect.bottom - previewRect.bottom,
+    };
+  });
+  expect(edgeMetrics.left).toBeCloseTo(0, 3);
+  expect(edgeMetrics.right).toBeCloseTo(0, 3);
+  expect(edgeMetrics.bottom).toBeCloseTo(0, 3);
+
   const cardBefore = await card.boundingBox();
   const panBefore = await pan.evaluate((element) => getComputedStyle(element).transform);
+  await expect(scale).toHaveCSS("filter", /grayscale\(1\)/);
 
   await card.hover();
   await expect(card).toHaveAttribute("data-preview-active", "true");
+  await expect(card).toHaveAttribute("data-preview-hovered", "true");
+  await expect
+    .poll(
+      () =>
+        card
+          .locator('[data-preview-entry-id="preview-kanban-motion"]')
+          .evaluate((element) =>
+            element.getAnimations().some((animation) => animation.playState === "running"),
+          ),
+      { timeout: 1500 },
+    )
+    .toBe(true);
   await expect
     .poll(() => firstKanbanColumn.locator(":scope > .snapsort-item").count())
     .toBe(1);
@@ -76,6 +114,7 @@ test("SnapSort asset preview pans and moves items through the imperative API", a
     .poll(() => sentenceAnswer.locator(":scope > .snapsort-item").count())
     .toBe(3);
   await expect.poll(() => firstTile.textContent()).toBe("02");
+  await expect(scale).toHaveCSS("filter", /grayscale\(0\)/);
 
   const panAfter = await pan.evaluate((element) => getComputedStyle(element).transform);
   expect(panAfter).not.toBe(panBefore);
@@ -86,23 +125,7 @@ test("SnapSort asset preview pans and moves items through the imperative API", a
   expect(cardAfter?.width).toBeCloseTo(cardBefore?.width ?? 0, 3);
   expect(cardAfter?.height).toBeCloseTo(cardBefore?.height ?? 0, 3);
 
-  const frameworkChrome = await card.locator(".framework-list > li").evaluateAll((items) =>
-    items.map((item) => {
-      const style = getComputedStyle(item);
-      return {
-        background: style.backgroundColor,
-        borderWidth: style.borderTopWidth,
-      };
-    }),
-  );
-  expect(frameworkChrome).toEqual(
-    Array.from({ length: 5 }, () => ({
-      background: "rgba(0, 0, 0, 0)",
-      borderWidth: "0px",
-    })),
-  );
-
-  await card.click();
+  await card.getByRole("link", { name: "Learn more" }).click();
   await expect(page).toHaveURL(/\/snapsort$/);
   expect(pageErrors).toEqual([]);
 });
@@ -118,6 +141,11 @@ test("SnapSort asset preview honors reduced motion", async ({ page }) => {
 
   await card.hover();
   await expect(card).toHaveAttribute("data-preview-active", "false");
+  await expect(card).toHaveAttribute("data-preview-hovered", "true");
+  await expect(card.locator(".snapsort-preview-scale")).toHaveCSS(
+    "filter",
+    /grayscale\(0\)/,
+  );
   await page.waitForTimeout(1200);
   await expect(firstKanbanColumn.locator(":scope > .snapsort-item")).toHaveCount(2);
   await expect(card.locator(".snapsort-preview-pan")).toHaveCSS("animation-name", "none");

@@ -25,7 +25,7 @@
   const pendingPlusCells = Array.from({ length: 96 }, (_, index) => index);
   const previewAnimation = {
     reorder: {
-      duration: 900,
+      duration: 700,
       timing_function: "cubic-bezier(0.22, 1, 0.36, 1)",
     },
   };
@@ -67,10 +67,10 @@
   ]);
 
   let previewTiles: PreviewEntry[] = $state([
-    { id: "preview-tile-coral", label: "01", color: "#ff8068" },
-    { id: "preview-tile-blue", label: "02", color: "#78a9ff" },
-    { id: "preview-tile-yellow", label: "03", color: "#ffd166" },
-    { id: "preview-tile-green", label: "04", color: "#61c99f" },
+    { id: "preview-tile-primary", label: "01", color: "#ff5d0f" },
+    { id: "preview-tile-secondary", label: "02", color: "#f34336" },
+    { id: "preview-tile-accent", label: "03", color: "#ff0e56" },
+    { id: "preview-tile-muted", label: "04", color: "#7f8286" },
   ]);
   let tileContainer: SnapSortContainer | undefined = $state();
 
@@ -162,11 +162,79 @@
     const item = source?.items[0];
     if (!source?.container || !target?.container || !item) return false;
 
-    return source.container.moveItem(
-      item.id,
-      target.container,
-      target.items.length,
+    return runAnimatedImperativeMove(
+      () =>
+        source.container!.moveItem(
+          item.id,
+          target.container!,
+          target.items.length,
+        ),
+      `[data-preview-entry-id^="${item.id.split("-").slice(0, 2).join("-")}-"]`,
     );
+  }
+
+  function runAnimatedImperativeMove(
+    move: () => boolean,
+    selector: string,
+  ): boolean {
+    const firstRects = new Map<string, DOMRect>();
+    document.querySelectorAll<HTMLElement>(selector).forEach((element) => {
+      const itemId = element.dataset.previewEntryId;
+      if (itemId) firstRects.set(itemId, element.getBoundingClientRect());
+    });
+
+    let observer: MutationObserver | undefined;
+    let fallbackTimer: ReturnType<typeof setTimeout> | undefined;
+    const playFallbackAnimation = () => {
+      observer?.disconnect();
+      if (fallbackTimer) clearTimeout(fallbackTimer);
+
+      const scaleElement = document.querySelector<HTMLElement>(
+        ".snapsort-preview-scale",
+      );
+      const scale = scaleElement
+        ? scaleElement.getBoundingClientRect().width / scaleElement.offsetWidth
+        : 1;
+
+      document.querySelectorAll<HTMLElement>(selector).forEach((element) => {
+        const itemId = element.dataset.previewEntryId;
+        const first = itemId ? firstRects.get(itemId) : undefined;
+        if (!first) return;
+
+        const last = element.getBoundingClientRect();
+        const deltaX = (first.left - last.left) / scale;
+        const deltaY = (first.top - last.top) / scale;
+        if (Math.hypot(deltaX, deltaY) < 2) return;
+
+        element.animate(
+          [
+            { transform: `translate3d(${deltaX}px, ${deltaY}px, 0)` },
+            { transform: "translate3d(0, 0, 0)" },
+          ],
+          {
+            duration: previewAnimation.reorder.duration,
+            easing: previewAnimation.reorder.timing_function,
+          },
+        );
+      });
+    };
+
+    if (!prefersReducedMotion) {
+      const mosaic = document.querySelector(".preview-mosaic");
+      if (mosaic) {
+        observer = new MutationObserver(playFallbackAnimation);
+        observer.observe(mosaic, { childList: true, subtree: true });
+        fallbackTimer = setTimeout(playFallbackAnimation, 120);
+      }
+    }
+
+    const moved = move();
+    if (!moved) {
+      observer?.disconnect();
+      if (fallbackTimer) clearTimeout(fallbackTimer);
+    }
+
+    return moved;
   }
 
   function runAutomationStep() {
@@ -185,10 +253,14 @@
       );
       if (moved) sentenceForward = !sentenceForward;
     } else if (tileContainer && previewTiles[0]) {
-      tileContainer.moveItem(
-        previewTiles[0].id,
-        tileContainer,
-        previewTiles.length,
+      runAnimatedImperativeMove(
+        () =>
+          tileContainer!.moveItem(
+            previewTiles[0].id,
+            tileContainer!,
+            previewTiles.length,
+          ),
+        '[data-preview-entry-id^="preview-tile-"]',
       );
     }
 
@@ -201,7 +273,7 @@
     automationTimer = null;
   }
 
-  function scheduleAutomation(delay = 2800) {
+  function scheduleAutomation(delay = 1350) {
     stopAutomation();
     if (!previewMotionActive) return;
 
@@ -219,7 +291,7 @@
       return;
     }
 
-    scheduleAutomation(900);
+    scheduleAutomation(450);
     return stopAutomation;
   });
 
@@ -255,33 +327,21 @@
   </div>
 
   <div class="assets-grid">
-    <a
-      href="/snapsort"
+    <article
       class="asset-card drop-snap-card"
       data-preview-active={previewMotionActive}
+      data-preview-hovered={previewRequested}
       onmouseenter={() => (pointerInside = true)}
       onmouseleave={() => (pointerInside = false)}
-      onfocus={() => (focusInside = true)}
-      onblur={() => (focusInside = false)}
+      onfocusin={() => (focusInside = true)}
+      onfocusout={() => (focusInside = false)}
     >
       <div class="asset-copy">
         <div class="asset-card-header">
           <h3>SnapSort</h3>
         </div>
         <p>Drag and drop any element</p>
-        <ul class="framework-list" aria-label="Framework availability">
-          <li><img src="/icon/javascript.svg" alt="JavaScript" /></li>
-          <li><img src="/icon/svelte.svg" alt="Svelte" /></li>
-          <li><img src="/icon/react.svg" alt="React" /></li>
-          <li class="framework-wip-logo">
-            <img src="/icon/vue.svg" alt="Vue" />
-            <small>WIP</small>
-          </li>
-          <li class="framework-wip-logo">
-            <img src="/icon/angular.svg" alt="Angular" />
-            <small>WIP</small>
-          </li>
-        </ul>
+        <a class="button primary learn-more-button" href="/snapsort">Learn more</a>
       </div>
 
       <div class="asset-preview snapsort-asset-preview">
@@ -327,9 +387,13 @@
                             {/snippet}
                             {#snippet entry(item)}
                               <Item itemId={item.id} className="preview-kanban-item">
-                                <div class="preview-task-card">
-                                  <span>{item.label}</span>
-                                  <small>{item.tag}</small>
+                                <div class="preview-task-card" data-preview-entry-id={item.id}>
+                                  <div class="preview-task-header">
+                                    <span>{item.label}</span>
+                                    <small>{item.tag}</small>
+                                  </div>
+                                  <p>Polish the interaction before the next release.</p>
+                                  <div class="preview-task-footer"><i>SE</i><span>Jul 19 · 2</span></div>
                                 </div>
                               </Item>
                             {/snippet}
@@ -359,7 +423,7 @@
                             >
                               {#snippet entry(item)}
                                 <Item itemId={item.id} className="preview-word-item">
-                                  <span>{item.label}</span>
+                                  <span class="preview-word" data-preview-entry-id={item.id}>{item.label}</span>
                                 </Item>
                               {/snippet}
                             </Container>
@@ -395,7 +459,7 @@
                       >
                         {#snippet entry(item)}
                           <Item itemId={item.id} className="preview-tile-item">
-                            <span style={`--preview-tile-color: ${item.color};`}>{item.label}</span>
+                            <span data-preview-entry-id={item.id} style={`--preview-tile-color: ${item.color};`}>{item.label}</span>
                           </Item>
                         {/snippet}
                       </Container>
@@ -416,7 +480,7 @@
                         <div class="preview-editor-tools">
                           <span>Text</span><span>Choice</span><span>Date</span>
                         </div>
-                        <div class="preview-editor-canvas">
+                        <div class="preview-editor-canvas card shallow">
                           <small>Customer feedback</small>
                           <div class="preview-input-line"></div>
                           <div class="preview-choice-row"><i></i><span>Excellent</span></div>
@@ -441,7 +505,7 @@
           </div>
         </div>
       </div>
-    </a>
+    </article>
 
     <div class="asset-card planned-card">
       <div class="asset-copy">
@@ -516,11 +580,13 @@
   }
 
   .asset-card {
+    --asset-card-padding: clamp(1.5rem, 3vw, 2.5rem);
+
     display: flex;
     flex-direction: column;
     align-items: stretch;
     gap: var(--size-24);
-    padding: clamp(1.5rem, 3vw, 2.5rem);
+    padding: var(--asset-card-padding);
     border-radius: var(--ui-radius);
     background: var(--color-background-tint);
     color: inherit;
@@ -552,7 +618,13 @@
 
   .drop-snap-card {
     position: relative;
+    gap: 0;
+    padding: 0;
     overflow: hidden;
+  }
+
+  .drop-snap-card .asset-copy {
+    padding: var(--asset-card-padding) var(--asset-card-padding) var(--size-16);
   }
 
   .asset-copy {
@@ -569,44 +641,15 @@
     margin-bottom: var(--size-16);
   }
 
-  .framework-list {
-    display: flex;
-    flex-wrap: wrap;
-    align-items: center;
-    gap: var(--size-16);
-    margin: var(--size-20) 0 0;
-    padding: 0;
-    list-style: none;
-  }
-
-  .framework-list li {
-    position: relative;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    width: 2.15rem;
-    height: 2.15rem;
-  }
-
-  .framework-list img {
-    display: block;
-    max-width: 100%;
-    max-height: 100%;
-    object-fit: contain;
-  }
-
-  .framework-wip-logo small {
-    position: absolute;
-    top: -0.5rem;
-    right: -0.7rem;
-    padding: 0.16rem 0.32rem;
-    border: 1px solid #d9dddf;
-    border-radius: 999px;
-    background: #ffffff;
-    color: #697074;
-    font-size: 0.58rem;
-    font-weight: 700;
-    line-height: 1;
+  .learn-more-button {
+    display: inline-flex;
+    align-self: flex-start;
+    margin-top: var(--size-24);
+    color: #ffffff;
+    font-size: 0.9rem;
+    font-weight: 500;
+    line-height: 1.2;
+    text-decoration: none;
   }
 
   .asset-preview {
@@ -617,8 +660,7 @@
   }
 
   .snapsort-asset-preview {
-    min-height: 340px;
-    margin-top: calc(var(--size-12) * -1);
+    min-height: 360px;
   }
 
   .snapsort-preview-window {
@@ -649,9 +691,9 @@
     position: absolute;
     top: 0;
     left: 0;
-    width: 542px;
-    transform: translate3d(-16px, -8px, 0);
-    animation: preview-pan 28s linear infinite alternate;
+    width: 1084px;
+    transform: translate3d(-12px, -8px, 0);
+    animation: preview-pan 24s linear infinite alternate;
     animation-play-state: paused;
     will-change: transform;
   }
@@ -661,34 +703,47 @@
   }
 
   .snapsort-preview-scale {
-    width: 542px;
-    transform: scale(0.72);
+    width: 1084px;
+    filter: grayscale(1) saturate(0.15) contrast(0.94);
+    transform: scale(0.42);
     transform-origin: top left;
+    transition: filter 320ms ease;
+  }
+
+  .drop-snap-card[data-preview-hovered="true"] .snapsort-preview-scale {
+    filter: grayscale(0) saturate(1.05) contrast(1);
   }
 
   :global(.preview-engine) {
-    width: 542px;
+    width: 1084px;
   }
 
   .preview-mosaic {
     display: grid;
-    grid-template-columns: repeat(3, 170px);
+    grid-template-columns: repeat(3, 340px);
     grid-auto-flow: row dense;
-    grid-auto-rows: minmax(190px, auto);
-    gap: 16px;
-    width: 542px;
+    grid-auto-rows: minmax(380px, auto);
+    gap: 32px;
+    width: 1084px;
     color: #292d2f;
   }
 
-  .preview-panel,
+  .preview-panel {
+    min-width: 0;
+    min-height: 380px;
+    padding: var(--size-32);
+    border-radius: var(--ui-radius);
+    background: var(--color-background-tint);
+    box-sizing: border-box;
+    user-select: none;
+  }
+
   .preview-skeleton-mosaic > div {
     min-width: 0;
-    min-height: 190px;
-    padding: 16px;
-    border: 1px solid rgb(31 30 41 / 8%);
-    border-radius: 14px;
-    background: rgb(255 255 255 / 88%);
-    box-shadow: 0 8px 24px rgb(31 30 41 / 7%);
+    min-height: 380px;
+    padding: var(--size-32);
+    border-radius: var(--ui-radius);
+    background: var(--color-background-tint);
     box-sizing: border-box;
   }
 
@@ -698,25 +753,27 @@
   }
 
   .preview-panel-tall {
-    min-height: 220px;
+    min-height: 440px;
   }
 
   .preview-panel header {
     display: flex;
     align-items: center;
     justify-content: space-between;
-    gap: 8px;
-    margin-bottom: 14px;
+    gap: var(--size-16);
+    margin-bottom: var(--size-24);
   }
 
   .preview-panel header strong {
-    font-size: 13px;
+    font-family: "Bitcount Grid Single", monospace;
+    font-size: 24px;
+    font-weight: 300;
     line-height: 1;
   }
 
   .preview-panel header span {
     color: #8a9094;
-    font-size: 9px;
+    font-size: 0.8rem;
     line-height: 1;
     text-transform: uppercase;
   }
@@ -724,23 +781,25 @@
   .preview-kanban-board {
     display: grid;
     grid-template-columns: repeat(2, minmax(0, 1fr));
-    gap: 10px;
+    gap: 1rem;
   }
 
   .preview-kanban-panel :global(.preview-kanban-column) {
     align-items: stretch;
-    gap: 7px;
-    min-height: 154px;
-    padding: 9px;
-    border-radius: 10px;
-    background: #f2f3f3;
+    gap: 0;
+    min-height: 300px;
+    padding: 0.75rem;
+    border-radius: 12px;
+    background: rgb(31 30 41 / 4%);
   }
 
   .preview-kanban-panel :global(.preview-kanban-column h5) {
-    margin: 0 0 2px;
-    color: #777e82;
-    font-size: 9px;
-    font-weight: 600;
+    margin: 0 0 1rem;
+    color: #8f9497;
+    font-family: "Bitcount Grid Single", monospace;
+    font-size: 0.9rem;
+    font-weight: 300;
+    letter-spacing: 0.05em;
     text-transform: uppercase;
   }
 
@@ -752,94 +811,134 @@
 
   .preview-task-card {
     display: flex;
-    align-items: center;
-    justify-content: space-between;
-    gap: 8px;
+    flex-direction: column;
+    gap: 0.5rem;
     width: 100%;
-    padding: 10px;
+    margin-bottom: 0.5rem;
+    padding: 0.85rem 0.95rem;
     border: 1px solid rgb(31 30 41 / 8%);
-    border-radius: 8px;
-    background: white;
-    box-shadow: 0 3px 10px rgb(31 30 41 / 6%);
+    border-radius: 10px;
+    background: var(--color-background);
+    box-shadow: 0 1px 2px rgb(31 30 41 / 5%), 0 4px 12px -6px rgb(31 30 41 / 8%);
     box-sizing: border-box;
   }
 
-  .preview-task-card span {
+  .preview-task-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 0.5rem;
+  }
+
+  .preview-task-header span {
     overflow: hidden;
-    font-size: 10px;
+    color: #232526;
+    font-size: 0.95rem;
     font-weight: 600;
+    line-height: 1.25;
     text-overflow: ellipsis;
     white-space: nowrap;
   }
 
-  .preview-task-card small {
+  .preview-task-header small {
     flex: 0 0 auto;
-    padding: 3px 5px;
+    padding: 0.16rem 0.5rem;
     border-radius: 999px;
-    background: #eff0ff;
-    color: #6862b7;
-    font-size: 7px;
+    background: color-mix(in srgb, var(--color-primary) 10%, #fff);
+    color: color-mix(in srgb, var(--color-primary) 72%, #222);
+    font-size: 0.7rem;
+    font-weight: 600;
+  }
+
+  .preview-task-card p {
+    margin: 0;
+    color: #5f6569;
+    font-size: 0.85rem;
+    line-height: 1.35;
+  }
+
+  .preview-task-footer {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding-top: 0.45rem;
+    color: #8f9497;
+    font-size: 0.78rem;
+  }
+
+  .preview-task-footer i {
+    display: grid;
+    width: 1.6rem;
+    height: 1.6rem;
+    border-radius: 50%;
+    background: var(--color-primary);
+    color: white;
+    font-family: "Bitcount Grid Single", monospace;
+    font-size: 0.67rem;
+    font-style: normal;
+    place-items: center;
   }
 
   .preview-sentence-board {
     display: flex;
     flex-direction: column;
-    gap: 12px;
+    gap: var(--size-24);
   }
 
   .preview-sentence-group > small {
     display: block;
-    margin-bottom: 5px;
+    margin-bottom: var(--size-8);
     color: #8a9094;
-    font-size: 8px;
+    font-size: 0.8rem;
     text-transform: uppercase;
   }
 
   .preview-sentence-panel :global(.preview-sentence-zone) {
     align-content: flex-start;
     align-items: flex-start;
-    gap: 5px;
-    min-height: 54px;
-    padding: 7px;
-    border: 1px dashed #d5d9db;
-    border-radius: 9px;
-    background: #f8f9f9;
+    gap: var(--size-4);
+    min-height: 76px;
+    padding: var(--size-8) 0;
+    border-bottom: 2px solid #ddd;
   }
 
   .preview-sentence-panel :global(.preview-word-item) {
     padding: 0;
   }
 
-  .preview-sentence-panel :global(.preview-word-item span) {
+  .preview-sentence-panel :global(.preview-word) {
     display: block;
-    padding: 6px 8px;
-    border: 1px solid #dfe2e3;
-    border-radius: 7px;
+    padding: 2px 4px;
+    border: 1px solid #ddd;
+    border-radius: 4px;
     background: white;
-    font-size: 9px;
-    font-weight: 600;
+    box-shadow: 0 3px 0 #d8dde0;
+    color: #232526;
+    font-family: "DotGothic16", sans-serif;
+    font-size: 1rem;
+    line-height: 1.2;
     white-space: nowrap;
   }
 
   .preview-file-tree {
     display: flex;
     flex-direction: column;
-    gap: 5px;
+    gap: 0.35rem;
     font-family: "Geist Mono", monospace;
-    font-size: 9px;
+    font-size: 0.9rem;
   }
 
   .preview-file-tree span {
-    padding: 6px 7px;
-    border-radius: 6px;
+    padding: 0.5rem 0.65rem;
+    border-radius: 8px;
   }
 
   .preview-file-tree .nested {
-    margin-left: 10px;
+    margin-left: 1rem;
   }
 
   .preview-file-tree .nested-deep {
-    margin-left: 20px;
+    margin-left: 2rem;
   }
 
   .preview-file-tree .folder {
@@ -848,14 +947,14 @@
   }
 
   .preview-file-tree .active {
-    background: #eceeff;
-    color: #5c57a8;
+    background: color-mix(in srgb, var(--color-primary) 14%, white);
+    color: color-mix(in srgb, var(--color-primary) 74%, #222);
   }
 
   .preview-swap-panel :global(.preview-tile-grid) {
     display: grid;
     grid-template-columns: repeat(2, minmax(0, 1fr));
-    gap: 8px;
+    gap: var(--size-8);
   }
 
   .preview-swap-panel :global(.preview-tile-item) {
@@ -867,12 +966,12 @@
     display: flex;
     align-items: flex-end;
     width: 100%;
-    height: 58px;
-    padding: 8px;
-    border-radius: 9px;
+    height: 116px;
+    padding: var(--size-16);
+    border-radius: var(--ui-radius);
     background: var(--preview-tile-color);
-    color: rgb(31 30 41 / 58%);
-    font-size: 9px;
+    color: white;
+    font-size: 1rem;
     font-weight: 700;
     box-sizing: border-box;
   }
@@ -880,89 +979,89 @@
   .preview-trash-list {
     display: flex;
     flex-direction: column;
-    gap: 6px;
+    gap: var(--size-12);
   }
 
   .preview-trash-list span {
     display: flex;
     align-items: center;
-    gap: 7px;
-    padding: 8px;
-    border: 1px solid #e2e4e5;
-    border-radius: 7px;
-    background: white;
-    font-size: 9px;
+    gap: var(--size-12);
+    padding: var(--size-16);
+    border: 1px solid color-mix(in srgb, var(--color-background-dark) 20%, transparent);
+    border-radius: var(--ui-radius);
+    background: var(--color-background);
+    font-size: 0.9rem;
   }
 
   .preview-trash-list i {
-    width: 5px;
-    height: 14px;
+    width: 10px;
+    height: 28px;
     border-right: 2px dotted #b6bbbe;
     border-left: 2px dotted #b6bbbe;
   }
 
   .preview-trash-target {
-    margin-top: 9px;
-    padding: 13px 6px;
-    border: 1px dashed #e0a39d;
-    border-radius: 8px;
-    background: #fff4f2;
-    color: #b65349;
-    font-size: 9px;
+    margin-top: var(--size-16);
+    padding: var(--size-24) var(--size-12);
+    border: 1px dashed color-mix(in srgb, var(--color-secondary-1) 38%, transparent);
+    border-radius: var(--ui-radius);
+    background: color-mix(in srgb, var(--color-secondary-1) 12%, white);
+    color: color-mix(in srgb, var(--color-secondary-1) 78%, #222);
+    font-size: 0.9rem;
     text-align: center;
   }
 
   .preview-editor-layout {
     display: grid;
-    grid-template-columns: 90px minmax(0, 1fr);
-    gap: 10px;
+    grid-template-columns: 180px minmax(0, 1fr);
+    gap: var(--size-24);
   }
 
   .preview-editor-tools {
     display: flex;
     flex-direction: column;
-    gap: 7px;
+    gap: var(--size-12);
   }
 
   .preview-editor-tools span {
-    padding: 9px;
-    border: 1px solid #e0e3e4;
-    border-radius: 7px;
-    background: #f7f8f8;
-    font-size: 9px;
+    padding: var(--size-16);
+    border: 1px solid color-mix(in srgb, var(--color-background-dark) 18%, transparent);
+    border-radius: var(--ui-radius);
+    background: var(--color-background-tint);
+    font-size: 0.9rem;
   }
 
   .preview-editor-canvas {
-    padding: 12px;
-    border: 1px solid #dfe2e3;
-    border-radius: 9px;
-    background: white;
+    --card-radius: var(--ui-radius);
+
+    padding: var(--size-24);
   }
 
   .preview-editor-canvas > small {
-    font-size: 10px;
+    font-size: 1rem;
     font-weight: 700;
   }
 
   .preview-input-line {
-    height: 24px;
-    margin: 11px 0;
-    border: 1px solid #dfe2e3;
-    border-radius: 6px;
+    height: 48px;
+    margin: var(--size-24) 0;
+    border: 1px solid color-mix(in srgb, var(--color-background-dark) 22%, transparent);
+    border-radius: var(--ui-radius);
+    background: var(--color-background);
   }
 
   .preview-choice-row {
     display: flex;
     align-items: center;
-    gap: 7px;
-    margin-top: 8px;
+    gap: var(--size-12);
+    margin-top: var(--size-16);
     color: #666d70;
-    font-size: 9px;
+    font-size: 0.9rem;
   }
 
   .preview-choice-row i {
-    width: 10px;
-    height: 10px;
+    width: 20px;
+    height: 20px;
     border: 1px solid #c9ced0;
     border-radius: 50%;
   }
@@ -970,58 +1069,59 @@
   .preview-clone-blocks {
     display: grid;
     grid-template-columns: 1fr 1fr;
-    gap: 7px;
+    gap: var(--size-12);
   }
 
   .preview-clone-blocks span {
-    padding: 9px 7px;
-    border-radius: 7px;
-    font-size: 8px;
+    padding: var(--size-16) var(--size-12);
+    border-radius: var(--ui-radius);
+    font-size: 0.85rem;
     text-align: center;
   }
 
   .preview-clone-blocks .heading-block {
-    background: #f0edff;
-    color: #655bb5;
+    background: color-mix(in srgb, var(--color-primary) 16%, white);
+    color: color-mix(in srgb, var(--color-primary) 78%, #222);
   }
 
   .preview-clone-blocks .image-block {
-    background: #e9f7f2;
-    color: #377d65;
+    background: color-mix(in srgb, var(--color-secondary-1) 15%, white);
+    color: color-mix(in srgb, var(--color-secondary-1) 78%, #222);
   }
 
   .preview-clone-blocks .button-block {
     grid-column: span 2;
-    background: #fff2df;
-    color: #9a6827;
+    background: color-mix(in srgb, var(--color-accent) 14%, white);
+    color: color-mix(in srgb, var(--color-accent) 72%, #222);
   }
 
   .preview-clone-canvas {
-    margin-top: 10px;
-    padding: 23px 6px;
-    border: 1px dashed #ccd1d3;
-    border-radius: 8px;
+    margin-top: var(--size-16);
+    padding: 46px var(--size-12);
+    border: 1px dashed #c7cccf;
+    border-radius: var(--ui-radius);
+    background: var(--color-background);
     color: #9ba0a3;
-    font-size: 8px;
+    font-size: 0.85rem;
     text-align: center;
   }
 
   .preview-skeleton-mosaic > div {
     display: flex;
     flex-direction: column;
-    gap: 12px;
+    gap: var(--size-24);
   }
 
   .preview-skeleton-mosaic span {
     display: block;
-    height: 30px;
-    border-radius: 7px;
+    height: 60px;
+    border-radius: var(--ui-radius);
     background: rgb(31 30 41 / 7%);
   }
 
   .preview-skeleton-mosaic span:first-child {
     width: 44%;
-    height: 12px;
+    height: 24px;
   }
 
   .pending-preview {
@@ -1068,17 +1168,21 @@
 
   @keyframes preview-pan {
     from {
-      transform: translate3d(-16px, -8px, 0);
+      transform: translate3d(-12px, -8px, 0);
     }
     to {
-      transform: translate3d(-86px, -135px, 0);
+      transform: translate3d(-58px, -175px, 0);
     }
   }
 
   @media (prefers-reduced-motion: reduce) {
     .snapsort-preview-pan {
       animation: none;
-      transform: translate3d(-48px, -58px, 0);
+      transform: translate3d(-28px, -74px, 0);
+    }
+
+    .snapsort-preview-scale {
+      transition: none;
     }
   }
 
@@ -1099,23 +1203,23 @@
     }
 
     .snapsort-asset-preview {
-      min-height: 300px;
+      min-height: 330px;
     }
 
     .snapsort-preview-scale {
-      transform: scale(0.64);
+      transform: scale(0.36);
     }
 
     .snapsort-preview-pan {
-      transform: translate3d(-10px, -6px, 0);
+      transform: translate3d(-8px, -6px, 0);
     }
 
     @keyframes preview-pan {
       from {
-        transform: translate3d(-10px, -6px, 0);
+        transform: translate3d(-8px, -6px, 0);
       }
       to {
-        transform: translate3d(-72px, -145px, 0);
+        transform: translate3d(-48px, -185px, 0);
       }
     }
   }
