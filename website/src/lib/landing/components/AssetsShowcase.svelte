@@ -102,6 +102,8 @@
 
   let pointerInside = $state(false);
   let focusInside = $state(false);
+  let previewPanX = $state(-12);
+  let previewPanY = $state(-104);
   let prefersReducedMotion = $state(false);
   let documentVisible = $state(true);
   const previewRequested = $derived(pointerInside || focusInside);
@@ -115,6 +117,24 @@
   let sentenceForward = true;
   let fileForward = true;
   let editorForward = true;
+
+  function handlePreviewPointerMove(event: MouseEvent) {
+    if (prefersReducedMotion) return;
+
+    const card = event.currentTarget as HTMLElement;
+    const rect = card.getBoundingClientRect();
+    const xProgress = Math.max(0, Math.min(1, (event.clientX - rect.left) / rect.width));
+    const yProgress = Math.max(0, Math.min(1, (event.clientY - rect.top) / rect.height));
+
+    previewPanX = -4 - xProgress * 60;
+    previewPanY = -18 - yProgress * 234;
+  }
+
+  function handlePreviewPointerLeave() {
+    pointerInside = false;
+    previewPanX = -12;
+    previewPanY = -104;
+  }
 
   function movePreviewEntry(
     groups: PreviewGroup[],
@@ -402,8 +422,10 @@
       class="asset-card drop-snap-card"
       data-preview-active={previewMotionActive}
       data-preview-hovered={previewRequested}
+      style={`--preview-pan-x: ${previewPanX}px; --preview-pan-y: ${previewPanY}px;`}
       onmouseenter={() => (pointerInside = true)}
-      onmouseleave={() => (pointerInside = false)}
+      onmousemove={handlePreviewPointerMove}
+      onmouseleave={handlePreviewPointerLeave}
       onfocusin={() => (focusInside = true)}
       onfocusout={() => (focusInside = false)}
     >
@@ -815,14 +837,9 @@
     top: 0;
     left: 0;
     width: 1084px;
-    transform: translate3d(-12px, -104px, 0);
-    animation: preview-pan 24s linear infinite alternate;
-    animation-play-state: paused;
+    transform: translate3d(var(--preview-pan-x), var(--preview-pan-y), 0);
+    transition: transform 180ms cubic-bezier(0.22, 1, 0.36, 1);
     will-change: transform;
-  }
-
-  .drop-snap-card[data-preview-active="true"] .snapsort-preview-pan {
-    animation-play-state: running;
   }
 
   .snapsort-preview-scale {
@@ -1439,25 +1456,9 @@
     }
   }
 
-  @keyframes preview-pan {
-    0% {
-      transform: translate3d(-12px, -104px, 0);
-    }
-    32% {
-      transform: translate3d(-30px, -20px, 0);
-    }
-    68% {
-      transform: translate3d(-42px, -104px, 0);
-    }
-    100% {
-      transform: translate3d(-58px, -250px, 0);
-    }
-  }
-
   @media (prefers-reduced-motion: reduce) {
     .snapsort-preview-pan {
-      animation: none;
-      transform: translate3d(-28px, -132px, 0);
+      transition: none;
     }
 
     .snapsort-preview-scale {
@@ -1489,23 +1490,5 @@
       transform: scale(0.36);
     }
 
-    .snapsort-preview-pan {
-      transform: translate3d(-8px, -94px, 0);
-    }
-
-    @keyframes preview-pan {
-      0% {
-        transform: translate3d(-8px, -94px, 0);
-      }
-      32% {
-        transform: translate3d(-22px, -18px, 0);
-      }
-      68% {
-        transform: translate3d(-34px, -94px, 0);
-      }
-      100% {
-        transform: translate3d(-48px, -248px, 0);
-      }
-    }
   }
 </style>

@@ -181,6 +181,23 @@ test("SnapSort asset preview pans and moves items through the imperative API", a
     .toBe(3);
   await expect(scale).toHaveCSS("filter", /grayscale\(0\)/);
 
+  const pointerCardBox = await card.boundingBox();
+  if (!pointerCardBox) throw new Error("Expected the SnapSort card to have bounds.");
+  await page.mouse.move(pointerCardBox.x + 20, pointerCardBox.y + 20);
+  await page.waitForTimeout(220);
+  const topPan = await pan.evaluate((element) =>
+    new DOMMatrix(getComputedStyle(element).transform).m42,
+  );
+  await page.mouse.move(
+    pointerCardBox.x + pointerCardBox.width - 20,
+    pointerCardBox.y + pointerCardBox.height - 20,
+  );
+  await page.waitForTimeout(220);
+  const bottomPan = await pan.evaluate((element) =>
+    new DOMMatrix(getComputedStyle(element).transform).m42,
+  );
+  expect(bottomPan).toBeLessThan(topPan - 100);
+
   const panAfter = await pan.evaluate((element) => getComputedStyle(element).transform);
   expect(panAfter).not.toBe(panBefore);
 
@@ -214,6 +231,16 @@ test("SnapSort asset preview honors reduced motion", async ({ page }) => {
   await page.waitForTimeout(1200);
   await expect(firstKanbanColumn.locator(":scope > .snapsort-item")).toHaveCount(2);
   await expect(card.locator(".snapsort-preview-pan")).toHaveCSS("animation-name", "none");
+  const reducedPanBefore = await card
+    .locator(".snapsort-preview-pan")
+    .evaluate((element) => getComputedStyle(element).transform);
+  const cardBox = await card.boundingBox();
+  if (!cardBox) throw new Error("Expected the SnapSort card to have bounds.");
+  await page.mouse.move(cardBox.x + 10, cardBox.y + cardBox.height - 10);
+  const reducedPanAfter = await card
+    .locator(".snapsort-preview-pan")
+    .evaluate((element) => getComputedStyle(element).transform);
+  expect(reducedPanAfter).toBe(reducedPanBefore);
 });
 
 test("camera card reserves modified wheel input for zoom", async ({ page }) => {
