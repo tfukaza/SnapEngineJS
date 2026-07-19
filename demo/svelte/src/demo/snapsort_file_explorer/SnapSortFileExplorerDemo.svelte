@@ -6,7 +6,6 @@
     GhostCreateEvent,
     ItemMoveEvent,
   } from "@snap-engine/snapsort";
-  import { tick } from "svelte";
   import FileTreeNode from "./FileTreeNode.svelte";
   import type { TreeNodeData } from "./FileTreeNode.svelte";
 
@@ -221,7 +220,6 @@
   const callbacks: ContainerCallbacks = {
     onItemMove: handleMove,
     createGhost: createFileTreeGhost,
-    awaitMutation: tick,
   };
 </script>
 

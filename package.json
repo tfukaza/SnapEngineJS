@@ -1,6 +1,6 @@
 {
   "name": "@snap-engine/core",
-  "version": "0.4.0",
+  "version": "0.4.1",
   "description": "Interactivity engine for the web",
   "type": "module",
   "workspaces": [
@@ -44,8 +44,11 @@
     "dev:all": "concurrently --kill-others \"npm run dev:vanilla\" \"npm run dev:react\"",
     "test": "start-server-and-test server:vanilla http://localhost:3001 'playwright test'",
     "test:camera-control": "playwright test -c tests/e2e/camera-control.playwright.config.ts",
+    "test:camera-control-react": "playwright test -c tests/e2e/camera-control-react.playwright.config.ts",
+    "test:asset-base-react": "playwright test -c tests/e2e/asset-base-react.playwright.config.ts",
     "test:snapline": "playwright test -c tests/e2e/snapline.playwright.config.ts",
     "test:snapline-react": "playwright test -c tests/e2e/snapline-react.playwright.config.ts",
+    "test:layout": "playwright test -c tests/e2e/snapsort-layout.playwright.config.ts",
     "test:snapsort": "playwright test -c tests/e2e/snapsort.playwright.config.ts",
     "test:snapsort-svelte": "playwright test -c tests/e2e/snapsort.playwright.config.ts --project=svelte-chromium",
     "test:snapsort-react": "playwright test -c tests/e2e/snapsort.playwright.config.ts --project=react-chromium",
@@ -56,6 +59,11 @@
     "lint": "eslint src --ext .ts",
     "build": "vite build --mode production",
     "build:dev": "FRAMEWORK=test npx vite build --mode development",
+    "validate:packages": "node scripts/validate-packages.mjs",
+    "check:website": "npm run check --prefix website",
+    "check:adapters": "FRAMEWORK=test svelte-check --tsconfig assets/asset-base/svelte/tsconfig.json && FRAMEWORK=test svelte-check --tsconfig assets/snapsort/svelte/tsconfig.json",
+    "typecheck": "tsc --noEmit",
+    "ci": "npm run validate:packages && npm run typecheck && npm run lint && npm run check:adapters && npm run check:website && npm run build",
     "prepublishOnly": "npm run lint",
     "wdio": "wdio run ./wdio.conf.ts"
   },
@@ -77,9 +85,13 @@
   "publishConfig": {
     "access": "public"
   },
+  "overrides": {
+    "brace-expansion@1": "1.1.16",
+    "picomatch@2": "2.3.2"
+  },
   "devDependencies": {
     "@eslint/js": "^9.6.0",
-    "@playwright/test": "^1.45.2",
+    "@playwright/test": "^1.61.1",
     "@sveltejs/vite-plugin-svelte": "^5.0.3",
     "@types/eslint__js": "^8.42.3",
     "@types/node": "^20.14.11",
@@ -98,6 +110,7 @@
     "react-dom": "^18.2.0",
     "sass": "^1.75.0",
     "start-server-and-test": "^2.0.4",
+    "svelte-check": "^4.7.3",
     "terser": "^5.31.1",
     "tslib": "^2.6.2",
     "typescript": "^5.5.3",

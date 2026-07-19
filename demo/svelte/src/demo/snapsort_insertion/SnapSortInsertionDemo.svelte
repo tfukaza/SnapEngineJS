@@ -7,7 +7,6 @@
     ItemMoveEvent,
     ItemRemoveEvent,
   } from "@snap-engine/snapsort";
-  import { tick } from "svelte";
 
   type DemoItem = {
     id: string;
@@ -218,7 +217,6 @@
             callbacks: {
               onItemMove: handleMove,
               onItemRemove: handleRemove,
-              awaitMutation: tick,
             },
           }}
           locked={true}

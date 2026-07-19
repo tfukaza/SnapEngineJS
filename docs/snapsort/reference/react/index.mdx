@@ -1,0 +1,88 @@
+---
+title: React Overview
+description: Package setup and component map for @snap-engine/snapsort-react.
+order: 0
+project: snapsort
+projectTitle: SnapSort
+section: reference
+sectionTitle: Reference
+sectionOrder: 3
+framework: react
+frameworkKey: overview
+---
+
+The React package wraps SnapSort's core objects in React components. Use it when React owns the rendered arrays and your component state remains the source of truth for item order.
+
+## Install
+
+```bash
+npm install @snap-engine/core @snap-engine/asset-base-react @snap-engine/snapsort @snap-engine/snapsort-react react react-dom
+```
+
+`react` and `react-dom` are peer dependencies of `@snap-engine/snapsort-react`.
+
+## Import
+
+```tsx
+import { Engine, Container, Ghost, Handle, Item } from "@snap-engine/snapsort-react";
+```
+
+Wrap the sortable tree in an `Engine`, then compose containers and items:
+
+```tsx
+<Engine id="tasks">
+  <Container config={{ direction: "column", groupID: "tasks" }}>
+    <Item itemId="task-1">
+      <Handle className="drag-handle">Drag</Handle>
+      Task 1
+    </Item>
+  </Container>
+</Engine>
+```
+
+`Engine` creates or accepts a core `Engine`, assigns it to the rendered root, installs collision handling, and provides it through React context. Use `useSnapSortEngine()` when a descendant needs the current core engine.
+
+## Components
+
+- [Container](/docs/snapsort/reference/react/container) — props, modes, callbacks, mutation timing, and the imperative ref API.
+- [Item](/docs/snapsort/reference/react/item) — props, identity, metadata, selection, refs, and drag handles.
+
+`Handle` belongs inside an `Item` and limits where a drag can begin.
+`Ghost` binds a framework-rendered flow placeholder to the `ghostItem` in an
+`onGhostInsert` event. Remove that rendered entry in `onGhostRemove`. Do not
+render a ghost with `Item`, because a ghost is already attached to the core
+container by the drag lifecycle.
+
+Every wrapper accepts standard `div` attributes and forwards them to its DOM
+element. `style` is merged after SnapSort's structural flex/position defaults.
+
+## Core Types
+
+Import callback events, configuration, metadata, and ref object types from the framework-agnostic package:
+
+```ts
+import type { Engine as CoreEngine } from "@snap-engine/core";
+import type {
+  CanDropEvent,
+  Container as SnapSortContainer,
+  ContainerConfig,
+  DragEndEvent,
+  DragStartEvent,
+  Item as SnapSortItem,
+  ItemMoveEvent,
+  ItemSnapshotMetadata,
+  ItemSwapEvent,
+} from "@snap-engine/snapsort";
+```
+
+For the application-state pattern shared by both adapters, see [Session Lifecycle](/docs/snapsort/guides/03_session_lifecycle).
+
+## Subpath Exports
+
+| Import path | Exports |
+|-------------|---------|
+| `@snap-engine/snapsort-react/Engine` | `Engine`, context, and `useSnapSortEngine` |
+| `@snap-engine/snapsort-react/Container` | Container components and context |
+| `@snap-engine/snapsort-react/Ghost` | Framework-owned flow ghost component |
+| `@snap-engine/snapsort-react/Item` | Item components and context |
+| `@snap-engine/snapsort-react/Handle` | `Handle` |

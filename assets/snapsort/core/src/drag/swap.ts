@@ -2,7 +2,12 @@ import type { Container } from "../container";
 import type { Item } from "../item";
 import { resetDropSnapshotDebugDump, type DropCandidate } from "../algorithm";
 import type { DragLocation, GhostRect, GhostRole } from "../events";
-import { fireAwaitMutation, fireGhostInsert, fireItemSwap } from "../mutation";
+import {
+  fireGhostInsert,
+  fireItemSwap,
+  fireMutation,
+  settleMutation,
+} from "../mutation";
 import type { DragLifecycleStrategy } from "./lifecycle";
 import type { DragSession } from "./session";
 
@@ -35,7 +40,7 @@ async function createPointerGhost(session: DragSession): Promise<void> {
   // insertion marker, it's a purely visual, absolutely-positioned element.
   // `index: -1` signals "not applicable" (there is no list position).
   fireGhostInsert(root, item, ghostItem, -1, null, ghostRect, session, "marker", "pointer");
-  await fireAwaitMutation(root);
+  await settleMutation();
 }
 
 function writePointerGhostPosition(session: DragSession): void {
@@ -78,9 +83,9 @@ async function removeGhost(
   const ghostContainer = ghostItem.parent as unknown as Container | null;
   if (ghostContainer) {
     item.removeGhostFrom(item, ghostContainer, ghostItem, session, "marker", role);
-    await fireAwaitMutation(ghostContainer);
+    await settleMutation();
   }
-  ghostItem.destroy();
+  ghostItem.destroy(!ghostItem.frameworkManagedGhostElement);
   session.ghosts.delete(role);
 }
 
@@ -134,28 +139,27 @@ function drop(session: DragSession): void {
           { item: targetItem, container: bContainer, index: bIndex },
           session,
         );
-        await fireAwaitMutation(bContainer);
-        if (bContainer !== aContainer) {
-          await fireAwaitMutation(aContainer);
-        }
+        await settleMutation();
       }
 
       root.clearDragSnapshotTree();
       resetDropSnapshotDebugDump(item);
       session.status = "ended";
       root.dragSession = null;
-      root.callbacks?.onDragEnd?.({
-        session,
-        item,
-        itemId: item.resolvedItemId,
-        itemMetadata: item.metadata,
-        items: session.items,
-        itemIds: session.items.map((member) => member.resolvedItemId),
-        itemsMetadata: session.items.map((member) => member.metadata),
-        element: item.element,
-        source: session.sources[0],
-        sources: session.sources,
-        destination,
+      fireMutation(root, () => {
+        root.callbacks?.onDragEnd?.({
+          session,
+          item,
+          itemId: item.resolvedItemId,
+          itemMetadata: item.metadata,
+          items: session.items,
+          itemIds: session.items.map((member) => member.resolvedItemId),
+          itemsMetadata: session.items.map((member) => member.metadata),
+          element: item.element,
+          source: session.sources[0],
+          sources: session.sources,
+          destination,
+        });
       });
     },
     { stage: "WRITE_1", queueId: `drag-end-swap-${item.id}` },
@@ -171,7 +175,7 @@ export class SwapLifecycle implements DragLifecycleStrategy {
     await session.updateDropTarget();
   }
 
-  async dragMove(session: DragSession): Promise<void> {
+  dragMove(session: DragSession): void {
     writePointerGhostPosition(session);
   }
 
@@ -190,12 +194,12 @@ export class SwapLifecycle implements DragLifecycleStrategy {
     return target.index;
   }
 
-  async moveGhost(
+  moveGhost(
     session: DragSession,
     container: Container,
     index: number,
     ghostRect: GhostRect | null | undefined,
-  ): Promise<void> {
+  ): void {
     const pointerGhost = session.ghosts.get("pointer");
     if (!pointerGhost) return;
     session.pendingGhostTarget = { ghostItem: pointerGhost, container, index, ghostRect };

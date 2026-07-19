@@ -1,6 +1,5 @@
 <script lang="ts">
   import { Engine } from "@snap-engine/asset-base-svelte";
-  import { tick } from "svelte";
   import SnapSortDuolingoDemo from "../snapsort_duolingo/SnapSortDuolingoDemo.svelte";
   import { Container, Ghost, Handle, Item } from "@snap-engine/snapsort-svelte";
   import type {
@@ -61,10 +60,14 @@
       items: [{ id: "item-6", label: "Audit export", detail: "CSV polish" }],
     },
   ];
-  const snapSortCubicAnimation = {
-    duration: 180,
-    timing_function: "cubic-bezier(0.2, 0, 0, 1)",
-  };
+  const snapSortCubicAnimation = new URLSearchParams(window.location.search).has(
+    "slowFlip",
+  )
+    ? { duration: 800, timing_function: "linear" }
+    : {
+        duration: 180,
+        timing_function: "cubic-bezier(0.2, 0, 0, 1)",
+      };
 
   const progressiveExamples: ProgressiveExample[] = [
     {
@@ -362,7 +365,6 @@
                       callbacks: {
                         onItemMove: handleSnapSortDomMove,
                         onItemRemove: handleSnapSortDomRemove,
-                        awaitMutation: tick,
                       },
                     }}
                     locked={true}

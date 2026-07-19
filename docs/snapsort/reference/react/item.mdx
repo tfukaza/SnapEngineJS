@@ -1,0 +1,91 @@
+---
+title: Item
+description: React Item component props, selection, metadata, refs, and drag handles.
+order: 2
+project: snapsort
+projectTitle: SnapSort
+section: reference
+sectionTitle: Reference
+sectionOrder: 3
+framework: react
+frameworkKey: item
+---
+
+`Item` connects rendered React content to a SnapSort container. The same component works in every container mode.
+
+```tsx
+import { Handle, Item } from "@snap-engine/snapsort-react";
+
+<Item itemId="task-1">
+  <article>
+    <Handle className="drag-handle">Drag</Handle>
+    <span>Task 1</span>
+  </article>
+</Item>
+```
+
+## Props
+
+```ts
+type ItemProps = {
+  children: ReactNode;
+  className?: string;
+  itemId?: string;
+  itemObject?: SnapSortItem | null;
+  metadata?: ItemSnapshotMetadata;
+  selected?: boolean;
+  style?: CSSProperties;
+};
+```
+
+| Prop | Default | Description |
+|------|---------|-------------|
+| `children` | Required | Rendered item content. |
+| `className` | `""` | Extra class string applied to the rendered element. |
+| `itemId` | `undefined` | Stable ID used by moves, removes, ghosts, and state callbacks. Preferred over legacy metadata fallbacks. |
+| `itemObject` | `null` | Optional existing core item object. The component does not destroy it on unmount. |
+| `metadata` | `{}` | Metadata assigned to the item object and exposed in callback events. |
+| `selected` | `false` | Consumer-owned selection flag. Dragging a selected item includes all selected items in its tree. |
+| `style` | `undefined` | Inline styles merged onto the rendered item element. |
+
+`Item` forwards a ref to its core item object, renders a `div` with `snapsort-item`, and provides its core object to descendants.
+
+## Metadata
+
+`ItemSnapshotMetadata` is an open record with these built-in fields:
+
+| Field | Description |
+|-------|-------------|
+| `insertionMarkerInsetLeft` | Optional left inset for insertion marker width. |
+| `insertionMarkerInsetRight` | Optional right inset for insertion marker width. |
+
+Your own metadata fields are included in item snapshots and callback events.
+
+## Selection
+
+SnapSort does not own selection state. Set `selected` from your application state; when a drag starts on a selected item, every selected item in the same drag tree joins the drag.
+
+```tsx
+<Item
+  itemId={task.id}
+  selected={selectedIds.has(task.id)}
+>
+  <button type="button" onClick={() => toggleSelected(task.id)}>
+    {task.label}
+  </button>
+</Item>
+```
+
+## Handle
+
+`Handle` registers its rendered element as an input alias for the nearest item, so a drag begins from the handle instead of the entire item.
+
+```ts
+type HandleProps = {
+  children: ReactNode;
+  className?: string;
+  style?: CSSProperties;
+};
+```
+
+`Handle` forwards a ref to its `HTMLDivElement` and renders a `div` with `snapsort-handle` plus the supplied `className`.

@@ -1,5 +1,6 @@
 {
   "name": "@snap-engine/snapline",
+  "private": true,
   "version": "0.2.0",
   "repository": {
     "type": "git",
@@ -30,5 +31,8 @@
     "snapengine"
   ],
   "author": "Tomoki Fukazawa",
-  "license": "MIT"
+  "license": "MIT",
+  "dependencies": {
+    "@snap-engine/core": "^0.4.1"
+  }
 }

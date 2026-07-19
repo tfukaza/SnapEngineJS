@@ -1,0 +1,97 @@
+---
+title: Item
+description: Svelte Item component props, selection, metadata, and drag handles.
+order: 2
+project: snapsort
+projectTitle: SnapSort
+section: reference
+sectionTitle: Reference
+sectionOrder: 3
+framework: svelte
+frameworkKey: item
+---
+
+`Item` connects rendered Svelte content to a SnapSort container. The same component works in every container mode.
+
+```svelte
+<script lang="ts">
+  import { Handle, Item } from "@snap-engine/snapsort-svelte";
+</script>
+
+<Item itemId="task-1">
+  <article>
+    <Handle className="drag-handle">Drag</Handle>
+    <span>Task 1</span>
+  </article>
+</Item>
+```
+
+## Props
+
+```ts
+type ItemProps = {
+  children: Snippet;
+  itemId?: string;
+  style?: string;
+  className?: string;
+  metadata?: ItemSnapshotMetadata;
+  selected?: boolean;
+  onclick?: (event: MouseEvent) => void;
+  itemObject?: Item | null;
+};
+```
+
+| Prop | Default | Description |
+|------|---------|-------------|
+| `children` | Required | Rendered item content. |
+| `itemId` | Required* | Stable ID used by moves, removes, ghosts, and state callbacks. *May be omitted only when `itemObject` already carries an ID. |
+| `style` | `""` | Inline style string applied to the rendered element. |
+| `className` | `""` | Extra class string applied to the rendered element. |
+| `metadata` | `{}` | Extra metadata assigned to the item object and exposed in callback events. |
+| `selected` | `false` | Consumer-owned selection flag. Dragging a selected item includes all selected items in its tree. |
+| `onclick` | `undefined` | Click handler on the rendered element; commonly used to toggle `selected`. |
+| `itemObject` | `null` | Optional existing core item object. The component does not destroy it on unmount. |
+
+`Item` renders a `div` with the `snapsort-item` class and provides its core item object to descendants.
+
+> [!NOTE]
+> `metadata.itemId` is not supported. Pass `itemId` as its own prop.
+
+## Metadata
+
+`ItemSnapshotMetadata` is an open record with these built-in fields:
+
+| Field | Description |
+|-------|-------------|
+| `insertionMarkerInsetLeft` | Optional left inset for insertion marker width. |
+| `insertionMarkerInsetRight` | Optional right inset for insertion marker width. |
+
+Your own metadata fields are included in item snapshots and callback events.
+
+## Selection
+
+SnapSort does not own selection state. Set `selected` from your application state; when a drag starts on a selected item, every selected item in the same drag tree joins the drag.
+
+```svelte
+<Item
+  itemId={task.id}
+  selected={selectedIds.has(task.id)}
+  onclick={() => toggleSelected(task.id)}
+>
+  {task.label}
+</Item>
+```
+
+## Handle
+
+`Handle` registers its rendered element as an input alias for the nearest item, so a drag begins from the handle instead of the entire item.
+
+```ts
+type HandleProps = {
+  children: Snippet;
+  style?: string;
+  className?: string;
+};
+```
+
+`Handle` renders a `div` with `snapsort-handle` and the supplied `className`.

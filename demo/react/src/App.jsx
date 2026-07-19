@@ -1,9 +1,9 @@
 import {
   Connector,
-  Engine as SnapLineEngine,
   Node,
   Select,
 } from "@snap-engine/snapline-react";
+import { Engine as SnapEngine } from "@snap-engine/asset-base-react";
 import {
   DropSnapNestedDemo,
   SnapSortComponentsDemo,
@@ -12,6 +12,7 @@ import {
   SnapSortWebsiteCoreDemo,
 } from "./snapsort/SnapSortFixtures";
 import "../demo.css";
+import AssetBaseReactDemo from "./AssetBaseReactDemo";
 
 function SimpleNode({ title, x, y }) {
   return (
@@ -40,6 +41,10 @@ function SimpleNode({ title, x, y }) {
 export default function App() {
   const path = window.location.pathname;
   const demo = new URLSearchParams(window.location.search).get("demo");
+
+  if (demo === "camera_control" || demo === "asset_base_react") {
+    return <AssetBaseReactDemo />;
+  }
 
   if (
     path === "/snapsort-insertion" ||
@@ -83,7 +88,7 @@ export default function App() {
 function SnapLineDemo() {
   return (
     <main className="snapline-demo">
-      <SnapLineEngine id="node-ui-demo-canvas" className="snapline-canvas">
+      <SnapEngine id="node-ui-demo-canvas" className="snapline-canvas">
         <div id="node-ui-demo">
           <div id="sl-background" />
           <Select />
@@ -91,7 +96,7 @@ function SnapLineDemo() {
           <SimpleNode title="Node B" x={440} y={170} />
           <SimpleNode title="Node C" x={280} y={360} />
         </div>
-      </SnapLineEngine>
+      </SnapEngine>
     </main>
   );
 }

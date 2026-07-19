@@ -1,36 +1,45 @@
 <script lang="ts">
-  import { getContext, setContext, onDestroy } from "svelte";
+  import { getContext, setContext, onDestroy, untrack } from "svelte";
   import { Item as SnapSortItem } from "@snap-engine/snapsort";
   import type {
     Container,
     ItemSnapshotMetadata,
   } from "@snap-engine/snapsort";
   import type { Engine } from "@snap-engine/core";
+  import type { Snippet } from "svelte";
+  import type { HTMLAttributes } from "svelte/elements";
+
+  type ItemProps = Omit<HTMLAttributes<HTMLDivElement>, "children"> & {
+    children: Snippet;
+    className?: string;
+    itemId?: string;
+    metadata?: ItemSnapshotMetadata;
+    selected?: boolean;
+    itemObject?: SnapSortItem | null;
+  };
 
   let {
     children,
     itemId,
     style = "",
+    class: classValue = "",
     className = "",
     metadata = {},
     selected = false,
-    onclick,
     itemObject: providedItemObject = null,
-  }: {
-    children: any;
-    itemId?: string;
-    style?: string;
-    className?: string;
-    metadata?: ItemSnapshotMetadata;
-    selected?: boolean;
-    onclick?: (event: MouseEvent) => void;
-    itemObject?: SnapSortItem | null;
-  } = $props();
+    ...divProps
+  }: ItemProps = $props();
 
   const engine: Engine = getContext("engine");
   const container: Container | null = getContext("container");
-  const ownsItem = providedItemObject == null;
-  const itemObject: SnapSortItem = providedItemObject ?? new SnapSortItem(engine, container);
+  const initial = untrack(() => ({ itemId, metadata, providedItemObject }));
+  const ownsItem = initial.providedItemObject == null;
+  const itemObject: SnapSortItem = initial.providedItemObject ?? new SnapSortItem(engine, container);
+  const mergedClass = $derived(`snapsort-item ${classValue} ${className}`.trim());
+
+  if ("itemId" in initial.metadata) {
+    throw new Error("SnapSort Item: `metadata.itemId` was removed. Pass `itemId` as its own prop instead.");
+  }
 
   if ("itemId" in metadata) {
     throw new Error("SnapSort Item: `metadata.itemId` was removed. Pass `itemId` as its own prop instead.");
@@ -38,15 +47,15 @@
 
   setContext("item", itemObject);
 
-  if (itemId !== undefined) {
-    itemObject.itemId = itemId;
+  if (initial.itemId !== undefined) {
+    itemObject.itemId = initial.itemId;
   }
   if (!itemObject.itemId) {
     throw new Error("SnapSort Item: missing required `itemId` prop.");
   }
 
-  if (ownsItem || Object.keys(metadata).length > 0) {
-    itemObject.metadata = metadata;
+  if (ownsItem || Object.keys(initial.metadata).length > 0) {
+    itemObject.metadata = initial.metadata;
   }
 
   $effect(() => {
@@ -64,10 +73,10 @@
 </script>
 
 <div
-  class="snapsort-item {className}"
+  {...divProps}
+  class={mergedClass}
   bind:this={itemObject.element}
   {style}
-  {onclick}
 >
   {@render children()}
 </div>

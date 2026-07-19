@@ -1,5 +1,5 @@
 ---
-title: Installation
+title: What is SnapSort?
 order: 0
 project: snapsort
 projectTitle: SnapSort
@@ -8,16 +8,23 @@ sectionTitle: Introduction
 sectionOrder: 1
 ---
 
-Install the component library for your framework.
+SnapSort is a drag-and-drop interface library for the web.
+A core concept of SnapSort is to provide _utilities_ for
+making drag-and-drop, not pre-built components.
+Specifically, this library is built on two key principles:
+- **Primitives over abstraction**: Rather than abstracting core utilities inside APIs, expose them directly. Let developers mix and match for maximum flexibility.
+- **Everything is configurable**: Avoid "sensible defaults" because there is no such thing. Every UI is unique.
 
-For Svelte:
+For developers, this means:
+  - You only need to know two components: `Item` and `Container`. Every UI are derived from these primitives.
+  - Extensive hooks to define custom behavior.
+  - Wide array of configurations to customize drag and drop behavior, animations, etc.
+  - Style-less by default, bring your own CSS.
 
-```bash
-npm install @snap-engine/core @snap-engine/asset-base-svelte @snap-engine/snapsort @snap-engine/snapsort-svelte
-```
+> [!TIP]
+> Using a coding agent? Start with <a href="/docs/snapsort/llms.txt" data-sveltekit-reload>SnapSort's <code>llms.txt</code></a> for the complete documentation tree, or append `.md` to any documentation URL to get clean, framework-aware Markdown. For example, open <a href="/docs/snapsort/introduction.md" data-sveltekit-reload>this page as Markdown</a>.
 
-For React:
-
-```bash
-npm install @snap-engine/core @snap-engine/snapsort @snap-engine/snapsort-react react react-dom
-```
+> [!WARNING]
+> SnapSort is in early beta. Expect breaking API changes, incomplete features, and behavioral instability between releases. It is not yet recommended for production-critical interfaces.
+>
+> SnapSort currently targets pointer-based interactions. Keyboard controls and other accessibility features have not been implemented yet.

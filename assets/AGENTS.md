@@ -20,14 +20,15 @@ Asset packages extend SnapEngine with specialized functionality. Each follows a 
 │   └── src/
 │       ├── index.ts       # Component exports
 │       └── *.svelte       # Components
-└── react/                 # React components (future)
-    └── package.json       # @snap-engine/{product}-react
+└── react/                 # React components
+    ├── package.json       # @snap-engine/{product}-react
+    └── src/
 ```
 
 ## Available Packages
 
 ### 1. asset-base/
-- **Packages:** `@snap-engine/asset-base`, `@snap-engine/asset-base-svelte`
+- **Packages:** `@snap-engine/asset-base`, `@snap-engine/asset-base-svelte`, `@snap-engine/asset-base-react`
 - **Purpose:** Common base components (Engine, Camera, Background)
 - **Components:** Engine.svelte, Camera.svelte, Background.svelte
 - **Classes:** CameraControl, Background
@@ -75,5 +76,5 @@ Special case - Asset Base:
     ↓
 @snap-engine/asset-base
     ↓
-@snap-engine/asset-base-svelte
+@snap-engine/asset-base-svelte   @snap-engine/asset-base-react
 ```

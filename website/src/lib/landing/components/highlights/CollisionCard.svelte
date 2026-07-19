@@ -780,7 +780,7 @@
     transform-origin: center;
   }
 
-  .dot-cell.is-active {
+  :global(.dot-cell.is-active) {
     transition: transform 320ms cubic-bezier(0.22, 1, 0.36, 1);
     will-change: transform, opacity, background-color;
   }
@@ -801,7 +801,7 @@
     white-space: pre;
   }
 
-  .collision-description-character.is-active {
+  :global(.collision-description-character.is-active) {
     transition: transform 220ms cubic-bezier(0.22, 1, 0.36, 1);
     will-change: transform;
   }

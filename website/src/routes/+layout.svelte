@@ -13,7 +13,18 @@
   </div>
   <div class="nav-right">
     <!-- <a href="#assets" class="nav-link">Assets</a> -->
-    <a href="/docs/snapengine/introduction" class="nav-link">Docs</a>
+    <div class="docs-menu">
+      <a href="/docs/snapengine/introduction" class="nav-link docs-menu-trigger" aria-haspopup="true">
+        Docs
+        <svg width="12" height="12" viewBox="0 0 12 12" fill="none" aria-hidden="true">
+          <path d="m3 4.5 3 3 3-3" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" />
+        </svg>
+      </a>
+      <div class="docs-dropdown card">
+        <a href="/docs/snapengine/introduction">SnapEngine</a>
+        <a href="/docs/snapsort/introduction">SnapSort</a>
+      </div>
+    </div>
     <a href="/about" class="nav-link">About</a>
     <a href="https://github.com/tfukaza/SnapLineJS" class="nav-link github-link" target="_blank" rel="noopener noreferrer">
       <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
@@ -119,6 +130,83 @@
 
     &:hover {
       color: var(--color-primary);
+    }
+  }
+
+  .docs-menu {
+    position: relative;
+    display: flex;
+    align-items: center;
+    padding-block: var(--size-8);
+    margin-block: calc(var(--size-8) * -1);
+
+    &:hover,
+    &:focus-within {
+      .docs-menu-trigger {
+        color: var(--color-primary);
+
+        svg {
+          transform: rotate(180deg);
+        }
+      }
+
+      .docs-dropdown {
+        opacity: 1;
+        visibility: visible;
+        transform: translate(-50%, 0);
+        pointer-events: auto;
+      }
+    }
+  }
+
+  .docs-menu-trigger {
+    display: flex;
+    align-items: center;
+    gap: var(--size-4);
+
+    svg {
+      transition: transform 0.2s ease;
+    }
+  }
+
+  .docs-dropdown {
+    --card-color: rgba(255, 255, 255, 0.96);
+    --card-radius: var(--size-8);
+
+    position: absolute;
+    z-index: 20;
+    top: 100%;
+    left: 50%;
+    display: flex;
+    min-width: 10rem;
+    flex-direction: column;
+    opacity: 0;
+    visibility: hidden;
+    transform: translate(-50%, calc(var(--size-4) * -1));
+    pointer-events: none;
+    transition:
+      opacity 0.15s ease,
+      visibility 0.15s ease,
+      transform 0.15s ease;
+
+    a {
+      padding: var(--size-8) var(--size-12);
+      border-radius: var(--size-4);
+      color: #5e4d44;
+      font-size: 0.9rem;
+      font-weight: 500;
+      text-decoration: none;
+      white-space: nowrap;
+      transition:
+        color 0.15s ease,
+        background-color 0.15s ease;
+
+      &:hover,
+      &:focus-visible {
+        color: var(--color-primary);
+        background: rgba(58, 42, 34, 0.05);
+        outline: none;
+      }
     }
   }
 

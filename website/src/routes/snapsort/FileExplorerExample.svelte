@@ -1,5 +1,4 @@
 <script lang="ts">
-  import { tick } from "svelte";
   import { Container } from "@snap-engine/snapsort-svelte";
   import type {
     CanDropEvent,
@@ -164,7 +163,7 @@
     return ids;
   }
 
-  function handleSelectNode(nodeId: string, event: MouseEvent) {
+  function handleSelectNode(nodeId: string, event: MouseEvent | KeyboardEvent) {
     if (event.shiftKey && lastClickedId) {
       const order = flattenVisibleIds(tree);
       const anchorIndex = order.indexOf(lastClickedId);
@@ -258,7 +257,6 @@
     onItemMove: handleMove,
     canDrop: canDropInFolder,
     createGhost: createFileTreeGhost,
-    awaitMutation: tick,
   };
 </script>
 

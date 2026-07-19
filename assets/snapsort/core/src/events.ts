@@ -245,8 +245,9 @@ export interface DragEndEvent {
  * Fired on the source (root) container at drag start when
  * `session.dropEffect === "copy"`, BEFORE the drag is hoisted. The consumer
  * must materialize a clone in their own state for each `cloneItems` entry and
- * render it (bound via `itemObject`) inside a drop container, then flush
- * (`awaitMutation`) so each clone has a DOM element. The core then hands the
+ * render it (bound via `itemObject`) inside a drop container. The framework
+ * adapter's synchronous `flushMutation` transaction ensures each clone has a
+ * DOM element before core hands the
  * drag off to the clones (`DragSession.handoff`) — the original items stay
  * exactly where they are, untouched and un-ghosted. If the consumer binds no
  * element, the copy drag is vetoed.
@@ -373,6 +374,17 @@ export interface ContainerCallbacks {
   onGhostInsert?: (event: GhostInsertEvent) => void;
   onGhostRemove?: (event: GhostRemoveEvent) => void;
 
-  /** Wait for the caller's framework to flush DOM after SnapSort mutates data. */
+  /**
+   * Run a state mutation inside the framework adapter's synchronous DOM
+   * commit boundary. Framework adapters provide this automatically.
+   */
+  flushMutation?: (mutation: () => void) => void;
+
+  /**
+   * Wait for the caller's framework to flush DOM after SnapSort mutates data.
+   *
+   * @deprecated Use `flushMutation`. Promise-returning mutation waits cannot
+   * guarantee that FLIP's inverse transform is installed before paint.
+   */
   awaitMutation?: () => void | Promise<void>;
 }

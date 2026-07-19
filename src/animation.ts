@@ -147,7 +147,13 @@ function acquireVariableChannels(
 
 function releaseVariableChannels(target: Element, channels: VariableChannel[]) {
   const pool = getVariableChannelPool(target);
+  const style = (target as Element & { style?: CSSStyleDeclaration }).style;
   for (const channel of channels) {
+    // A non-persistent animation commits its final styles before releasing its
+    // channels. Clear the internal property so the next animation that
+    // acquires this channel cannot sample that terminal value while its new
+    // Web Animation is still pending.
+    style?.removeProperty(channel.propertyName);
     pool.freeChannels.push(channel);
   }
 }
@@ -320,6 +326,13 @@ function createKeyframeBuildResult(
       variables[key] = normalizeVariableValues(value, keyframeLength);
       variableProperties[key] = channel.propertyName;
       cssKeyframe[channel.propertyName] = variables[key].map(String);
+
+      // play() can leave a Web Animation pending until the browser's next
+      // animation update. AnimationObject may still be sampled in the same
+      // SnapEngine frame, so give the channel a deterministic starting value
+      // instead of exposing a value committed by its previous owner.
+      const style = (target as Element & { style?: CSSStyleDeclaration }).style;
+      style?.setProperty(channel.propertyName, String(variables[key][0] ?? 0));
     }
   } catch (error) {
     releaseVariableChannels(target, variableChannels);

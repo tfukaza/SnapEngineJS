@@ -4,19 +4,19 @@ import {
   useEffect,
   useImperativeHandle,
   useRef,
-  type CSSProperties,
+  type HTMLAttributes,
   type ReactNode,
 } from "react";
 import { ItemObjectContext } from "./Item";
 
-export interface HandleProps {
+export interface HandleProps
+  extends Omit<HTMLAttributes<HTMLDivElement>, "children"> {
   children: ReactNode;
   className?: string;
-  style?: CSSProperties;
 }
 
 export const Handle = forwardRef<HTMLDivElement, HandleProps>(function Handle(
-  { children, className = "", style },
+  { children, className = "", style, ...divProps },
   ref,
 ) {
   const item = useContext(ItemObjectContext);
@@ -36,6 +36,7 @@ export const Handle = forwardRef<HTMLDivElement, HandleProps>(function Handle(
 
   return (
     <div
+      {...divProps}
       ref={handleRef}
       className={`snapsort-handle ${className}`.trim()}
       style={style}

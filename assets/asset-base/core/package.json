@@ -1,6 +1,6 @@
 {
   "name": "@snap-engine/asset-base",
-  "version": "0.4.0",
+  "version": "0.4.2",
   "repository": {
     "type": "git",
     "url": "git+https://github.com/tfukaza/SnapEngineJS.git",
@@ -14,7 +14,7 @@
     "./background": "./src/background.ts"
   },
   "dependencies": {
-    "@snap-engine/core": "^0.4.0"
+    "@snap-engine/core": "^0.4.1"
   },
   "description": "Shared foundational asset classes for SnapEngine",
   "types": "./src/index.ts",

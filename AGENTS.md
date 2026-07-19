@@ -18,7 +18,7 @@ SnapEngineJS/
 │   ├── svelte/
 │   ├── react/
 │   └── vanilla/
-├── doc/                    # Documentation
+├── docs/                   # Documentation
 ├── tests/                  # Test suites
 ├── dist/                   # Build output (generated)
 ├── package.json            # Root workspace config
@@ -45,16 +45,16 @@ See `src/AGENTS.md` for module details.
 Organized as npm workspaces following a consistent pattern:
 - `core/` - TypeScript classes extending snap-engine
 - `svelte/` - Svelte component wrappers
-- `react/` - React component wrappers (future)
+- `react/` - React component wrappers
 
 ### 1. SnapEngine Asset Base
-- **Packages:** `@snap-engine/asset-base`, `@snap-engine/asset-base-svelte`
+- **Packages:** `@snap-engine/asset-base`, `@snap-engine/asset-base-svelte`, `@snap-engine/asset-base-react`
 - **Purpose:** Common components (Engine, Camera, Background)
 - **Status:** Active
 - See `assets/asset-base/AGENTS.md`
 
 ### 2. SnapSort
-- **Packages:** `@snap-engine/snapsort`, `@snap-engine/snapsort-svelte`
+- **Packages:** `@snap-engine/snapsort`, `@snap-engine/snapsort-svelte`, `@snap-engine/snapsort-react`
 - **Purpose:** Drag-and-drop list reordering
 - **Status:** Active
 - See `assets/snapsort/AGENTS.md`
@@ -62,7 +62,7 @@ Organized as npm workspaces following a consistent pattern:
 ### 3. SnapLine
 - **Packages:** `@snap-engine/snapline`, `@snap-engine/snapline-svelte`
 - **Purpose:** Node graph UI system
-- **Status:** Active
+- **Status:** Experimental and private (not published)
 - See `assets/snapline/AGENTS.md`
 
 ### 4. SnapZap
@@ -75,7 +75,7 @@ Organized as npm workspaces following a consistent pattern:
 All packages use the `@snap-engine` organization:
 
 - **Core engine:** `@snap-engine/core`
-- **Asset base:** `@snap-engine/asset-base`, `@snap-engine/asset-base-svelte`
+- **Asset base:** `@snap-engine/asset-base`, `@snap-engine/asset-base-svelte`, `@snap-engine/asset-base-react`
 - **Products:** `@snap-engine/{product}`, `@snap-engine/{product}-svelte`, `@snap-engine/{product}-react`
 
 ## Import Patterns
@@ -177,15 +177,18 @@ git push origin core-v{version}
 ```bash
 git tag asset-base-v{version}
 git tag asset-base-svelte-v{version}
+git tag asset-base-react-v{version}
 git tag snapsort-v{version}
 git tag snapsort-svelte-v{version}
-git tag snapline-v{version}
-git tag snapline-svelte-v{version}
-git push origin asset-base-v{version} asset-base-svelte-v{version} snapsort-v{version}
-git push origin snapsort-svelte-v{version} snapline-v{version} snapline-svelte-v{version}
+git push origin asset-base-v{version}
+git push origin asset-base-svelte-v{version}
+git push origin asset-base-react-v{version}
+git push origin snapsort-v{version}
+git push origin snapsort-svelte-v{version}
+git push origin snapsort-react-v{version}
 ```
 
-Push no more than three tags in a single `git push`; GitHub does not create push events when more than three tags are pushed at once.
+Push release tags one at a time and verify each publish workflow before sending the next tag.
 
 Tag versions must match each package's `package.json` version. The publish workflows live in `.github/workflows/publish.yml` and `.github/workflows/publish-assets.yml`.
 

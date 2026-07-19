@@ -3,7 +3,8 @@ import type { Container } from "../container";
 import { Item } from "../item";
 import { resetDropSnapshotDebugDump, type DropCandidate } from "../algorithm";
 import type { DragCloneEvent, DragLocation, GhostRect, GhostRole } from "../events";
-import { fireAwaitMutation, fireItemRemove } from "../mutation";
+import { virtualEntrySizeFor } from "../layout";
+import { fireItemRemove, fireMutation, settleMutation } from "../mutation";
 import type { DragLifecycleStrategy } from "./lifecycle";
 import type { DragSession } from "./session";
 
@@ -60,19 +61,34 @@ function liveIndexFromSnapshotIndex(
 }
 
 /**
+ * Size a run anchor's spacer rect for its *destination* container: the
+ * member's own snapshot box, cross-axis-stretched when the destination
+ * declares `stretchItems` (so a spacer entering a narrower nested list
+ * reserves the nested width, not the source container's).
+ */
+function anchorRectFor(container: Container, member: Item): GhostRect | null {
+  const box = member.dragSnapshot?.box;
+  if (!box) return null;
+  const containerSnapshot = container.dragSnapshot;
+  if (!containerSnapshot) {
+    return { x: 0, y: 0, width: box.width, height: box.height };
+  }
+  const size = virtualEntrySizeFor(containerSnapshot, box);
+  return { x: 0, y: 0, width: size.width, height: size.height };
+}
+
+/**
  * Ensure the target ghost run has one anchor per dragged member. Each anchor
  * is created for its own member (so `createGhost` sees `original = member`
- * and can size/skip per member), sized to that member's snapshot box. Newly
- * created anchors are not yet attached to any container.
+ * and can size/skip per member), sized to that member's snapshot box for the
+ * destination container. Newly created anchors are not yet attached to any
+ * container.
  */
 function ensureFlowGhostRun(session: DragSession, container: Container): Item[] {
   const run = session.flowGhostRun;
   for (let i = run.length; i < session.items.length; i++) {
     const member = session.items[i];
-    const box = member.dragSnapshot?.box;
-    const rect: GhostRect | null = box
-      ? { x: 0, y: 0, width: box.width, height: box.height }
-      : null;
+    const rect = anchorRectFor(container, member);
     const ghost = member.createGhostItem(session, "flow", container, rect, "target");
     if (!ghost) break;
     run.push(ghost);
@@ -136,10 +152,8 @@ async function moveGhost(
       }
     });
     run.forEach((ghost, i) => {
-      const box = session.items[i]?.dragSnapshot?.box;
-      const rect: GhostRect | null = box
-        ? { x: 0, y: 0, width: box.width, height: box.height }
-        : null;
+      const member = session.items[i] ?? item;
+      const rect = anchorRectFor(container, member);
       container.insertGhostAt(
         session.items[i] ?? item,
         container,
@@ -158,7 +172,7 @@ async function moveGhost(
     container.withReorderAnimation(container, session.items, doMove);
   } else {
     doMove();
-    await fireAwaitMutation(container);
+    await settleMutation();
   }
 }
 
@@ -176,19 +190,15 @@ async function removeGhost(
   const run = session.flowGhostRun;
   if (run.length === 0) return;
 
-  const containers = new Set<Container>();
   for (const ghost of run) {
     const ghostContainer = ghost.parent as unknown as Container | null;
     if (ghostContainer) {
       item.removeGhostFrom(item, ghostContainer, ghost, session, "flow", "target");
-      containers.add(ghostContainer);
     }
   }
-  for (const c of containers) {
-    await fireAwaitMutation(c);
-  }
+  await settleMutation();
   for (const ghost of run) {
-    ghost.destroy();
+    ghost.destroy(!ghost.frameworkManagedGhostElement);
   }
   run.length = 0;
 }
@@ -235,8 +245,8 @@ async function startCopyHandoff(session: DragSession): Promise<boolean> {
     sources: session.sources,
     cloneItems,
   };
-  root.callbacks?.onDragClone?.(event);
-  await fireAwaitMutation(root);
+  fireMutation(root, () => root.callbacks?.onDragClone?.(event));
+  await settleMutation();
 
   // Every clone must have been given an element by the consumer.
   if (cloneItems.some((c) => !c.element)) {
@@ -416,8 +426,7 @@ function drop(session: DragSession): void {
           session,
           origins,
         );
-        await fireAwaitMutation(destinationContainer);
-
+        await settleMutation();
         // Skip for copy: the dragged clone's element is *expected* to go
         // stale here, once the consumer's state-driven re-render replaces it
         // with a fresh, permanent Item instance sharing the same itemId (see
@@ -437,7 +446,7 @@ function drop(session: DragSession): void {
               runTailElement?.nextElementSibling !== expectedBefore
             ) {
               console.warn(
-                "SnapSort: the adapter did not place the dropped item(s) where onItemMove/onItemInsert specified. Check the adapter's callback/awaitMutation wiring.",
+                "SnapSort: the adapter did not place the dropped item(s) where onItemMove/onItemInsert specified. Check the adapter's callback/flushMutation wiring.",
                 {
                   items,
                   container: destinationContainer,
@@ -452,19 +461,15 @@ function drop(session: DragSession): void {
         // clone was never a real list member, so there is nothing to return
         // home to — remove it from wherever the consumer rendered it and let
         // them delete it from state.
-        const containersToFlush = new Set<Container>();
         for (const clone of items) {
           const cloneContainer = cloneContainers.get(clone) as
             | Container
             | undefined;
           if (cloneContainer) {
             fireItemRemove(cloneContainer, [clone], session);
-            containersToFlush.add(cloneContainer);
           }
         }
-        for (const container of containersToFlush) {
-          await fireAwaitMutation(container);
-        }
+        await settleMutation();
         for (const clone of items) {
           clone.destroy();
         }
@@ -477,18 +482,20 @@ function drop(session: DragSession): void {
       }
       session.status = "ended";
       root.dragSession = null;
-      root.callbacks?.onDragEnd?.({
-        session,
-        item,
-        itemId: item.resolvedItemId,
-        itemMetadata: item.metadata,
-        items,
-        itemIds: items.map((member) => member.resolvedItemId),
-        itemsMetadata: items.map((member) => member.metadata),
-        element: item.element,
-        source: session.sources[0],
-        sources: session.sources,
-        destination,
+      fireMutation(root, () => {
+        root.callbacks?.onDragEnd?.({
+          session,
+          item,
+          itemId: item.resolvedItemId,
+          itemMetadata: item.metadata,
+          items,
+          itemIds: items.map((member) => member.resolvedItemId),
+          itemsMetadata: items.map((member) => member.metadata),
+          element: item.element,
+          source: session.sources[0],
+          sources: session.sources,
+          destination,
+        });
       });
     },
     { stage: "WRITE_1", queueId: `drag-end-${session.pressedItem.id}` },

@@ -15,6 +15,14 @@ export default defineConfig(({ command, mode }) => {
         "@snap-engine/core/collision": path.resolve(root, "src/collision.ts"),
         "@snap-engine/core/debug": path.resolve(root, "src/debug.ts"),
         "@snap-engine/core": path.resolve(root, "src/index.ts"),
+        "@snap-engine/asset-base-react": path.resolve(
+          root,
+          "assets/asset-base/react/src/index.ts",
+        ),
+        "@snap-engine/asset-base": path.resolve(
+          root,
+          "assets/asset-base/core/src/index.ts",
+        ),
         "@snap-engine/snapsort-react": path.resolve(
           root,
           "assets/snapsort/react/src/index.ts",

@@ -12,6 +12,8 @@ dist
 dist-ssr
 *.local
 **/package-lock.json
+!package-lock.json
+!website/package-lock.json
 
 # Editor directories and files
 .vscode/*
@@ -43,6 +45,7 @@ dist-ssr
 *.mjs
 *.umd.js
 demo/svelte/src/snapengine/
+.svelte-kit
 
 # Local design notes / plans
 /plan-*.md
@@ -51,3 +54,4 @@ TODO.md
 # Exceptions
 !vite.config.mjs
 !demo.mjs
+!scripts/*.mjs

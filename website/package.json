@@ -34,5 +34,9 @@
 		"svhighlight": "^0.7.1",
 		"tone": "^15.1.22",
 		"unist-util-visit": "^5.1.0"
+	},
+	"overrides": {
+		"cookie": "0.7.2",
+		"postcss": "8.5.10"
 	}
 }

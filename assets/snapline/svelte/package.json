@@ -1,5 +1,6 @@
 {
   "name": "@snap-engine/snapline-svelte",
+  "private": true,
   "version": "0.2.0",
   "repository": {
     "type": "git",
@@ -27,6 +28,7 @@
   "author": "Tomoki Fukazawa",
   "license": "MIT",
   "dependencies": {
+    "@snap-engine/core": "^0.4.1",
     "@snap-engine/snapline": "^0.2.0"
   },
   "files": [
