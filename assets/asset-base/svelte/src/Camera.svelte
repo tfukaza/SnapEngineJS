@@ -9,13 +9,19 @@
   } from "svelte";
   import type { HTMLAttributes } from "svelte/elements";
   import { CameraControl as CameraControlObject } from "@snap-engine/asset-base";
-  import type { Engine } from "@snap-engine/core";
+  import type { CameraConfig, Engine } from "@snap-engine/core";
 
   type CameraProps = Omit<HTMLAttributes<HTMLDivElement>, "children"> & {
     children: Snippet;
     className?: string;
     zoomLock?: boolean;
     panLock?: boolean;
+    /** Disable single-pointer panning while leaving pinch panning intact. */
+    pointerPanLock?: boolean | "touch";
+    /** Require ctrl/cmd for wheel zoom so unmodified scrolling pans the page. */
+    wheelZoomModifier?: "none" | "ctrlOrMeta";
+    /** Options forwarded to the underlying Camera, e.g. zoomBounds and contentBounds. */
+    cameraConfig?: CameraConfig;
     cameraControl?: CameraControlObject | null;
   };
 
@@ -26,6 +32,9 @@
     id = "snap-camera-control",
     zoomLock = false,
     panLock = false,
+    pointerPanLock = false,
+    wheelZoomModifier = "none",
+    cameraConfig,
     cameraControl = $bindable<CameraControlObject | null>(null),
     style = "",
     ...divProps
@@ -37,9 +46,15 @@
   }
 
   const ownsCameraControl = cameraControl == null;
-  const initialLocks = untrack(() => ({ panLock, zoomLock }));
+  const initialConfig = untrack(() => ({
+    panLock,
+    zoomLock,
+    pointerPanLock,
+    wheelZoomModifier,
+    camera: cameraConfig,
+  }));
   const cameraControlInstance =
-    cameraControl ?? new CameraControlObject(engine, initialLocks);
+    cameraControl ?? new CameraControlObject(engine, initialConfig);
   if (cameraControlInstance.engine !== engine) {
     throw new Error("The injected CameraControl belongs to another Engine.");
   }
@@ -49,7 +64,7 @@
   let cameraControlElement: HTMLDivElement | null = null;
   const mergedClass = $derived(`${classValue} ${className}`.trim());
   const mergedStyle = $derived(
-    `background-color:#fff;height:100%;transform-origin:0 0;user-select:none;width:100%;${style ?? ""}`,
+    `height:100%;transform-origin:0 0;user-select:none;width:100%;${style ?? ""}`,
   );
 
   $effect(() => {
@@ -57,7 +72,15 @@
       ...cameraControlInstance.config,
       panLock,
       zoomLock,
+      pointerPanLock,
+      wheelZoomModifier,
     };
+  });
+
+  // Bounds often depend on measured layout, so keep applying them as they change.
+  $effect(() => {
+    if (!cameraConfig) return;
+    cameraControlInstance.setCameraConfig(cameraConfig);
   });
 
   onMount(() => {

@@ -7,15 +7,35 @@ import type {
 } from "@snap-engine/core";
 import { ElementObject } from "@snap-engine/core";
 import { Camera } from "@snap-engine/core";
+import type { CameraConfig } from "@snap-engine/core";
 
 export type CameraControlConfig = {
   zoomLock?: boolean;
   panLock?: boolean;
+  /**
+   * Disables panning with a single pointer while leaving two-finger pinch panning
+   * intact. Use when the camera sits inside a scrollable page and a one-finger drag
+   * should scroll the page instead of moving the camera.
+   *
+   * Pass "touch" to restrict the lock to touch pointers, so a mouse drag still pans —
+   * on desktop a drag never scrolls the page, so it costs nothing to keep.
+   */
+  pointerPanLock?: boolean | "touch";
+  /**
+   * Requires a modifier key for wheel zoom. With "ctrlOrMeta", an unmodified wheel
+   * event is left alone so the page scrolls normally; trackpad pinch still zooms,
+   * because browsers report it as a wheel event with ctrlKey set.
+   */
+  wheelZoomModifier?: "none" | "ctrlOrMeta";
+  /** Options forwarded to the underlying Camera, e.g. zoomBounds and contentBounds. */
+  camera?: CameraConfig;
 };
 
 const DEFAULT_CONFIG: CameraControlConfig = {
   zoomLock: false,
   panLock: false,
+  pointerPanLock: false,
+  wheelZoomModifier: "none",
 };
 
 type PinchAnchor = {
@@ -66,9 +86,19 @@ class CameraControl extends ElementObject {
     });
   }
 
+  /**
+   * Merges options into the underlying Camera's configuration, e.g. to apply pan or
+   * zoom bounds that can only be computed once the container has been laid out.
+   */
+  setCameraConfig(config: CameraConfig) {
+    this.config = { ...this.config, camera: { ...this.config.camera, ...config } };
+    this.camera?.setConfig(config);
+    this.paintCamera();
+  }
+
   set element(_element: HTMLElement) {
     super.element = _element;
-    this.camera = new Camera(this.engine);
+    this.camera = new Camera(this.engine, this.config.camera);
     this.engine.camera = this.camera;
     this.camera.containerDom =
       this.engine.containerElement ?? _element.parentElement ?? _element;
@@ -141,6 +171,13 @@ class CameraControl extends ElementObject {
     if (this.config.panLock) {
       return;
     }
+    const pointerPanLock = this.config.pointerPanLock;
+    if (
+      pointerPanLock === true ||
+      (pointerPanLock === "touch" && prop.event.pointerType === "touch")
+    ) {
+      return;
+    }
     if (this.global.data.allowCameraControl === false) {
       return;
     }
@@ -196,6 +233,13 @@ class CameraControl extends ElementObject {
   onZoom(prop: mouseWheelProp) {
     if (this.config.zoomLock) {
       return;
+    }
+    if (this.config.wheelZoomModifier === "ctrlOrMeta") {
+      const event = prop.event as WheelEvent;
+      if (!event.ctrlKey && !event.metaKey) {
+        // Return without preventDefault so the page keeps scrolling.
+        return;
+      }
     }
     const camera = this.engine.camera!;
     if (

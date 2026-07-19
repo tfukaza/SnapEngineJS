@@ -1,11 +1,11 @@
 <script lang="ts">
-  import { onMount, tick } from "svelte";
+  import { onMount } from "svelte";
+  import { fade } from "svelte/transition";
   import ClientDemoFrame from "$lib/components/ClientDemoFrame.svelte";
   import { Engine } from "@snap-engine/asset-base-svelte";
   import { Container, Item } from "@snap-engine/snapsort-svelte";
   import type { ItemMoveEvent } from "@snap-engine/snapsort";
   import * as Tone from "tone";
-  import HeroToneJoystick from "./hero/HeroToneJoystick.svelte";
 
   const recessedPadIndices = new Set([5, 6, 9, 10]);
   const padIndices = Array.from({ length: 16 }, (_, index) => index);
@@ -51,17 +51,14 @@
     "C6",
   ];
 
-  let waveformCanvas: HTMLCanvasElement | null = null;
   let toneInstrument: ReturnType<typeof createToneInstrument> | null = null;
-  let sequenceTimer: number | null = null;
-  let animationFrame = 0;
   let activePadIndex = $state<number | null>(null);
-  let isPlaying = $state(false);
-  let currentStep = $state(0);
-  let speedMultiplier = $state(1);
-  let sequenceDirection = $state<1 | -1>(1);
-  let toneX = $state(0.5);
-  let toneY = $state(0.5);
+  // The hint only earns its space until the visitor discovers the pads are live.
+  let hasTriedDemo = $state(false);
+
+  // Fixed tone character now that the joystick that used to drive these is gone.
+  const toneX = 0.5;
+  const toneY = 0.5;
 
   function createToneInstrument() {
     const filter = new Tone.Filter({
@@ -126,12 +123,6 @@
     return toneInstrument;
   }
 
-  function updateToneControls(value: { x: number; y: number }) {
-    toneX = value.x;
-    toneY = value.y;
-    applyToneControls();
-  }
-
   function handlePadMove(event: ItemMoveEvent) {
     const itemId = event.itemId;
     if (typeof itemId !== "string" || !itemId.startsWith("pad-")) return;
@@ -146,6 +137,7 @@
   }
 
   async function playPad(index: number) {
+    hasTriedDemo = true;
     const instrument = await getToneInstrument();
     if (!instrument) return;
 
@@ -155,7 +147,7 @@
 
     instrument.filter.frequency.cancelScheduledValues(now);
     instrument.filter.frequency.rampTo(brightness, 0.03);
-    instrument.synth.triggerAttackRelease(note, "16n", now, isPlaying ? 0.42 : 0.55);
+    instrument.synth.triggerAttackRelease(note, "16n", now, 0.55);
 
     activePadIndex = index;
     window.setTimeout(() => {
@@ -163,99 +155,8 @@
     }, 160);
   }
 
-  function currentPadOrder() {
-    return padOrder;
-  }
-
-  function stopSequencer() {
-    if (sequenceTimer !== null) {
-      window.clearInterval(sequenceTimer);
-      sequenceTimer = null;
-    }
-    isPlaying = false;
-  }
-
-  function sequencerTick() {
-    const order = currentPadOrder();
-    const normalizedStep = ((currentStep % order.length) + order.length) % order.length;
-    const padIndex = order[normalizedStep] ?? 0;
-    playPad(padIndex);
-    currentStep = (currentStep + sequenceDirection + order.length) % order.length;
-  }
-
-  function scheduleSequencer() {
-    if (sequenceTimer !== null) window.clearInterval(sequenceTimer);
-    sequenceTimer = window.setInterval(sequencerTick, 220 / speedMultiplier);
-  }
-
-  async function playSequencer() {
-    if (isPlaying) return;
-
-    await getToneInstrument();
-    isPlaying = true;
-    sequencerTick();
-    scheduleSequencer();
-  }
-
-  function toggleSpeed() {
-    speedMultiplier = speedMultiplier === 1 ? 2 : 1;
-    if (isPlaying) scheduleSequencer();
-  }
-
-  function toggleDirection() {
-    sequenceDirection = sequenceDirection === 1 ? -1 : 1;
-  }
-
-  function drawWaveform(time: number) {
-    if (!waveformCanvas) {
-      animationFrame = requestAnimationFrame(drawWaveform);
-      return;
-    }
-
-    const canvas = waveformCanvas;
-    const context = canvas.getContext("2d");
-    if (!context) return;
-
-    const width = canvas.width;
-    const height = canvas.height;
-    const pixelPitch = 4;
-    const pixelSize = 3;
-    const phase = time * 0.006;
-    const energy = activePadIndex === null ? 0.35 : 0.75;
-
-    context.imageSmoothingEnabled = false;
-    context.shadowBlur = 0;
-    context.clearRect(0, 0, width, height);
-    context.fillStyle = "#000000";
-    context.fillRect(0, 0, width, height);
-
-    context.shadowColor = "#ffffff";
-    context.shadowBlur = 2;
-    context.fillStyle = "#ffffff";
-    for (let x = 0; x < width; x += pixelPitch) {
-      const wave = Math.sin(x * 0.16 + phase) + Math.sin(x * 0.07 + phase * 1.7) * 0.42;
-      const y = Math.round((height / 2 + wave * height * 0.18 * energy) / pixelPitch) * pixelPitch;
-      context.fillRect(x, y, pixelSize, pixelSize);
-    }
-
-    const stepWidth = width / 16;
-    for (let index = 0; index < 16; index++) {
-      const isCurrent = isPlaying && index === (currentStep + 15) % 16;
-      const x = Math.round(index * stepWidth);
-      const y = isCurrent ? height - 12 : height - 8;
-      context.fillRect(x, y, pixelSize, isCurrent ? pixelSize * 2 + 1 : pixelSize);
-    }
-    context.shadowBlur = 0;
-
-    animationFrame = requestAnimationFrame(drawWaveform);
-  }
-
   onMount(() => {
-    animationFrame = requestAnimationFrame(drawWaveform);
-
     return () => {
-      cancelAnimationFrame(animationFrame);
-      stopSequencer();
       toneInstrument?.synth.dispose();
       toneInstrument?.filter.dispose();
       toneInstrument?.delay.dispose();
@@ -275,23 +176,31 @@
         any interactive UI elements, from simple TODO lists to
         complex node UIs.
       </p>
-      <!-- <div class="button">
-          See Docs
-      </div> -->
+      <div class="hero-actions">
+        <a class="button primary hero-action" href="/docs/snapengine/introduction">
+          Read the docs
+        </a>
+        <a class="button hero-action" href="/snapsort/gallery">
+          See it in action
+          <span class="hero-action-icon material-symbols-rounded" aria-hidden="true">arrow_forward</span>
+        </a>
+      </div>
     </div>
     <div class="hero-card card">
+      {#if !hasTriedDemo}
+        <img
+          class="hero-try-me"
+          src="/images/try-me.png"
+          alt="Try me"
+          width="420"
+          height="330"
+          aria-hidden="true"
+          out:fade={{ duration: 220 }}
+        />
+      {/if}
       <ClientDemoFrame>
         {#snippet fallback()}
           <div class="hero-synth-panel hero-synth-skeleton" aria-hidden="true">
-            <div class="hero-synth-top">
-              <div class="hero-oled display"></div>
-              <div class="hero-transport-grid">
-                {#each Array(4) as _}
-                  <div class="hero-transport-button"></div>
-                {/each}
-              </div>
-              <div class="hero-skeleton-joystick"></div>
-            </div>
             <div class="hero-button-bed slot">
               <div class="hero-skeleton-pad-grid">
                 {#each padIndices as index}
@@ -303,26 +212,6 @@
         {/snippet}
         <Engine id="hero-synth-pads">
         <div class="hero-synth-panel">
-          <div class="hero-synth-top">
-            <div class="hero-oled display">
-              <canvas bind:this={waveformCanvas} class="hero-waveform" width="64" height="64"></canvas>
-            </div>
-            <div class="hero-transport-grid" aria-label="Sequencer controls">
-              <button class="hero-transport-button" type="button" aria-label="Play sequence" aria-pressed={isPlaying} onclick={playSequencer}>
-                <span class="hero-transport-icon material-symbols-rounded" aria-hidden="true">play_arrow</span>
-              </button>
-              <button class="hero-transport-button" type="button" aria-label="Pause sequence" aria-pressed={!isPlaying} onclick={stopSequencer}>
-                <span class="hero-transport-icon material-symbols-rounded" aria-hidden="true">pause</span>
-              </button>
-              <button class={`hero-transport-button ${speedMultiplier === 2 ? "is-active" : ""}`} type="button" aria-label="Toggle double speed" aria-pressed={speedMultiplier === 2} onclick={toggleSpeed}>
-                <span class="hero-transport-icon material-symbols-rounded" aria-hidden="true">speed</span>
-              </button>
-              <button class={`hero-transport-button ${sequenceDirection === -1 ? "is-active" : ""}`} type="button" aria-label="Reverse sequence direction" aria-pressed={sequenceDirection === -1} onclick={toggleDirection}>
-                <span class="hero-transport-icon material-symbols-rounded" aria-hidden="true">keyboard_backspace</span>
-              </button>
-            </div>
-            <HeroToneJoystick bind:x={toneX} bind:y={toneY} onValueChange={updateToneControls} />
-          </div>
           <div class="hero-button-bed slot">
             <div class="hero-button-slots" aria-hidden="true">
               {#each Array(16) as _}
@@ -354,7 +243,6 @@
                       role="button"
                       tabindex="0"
                     >
-                      <span class="hero-synth-button-number" aria-hidden="true">{index + 1}</span>
                       {#if recessedPadIndices.has(index)}
                         <div class="hero-synth-button-indent"></div>
                       {:else}
@@ -410,15 +298,15 @@
     display: flex;
     flex-direction: column;
     align-items: flex-start;
-    justify-content: flex-start;
+    justify-content: center;
     text-align: left;
-    padding-top: var(--size-24);
     padding-left: var(--size-24);
 
     h1 {
-      line-height: 1.0;
+      font-family: "Bitcount Single", monospace;
+      line-height: 1.05;
       margin: 0;
-      font-size: 90px;
+      font-size: 58px;
       margin-bottom: 20px;
     }
 
@@ -435,29 +323,88 @@
         p {
             font-size: 1.0rem;
         }
+
+        .hero-actions {
+            justify-content: center;
+        }
     }
 
   }
 
+  .hero-actions {
+    display: flex;
+    flex-wrap: wrap;
+    gap: var(--size-12);
+    margin-top: var(--size-24);
+  }
+
+  .hero-action {
+    display: inline-flex;
+    align-items: center;
+    gap: var(--size-4);
+    padding: var(--size-8) var(--size-16);
+    text-decoration: none;
+  }
+
+  .hero-action-icon {
+    font-size: 18px;
+    line-height: 1;
+    font-variation-settings:
+      "FILL" 0,
+      "wght" 500,
+      "GRAD" 0,
+      "opsz" 20;
+    transition: transform 0.15s ease;
+  }
+
+  .hero-action:hover .hero-action-icon {
+    transform: translateX(2px);
+  }
+
   .hero-card {
     width: 440px;
-    align-self: end;
+    align-self: center;
     justify-self: end;
     box-sizing: border-box;
     padding: var(--size-24);
+    position: relative;
+  }
+
+  .hero-try-me {
+    position: absolute;
+    top: calc(var(--size-24) * -1);
+    right: calc(var(--size-16) * -1);
+    z-index: 2;
+    width: 132px;
+    height: auto;
+    pointer-events: none;
+    transform-origin: center;
+    // The orange is baked into the asset rather than applied as a hue-rotate here: a
+    // CSS filter would drag the yellow outline into green along with the fill.
+    filter: drop-shadow(0 6px 14px rgba(6, 29, 57, 0.28));
+    animation: hero-try-me-bob 2.4s ease-in-out infinite;
+  }
+
+  @keyframes hero-try-me-bob {
+    0%,
+    100% {
+      transform: rotate(3deg) translateY(0);
+    }
+    50% {
+      transform: rotate(3deg) translateY(-4px);
+    }
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    .hero-try-me {
+      animation: none;
+      transform: rotate(3deg);
+    }
   }
 
   .hero-synth-skeleton {
     min-height: 100%;
     pointer-events: none;
-  }
-
-  .hero-skeleton-joystick {
-    width: var(--hero-control-size);
-    aspect-ratio: 1 / 1;
-    border-radius: 50%;
-    background: #e7ebef;
-    box-shadow: inset 0 0 0 1px rgb(31 30 41 / 8%);
   }
 
   .hero-skeleton-pad-grid {
@@ -479,81 +426,12 @@
 
   .hero-synth-panel {
     --hero-pad-gap: 4px;
-    --hero-control-gap: var(--hero-pad-gap);
-    --hero-control-size: calc((100% - (var(--hero-pad-gap) * 5)) / 4);
     width: 100%;
     display: flex;
     flex-direction: column;
     align-items: flex-start;
     gap: 12px;
     box-sizing: border-box;
-  }
-
-  .hero-synth-top {
-    width: 100%;
-    display: flex;
-    align-items: center;
-    gap: var(--hero-pad-gap);
-  }
-
-  .hero-oled {
-    width: var(--hero-control-size);
-    aspect-ratio: 1 / 1;
-    margin-left: var(--hero-pad-gap);
-    flex: 0 0 auto;
-  }
-
-  .hero-waveform {
-    width: 100%;
-    height: 100%;
-    display: block;
-    image-rendering: pixelated;
-    image-rendering: crisp-edges;
-    filter: blur(0.18px);
-  }
-
-  .hero-transport-grid {
-    width: var(--hero-control-size);
-    aspect-ratio: 1 / 1;
-    display: grid;
-    grid-template-columns: repeat(2, 1fr);
-    grid-template-rows: repeat(2, 1fr);
-    gap: var(--hero-pad-gap);
-    padding: 5px;
-    box-sizing: border-box;
-  }
-
-  .hero-transport-button {
-    width: 100%;
-    height: 100%;
-    min-width: 0;
-    min-height: 0;
-    padding: 0;
-    display: grid;
-    place-items: center;
-    font-family: "Geist Pixel Square", "Geist Pixel Circle", monospace;
-    font-size: 0.55rem;
-    letter-spacing: 0;
-    user-select: none;
-    -webkit-user-select: none;
-  }
-
-  .hero-transport-icon {
-    width: 16px;
-    height: 16px;
-    display: grid;
-    place-items: center;
-    flex: 0 0 auto;
-    font-size: 16px;
-    line-height: 1;
-    font-variation-settings:
-      "FILL" 0,
-      "wght" 500,
-      "GRAD" 0,
-      "opsz" 20;
-    transition:
-      color 0.1s ease,
-      filter 0.1s ease;
   }
 
   .hero-button-bed {
@@ -723,19 +601,6 @@
     background-image: radial-gradient(circle, var(--button-dot-color) 1px, transparent 1.15px);
     background-size: 4px 4px;
     background-position: 0 0;
-    pointer-events: none;
-  }
-
-  .hero-synth-button-number {
-    position: absolute;
-    top: 8px;
-    right: 8px;
-    z-index: 3;
-    font-family: "Zen Dots", "Geist Mono", monospace;
-    font-size: 15px;
-    line-height: 1;
-    color: var(--button-dot-color);
-    text-align: right;
     pointer-events: none;
   }
 

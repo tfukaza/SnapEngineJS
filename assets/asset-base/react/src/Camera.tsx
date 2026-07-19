@@ -11,6 +11,7 @@ import {
   type ReactNode,
 } from "react";
 import { CameraControl } from "@snap-engine/asset-base";
+import type { CameraConfig } from "@snap-engine/core";
 import { useSnapEngine } from "./Engine";
 
 const useClientLayoutEffect =
@@ -31,8 +32,14 @@ export function useCameraControl(): CameraControl {
 export interface CameraProps
   extends Omit<HTMLAttributes<HTMLDivElement>, "children"> {
   cameraControl?: CameraControl | null;
+  /** Options forwarded to the underlying Camera, e.g. zoomBounds and panBounds. */
+  cameraConfig?: CameraConfig;
   children: ReactNode;
   panLock?: boolean;
+  /** Disable single-pointer panning while leaving pinch panning intact. */
+  pointerPanLock?: boolean | "touch";
+  /** Require ctrl/cmd for wheel zoom so unmodified scrolling pans the page. */
+  wheelZoomModifier?: "none" | "ctrlOrMeta";
   zoomLock?: boolean;
 }
 
@@ -51,10 +58,13 @@ const cameraControlElements = new WeakMap<CameraControl, HTMLDivElement>();
 export const Camera = forwardRef<CameraControl, CameraProps>(function Camera(
   {
     cameraControl: providedCameraControl = null,
+    cameraConfig,
     children,
     className,
     id = "snap-camera-control",
     panLock = false,
+    pointerPanLock = false,
+    wheelZoomModifier = "none",
     style,
     zoomLock = false,
     ...divProps
@@ -80,7 +90,13 @@ export const Camera = forwardRef<CameraControl, CameraProps>(function Camera(
     const ownsCameraControl = providedCameraControl == null;
 
     if (!cameraControl) {
-      cameraControl = new CameraControl(engine, { panLock, zoomLock });
+      cameraControl = new CameraControl(engine, {
+        panLock,
+        zoomLock,
+        pointerPanLock,
+        wheelZoomModifier,
+        camera: cameraConfig,
+      });
       ownedCameraControlRef.current = cameraControl;
     }
 
@@ -142,8 +158,18 @@ export const Camera = forwardRef<CameraControl, CameraProps>(function Camera(
       ...activeCameraControl.config,
       panLock,
       zoomLock,
+      pointerPanLock,
+      wheelZoomModifier,
     };
-  }, [activeCameraControl, panLock, zoomLock]);
+  }, [activeCameraControl, panLock, zoomLock, pointerPanLock, wheelZoomModifier]);
+
+  // Bounds often depend on measured layout, so keep applying them as they change.
+  useEffect(() => {
+    if (!activeCameraControl || !cameraConfig) {
+      return;
+    }
+    activeCameraControl.setCameraConfig(cameraConfig);
+  }, [activeCameraControl, cameraConfig]);
 
   useImperativeHandle(
     ref,
@@ -158,7 +184,6 @@ export const Camera = forwardRef<CameraControl, CameraProps>(function Camera(
       className={className}
       ref={elementRef}
       style={{
-        backgroundColor: "#fff",
         height: "100%",
         transformOrigin: "0 0",
         userSelect: "none",

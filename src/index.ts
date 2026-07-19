@@ -24,6 +24,7 @@ import type {
 } from "./input";
 import { getDomProperty, cloneDomProperty, EventProxyFactory } from "./util";
 import { Camera } from "./camera";
+import type { CameraConfig } from "./camera";
 
 export {
   Engine,
@@ -50,5 +51,6 @@ export {
   type PinchSnapshot,
   type InputControlConfig,
   type DomProperty,
+  type CameraConfig,
   mouseButtonBitmap,
 };

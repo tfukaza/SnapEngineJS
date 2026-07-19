@@ -8,9 +8,9 @@
 </script>
 
 <section class="two-column interactivity-explainer">
-  <div class="interactivity-intro">
-    <h2 class="landing-section-heading">What's Included:</h2>
-  </div>
+  <!-- <div class="interactivity-intro">
+    <h2 class="landing-section-heading">The toolkit for interactive<br />web components</h2>
+  </div> -->
 
   <div class="highlight-card-list">
     <InputHandlingCard />

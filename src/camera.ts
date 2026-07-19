@@ -14,6 +14,21 @@ export interface CameraConfig {
     right: number | null;
     bottom: number | null;
   };
+  /**
+   * A rectangle in world coordinates that the view must stay inside, so the camera
+   * never reveals anything beyond it.
+   *
+   * Unlike {@link CameraConfig.panBounds}, which limits the raw camera position, this
+   * accounts for how much world the view covers at the current zoom — the limits
+   * loosen as you zoom in and tighten as you zoom out. If the content is smaller than
+   * the view on an axis, it is centred on that axis instead.
+   */
+  contentBounds?: {
+    top: number;
+    left: number;
+    right: number;
+    bottom: number;
+  } | null;
   handleResize?: boolean; // Whether to handle resize events and update camera properties
 }
 
@@ -153,6 +168,111 @@ export class Camera {
    */
   get containerOffsetY() {
     return this.#containerOffsetY;
+  }
+
+  /**
+   * Gets the camera's current configuration.
+   */
+  get config(): CameraConfig {
+    return this.#config;
+  }
+
+  /**
+   * Merges new options into the camera's configuration.
+   *
+   * @param config - Partial configuration to merge over the current one
+   *
+   * @remarks
+   * Useful for bounds that can only be computed after layout, or that change on
+   * resize. Applying new pan bounds immediately clamps the current position so the
+   * camera can never be left outside the new bounds.
+   *
+   * @example
+   * ```typescript
+   * camera.setConfig({ panBounds: { left: -500, right: 500, top: null, bottom: null } });
+   * ```
+   */
+  setConfig(config: CameraConfig) {
+    this.#config = { ...this.#config, ...config };
+    this.#clampZoom();
+    this.#clampCameraPosition();
+    this.updateCamera();
+  }
+
+  /**
+   * Clamps the camera position so the view stays within the configured pan bounds.
+   * Bounds are expressed in world coordinates and applied to the camera position,
+   * which is the top-left corner of the view.
+   */
+  #clampCameraPosition() {
+    this.#clampToContentBounds();
+
+    const bounds = this.#config.panBounds;
+    if (!bounds) {
+      return;
+    }
+    if (bounds.left !== null && this.#cameraPositionX < bounds.left) {
+      this.#cameraPositionX = bounds.left;
+    }
+    if (bounds.right !== null && this.#cameraPositionX > bounds.right) {
+      this.#cameraPositionX = bounds.right;
+    }
+    if (bounds.top !== null && this.#cameraPositionY < bounds.top) {
+      this.#cameraPositionY = bounds.top;
+    }
+    if (bounds.bottom !== null && this.#cameraPositionY > bounds.bottom) {
+      this.#cameraPositionY = bounds.bottom;
+    }
+  }
+
+  /**
+   * Keeps the view inside contentBounds, accounting for how much world is visible at
+   * the current zoom. Recomputed per call, so the limits track the zoom level instead
+   * of being fixed to one of them.
+   */
+  #clampToContentBounds() {
+    const bounds = this.#config.contentBounds;
+    if (!bounds || this.#zoom <= 0) {
+      return;
+    }
+
+    const viewWidth = this.#cameraWidth / this.#zoom;
+    const viewHeight = this.#cameraHeight / this.#zoom;
+    const contentWidth = bounds.right - bounds.left;
+    const contentHeight = bounds.bottom - bounds.top;
+
+    // When the content no longer fills the view, centre it rather than pinning it to
+    // an edge — otherwise the leftover space always lands on one side.
+    this.#cameraPositionX =
+      contentWidth <= viewWidth
+        ? bounds.left - (viewWidth - contentWidth) / 2
+        : Math.min(
+            Math.max(this.#cameraPositionX, bounds.left),
+            bounds.right - viewWidth,
+          );
+
+    this.#cameraPositionY =
+      contentHeight <= viewHeight
+        ? bounds.top - (viewHeight - contentHeight) / 2
+        : Math.min(
+            Math.max(this.#cameraPositionY, bounds.top),
+            bounds.bottom - viewHeight,
+          );
+  }
+
+  /**
+   * Clamps the current zoom into the configured bounds.
+   */
+  #clampZoom() {
+    const bounds = this.#config.zoomBounds;
+    if (!bounds) {
+      return;
+    }
+    if (this.#zoom < bounds.min) {
+      this.#zoom = bounds.min;
+    } else if (this.#zoom > bounds.max) {
+      this.#zoom = bounds.max;
+    }
   }
 
   set containerDom(element: HTMLElement | null) {
@@ -327,6 +447,7 @@ export class Camera {
         (1 - (this.#cameraHeight - cameraY) / this.#cameraHeight);
     }
     this.#zoom += deltaZoom;
+    this.#clampCameraPosition();
 
     this.updateCamera();
   }
@@ -356,22 +477,19 @@ export class Camera {
     }
 
     this.#zoom = nextZoom;
+    this.#clampCameraPosition();
     this.updateCamera();
   }
 
   #constrainDeltaZoom(deltaZoom: number) {
-    if (this.#zoom + deltaZoom < 0.2) {
-      deltaZoom = 0.2 - this.#zoom;
-    } else if (this.#zoom + deltaZoom > 1) {
-      deltaZoom = 1 - this.#zoom;
-    }
+    // Clamp to the configured bounds rather than rejecting the gesture outright, so
+    // a large step still moves the camera as far as it is allowed to go.
+    const bounds = this.#config.zoomBounds ?? { min: 0.2, max: 1 };
 
-    if (this.#config.zoomBounds) {
-      if (this.#zoom + deltaZoom < this.#config.zoomBounds.min) {
-        deltaZoom = 0;
-      } else if (this.#zoom + deltaZoom > this.#config.zoomBounds.max) {
-        deltaZoom = 0;
-      }
+    if (this.#zoom + deltaZoom < bounds.min) {
+      deltaZoom = bounds.min - this.#zoom;
+    } else if (this.#zoom + deltaZoom > bounds.max) {
+      deltaZoom = bounds.max - this.#zoom;
     }
 
     return deltaZoom;
@@ -404,6 +522,7 @@ export class Camera {
     }
     this.#cameraPositionX += deltaX / this.#zoom;
     this.#cameraPositionY += deltaY / this.#zoom;
+    this.#clampCameraPosition();
 
     this.updateCamera();
   }
@@ -468,32 +587,7 @@ export class Camera {
     }
     this.#cameraPositionX = -deltaX / this.#zoom + this.#cameraPanStartX;
     this.#cameraPositionY = -deltaY / this.#zoom + this.#cameraPanStartY;
-    if (this.#config.panBounds) {
-      if (
-        this.#config.panBounds.left !== null &&
-        this.#cameraPositionX < this.#config.panBounds.left
-      ) {
-        this.#cameraPositionX = this.#config.panBounds.left + 1;
-      }
-      if (
-        this.#config.panBounds.right !== null &&
-        this.#cameraPositionX > this.#config.panBounds.right
-      ) {
-        this.#cameraPositionX = this.#config.panBounds.right - 1;
-      }
-      if (
-        this.#config.panBounds.top !== null &&
-        this.#cameraPositionY < this.#config.panBounds.top
-      ) {
-        this.#cameraPositionY = this.#config.panBounds.top - 1;
-      }
-      if (
-        this.#config.panBounds.bottom !== null &&
-        this.#cameraPositionY > this.#config.panBounds.bottom
-      ) {
-        this.#cameraPositionY = this.#config.panBounds.bottom + 1;
-      }
-    }
+    this.#clampCameraPosition();
     this.updateCamera();
   }
 

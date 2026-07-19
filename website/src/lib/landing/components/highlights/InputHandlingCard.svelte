@@ -1,5 +1,6 @@
 <script lang="ts">
   import { onDestroy, onMount, tick } from "svelte";
+  import { fade } from "svelte/transition";
 
   type RowId = "move" | "dragStart" | "drag" | "pinch";
   type Point = {
@@ -54,6 +55,54 @@
   let activePointers = $state<PointerMarker[]>([]);
   let dragLines = $state<DragLine[]>([]);
   let glyphPanelHidden = $state(false);
+  // The hint only earns its space until the visitor discovers the surface is live.
+  let hasInteracted = $state(false);
+
+  const hintLines = ["Click or touch to", "visualize input handling"];
+  const hintRunnerGlyph = "*";
+  const hintInnerWidth = Math.max(...hintLines.map((line) => line.length));
+
+  // Plain ASCII rather than Unicode box-drawing: Bitcount has no ┌─┐ glyphs, so those
+  // silently fall back to another font at a wider advance and the box stops lining up.
+  const hintGrid = hintLines
+    .map((line) => ["|", " ", ...line.padEnd(hintInnerWidth, " "), " ", "|"])
+    .reduce(
+      (rows, row) => (rows.push(row), rows),
+      [["+", ...Array(hintInnerWidth + 2).fill("-"), "+"]] as string[][],
+    )
+    .concat([["+", ...Array(hintInnerWidth + 2).fill("-"), "+"]]);
+
+  // Perimeter walked clockwise from the top-left, so the runner circles the box.
+  const hintPerimeter: Array<[number, number]> = (() => {
+    const rows = hintGrid.length;
+    const cols = hintGrid[0].length;
+    const path: Array<[number, number]> = [];
+    for (let c = 0; c < cols; c++) path.push([0, c]);
+    for (let r = 1; r < rows - 1; r++) path.push([r, cols - 1]);
+    for (let c = cols - 1; c >= 0; c--) path.push([rows - 1, c]);
+    for (let r = rows - 2; r >= 1; r--) path.push([r, 0]);
+    return path;
+  })();
+
+  let hintRunner = $state(0);
+
+  const hintFrame = $derived.by(() => {
+    const [row, col] = hintPerimeter[hintRunner % hintPerimeter.length];
+    return hintGrid
+      .map((chars, r) =>
+        chars.map((char, c) => (r === row && c === col ? hintRunnerGlyph : char)).join(""),
+      )
+      .join("\n");
+  });
+
+  $effect(() => {
+    if (hasInteracted) return;
+    if (window.matchMedia("(prefers-reduced-motion: reduce)").matches) return;
+    const timer = setInterval(() => {
+      hintRunner = (hintRunner + 1) % hintPerimeter.length;
+    }, 55);
+    return () => clearInterval(timer);
+  });
   let tapDisplayElement: HTMLDivElement | null = null;
   let displayResizeObserver: ResizeObserver | null = null;
   let glyphPanelCheckPending = false;
@@ -141,6 +190,7 @@
   }
 
   function handlePointerDown(event: PointerEvent & { currentTarget: HTMLElement }) {
+    hasInteracted = true;
     event.currentTarget.setPointerCapture(event.pointerId);
     inputMode = event.pointerType === "touch" ? "touch" : "mouse";
     mouseButtons = event.buttons;
@@ -283,7 +333,11 @@
   <div class="input-card-layout">
     <div class="input-card-heading">
       <h3>Input Handling</h3>
-      <p>Common API for multiple types of input devices. Includes support for touch gestures.</p>
+      <p>A standardized API for mouse, touch, and stylus inputs.
+          Includes support for basic mouse and touch gestures like
+          drag and pinch. It also handles edge cases like tracking
+          drag gestures even while mouse leaves the browser window.
+        </p>
     </div>
 
     <div class="input-card-body card">
@@ -356,6 +410,10 @@
             aria-hidden="true"
           ></span>
         {/each}
+
+        {#if !hasInteracted}
+          <pre class="tap-hint" aria-hidden="true" out:fade={{ duration: 220 }}>{hintFrame}</pre>
+        {/if}
       </div>
     </div>
   </div>
@@ -546,6 +604,31 @@
     border-radius: var(--ui-radius);
     border: 1px solid rgba(0, 0, 0, 0.14);
     background-color: var(--color-background-tint);
+  }
+
+  // Orange is the site's "this is interactive" signal. Drawn as bare monospace type in
+  // the ASCII idiom rather than a chrome button, so it reads as part of the demo.
+  .tap-hint {
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    z-index: 3;
+    margin: 0;
+    transform: translate(-50%, -50%);
+    background: none;
+    border: 0;
+    padding: 0;
+    color: var(--color-primary);
+    font-family: "Bitcount Single", "Geist Mono", monospace;
+    font-size: clamp(0.62rem, 1.5cqw, 0.82rem);
+    font-weight: 500;
+    line-height: 1.15;
+    letter-spacing: 0;
+    white-space: pre;
+    text-align: left;
+    // Must not swallow the very interaction it is asking for.
+    pointer-events: none;
+    user-select: none;
   }
 
   .touch-plus-grid {

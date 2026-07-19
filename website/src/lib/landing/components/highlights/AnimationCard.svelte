@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { onDestroy } from "svelte";
+  import { onDestroy, untrack } from "svelte";
   import ClientDemoFrame from "$lib/components/ClientDemoFrame.svelte";
   import { Engine } from "@snap-engine/asset-base-svelte";
   import { ElementObject } from "@snapline/object";
@@ -33,26 +33,56 @@
   const INITIAL_TIME = 0;
   const timelineMarkers = [0, 1, 2, 3, 4];
   let currentTime = $state(INITIAL_TIME);
-  const TRACK_IDS: TrackId[] = ["rotate", "scale", "variable"];
-  const KEYFRAME_TIMES = [0, 1.5, 3, TOTAL_DURATION];
   const ROTATION_KEYFRAMES = [0, 135, 270, 360];
   const SCALE_KEYFRAMES = [1, 1.5, 0.5, 1];
   const VARIABLE_KEYFRAMES = [1, 100];
 
-  let counterValue = $state(VARIABLE_KEYFRAMES[0]);
+  // Wide layouts get a grid whose cells run the same animation on a staggered
+  // delay, so the motion reads as a wave travelling along the diagonal.
+  // Narrow layouts fall back to the single readout.
+  const GRID_QUERY = "(min-width: 900px)";
+  const GRID_COLS = 6;
+  const GRID_ROWS = 3;
+  const STAGGER_MS = 120;
+  const LAST_WAVE_STEP = GRID_COLS - 1 + (GRID_ROWS - 1);
+  // Shorten each cell so the last one in the wave still lands on TOTAL_DURATION,
+  // which keeps the timeline honest at 0–4s for both layouts.
+  const GRID_CELL_DURATION_MS = TOTAL_DURATION_MS - LAST_WAVE_STEP * STAGGER_MS;
+
+  type Cell = {
+    key: string;
+    delayMs: number;
+    durationMs: number;
+  };
+
+  const SOLO_CELLS: Cell[] = [
+    { key: "solo", delayMs: 0, durationMs: TOTAL_DURATION_MS },
+  ];
+
+  const GRID_CELLS: Cell[] = Array.from(
+    { length: GRID_COLS * GRID_ROWS },
+    (_, index) => {
+      const col = index % GRID_COLS;
+      const row = Math.floor(index / GRID_COLS);
+      return {
+        key: `cell-${index}`,
+        delayMs: (col + row) * STAGGER_MS,
+        durationMs: GRID_CELL_DURATION_MS,
+      };
+    },
+  );
+
+  let isGridMode = $state(false);
+  const cells = $derived(isGridMode ? GRID_CELLS : SOLO_CELLS);
+
   let engine: EngineType | null = $state(null);
   let canvasComponent: Engine | null = null;
-  let animatedValueRef: HTMLSpanElement | null = $state(null);
-  let valueObject: ElementObject | null = null;
+  let cellRefs = $state<(HTMLSpanElement | null)[]>([]);
+  let cellValues = $state<number[]>([VARIABLE_KEYFRAMES[0]]);
+  let cellObjects: ElementObject[] = [];
+  let cellAnimations: AnimationObject[] = [];
+  let builtCellCount: number | null = null;
   let isPlaying = $state(true);
-  let trackControllers: Record<TrackId, AnimationObject | null> = {
-    rotate: null,
-    scale: null,
-    variable: null,
-  };
-  let currentRotation = $state(0);
-  let currentScale = $state(1);
-  let valueTransform = $state(`rotate(0deg) scale(1)`);
   // Hidden linear time track state
   let playbackRaf: number | null = null;
   let playbackStartMs = 0;
@@ -112,35 +142,49 @@
     return `${(time / TOTAL_DURATION) * 100}%`;
   }
 
-  function updateRotationState(rotation: number) {
-    const clampedRotation = clamp(rotation, 0, 360);
-    currentRotation = clampedRotation;
-    valueTransform = `rotate(${currentRotation}deg) scale(${currentScale})`;
-  }
-
-  function updateScaleState(scale: number) {
-    currentScale = clamp(scale, 0.25, 2);
-    valueTransform = `rotate(${currentRotation}deg) scale(${currentScale})`;
-  }
-
   $effect(() => {
-    if (!engine || !animatedValueRef) {
+    if (typeof window === "undefined") {
       return;
     }
 
-    if (!valueObject) {
-      valueObject = new ElementObject(engine, null);
-      valueObject.element = animatedValueRef;
+    const query = window.matchMedia(GRID_QUERY);
+    const sync = () => {
+      isGridMode = query.matches;
+    };
+
+    sync();
+    query.addEventListener("change", sync);
+    return () => query.removeEventListener("change", sync);
+  });
+
+  $effect(() => {
+    const activeCells = cells;
+    const activeEngine = engine;
+    const refs = cellRefs.slice(0, activeCells.length);
+
+    if (!activeEngine || refs.length < activeCells.length) {
+      return;
+    }
+    if (refs.some((ref) => !ref)) {
+      return;
     }
 
-    ensureTrackAnimations();
+    // Building reads playback state, which changes every frame — keep it out of
+    // this effect's dependencies so only the layout mode can trigger a rebuild.
+    untrack(() => {
+      if (builtCellCount === activeCells.length) {
+        return;
+      }
+
+      teardownCells();
+      buildCells(activeEngine, activeCells, refs as HTMLSpanElement[]);
+      builtCellCount = activeCells.length;
+    });
   });
 
   onDestroy(() => {
     stopPlaybackLoop();
-    cancelTrackAnimations();
-    valueObject?.destroy();
-    valueObject = null;
+    teardownCells();
   });
 
   function startPlaybackLoop() {
@@ -159,11 +203,12 @@
       playbackRaf = null;
       const elapsedSeconds = (now - playbackStartMs) / 1000;
       const nextTime = playbackOffsetTime + elapsedSeconds;
-      currentTime = Math.min(nextTime, TOTAL_DURATION);
 
-      if (currentTime >= TOTAL_DURATION) {
-        stopPlaybackLoop();
-        return;
+      // The wave is continuous, so the cycle loops rather than parking at the end.
+      if (nextTime >= TOTAL_DURATION) {
+        restartCycle();
+      } else {
+        currentTime = nextTime;
       }
 
       playbackRaf = requestAnimationFrame(step);
@@ -192,12 +237,11 @@
     if (Number.isNaN(nextTime)) {
       return;
     }
-    const progress = clamp(nextTime / TOTAL_DURATION, 0, 1);
     const triggeredScrubSession = !isScrubbingTimeline;
     if (triggeredScrubSession) {
       beginTimelineScrub();
     }
-    setTrackProgress(progress);
+    setTimelineTime(nextTime);
     if (triggeredScrubSession) {
       endTimelineScrub();
     }
@@ -231,153 +275,90 @@
     resumeAfterScrub = false;
   }
 
-  function ensureTrackAnimations() {
-    if (!valueObject || !animatedValueRef) {
-      return;
-    }
+  function buildCells(
+    activeEngine: EngineType,
+    activeCells: Cell[],
+    refs: HTMLSpanElement[],
+  ) {
+    cellValues = activeCells.map(() => VARIABLE_KEYFRAMES[0]);
 
-    const builders: Record<TrackId, () => AnimationObject> = {
-      rotate: createRotationAnimation,
-      scale: createScaleAnimation,
-      variable: createVariableAnimation,
-    };
+    activeCells.forEach((cell, index) => {
+      const element = refs[index];
+      const object = new ElementObject(activeEngine, null);
+      object.element = element;
+      cellObjects.push(object);
 
-    for (const id of TRACK_IDS) {
-      if (trackControllers[id]) {
-        continue;
+      for (const animation of createCellAnimations(element, cell, index)) {
+        animation.pause();
+        object.addAnimation(animation, { replaceExisting: false });
+        cellAnimations.push(animation);
       }
+    });
 
-      const animation = builders[id]();
-      animation.pause();
-      valueObject.addAnimation(animation, { replaceExisting: false });
-      animation.progress = currentTime / TOTAL_DURATION;
-      trackControllers = { ...trackControllers, [id]: animation };
-    }
-
-    syncPlaybackState();
+    setTimelineTime(currentTime);
 
     if (isPlaying) {
       startPlaybackLoop();
     }
   }
 
-  function createRotationAnimation() {
-    let controller: AnimationObject;
-    controller = new AnimationObject(
-      animatedValueRef,
-      {
-        $rotation: ROTATION_KEYFRAMES,
-      },
-      {
-        duration: TOTAL_DURATION_MS,
-        easing: "linear",
-        tick: (values: Record<string, number>) => {
-          if (typeof values.$rotation === "number") {
-            updateRotationState(values.$rotation);
-          }
-        },
-        finish: () => handleTrackFinish("rotate", controller),
-      },
-    );
-    return controller;
-  }
-
-  function createScaleAnimation() {
-    let controller: AnimationObject;
-    controller = new AnimationObject(
-      animatedValueRef,
-      {
-        $scale: SCALE_KEYFRAMES,
-      },
-      {
-        duration: TOTAL_DURATION_MS,
-        easing: ["cubic-bezier(0.65, 0, 0.35, 1)", "linear", "steps(5, end)"],
-        tick: (values: Record<string, number>) => {
-          if (typeof values.$scale === "number") {
-            updateScaleState(values.$scale);
-          }
-        },
-        finish: () => handleTrackFinish("scale", controller),
-      },
-    );
-    return controller;
-  }
-
-  function createVariableAnimation() {
-    let controller: AnimationObject;
-    controller = new AnimationObject(
-      animatedValueRef,
-      {
-        $variable: VARIABLE_KEYFRAMES,
-      },
-      {
-        duration: TOTAL_DURATION_MS,
-        easing: "ease-in-out",
-        tick: (values: Record<string, number>) => {
-          if (typeof values.$variable === "number") {
-            counterValue = Math.round(values.$variable);
-          }
-        },
-        finish: () => handleTrackFinish("variable", controller),
-      },
-    );
-    return controller;
-  }
-
-  function handleTrackFinish(trackId: TrackId, controller: AnimationObject) {
-    if (trackControllers[trackId] !== controller) {
-      return;
-    }
-    trackControllers = { ...trackControllers, [trackId]: null };
-    if (TRACK_IDS.every((id) => trackControllers[id] === null)) {
-      onAllTracksFinished();
-    }
-  }
-
-  function onAllTracksFinished() {
-    updateScaleState(SCALE_KEYFRAMES[SCALE_KEYFRAMES.length - 1]);
-    updateRotationState(ROTATION_KEYFRAMES[ROTATION_KEYFRAMES.length - 1]);
-    counterValue = VARIABLE_KEYFRAMES[VARIABLE_KEYFRAMES.length - 1];
-    currentTime = TOTAL_DURATION;
-    stopPlaybackLoop();
-
-    if (isPlaying) {
-      resetAnimationCycle();
-    }
-  }
-
-  function resetAnimationCycle() {
-    stopPlaybackLoop();
-    cancelTrackAnimations();
-    updateScaleState(SCALE_KEYFRAMES[0]);
-    updateRotationState(ROTATION_KEYFRAMES[0]);
-    counterValue = VARIABLE_KEYFRAMES[0];
-    currentTime = 0;
-    playbackOffsetTime = 0;
-    ensureTrackAnimations();
-    setTrackProgress(0);
-
-    if (isPlaying) {
-      startPlaybackLoop();
-      syncPlaybackState();
-    }
-  }
-
-  function cancelTrackAnimations() {
-    valueObject?.cancelAnimations();
-    trackControllers = {
-      rotate: null,
-      scale: null,
-      variable: null,
+  // rotate and scale are independent CSS properties, so each track can own one
+  // outright and animate natively — no per-frame JS to composite a transform.
+  // Only the counter needs a $variable channel and a tick.
+  function createCellAnimations(
+    element: HTMLSpanElement,
+    cell: Cell,
+    index: number,
+  ) {
+    const shared = {
+      duration: cell.durationMs,
+      delay: cell.delayMs,
+      // Cells finish at staggered times but must survive to the next cycle.
+      persist: true,
     };
+
+    return [
+      new AnimationObject(
+        element,
+        { rotate: ROTATION_KEYFRAMES.map((deg) => `${deg}deg`) },
+        { ...shared, easing: "linear" },
+      ),
+      new AnimationObject(
+        element,
+        { scale: SCALE_KEYFRAMES.map(String) },
+        {
+          ...shared,
+          easing: ["cubic-bezier(0.65, 0, 0.35, 1)", "linear", "steps(5, end)"],
+        },
+      ),
+      new AnimationObject(
+        element,
+        { $variable: VARIABLE_KEYFRAMES },
+        {
+          ...shared,
+          easing: "ease-in-out",
+          tick: (values: Record<string, number>) => {
+            if (typeof values.$variable === "number") {
+              cellValues[index] = Math.round(values.$variable);
+            }
+          },
+        },
+      ),
+    ];
+  }
+
+  function teardownCells() {
+    for (const object of cellObjects) {
+      object.cancelAnimations();
+      object.destroy();
+    }
+    cellObjects = [];
+    cellAnimations = [];
+    builtCellCount = null;
   }
 
   function syncPlaybackState() {
-    for (const id of TRACK_IDS) {
-      const animation = trackControllers[id];
-      if (!animation) {
-        continue;
-      }
+    for (const animation of cellAnimations) {
       if (isPlaying) {
         animation.play();
       } else {
@@ -386,29 +367,32 @@
     }
   }
 
-  function setTrackProgress(progress: number) {
-    for (const id of TRACK_IDS) {
-      const animation = trackControllers[id];
-      if (!animation) {
-        continue;
-      }
+  // Every cell shares one absolute clock, so a staggered cell lands wherever its
+  // own delay puts it. This is why scrubbing sets currentTime and not progress.
+  function setTimelineTime(seconds: number) {
+    const clampedTime = clamp(seconds, 0, TOTAL_DURATION);
+    for (const animation of cellAnimations) {
       animation.pause();
-      animation.progress = progress;
+      animation.currentTime = clampedTime * 1000;
     }
-    const clampedProgress = clamp(progress, 0, 1);
-    currentTime = clampedProgress * TOTAL_DURATION;
-    playbackOffsetTime = currentTime;
+    currentTime = clampedTime;
+    playbackOffsetTime = clampedTime;
     syncPlaybackState();
+  }
+
+  function restartCycle() {
+    setTimelineTime(0);
+    playbackStartMs = performance.now();
   }
 
   function togglePlayback() {
     isPlaying = !isPlaying;
+
     if (isPlaying && currentTime >= TOTAL_DURATION - 0.01) {
-      resetAnimationCycle();
+      restartCycle();
+      startPlaybackLoop();
       return;
     }
-
-    ensureTrackAnimations();
 
     if (isPlaying) {
       startPlaybackLoop();
@@ -496,14 +480,17 @@
               <span>+</span>
             {/each}
           </div>
-          <div class="preview-value-container">
-            <span
-              class="animated-value value-readout"
-              bind:this={animatedValueRef}
-              style={`transform: ${valueTransform};`}
-            >
-              {counterValue}
-            </span>
+          <div
+            class="preview-value-grid"
+            class:is-grid={isGridMode}
+            style={`--value-cols: ${isGridMode ? GRID_COLS : 1};`}
+            aria-hidden={isGridMode ? "true" : undefined}
+          >
+            {#each cells as cell, index (cell.key)}
+              <span class="animated-value value-readout" bind:this={cellRefs[index]}>
+                {cellValues[index] ?? VARIABLE_KEYFRAMES[0]}
+              </span>
+            {/each}
           </div>
             <!-- <button class="playback-toggle" type="button" onclick={togglePlayback}>
               {isPlaying ? "Pause" : "Play"}
@@ -516,7 +503,9 @@
 
     <div class="animation-card-heading">
       <h3>Animation Engine</h3>
-      <p>WAAPI based animation engine that's lightweight and performant.</p>
+      <p>Lightweight WAAPI (Web Animations API) based animation engine
+          that can animate not only CSS properties but also arbitrary JavaScript variables.
+        Deep integration with the engine allows maximal performance.</p>
     </div>
   </div>
 </article>
@@ -548,13 +537,13 @@
     grid-template-columns: minmax(0, 0.6fr) minmax(0, 0.4fr);
     grid-template-areas: "visual heading";
     align-items: stretch;
-    gap: var(--size-48);
+    gap: var(--size-80);
     box-sizing: border-box;
 
     @container animation-card (max-width: 400px) {
       display: flex;
       flex-direction: column;
-      gap: var(--size-24);
+      gap: var(--size-48);
     }
   }
 
@@ -617,8 +606,12 @@
     align-items: center;
     justify-content: center;
     background-color: var(--color-background-tint);
-    min-height: 100px;
+    min-height: clamp(220px, 26vw, 380px);
     isolation: isolate;
+
+    @media (max-width: 720px) {
+      min-height: 180px;
+    }
   }
 
   .preview-plus-grid {
@@ -644,12 +637,19 @@
     margin: 0;
   }
 
-  .preview-value-container {
+  .preview-value-grid {
     position: relative;
     z-index: 1;
-    display: flex;
-    align-items: center;
-    justify-content: center;
+    display: grid;
+    grid-template-columns: repeat(var(--value-cols, 1), minmax(0, 1fr));
+    place-items: center;
+    width: 100%;
+    box-sizing: border-box;
+  }
+
+  .preview-value-grid.is-grid {
+    gap: clamp(0.5rem, 1.4vw, 1.5rem);
+    padding: clamp(1rem, 3vw, 2.75rem);
   }
 
   .animated-value {
@@ -664,10 +664,17 @@
     font-variant-numeric: tabular-nums;
     line-height: 1;
     letter-spacing: 0;
-    transform: rotate(0deg) scale(1);
+    /* rotate/scale are animated natively as separate CSS properties. */
+    rotate: 0deg;
+    scale: 1;
   }
 
-  // .preview-value-container {
+  .preview-value-grid.is-grid .animated-value {
+    min-width: 3ch;
+    font-size: clamp(1.25rem, 2.4vw, 2.25rem);
+  }
+
+  // .preview-value-grid {
   //   filter: drop-shadow(6px 6px 5px rgba(24, 29, 42, 0.264));
   // }
 
