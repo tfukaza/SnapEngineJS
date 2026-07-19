@@ -114,6 +114,22 @@ test("SnapSort asset preview pans and moves items through the imperative API", a
     .poll(() => sentenceAnswer.locator(":scope > .snapsort-item").count())
     .toBe(3);
   await expect.poll(() => firstTile.textContent()).toBe("02");
+  const movedTile = card.locator(
+    '[data-preview-entry-id="preview-tile-primary"]',
+  );
+  await expect
+    .poll(() =>
+      movedTile.evaluate((element) =>
+        element
+          .getAnimations()
+          .some((animation) => animation.playState === "running"),
+      ),
+    )
+    .toBe(true);
+  await expect(movedTile.locator("xpath=ancestor::*[contains(@class, 'snapsort-item')][1]")).toHaveCSS(
+    "transform",
+    "none",
+  );
   await expect(scale).toHaveCSS("filter", /grayscale\(0\)/);
 
   const panAfter = await pan.evaluate((element) => getComputedStyle(element).transform);

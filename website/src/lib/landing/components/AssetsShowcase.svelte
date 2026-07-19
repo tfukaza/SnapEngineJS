@@ -453,6 +453,7 @@
                         config={{
                           direction: "row",
                           groupID: "assets-preview-tiles",
+                          disableFlip: true,
                           animation: previewAnimation,
                           callbacks: { onItemMove: handleTileMove },
                         }}
