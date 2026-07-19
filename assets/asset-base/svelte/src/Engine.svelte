@@ -57,7 +57,8 @@
     if (!resolvedEngine) return;
     resolvedEngine.disableDebug();
     if (ownsEngine) {
-      resolvedEngine.destroy();
+      // Child onDestroy callbacks must unregister their objects first.
+      queueMicrotask(() => resolvedEngine.destroy());
     }
   });
 
