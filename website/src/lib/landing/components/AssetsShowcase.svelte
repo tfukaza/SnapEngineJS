@@ -687,6 +687,15 @@
     content: "";
   }
 
+  .snapsort-preview-window::after {
+    position: absolute;
+    inset: 0;
+    z-index: 5;
+    box-shadow: inset 0 0 var(--size-24) var(--size-12) var(--color-background-tint);
+    content: "";
+    pointer-events: none;
+  }
+
   .snapsort-preview-pan {
     position: absolute;
     top: 0;
