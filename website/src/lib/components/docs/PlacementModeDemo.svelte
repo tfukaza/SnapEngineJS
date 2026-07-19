@@ -150,7 +150,7 @@
     overflow: visible;
   }
 
-  :global(.placement-demo #snap-canvas) {
+  :global(.placement-demo .snap-engine-canvas) {
     overflow: visible !important;
   }
 

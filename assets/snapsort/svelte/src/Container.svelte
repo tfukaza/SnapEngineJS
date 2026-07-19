@@ -62,9 +62,13 @@
   const renderEntry: Snippet<[T]> = initial.entrySnippet;
 
   if (
-    initial.config.callbacks?.createGhost ||
-    initial.config.callbacks?.onGhostInsert ||
-    initial.config.callbacks?.onGhostRemove
+    !initial.config.strategy &&
+    (initial.config.mode === undefined ||
+      initial.config.mode === "euclidean" ||
+      initial.config.mode === "progressive") &&
+    (initial.config.callbacks?.createGhost ||
+      initial.config.callbacks?.onGhostInsert ||
+      initial.config.callbacks?.onGhostRemove)
   ) {
     console.warn(
       "SnapSort Container: ghost callbacks (createGhost/onGhostInsert/onGhostRemove) passed " +

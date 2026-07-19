@@ -36,7 +36,9 @@
   let canvas: HTMLDivElement | null = null;
   let mounted = $state(false);
   let pendingDebugEnable = $state(false);
-  const mergedClass = $derived(`${classValue} ${className}`.trim());
+  const mergedClass = $derived(
+    `snap-engine-canvas ${classValue} ${className}`.trim(),
+  );
   const mergedStyle = $derived(
     `height:100%;overflow:visible;position:relative;${style ?? ""}`,
   );

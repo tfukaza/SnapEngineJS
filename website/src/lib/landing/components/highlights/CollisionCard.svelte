@@ -722,7 +722,7 @@
     overflow: hidden;
     text-align: center;
 
-    :global(#snap-canvas) {
+    :global(.snap-engine-canvas) {
       width: 100%;
       height: auto !important;
       min-height: inherit;

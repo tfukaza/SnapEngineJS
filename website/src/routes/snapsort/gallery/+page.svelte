@@ -1802,7 +1802,7 @@
     color: #697074;
   }
 
-  :global(#snap-canvas) {
+  :global(.snap-engine-canvas) {
     display: flex;
     flex-direction: column;
     align-items: center;

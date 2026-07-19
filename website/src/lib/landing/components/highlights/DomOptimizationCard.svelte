@@ -554,7 +554,7 @@
     gap: var(--size-16);
   }
 
-  .dom-optimization-visual :global(#snap-canvas) {
+  .dom-optimization-visual :global(.snap-engine-canvas) {
     width: 100%;
     flex: 1;
     min-height: 0;
