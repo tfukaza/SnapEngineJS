@@ -14,6 +14,15 @@ function center(box: { x: number; y: number; width: number; height: number }) {
   return { x: box.x + box.width / 2, y: box.y + box.height / 2 };
 }
 
+function centerDistance(
+  a: { x: number; y: number; width: number; height: number },
+  b: { x: number; y: number; width: number; height: number },
+) {
+  const aCenter = center(a);
+  const bCenter = center(b);
+  return Math.hypot(aCenter.x - bCenter.x, aCenter.y - bCenter.y);
+}
+
 /**
  * Drag `source` onto `target`, using a real pointer-move sequence (not a
  * single jump) so SnapSort's drag-threshold and per-move drop-target
@@ -23,7 +32,13 @@ async function dragOnto(
   page: Page,
   source: Locator,
   target: Locator,
-  options: { steps?: number; xOffset?: number; yOffset?: number } = {},
+  options: {
+    steps?: number;
+    xOffset?: number;
+    yOffset?: number;
+    beforeDrop?: () => Promise<void>;
+    afterDrop?: () => Promise<void>;
+  } = {},
 ) {
   const sourceBox = await rect(source);
   const start = center(sourceBox);
@@ -50,7 +65,9 @@ async function dragOnto(
   }
 
   await page.waitForTimeout(80);
+  await options.beforeDrop?.();
   await page.mouse.up();
+  await options.afterDrop?.();
   await page.waitForTimeout(250);
 }
 
@@ -222,7 +239,98 @@ test.describe("SnapSort gallery — new drag primitives", () => {
 
       const tileA1 = tiles.filter({ hasText: "A1" });
       const tileB2 = tiles.filter({ hasText: "B2" });
-      await dragOnto(page, tileA1, tileB2);
+      const sourceStart = await rect(tileA1);
+      const targetStart = await rect(tileB2);
+      let ghostRelease: Awaited<ReturnType<typeof rect>> | null = null;
+      await dragOnto(page, tileA1, tileB2, {
+        xOffset: 32,
+        yOffset: -24,
+        beforeDrop: async () => {
+          const sourceTile = tileA1.locator(".swap-tile");
+          const pointerGhost = page.locator(
+            '[data-snapsort-ghost="pointer"]',
+          );
+
+          await expect(pointerGhost).toBeVisible();
+          await expect(pointerGhost).toContainText("A1");
+          await expect(pointerGhost.locator(".swap-tile-grip i")).toHaveCount(6);
+
+          const appearances = await Promise.all(
+            [sourceTile, pointerGhost].map((locator) =>
+              locator.evaluate((element) => {
+                const style = getComputedStyle(element);
+                return {
+                  backgroundColor: style.backgroundColor,
+                  borderRadius: style.borderRadius,
+                  boxShadow: style.boxShadow,
+                  fontFamily: style.fontFamily,
+                };
+              }),
+            ),
+          );
+          expect(appearances[1]).toEqual(appearances[0]);
+          ghostRelease = await rect(pointerGhost);
+        },
+        afterDrop: async () => {
+          await expect
+            .poll(
+              () =>
+                grid.locator(".snapsort-item").evaluateAll(
+                  (nodes) =>
+                    nodes.filter(
+                      (node) => getComputedStyle(node).transform !== "none",
+                    ).length,
+                ),
+              { intervals: [10, 20, 40], timeout: 500 },
+            )
+            .toBeGreaterThanOrEqual(2);
+
+          expect(ghostRelease).not.toBeNull();
+          const expectedDraggedDelta = {
+            x: center(ghostRelease!).x - center(targetStart).x,
+            y: center(ghostRelease!).y - center(targetStart).y,
+          };
+          const expectedDisplacedDelta = {
+            x: center(targetStart).x - center(sourceStart).x,
+            y: center(targetStart).y - center(sourceStart).y,
+          };
+          const [draggedTransform, displacedTransform] = await Promise.all(
+            [tileA1, tileB2].map((locator) =>
+              locator.evaluate((node) => {
+                const matrix = new DOMMatrixReadOnly(
+                  getComputedStyle(node).transform,
+                );
+                return { x: matrix.m41, y: matrix.m42 };
+              }),
+            ),
+          );
+
+          expect(Math.sign(draggedTransform.x)).toBe(
+            Math.sign(expectedDraggedDelta.x),
+          );
+          expect(Math.sign(draggedTransform.y)).toBe(
+            Math.sign(expectedDraggedDelta.y),
+          );
+          expect(Math.abs(draggedTransform.x)).toBeLessThanOrEqual(
+            Math.abs(expectedDraggedDelta.x) + 1,
+          );
+          expect(Math.abs(draggedTransform.y)).toBeLessThanOrEqual(
+            Math.abs(expectedDraggedDelta.y) + 1,
+          );
+          expect(Math.sign(displacedTransform.x)).toBe(
+            Math.sign(expectedDisplacedDelta.x),
+          );
+          expect(Math.sign(displacedTransform.y)).toBe(
+            Math.sign(expectedDisplacedDelta.y),
+          );
+          expect(Math.abs(displacedTransform.x)).toBeLessThanOrEqual(
+            Math.abs(expectedDisplacedDelta.x) + 1,
+          );
+          expect(Math.abs(displacedTransform.y)).toBeLessThanOrEqual(
+            Math.abs(expectedDisplacedDelta.y) + 1,
+          );
+        },
+      });
 
       const afterOrder = await grid.locator(".swap-tile").evaluateAll((nodes) =>
         nodes.map((node) => node.textContent?.trim() ?? ""),
@@ -231,6 +339,60 @@ test.describe("SnapSort gallery — new drag primitives", () => {
       // Only the two dragged/targeted slots change; everything else stays put.
       expect(afterOrder).toEqual(["B2", "A2", "A3", "B1", "A1", "B3", "C1", "C2", "C3"]);
       await expect(tiles).toHaveCount(9);
+      await expect(
+        grid.locator('[data-snapsort-dragging="true"]'),
+      ).toHaveCount(0);
+      const tileOpacities = await grid
+        .locator(".swap-tile")
+        .evaluateAll((nodes) =>
+          nodes.map((node) => getComputedStyle(node).opacity),
+        );
+      expect(tileOpacities).toEqual(Array(9).fill("1"));
+    });
+
+    test("dropping outside the grid animates the dragged tile back home", async ({
+      page,
+    }) => {
+      const exhibit = page.locator("#swap-grid");
+      await exhibit.scrollIntoViewIfNeeded();
+
+      const grid = exhibit.locator(".swap-grid");
+      const tileA2 = grid.locator(".snapsort-item").filter({ hasText: "A2" });
+      const sourceStart = await rect(tileA2);
+      let ghostRelease: Awaited<ReturnType<typeof rect>> | null = null;
+
+      await dragOnto(page, tileA2, exhibit.locator(".example-placard"), {
+        beforeDrop: async () => {
+          ghostRelease = await rect(
+            page.locator('[data-snapsort-ghost="pointer"]'),
+          );
+        },
+        afterDrop: async () => {
+          await expect
+            .poll(
+              () =>
+                tileA2.evaluate(
+                  (node) => getComputedStyle(node).transform !== "none",
+                ),
+              { intervals: [10, 20, 40], timeout: 500 },
+            )
+            .toBe(true);
+
+          expect(ghostRelease).not.toBeNull();
+          const returningVisual = await rect(tileA2);
+          expect(centerDistance(returningVisual, ghostRelease!)).toBeLessThan(
+            centerDistance(returningVisual, sourceStart),
+          );
+        },
+      });
+
+      const order = await grid.locator(".swap-tile").evaluateAll((nodes) =>
+        nodes.map((node) => node.textContent?.trim() ?? ""),
+      );
+      expect(order).toEqual(["A1", "A2", "A3", "B1", "B2", "B3", "C1", "C2", "C3"]);
+      await expect(grid.locator('[data-snapsort-dragging="true"]')).toHaveCount(0);
+      await expect(tileA2).toHaveCSS("transform", "none");
+      await expect(tileA2.locator(".swap-tile")).toHaveCSS("opacity", "1");
     });
   });
 });

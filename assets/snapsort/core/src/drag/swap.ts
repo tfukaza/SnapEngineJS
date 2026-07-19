@@ -1,4 +1,4 @@
-import type { Container } from "../container";
+import type { AnimationConfig, Container } from "../container";
 import type { Item } from "../item";
 import { resetDropSnapshotDebugDump, type DropCandidate } from "../algorithm";
 import type { DragLocation, GhostRect, GhostRole } from "../events";
@@ -92,24 +92,86 @@ async function removeGhost(
 function drop(session: DragSession): void {
   const item = session.primaryItem;
   const root = session.root;
+  const draggedKey = root.itemKey(item);
+  const draggedAnimation: {
+    first: DOMRect | null;
+    last: DOMRect | null;
+    element: HTMLElement | null;
+    config: AnimationConfig | null;
+  } = { first: null, last: null, element: null, config: null };
+  const displacedAnimation: {
+    item: Item | null;
+    key: string | null;
+    first: DOMRect | null;
+    last: DOMRect | null;
+    element: HTMLElement | null;
+    config: AnimationConfig | null;
+  } = {
+    item: null,
+    key: null,
+    first: null,
+    last: null,
+    element: null,
+    config: null,
+  };
+  let dropTarget: {
+    container: Container;
+    index: number;
+    item: Item;
+  } | null = null;
+
+  const resolveDropTarget = () => {
+    const pending = session.pendingGhostTarget;
+    const container = pending?.container ?? null;
+    const index = pending?.index ?? -1;
+    const targetItem =
+      container && index >= 0 && index < container.itemOrderedList.length
+        ? container.itemOrderedList[index]
+        : null;
+    return container && targetItem
+      ? { container, index, item: targetItem }
+      : null;
+  };
+
+  item.schedule(
+    () => {
+      const pointerGhost = session.ghosts.get("pointer")?.element ?? null;
+      draggedAnimation.first =
+        pointerGhost?.getBoundingClientRect() ??
+        item.element?.getBoundingClientRect() ??
+        null;
+
+      dropTarget = resolveDropTarget();
+      if (!dropTarget || dropTarget.item === item) return;
+      displacedAnimation.item = dropTarget.item;
+      displacedAnimation.key = root.itemKey(dropTarget.item);
+      displacedAnimation.first =
+        dropTarget.item.element?.getBoundingClientRect() ?? null;
+    },
+    { stage: "READ_1", queueId: `drag-end-swap-read-first-${item.id}` },
+  );
 
   item.schedule(
     async () => {
-      const pending = session.pendingGhostTarget;
-
       await removeGhost(session, "pointer");
       session.pendingGhostTarget = null;
       session.clearHoveredItem();
+      for (const member of session.items) {
+        if (member.element) {
+          delete member.element.dataset.snapsortDragging;
+        }
+      }
 
       const aLocation = item.getIndexAndContainer();
-      const bContainer = pending?.container ?? null;
-      const bIndex = pending?.index ?? -1;
-      const targetItem =
-        bContainer && bIndex >= 0 && bIndex < bContainer.itemOrderedList.length
-          ? bContainer.itemOrderedList[bIndex]
-          : null;
+      const target = dropTarget ?? resolveDropTarget();
+      const bContainer = target?.container ?? null;
+      const bIndex = target?.index ?? -1;
+      const targetItem = target?.item ?? null;
 
       let destination: DragLocation | null = null;
+      draggedAnimation.config = item.dropAnimationConfig(
+        bContainer ?? aLocation.container,
+      );
 
       if (
         aLocation.container &&
@@ -119,6 +181,12 @@ function drop(session: DragSession): void {
       ) {
         const aContainer = aLocation.container;
         const aIndex = aLocation.index;
+        displacedAnimation.config = targetItem.reorderAnimationConfig(aContainer);
+        if (displacedAnimation.key !== root.itemKey(targetItem)) {
+          displacedAnimation.item = null;
+          displacedAnimation.key = null;
+          displacedAnimation.first = null;
+        }
 
         destination = {
           container: bContainer,
@@ -163,6 +231,47 @@ function drop(session: DragSession): void {
       });
     },
     { stage: "WRITE_1", queueId: `drag-end-swap-${item.id}` },
+  );
+
+  root.schedule(
+    () => {
+      const currentDraggedItem = root.findItemByKey(draggedKey) ?? item;
+      draggedAnimation.element = currentDraggedItem.element?.isConnected
+        ? currentDraggedItem.element
+        : null;
+      draggedAnimation.last =
+        draggedAnimation.element?.getBoundingClientRect() ?? null;
+
+      if (!displacedAnimation.item || !displacedAnimation.key) return;
+      const currentDisplacedItem =
+        root.findItemByKey(displacedAnimation.key) ?? displacedAnimation.item;
+      displacedAnimation.element = currentDisplacedItem.element?.isConnected
+        ? currentDisplacedItem.element
+        : null;
+      displacedAnimation.last =
+        displacedAnimation.element?.getBoundingClientRect() ?? null;
+    },
+    { stage: "READ_2", queueId: `drag-end-swap-read-last-${item.id}` },
+  );
+
+  root.schedule(
+    () => {
+      item.playDropAnimation(
+        draggedAnimation.first,
+        draggedAnimation.last,
+        draggedAnimation.element,
+        draggedAnimation.config,
+        root,
+      );
+      displacedAnimation.item?.playDropAnimation(
+        displacedAnimation.first,
+        displacedAnimation.last,
+        displacedAnimation.element,
+        displacedAnimation.config,
+        root,
+      );
+    },
+    { stage: "WRITE_2", queueId: `drag-end-swap-play-${item.id}` },
   );
 }
 

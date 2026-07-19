@@ -714,19 +714,15 @@
 
   function createSwapGhost(event: GhostCreateEvent): HTMLElement | void {
     if (event.role !== "pointer") return;
-    const color =
-      typeof event.originalMetadata.color === "string"
-        ? event.originalMetadata.color
-        : "#999";
-    const label =
-      typeof event.originalMetadata.label === "string"
-        ? event.originalMetadata.label
-        : "";
-    const el = document.createElement("div");
-    el.className = "swap-tile swap-tile-ghost";
-    el.style.setProperty("--tile-color", color);
-    el.textContent = label;
-    return el;
+    const originalTile = event.original.element?.querySelector<HTMLElement>(
+      ".swap-tile",
+    );
+    if (!originalTile) return;
+
+    const ghostTile = originalTile.cloneNode(true) as HTMLElement;
+    ghostTile.classList.remove("swap-tile-hovered");
+    ghostTile.classList.add("swap-tile-ghost");
+    return ghostTile;
   }
 </script>
 
@@ -1446,6 +1442,16 @@
               mode: "swap",
               direction: "row",
               name: "swap-grid",
+              animation: {
+                reorder: {
+                  duration: 240,
+                  timing_function: "cubic-bezier(0.22, 1, 0.36, 1)",
+                },
+                drop: {
+                  duration: 240,
+                  timing_function: "cubic-bezier(0.22, 1, 0.36, 1)",
+                },
+              },
               callbacks: {
                 onItemSwap: handleSwapCommit,
                 onDragItemEnter: handleSwapHoverEnter,
