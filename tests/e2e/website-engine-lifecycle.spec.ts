@@ -56,6 +56,9 @@ test("SnapSort asset preview pans and moves items through the imperative API", a
   const firstKanbanColumn = card.locator(".preview-kanban-column").first();
   const sentenceAnswer = card.locator(".preview-sentence-zone").first();
   const firstTile = card.locator(".preview-tile-grid > .snapsort-item").first();
+  const fileRows = card.locator(".preview-file-tree > .snapsort-item");
+  const editorTools = card.locator(".preview-editor-tools");
+  const editorCanvas = card.locator(".preview-editor-canvas");
 
   await card.scrollIntoViewIfNeeded();
   await expect(preview).toBeVisible();
@@ -66,6 +69,9 @@ test("SnapSort asset preview pans and moves items through the imperative API", a
   await expect(firstKanbanColumn.locator(":scope > .snapsort-item")).toHaveCount(2);
   await expect(sentenceAnswer.locator(":scope > .snapsort-item")).toHaveCount(2);
   await expect(firstTile).toHaveText("01");
+  await expect(fileRows).toHaveCount(5);
+  await expect(editorTools.locator(":scope > .snapsort-item")).toHaveCount(3);
+  await expect(editorCanvas.locator(":scope > .snapsort-item")).toHaveCount(0);
 
   const nativeGridMetrics = await preview.evaluate((element) => ({
     layoutWidth: (element as HTMLElement).offsetWidth,
@@ -73,6 +79,14 @@ test("SnapSort asset preview pans and moves items through the imperative API", a
   }));
   expect(nativeGridMetrics.layoutWidth).toBe(1084);
   expect(nativeGridMetrics.renderedWidth).toBeLessThan(500);
+
+  const exhibitRows = await card.evaluate((element) => ({
+    sentence: element.querySelector(".preview-sentence-panel")!.getBoundingClientRect().top,
+    kanban: element.querySelector(".preview-kanban-panel")!.getBoundingClientRect().top,
+    editor: element.querySelector(".preview-editor-panel")!.getBoundingClientRect().top,
+  }));
+  expect(exhibitRows.kanban).toBeGreaterThan(exhibitRows.sentence);
+  expect(exhibitRows.kanban).toBeLessThan(exhibitRows.editor);
 
   const edgeMetrics = await card.evaluate((element) => {
     const cardRect = element.getBoundingClientRect();
@@ -97,9 +111,7 @@ test("SnapSort asset preview pans and moves items through the imperative API", a
   await expect(card).toHaveAttribute("data-preview-active", "true");
   await expect(card).toHaveAttribute("data-preview-hovered", "true");
   for (const selector of [
-    ".preview-file-tree .active",
     ".preview-trash-list span:first-child",
-    ".preview-editor-tools span:first-child",
     ".preview-clone-blocks .heading-block",
   ]) {
     await expect(card.locator(selector)).toHaveCSS(
@@ -118,12 +130,21 @@ test("SnapSort asset preview pans and moves items through the imperative API", a
       { timeout: 1500 },
     )
     .toBe(true);
+  await expect.poll(() => fileRows.last().textContent()).toContain("Card.svelte");
+  await expect
+    .poll(() =>
+      card
+        .locator('[data-preview-entry-id="preview-file-card"]')
+        .evaluate((element) =>
+          element
+            .getAnimations()
+            .some((animation) => animation.playState === "running"),
+        ),
+    )
+    .toBe(true);
   await expect
     .poll(() => firstKanbanColumn.locator(":scope > .snapsort-item").count())
     .toBe(1);
-  await expect
-    .poll(() => sentenceAnswer.locator(":scope > .snapsort-item").count())
-    .toBe(3);
   await expect.poll(() => firstTile.textContent()).toBe("02");
   const movedTile = card.locator(
     '[data-preview-entry-id="preview-tile-primary"]',
@@ -141,6 +162,23 @@ test("SnapSort asset preview pans and moves items through the imperative API", a
     "transform",
     "none",
   );
+  await expect
+    .poll(() => editorCanvas.locator(":scope > .snapsort-item").count())
+    .toBe(1);
+  await expect
+    .poll(() =>
+      card
+        .locator('[data-preview-entry-id="preview-editor-text"]')
+        .evaluate((element) =>
+          element
+            .getAnimations()
+            .some((animation) => animation.playState === "running"),
+        ),
+    )
+    .toBe(true);
+  await expect
+    .poll(() => sentenceAnswer.locator(":scope > .snapsort-item").count())
+    .toBe(3);
   await expect(scale).toHaveCSS("filter", /grayscale\(0\)/);
 
   const panAfter = await pan.evaluate((element) => getComputedStyle(element).transform);

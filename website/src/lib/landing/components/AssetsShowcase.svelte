@@ -74,6 +74,32 @@
   ]);
   let tileContainer: SnapSortContainer | undefined = $state();
 
+  let previewFiles: PreviewEntry[] = $state([
+    { id: "preview-file-src", label: "▾ src", tag: "folder" },
+    { id: "preview-file-components", label: "▾ components", tag: "folder-nested" },
+    { id: "preview-file-card", label: "Card.svelte", tag: "file-nested-deep" },
+    { id: "preview-file-theme", label: "theme.scss", tag: "file-nested" },
+    { id: "preview-file-package", label: "package.json", tag: "file" },
+  ]);
+  let fileContainer: SnapSortContainer | undefined = $state();
+
+  let editorGroups: PreviewGroup[] = $state([
+    {
+      id: "preview-editor-tools",
+      label: "Tools",
+      items: [
+        { id: "preview-editor-text", label: "Text" },
+        { id: "preview-editor-choice", label: "Choice" },
+        { id: "preview-editor-date", label: "Date" },
+      ],
+    },
+    {
+      id: "preview-editor-canvas",
+      label: "Form",
+      items: [],
+    },
+  ]);
+
   let pointerInside = $state(false);
   let focusInside = $state(false);
   let prefersReducedMotion = $state(false);
@@ -87,6 +113,8 @@
   let automationStep = 0;
   let kanbanForward = true;
   let sentenceForward = true;
+  let fileForward = true;
+  let editorForward = true;
 
   function movePreviewEntry(
     groups: PreviewGroup[],
@@ -150,6 +178,29 @@
     const index = Math.max(0, Math.min(event.to.index, items.length));
     items.splice(index, 0, movedItem);
     previewTiles = items;
+  }
+
+  function handleFileMove(event: ItemMoveEvent) {
+    const itemId = String(event.itemId);
+    const movedItem = previewFiles.find((item) => item.id === itemId);
+    if (!movedItem) return;
+
+    const items = previewFiles.filter((item) => item.id !== itemId);
+    const index = Math.max(0, Math.min(event.to.index, items.length));
+    items.splice(index, 0, movedItem);
+    previewFiles = items;
+  }
+
+  function handleEditorMove(event: ItemMoveEvent) {
+    const targetGroupId = event.to.containerMetadata.previewGroupId;
+    if (typeof targetGroupId !== "string") return;
+
+    editorGroups = movePreviewEntry(
+      editorGroups,
+      String(event.itemId),
+      targetGroupId,
+      event.to.index,
+    );
   }
 
   function moveBetweenGroups(
@@ -238,21 +289,27 @@
   }
 
   function runAutomationStep() {
-    if (automationStep % 3 === 0) {
+    const cycleStep = automationStep % 6;
+
+    if (cycleStep === 0 || cycleStep === 3) {
       const moved = moveBetweenGroups(
         kanbanGroups,
         kanbanForward ? 0 : 1,
         kanbanForward ? 1 : 0,
       );
       if (moved) kanbanForward = !kanbanForward;
-    } else if (automationStep % 3 === 1) {
-      const moved = moveBetweenGroups(
-        sentenceGroups,
-        sentenceForward ? 1 : 0,
-        sentenceForward ? 0 : 1,
+    } else if (cycleStep === 1 && fileContainer) {
+      const moved = runAnimatedImperativeMove(
+        () =>
+          fileContainer!.moveItem(
+            "preview-file-card",
+            fileContainer!,
+            fileForward ? previewFiles.length : 2,
+          ),
+        '[data-preview-entry-id^="preview-file-"]',
       );
-      if (moved) sentenceForward = !sentenceForward;
-    } else if (tileContainer && previewTiles[0]) {
+      if (moved) fileForward = !fileForward;
+    } else if (cycleStep === 2 && tileContainer && previewTiles[0]) {
       runAnimatedImperativeMove(
         () =>
           tileContainer!.moveItem(
@@ -262,6 +319,20 @@
           ),
         '[data-preview-entry-id^="preview-tile-"]',
       );
+    } else if (cycleStep === 4) {
+      const moved = moveBetweenGroups(
+        editorGroups,
+        editorForward ? 0 : 1,
+        editorForward ? 1 : 0,
+      );
+      if (moved) editorForward = !editorForward;
+    } else if (cycleStep === 5) {
+      const moved = moveBetweenGroups(
+        sentenceGroups,
+        sentenceForward ? 1 : 0,
+        sentenceForward ? 0 : 1,
+      );
+      if (moved) sentenceForward = !sentenceForward;
     }
 
     automationStep += 1;
@@ -273,7 +344,7 @@
     automationTimer = null;
   }
 
-  function scheduleAutomation(delay = 1350) {
+  function scheduleAutomation(delay = 800) {
     stopAutomation();
     if (!previewMotionActive) return;
 
@@ -291,7 +362,7 @@
       return;
     }
 
-    scheduleAutomation(450);
+    scheduleAutomation(400);
     return stopAutomation;
   });
 
@@ -434,13 +505,31 @@
 
                     <article class="preview-panel preview-file-panel">
                       <header><strong>Files</strong><span>Tree</span></header>
-                      <div class="preview-file-tree">
-                        <span class="folder">▾ src</span>
-                        <span class="folder nested">▾ components</span>
-                        <span class="file nested-deep active">Card.svelte</span>
-                        <span class="file nested">theme.scss</span>
-                        <span class="file">package.json</span>
-                      </div>
+                      <Container
+                        bind:container={fileContainer}
+                        className="preview-file-tree"
+                        items={previewFiles}
+                        getItemId={(item) => item.id}
+                        config={{
+                          direction: "column",
+                          groupID: "assets-preview-files",
+                          disableFlip: true,
+                          animation: previewAnimation,
+                          callbacks: { onItemMove: handleFileMove },
+                        }}
+                      >
+                        {#snippet entry(item)}
+                          <Item itemId={item.id} className="preview-file-item">
+                            <span
+                              class:folder={item.tag?.startsWith("folder")}
+                              class:nested={item.tag?.includes("nested")}
+                              class:nested-deep={item.tag === "file-nested-deep"}
+                              class:active={item.id === "preview-file-card"}
+                              data-preview-entry-id={item.id}
+                            >{item.label}</span>
+                          </Item>
+                        {/snippet}
+                      </Container>
                     </article>
 
                     <article class="preview-panel preview-swap-panel">
@@ -478,15 +567,39 @@
                     <article class="preview-panel preview-panel-wide preview-panel-tall preview-editor-panel">
                       <header><strong>Editor</strong><span>Form builder</span></header>
                       <div class="preview-editor-layout">
-                        <div class="preview-editor-tools">
-                          <span>Text</span><span>Choice</span><span>Date</span>
-                        </div>
-                        <div class="preview-editor-canvas card shallow">
-                          <small>Customer feedback</small>
-                          <div class="preview-input-line"></div>
-                          <div class="preview-choice-row"><i></i><span>Excellent</span></div>
-                          <div class="preview-choice-row"><i></i><span>Good</span></div>
-                        </div>
+                        {#each editorGroups as group (group.id)}
+                          <Container
+                            bind:container={group.container}
+                            className={group.id === "preview-editor-tools" ? "preview-editor-tools" : "preview-editor-canvas card shallow"}
+                            items={group.items}
+                            getItemId={(item) => item.id}
+                            metadata={{ previewGroupId: group.id }}
+                            config={{
+                              direction: "column",
+                              groupID: "assets-preview-editor",
+                              animation: previewAnimation,
+                              callbacks: { onItemMove: handleEditorMove },
+                            }}
+                          >
+                            {#snippet before()}
+                              {#if group.id === "preview-editor-canvas"}
+                                <small>Customer feedback</small>
+                              {/if}
+                            {/snippet}
+                            {#snippet entry(item)}
+                              <Item itemId={item.id} className="preview-editor-item">
+                                <span class="preview-editor-control" data-preview-entry-id={item.id}>{item.label}</span>
+                              </Item>
+                            {/snippet}
+                            {#snippet after()}
+                              {#if group.id === "preview-editor-canvas"}
+                                <div class="preview-input-line"></div>
+                                <div class="preview-choice-row"><i></i><span>Excellent</span></div>
+                                <div class="preview-choice-row"><i></i><span>Good</span></div>
+                              {/if}
+                            {/snippet}
+                          </Container>
+                        {/each}
                       </div>
                     </article>
 
@@ -678,7 +791,7 @@
     right: 0;
     left: 0;
     z-index: 4;
-    height: 96px;
+    height: 72px;
     background: linear-gradient(
       to bottom,
       var(--color-background-tint) 5%,
@@ -702,7 +815,7 @@
     top: 0;
     left: 0;
     width: 1084px;
-    transform: translate3d(-12px, -8px, 0);
+    transform: translate3d(-12px, -104px, 0);
     animation: preview-pan 24s linear infinite alternate;
     animation-play-state: paused;
     will-change: transform;
@@ -792,6 +905,36 @@
     display: grid;
     grid-template-columns: repeat(2, minmax(0, 1fr));
     gap: 1rem;
+  }
+
+  .preview-kanban-panel {
+    order: 4;
+    grid-column: span 2;
+    min-height: 440px;
+  }
+
+  .preview-sentence-panel {
+    order: 1;
+  }
+
+  .preview-file-panel {
+    order: 2;
+  }
+
+  .preview-swap-panel {
+    order: 3;
+  }
+
+  .preview-trash-panel {
+    order: 5;
+  }
+
+  .preview-editor-panel {
+    order: 6;
+  }
+
+  .preview-clone-panel {
+    order: 7;
   }
 
   .preview-kanban-panel :global(.preview-kanban-column) {
@@ -930,7 +1073,7 @@
     white-space: nowrap;
   }
 
-  .preview-file-tree {
+  .preview-file-panel :global(.preview-file-tree) {
     display: flex;
     flex-direction: column;
     gap: 0.35rem;
@@ -938,29 +1081,34 @@
     font-size: 0.9rem;
   }
 
-  .preview-file-tree span {
+  .preview-file-panel :global(.preview-file-item) {
+    align-items: stretch;
+    width: 100%;
+    padding: 0;
+  }
+
+  .preview-file-panel :global(.preview-file-tree span) {
+    display: block;
     padding: 0.5rem 0.65rem;
     border-radius: 8px;
   }
 
-  .preview-file-tree .nested {
+  .preview-file-panel :global(.preview-file-tree .nested) {
     margin-left: 1rem;
   }
 
-  .preview-file-tree .nested-deep {
+  .preview-file-panel :global(.preview-file-tree .nested-deep) {
     margin-left: 2rem;
   }
 
-  .preview-file-tree .folder {
+  .preview-file-panel :global(.preview-file-tree .folder) {
     color: #5d6266;
     font-weight: 600;
   }
 
-  .preview-file-tree .active {
+  .preview-file-panel :global(.preview-file-tree .active) {
     background: color-mix(in srgb, var(--color-primary) 14%, white);
     color: color-mix(in srgb, var(--color-primary) 74%, #222);
-    animation: preview-file-selection 3.8s ease-in-out infinite;
-    animation-play-state: paused;
   }
 
   .preview-swap-panel :global(.preview-tile-grid) {
@@ -1036,13 +1184,20 @@
     gap: var(--size-24);
   }
 
-  .preview-editor-tools {
+  .preview-editor-panel :global(.preview-editor-tools) {
     display: flex;
     flex-direction: column;
     gap: var(--size-12);
   }
 
-  .preview-editor-tools span {
+  .preview-editor-panel :global(.preview-editor-item) {
+    align-items: stretch;
+    width: 100%;
+    padding: 0;
+  }
+
+  .preview-editor-panel :global(.preview-editor-control) {
+    display: block;
     padding: var(--size-16);
     border: 1px solid color-mix(in srgb, var(--color-background-dark) 18%, transparent);
     border-radius: var(--ui-radius);
@@ -1050,20 +1205,15 @@
     font-size: 0.9rem;
   }
 
-  .preview-editor-tools span:first-child {
-    position: relative;
-    z-index: 2;
-    animation: preview-editor-insert 4.6s cubic-bezier(0.22, 1, 0.36, 1) infinite;
-    animation-play-state: paused;
-  }
-
-  .preview-editor-canvas {
+  .preview-editor-panel :global(.preview-editor-canvas) {
     --card-radius: var(--ui-radius);
 
+    align-items: stretch;
+    min-height: 260px;
     padding: var(--size-24);
   }
 
-  .preview-editor-canvas > small {
+  .preview-editor-panel :global(.preview-editor-canvas > small) {
     font-size: 1rem;
     font-weight: 700;
   }
@@ -1140,9 +1290,7 @@
     animation-play-state: paused;
   }
 
-  .drop-snap-card[data-preview-active="true"] .preview-file-tree .active,
   .drop-snap-card[data-preview-active="true"] .preview-trash-list span:first-child,
-  .drop-snap-card[data-preview-active="true"] .preview-editor-tools span:first-child,
   .drop-snap-card[data-preview-active="true"] .preview-input-line,
   .drop-snap-card[data-preview-active="true"] .preview-clone-blocks .heading-block,
   .drop-snap-card[data-preview-active="true"] .preview-clone-canvas {
@@ -1209,21 +1357,6 @@
     color: inherit;
   }
 
-  @keyframes preview-file-selection {
-    0%,
-    18%,
-    72%,
-    100% {
-      transform: translate3d(0, 0, 0);
-      box-shadow: inset 0 0 0 0 transparent;
-    }
-    34%,
-    56% {
-      transform: translate3d(12px, 0, 0);
-      box-shadow: inset 4px 0 0 var(--color-primary);
-    }
-  }
-
   @keyframes preview-trash-drop {
     0%,
     16% {
@@ -1238,32 +1371,6 @@
     58% {
       opacity: 0;
       transform: translate3d(0, 126px, 0) scale(0.88);
-    }
-    59% {
-      opacity: 0;
-      transform: translate3d(0, 0, 0) scale(1);
-    }
-    72%,
-    100% {
-      opacity: 1;
-      transform: translate3d(0, 0, 0) scale(1);
-    }
-  }
-
-  @keyframes preview-editor-insert {
-    0%,
-    14% {
-      opacity: 1;
-      transform: translate3d(0, 0, 0) scale(1);
-    }
-    40% {
-      opacity: 1;
-      transform: translate3d(204px, 62px, 0) scale(0.92);
-    }
-    48%,
-    58% {
-      opacity: 0;
-      transform: translate3d(204px, 62px, 0) scale(0.88);
     }
     59% {
       opacity: 0;
@@ -1333,18 +1440,24 @@
   }
 
   @keyframes preview-pan {
-    from {
-      transform: translate3d(-12px, -8px, 0);
+    0% {
+      transform: translate3d(-12px, -104px, 0);
     }
-    to {
-      transform: translate3d(-58px, -175px, 0);
+    32% {
+      transform: translate3d(-30px, -20px, 0);
+    }
+    68% {
+      transform: translate3d(-42px, -104px, 0);
+    }
+    100% {
+      transform: translate3d(-58px, -250px, 0);
     }
   }
 
   @media (prefers-reduced-motion: reduce) {
     .snapsort-preview-pan {
       animation: none;
-      transform: translate3d(-28px, -74px, 0);
+      transform: translate3d(-28px, -132px, 0);
     }
 
     .snapsort-preview-scale {
@@ -1377,15 +1490,21 @@
     }
 
     .snapsort-preview-pan {
-      transform: translate3d(-8px, -6px, 0);
+      transform: translate3d(-8px, -94px, 0);
     }
 
     @keyframes preview-pan {
-      from {
-        transform: translate3d(-8px, -6px, 0);
+      0% {
+        transform: translate3d(-8px, -94px, 0);
       }
-      to {
-        transform: translate3d(-48px, -185px, 0);
+      32% {
+        transform: translate3d(-22px, -18px, 0);
+      }
+      68% {
+        transform: translate3d(-34px, -94px, 0);
+      }
+      100% {
+        transform: translate3d(-48px, -248px, 0);
       }
     }
   }
