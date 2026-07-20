@@ -2,9 +2,22 @@ import type { AnimationConfig } from "../container";
 import type { Container } from "../container";
 import { Item } from "../item";
 import { resetDropSnapshotDebugDump, type DropCandidate } from "../algorithm";
-import type { DragCloneEvent, DragLocation, GhostRect, GhostRole } from "../events";
+import type {
+  DragCloneEvent,
+  DragLocation,
+  GhostRect,
+  GhostRole,
+} from "../events";
 import { virtualEntrySizeFor } from "../layout";
-import { fireItemRemove, fireMutation, settleMutation } from "../mutation";
+import {
+  assertCanFireGhostInsert,
+  assertCanFireGhostRemove,
+  assertCanFireItemMove,
+  assertCanFireItemRemove,
+  fireItemRemove,
+  fireMutation,
+  settleMutation,
+} from "../mutation";
 import type { DragLifecycleStrategy } from "./lifecycle";
 import type { DragSession } from "./session";
 
@@ -52,7 +65,10 @@ function liveIndexFromSnapshotIndex(
   const liveItems = container.itemOrderedList.filter(
     (i) => !session.itemSet.has(i) && !runSet.has(i),
   );
-  const clampedIndex = Math.max(0, Math.min(snapshotIndex, snapshotItems.length));
+  const clampedIndex = Math.max(
+    0,
+    Math.min(snapshotIndex, snapshotItems.length),
+  );
   const beforeItem = snapshotItems[clampedIndex] ?? null;
   if (!beforeItem) return liveItems.length;
 
@@ -84,12 +100,21 @@ function anchorRectFor(container: Container, member: Item): GhostRect | null {
  * destination container. Newly created anchors are not yet attached to any
  * container.
  */
-function ensureFlowGhostRun(session: DragSession, container: Container): Item[] {
+function ensureFlowGhostRun(
+  session: DragSession,
+  container: Container,
+): Item[] {
   const run = session.flowGhostRun;
   for (let i = run.length; i < session.items.length; i++) {
     const member = session.items[i];
     const rect = anchorRectFor(container, member);
-    const ghost = member.createGhostItem(session, "flow", container, rect, "target");
+    const ghost = member.createGhostItem(
+      session,
+      "flow",
+      container,
+      rect,
+      "target",
+    );
     if (!ghost) break;
     run.push(ghost);
   }
@@ -103,6 +128,14 @@ async function moveGhost(
   _ghostRect: GhostRect | null | undefined,
 ): Promise<void> {
   const item = session.primaryItem;
+  if (session.dropEffect !== "none") {
+    assertCanFireItemMove(container);
+  }
+  // A rendered ghost must always have a framework-owned cleanup path before
+  // it is created or attached. Otherwise a bad adapter config can leak state
+  // and DOM when the drag ends or crosses containers.
+  assertCanFireGhostInsert(container);
+  assertCanFireGhostRemove(container);
   const run = ensureFlowGhostRun(session, container);
   if (run.length === 0) return;
 
@@ -124,6 +157,13 @@ async function moveGhost(
       !container.element
     ) {
       return;
+    }
+
+    assertCanFireGhostInsert(container);
+    for (const ghost of run) {
+      if (ghost.parent && ghost.container !== container) {
+        assertCanFireGhostRemove(ghost.container);
+      }
     }
 
     // Detach every run anchor from wherever it currently sits, then reinsert
@@ -193,7 +233,14 @@ async function removeGhost(
   for (const ghost of run) {
     const ghostContainer = ghost.parent as unknown as Container | null;
     if (ghostContainer) {
-      item.removeGhostFrom(item, ghostContainer, ghost, session, "flow", "target");
+      item.removeGhostFrom(
+        item,
+        ghostContainer,
+        ghost,
+        session,
+        "flow",
+        "target",
+      );
     }
   }
   await settleMutation();
@@ -248,10 +295,71 @@ async function startCopyHandoff(session: DragSession): Promise<boolean> {
   fireMutation(root, () => root.callbacks?.onDragClone?.(event));
   await settleMutation();
 
-  // Every clone must have been given an element by the consumer.
-  if (cloneItems.some((c) => !c.element)) {
-    for (const c of cloneItems) c.destroy();
+  const cloneBindings = cloneItems.map((clone) => ({
+    clone,
+    container: containerForElement(
+      session,
+      clone.element?.parentElement ?? null,
+    ),
+  }));
+
+  // Every clone must be rendered directly inside a registered drop
+  // container. Otherwise core cannot route either commit or cancellation
+  // back through the framework's state model.
+  if (
+    cloneBindings.some(
+      ({ clone, container }) => !clone.element || container === null,
+    )
+  ) {
+    // A framework may have rendered only part of the requested run before a
+    // bad binding vetoes the handoff. Retire any rendered clone through its
+    // owning container's state callback, then destroy core objects without
+    // touching DOM. Directly removing those nodes would put framework state
+    // and the rendered tree out of sync.
+    const renderedClones = cloneBindings
+      .filter(
+        (entry): entry is { clone: Item; container: Container } =>
+          entry.container !== null,
+      );
+    try {
+      for (const { container } of renderedClones) {
+        assertCanFireItemRemove(container);
+      }
+      for (const { clone, container } of renderedClones) {
+        fireItemRemove(container, [clone], session);
+      }
+      await settleMutation();
+    } finally {
+      for (const clone of cloneItems) clone.destroy(false);
+    }
     return false;
+  }
+
+  const boundClones = cloneBindings as Array<{
+    clone: Item;
+    container: Container;
+  }>;
+  try {
+    // Copy can be released before its first target-ghost update, so validate
+    // both possible terminal mutations at handoff time. A framework-owned
+    // transient clone must always be removable from state on cancel and
+    // movable into state on commit.
+    for (const { container } of boundClones) {
+      assertCanFireItemRemove(container);
+      assertCanFireItemMove(container);
+    }
+  } catch (error) {
+    // Retire core objects without deleting framework DOM. Containers that do
+    // provide a removal callback still get a chance to discard clone state;
+    // the original configuration error remains the one reported to users.
+    for (const { clone, container } of boundClones) {
+      if (container.callbacks?.onItemRemove) {
+        fireItemRemove(container, [clone], session);
+      }
+    }
+    await settleMutation();
+    for (const clone of cloneItems) clone.destroy(false);
+    throw error;
   }
 
   session.handoff(cloneItems);
@@ -268,6 +376,7 @@ function drop(session: DragSession): void {
     element: HTMLElement | null;
   }> = items.map(() => ({ first: null, last: null, element: null }));
   let dropAnimationConfig: AnimationConfig | null = null;
+  let retireCopyMembers = false;
 
   session.pressedItem.schedule(
     () => {
@@ -317,7 +426,9 @@ function drop(session: DragSession): void {
       // destination), since a cancelled clone was never a real list member
       // and must be removed from wherever the consumer rendered it.
       const cloneContainers = new Map(session.dragCoordinateParent);
-      if (!ghostPos?.container) {
+      if (session.cancelled) {
+        ghostPos = undefined;
+      } else if (!ghostPos?.container) {
         const finalTarget =
           root.hasDragSnapshotTree() && item.dragSnapshot
             ? session.strategy.dropTarget.resolve(item, root, session)
@@ -383,7 +494,8 @@ function drop(session: DragSession): void {
         // container) so relative order within any shared source is preserved.
         const bySourceContainer = new Map<Container, number[]>();
         items.forEach((_, i) => {
-          const list = bySourceContainer.get(session.sources[i].container) ?? [];
+          const list =
+            bySourceContainer.get(session.sources[i].container) ?? [];
           list.push(i);
           bySourceContainer.set(session.sources[i].container, list);
         });
@@ -393,14 +505,21 @@ function drop(session: DragSession): void {
             .sort((a, b) => session.sources[a].index - session.sources[b].index)
             .forEach((i) => {
               const member = items[i];
+              if (member.parent) return;
               const returnIndex = Math.min(
                 session.sources[i].index,
                 sourceContainer.itemOrderedList.length,
               );
-              member.attachItemToContainer(sourceContainer, member, returnIndex);
+              member.attachItemToContainer(
+                sourceContainer,
+                member,
+                returnIndex,
+              );
             });
         }
-        dropAnimationConfig = item.dropAnimationConfig(session.sources[0].container);
+        dropAnimationConfig = item.dropAnimationConfig(
+          session.sources[0].container,
+        );
       } else if (destination) {
         // "move" and "copy" share this path from here on: one batch
         // `onItemMove` commit into the destination. For "move" the originals
@@ -416,7 +535,7 @@ function drop(session: DragSession): void {
         dropAnimationConfig = item.dropAnimationConfig(destinationContainer);
         const froms = isCopy ? items.map(() => null) : session.sources;
         const origins = isCopy
-          ? (session.handoffOrigins ?? items.map(() => null))
+          ? session.handoffOrigins ?? items.map(() => null)
           : items.map(() => null);
         item.moveItemsAt(
           froms,
@@ -427,6 +546,7 @@ function drop(session: DragSession): void {
           origins,
         );
         await settleMutation();
+        retireCopyMembers = isCopy;
         // Skip for copy: the dragged clone's element is *expected* to go
         // stale here, once the consumer's state-driven re-render replaces it
         // with a fresh, permanent Item instance sharing the same itemId (see
@@ -471,7 +591,7 @@ function drop(session: DragSession): void {
         }
         await settleMutation();
         for (const clone of items) {
-          clone.destroy();
+          clone.destroy(false);
         }
       }
 
@@ -516,15 +636,31 @@ function drop(session: DragSession): void {
         dropRects[i].last = element.getBoundingClientRect();
       });
     },
-    { stage: "READ_2", queueId: `drag-end-read-last-${session.pressedItem.id}` },
+    {
+      stage: "READ_2",
+      queueId: `drag-end-read-last-${session.pressedItem.id}`,
+    },
   );
 
   root.schedule(
     () => {
       items.forEach((member, i) => {
         const { first, last, element } = dropRects[i];
-        member.playDropAnimation(first, last, element, dropAnimationConfig, root);
+        member.playDropAnimation(
+          first,
+          last,
+          element,
+          dropAnimationConfig,
+          root,
+        );
       });
+      if (retireCopyMembers) {
+        // The framework has replaced each transient clone with a permanent
+        // item carrying the same itemId. Keep that framework-owned DOM in
+        // place and retire only the handoff objects after their drop FLIP has
+        // been started (the animation itself is owned by the root).
+        for (const member of items) member.destroy(false);
+      }
     },
     { stage: "WRITE_2", queueId: `drag-end-play-${session.pressedItem.id}` },
   );
@@ -532,6 +668,17 @@ function drop(session: DragSession): void {
 
 export class FlowGhostLifecycle implements DragLifecycleStrategy {
   readonly ghostKind = "flow" as const;
+
+  validateStart(session: DragSession): void {
+    if (session.dropEffect === "copy") return;
+    const pressedIndex = session.items.indexOf(session.pressedItem);
+    const source = session.sources[pressedIndex] ?? session.sources[0];
+    if (session.dropEffect !== "none") {
+      assertCanFireItemMove(source.container);
+    }
+    assertCanFireGhostInsert(source.container);
+    assertCanFireGhostRemove(source.container);
+  }
 
   async dragStart(session: DragSession): Promise<void> {
     const isCopy = session.dropEffect === "copy";
@@ -553,14 +700,19 @@ export class FlowGhostLifecycle implements DragLifecycleStrategy {
       const pressedIndex = session.items.indexOf(session.pressedItem);
       const pressedSource = session.sources[pressedIndex];
       // Create a ghost run at the pressed item's current location.
-      await moveGhost(session, pressedSource.container, pressedSource.index, null);
+      await moveGhost(
+        session,
+        pressedSource.container,
+        pressedSource.index,
+        null,
+      );
     }
 
     const pressedItem = session.pressedItem;
     const coordinateContainer = (member: Item, sourceContainer: Container) =>
       isCopy
-        ? (containerForElement(session, member.element?.parentElement ?? null) ??
-          sourceContainer)
+        ? containerForElement(session, member.element?.parentElement ?? null) ??
+          sourceContainer
         : sourceContainer;
     const axisContainer = isCopy
       ? session.root
@@ -578,7 +730,7 @@ export class FlowGhostLifecycle implements DragLifecycleStrategy {
       cumulativeByItem.set(member, cumulative);
       if (member === pressedItem) pressedCumulative = cumulative;
       const box = member.dragSnapshot?.box;
-      cumulative += axis === "y" ? (box?.height ?? 0) : (box?.width ?? 0);
+      cumulative += axis === "y" ? box?.height ?? 0 : box?.width ?? 0;
     }
     for (const member of session.items) {
       const delta = (cumulativeByItem.get(member) ?? 0) - pressedCumulative;
@@ -665,6 +817,7 @@ export class FlowGhostLifecycle implements DragLifecycleStrategy {
   }
 
   drop(session: DragSession): void {
+    session.scheduleDropFinalizer();
     drop(session);
   }
 }

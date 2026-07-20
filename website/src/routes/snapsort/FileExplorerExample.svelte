@@ -3,7 +3,6 @@
   import type {
     CanDropEvent,
     ContainerCallbacks,
-    GhostCreateEvent,
     ItemMoveEvent,
   } from "@snap-engine/snapsort";
   import FileExplorerNode from "./FileExplorerNode.svelte";
@@ -232,31 +231,9 @@
     return true;
   }
 
-  function createFileTreeGhost(event: GhostCreateEvent): HTMLElement {
-    const ghostElement = document.createElement("div");
-    const ghostRect = event.ghostRect;
-    const insetLeft = ghostRect?.insetLeft ?? 0;
-    const insetRight = ghostRect?.insetRight ?? 0;
-    const width = ghostRect
-      ? Math.max(0, ghostRect.width - insetLeft - insetRight)
-      : 0;
-
-    ghostElement.dataset.snapsortGhost = "insertion";
-    ghostElement.style.position = "absolute";
-    ghostElement.style.width = `${width}px`;
-    ghostElement.style.height = "0px";
-    ghostElement.style.borderTop = "3px solid currentColor";
-    ghostElement.style.color = "#1d4ed8";
-    ghostElement.style.pointerEvents = "none";
-    ghostElement.style.boxSizing = "border-box";
-
-    return ghostElement;
-  }
-
   const callbacks: ContainerCallbacks = {
     onItemMove: handleMove,
     canDrop: canDropInFolder,
-    createGhost: createFileTreeGhost,
   };
 </script>
 

@@ -7,7 +7,11 @@ const repoRoot = resolve(dirname(fileURLToPath(import.meta.url)), "../..");
 
 export default defineConfig({
   testDir: ".",
-  testMatch: ["docs-framework-code.spec.ts", "website-engine-lifecycle.spec.ts"],
+  testMatch: [
+    "docs-framework-code.spec.ts",
+    "snapsort-landing-regression.spec.ts",
+    "website-engine-lifecycle.spec.ts",
+  ],
   workers: 1,
   reporter: [["list"]],
   use: {

@@ -437,36 +437,47 @@ function layoutInsertionFromGhost(
   };
 }
 
-function activeGhostInsertionFromPendingTarget(
+function activeGhostInsertionsFromPendingTarget(
   byItem: Map<ItemBase, ItemSnapshot<ItemBase>>,
-  root: ItemBase,
+  session: DragSession | null,
   draggedBox: DomProperty,
   dragGhostW: number,
   dragGhostH: number,
-): VirtualInsertion<ItemBase> | undefined {
-  const pendingTarget = (
-    root as unknown as {
-      pendingGhostTarget?: {
-        container: ItemBase | null;
-        index: number;
-      } | null;
-    }
-  ).pendingGhostTarget;
-  if (!pendingTarget?.container) return undefined;
+): VirtualInsertion<ItemBase>[] {
+  // Insertion and swap lifecycles use absolute marker/pointer ghosts. They do
+  // not occupy a flow slot and must never influence virtual list layout.
+  if (!session || session.strategy.lifecycle.ghostKind !== "flow") return [];
+
+  const pendingTarget = session?.pendingGhostTarget;
+  if (!pendingTarget?.container) return [];
 
   const container = byItem.get(pendingTarget.container);
-  if (!container) return undefined;
+  if (!container) return [];
 
-  const size = virtualEntrySizeFor(container, {
-    width: dragGhostW,
-    height: dragGhostH,
-    margin: draggedBox.margin,
+  // The live flow lifecycle renders one spacer anchor for every dragged
+  // member. Model that same run here so the next prediction is based on the
+  // layout the browser is actually showing. Treating a multi-item run as one
+  // group-sized virtual entry made the predicted slots drift from the real
+  // ghost DOM after a few moves, especially in wrapped or unequal lists.
+  const memberBoxes =
+    session && session.items.length > 0
+      ? session.items.map((member) => member.dragSnapshot?.box ?? draggedBox)
+      : [
+          {
+            ...draggedBox,
+            width: dragGhostW,
+            height: dragGhostH,
+          },
+        ];
+
+  return memberBoxes.map((box, offset) => {
+    const size = virtualEntrySizeFor(container, box);
+    return {
+      container,
+      index: pendingTarget.index + offset,
+      entry: { ...size, margin: box.margin },
+    };
   });
-  return {
-    container,
-    index: pendingTarget.index,
-    entry: { ...size, margin: draggedBox.margin },
-  };
 }
 
 function containerContentRect(container: ItemBase): Rect {
@@ -547,9 +558,9 @@ export function virtualLayoutRecursive(
 ): { candidates: DropCandidate[]; endX: number; endY: number } {
   const snapshot = createLayoutSnapshot(container);
   const draggedBox = requireDragSnapshotBox(draggedItem);
-  const activeInsertion = activeGhostInsertionFromPendingTarget(
+  const activeInsertions = activeGhostInsertionsFromPendingTarget(
     snapshot.byItem,
-    container,
+    session,
     draggedBox,
     dragGhostW,
     dragGhostH,
@@ -572,7 +583,7 @@ export function virtualLayoutRecursive(
     dragCenterX,
     dragCenterY,
     dragRect,
-    activeInsertion ? [activeInsertion] : [],
+    activeInsertions,
     0,
     session,
   );

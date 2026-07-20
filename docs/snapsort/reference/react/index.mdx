@@ -29,13 +29,14 @@ import { Engine, Container, Ghost, Handle, Item } from "@snap-engine/snapsort-re
 
 Wrap the sortable tree in an `Engine`, then compose containers and items:
 
+The abbreviated `callbacks` below synchronously updates the React item array
+and ghost state, while `renderedEntries` contains keyed `Item` and `Ghost`
+elements. See the Container and Setup pages for the full implementation.
+
 ```tsx
 <Engine id="tasks">
-  <Container config={{ direction: "column", groupID: "tasks" }}>
-    <Item itemId="task-1">
-      <Handle className="drag-handle">Drag</Handle>
-      Task 1
-    </Item>
+  <Container config={{ direction: "column", groupID: "tasks", callbacks }}>
+    {renderedEntries}
   </Container>
 </Engine>
 ```

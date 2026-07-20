@@ -44,10 +44,13 @@ export default defineConfig({
 
 Wrap the sortable tree in an `Engine`, then compose containers and items:
 
+Here `tasks` is a `$state` array and `onItemMove` synchronously reorders it by
+stable item ID. See the Container page for the complete handler.
+
 ```svelte
 <Engine id="tasks">
   <Container
-    config={{ direction: "column", groupID: "tasks" }}
+    config={{ direction: "column", groupID: "tasks", callbacks: { onItemMove } }}
     items={tasks}
     getItemId={(task) => task.id}
   >

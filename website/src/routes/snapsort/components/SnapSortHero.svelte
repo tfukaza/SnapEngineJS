@@ -3,7 +3,9 @@
   import { Engine } from "@snap-engine/asset-base-svelte";
   import type { Engine as SnapEngine } from "@snap-engine/core";
   import { Container, Handle, Item } from "@snap-engine/snapsort-svelte";
+  import type { ItemMoveEvent } from "@snap-engine/snapsort";
   import SnapSortContextBoundary from "../SnapSortContextBoundary.svelte";
+  import { moveEntries } from "./listState";
 
   let {
     debugLayout,
@@ -23,13 +25,21 @@
 
   const title = "SnapSort";
   const gripDots = Array.from({ length: 6 }, (_, i) => i);
-  const titleChars = title.split("").map((char, i) => ({
+  let titleChars = $state(title.split("").map((char, i) => ({
     char,
     id: `snapsort-letter-${i}`,
-  }));
+  })));
 
   type HeroStackEntry = "title" | "copy" | "cta";
-  const heroStackEntries: HeroStackEntry[] = ["title", "copy", "cta"];
+  let heroStackEntries: HeroStackEntry[] = $state(["title", "copy", "cta"]);
+
+  function handleHeroStackMove(event: ItemMoveEvent) {
+    heroStackEntries = moveEntries(heroStackEntries, event, (kind) => kind);
+  }
+
+  function handleTitleMove(event: ItemMoveEvent) {
+    titleChars = moveEntries(titleChars, event, (entry) => entry.id);
+  }
 </script>
 
 <section id="landing">
@@ -72,9 +82,16 @@
         <div class="hero-slot slot">
           <Container
             className="hero-stack"
-            config={{ direction: "column", groupID: "snapsort-hero-content" }}
+            config={{
+              direction: "column",
+              groupID: "snapsort-hero-content",
+              callbacks: { onItemMove: handleHeroStackMove },
+            }}
             items={heroStackEntries}
             getItemId={(kind) => kind}
+            data-snapsort-demo="hero-stack"
+            data-list-id="snapsort-hero-content"
+            data-order={heroStackEntries.join(",")}
           >
             {#snippet entry(kind)}
               {#if kind === "title"}
@@ -90,9 +107,16 @@
                     <div class="title-section" aria-label="SnapSort">
                       <SnapSortContextBoundary>
                         <Container
-                          config={{ direction: "row", groupID: "snapsort-title" }}
+                          config={{
+                            direction: "row",
+                            groupID: "snapsort-title",
+                            callbacks: { onItemMove: handleTitleMove },
+                          }}
                           items={titleChars}
                           getItemId={(t) => t.id}
+                          data-snapsort-demo="hero-title"
+                          data-list-id="snapsort-title"
+                          data-order={titleChars.map((entry) => entry.id).join(",")}
                         >
                           {#snippet entry(t)}
                             <Item itemId={t.id} style="padding: 0; width: auto;">

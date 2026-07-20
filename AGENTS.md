@@ -226,6 +226,15 @@ Tag versions must match each package's `package.json` version. The publish workf
 - **No build for assets:** Raw source exported, not built bundles
 - **Workspace linking:** Automatic via npm workspaces
 
+### Framework DOM ownership
+
+Framework adapters must treat framework state as the single source of truth for
+rendered collections. Svelte and React examples must update their arrays
+synchronously from SnapSort mutation callbacks and let the framework reconcile
+the DOM. Never call `insertBefore`, `appendChild`, `remove`, or another
+structural DOM API for framework-rendered items or ghosts. SnapSort's default
+DOM mutation callbacks are for the framework-agnostic/Vanilla API only.
+
 ## Documentation
 
 - **Project structure:** This file and subdirectory AGENTS.md files

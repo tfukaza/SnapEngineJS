@@ -60,6 +60,16 @@ Asset packages extend SnapEngine with specialized functionality. Each follows a 
 - **Framework packages:** Thin wrappers for React, Svelte, etc.
 - **No build step:** Raw source exported, not built bundles
 
+### Framework-owned collections
+
+React and Svelte own the structure of every collection they render. Asset
+adapters report structural intent through callbacks; application code updates
+framework state synchronously, and the framework performs the DOM mutation.
+Do not reuse a core package's Vanilla `insertBefore`/`remove` defaults in a
+framework adapter, and do not demonstrate direct DOM mutation in framework
+fixtures. Temporary drag UI follows the ownership model documented by each
+adapter (Svelte renders ghosts internally; React consumers render `Ghost`).
+
 ## Package Dependencies
 
 ```

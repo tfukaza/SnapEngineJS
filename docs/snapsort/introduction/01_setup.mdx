@@ -51,16 +51,33 @@ and render one `Item` per entry. This creates a working drag-and-drop list:
 <script lang="ts">
   import { Engine } from "@snap-engine/asset-base-svelte";
   import { Container, Item } from "@snap-engine/snapsort-svelte";
+  import type { ItemMoveEvent } from "@snap-engine/snapsort";
 
-  const tasks = [
+  let tasks = $state([
     { id: "design", label: "Design" },
     { id: "build", label: "Build" },
     { id: "ship", label: "Ship" },
-  ];
+  ]);
+
+  function onItemMove(event: ItemMoveEvent) {
+    const task = tasks.find((entry) => entry.id === event.itemId);
+    if (!task) return;
+
+    const next = tasks.filter((entry) => entry.id !== event.itemId);
+    next.splice(Math.max(0, Math.min(event.to.index, next.length)), 0, task);
+    tasks = next;
+  }
 </script>
 
 <Engine id="quick-start">
-  <Container config={{ direction: "column", groupID: "tasks" }} items={tasks}>
+  <Container
+    config={{
+      direction: "column",
+      groupID: "tasks",
+      callbacks: { onItemMove },
+    }}
+    items={tasks}
+  >
     {#snippet entry(task)}
       <Item itemId={task.id}>{task.label}</Item>
     {/snippet}
@@ -69,23 +86,78 @@ and render one `Item` per entry. This creates a working drag-and-drop list:
 ```
 
 ```tsx framework=React
-import { Engine, Container, Item } from "@snap-engine/snapsort-react";
+import { useState } from "react";
+import { Engine, Container, Ghost, Item } from "@snap-engine/snapsort-react";
+import type {
+  GhostInsertEvent,
+  GhostRemoveEvent,
+  ItemMoveEvent,
+} from "@snap-engine/snapsort";
 
-const tasks = [
+type Task = { id: string; label: string };
+type RenderEntry =
+  | { kind: "task"; task: Task }
+  | { kind: "ghost"; event: GhostInsertEvent };
+
+const initialTasks: Task[] = [
   { id: "design", label: "Design" },
   { id: "build", label: "Build" },
   { id: "ship", label: "Ship" },
 ];
 
 export function QuickStart() {
+  const [tasks, setTasks] = useState(initialTasks);
+  const [ghost, setGhost] = useState<GhostInsertEvent | null>(null);
+
+  function onItemMove(event: ItemMoveEvent) {
+    setTasks((current) => {
+      const task = current.find((entry) => entry.id === event.itemId);
+      if (!task) return current;
+
+      const next = current.filter((entry) => entry.id !== event.itemId);
+      next.splice(Math.max(0, Math.min(event.to.index, next.length)), 0, task);
+      return next;
+    });
+  }
+
+  function onGhostRemove(event: GhostRemoveEvent) {
+    setGhost((current) =>
+      current?.ghostItem === event.ghostItem ? null : current,
+    );
+  }
+
+  const entries: RenderEntry[] = tasks.map((task) => ({ kind: "task", task }));
+  if (ghost) {
+    const originalIndex = tasks.findIndex((task) => task.id === ghost.originalItemId);
+    const coreIndex = Math.max(0, Math.min(ghost.index, entries.length));
+    entries.splice(originalIndex !== -1 && originalIndex <= coreIndex ? coreIndex + 1 : coreIndex, 0, {
+      kind: "ghost",
+      event: ghost,
+    });
+  }
+
   return (
     <Engine id="quick-start">
-      <Container config={{ direction: "column", groupID: "tasks" }}>
-        {tasks.map((task) => (
-          <Item key={task.id} itemId={task.id}>
-            {task.label}
-          </Item>
-        ))}
+      <Container
+        config={{
+          direction: "column",
+          groupID: "tasks",
+          callbacks: {
+            onItemMove,
+            onGhostInsert: setGhost,
+            onGhostRemove,
+          },
+        }}
+      >
+        {entries.map((entry) =>
+          entry.kind === "ghost" ? (
+            <Ghost key={`ghost-${entry.event.ghostItem.id}`} event={entry.event} />
+          ) : (
+            <Item key={entry.task.id} itemId={entry.task.id}>
+              {entry.task.label}
+            </Item>
+          ),
+        )}
       </Container>
     </Engine>
   );
@@ -116,7 +188,11 @@ for (const element of list.querySelectorAll("[data-item-id]")) {
 }
 ```
 
-Items can now be dragged to reorder, with FLIP animations included by default. The list on screen updates, but your `tasks` array does not — wiring drops back into framework state is covered in [Session Lifecycle](/docs/snapsort/guides/03_session_lifecycle).
+Items can now be dragged to reorder, with FLIP animations included by default.
+In Svelte and React, the callback updates framework state and the framework
+renders the new order. SnapSort never reparents framework-owned item nodes.
+The Vanilla integration uses SnapSort's default DOM callbacks. Cross-container
+state updates are covered in [Session Lifecycle](/docs/snapsort/guides/03_session_lifecycle).
 
 ## Production Checklist
 
@@ -126,6 +202,6 @@ Before treating a list as complete:
 2. Keep the framework array as the source of truth. Update it synchronously in `onItemMove` (and `onItemSwap` when using swap mode).
 3. Put containers that exchange items in the same `groupID` and attach identifying `metadata` to each container.
 4. Give the `Engine` and sortable container real dimensions. `Engine` defaults to `height: 100%`, `position: relative`, and `overflow: visible`; pass `style` or a class when the parent does not already establish a height.
-5. Render one framework component for each core object. Use `Ghost` for framework-owned flow placeholders instead of wrapping `event.ghostItem` in a normal `Item`.
+5. Render one framework component for each core object. Svelte `Container` manages its ghost entries; React code stores `onGhostInsert`/`onGhostRemove` events and renders keyed `Ghost` components. Never wrap `event.ghostItem` in a normal `Item`.
 
 All wrapper components forward normal `div` attributes such as `class`, `className`, `style`, `id`, `data-*`, ARIA attributes, and event handlers. Consumer styles are merged after the structural defaults, so an explicit style can override them.

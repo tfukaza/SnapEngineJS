@@ -2,6 +2,7 @@ import type { Container } from "./container";
 import type { Item } from "./item";
 import type { DragSession } from "./drag/session";
 import type {
+  ContainerCallbacks,
   DragItemHoverEvent,
   DragLocation,
   GhostCreateEvent,
@@ -70,6 +71,63 @@ function ghostItemIds(session: DragSession): string[] {
   return session.items.map((item) => item.resolvedItemId);
 }
 
+function missingCallbackError(
+  container: Container,
+  callback: keyof ContainerCallbacks,
+  operation: string,
+): Error {
+  if (container.domOwnership === "framework") {
+    return new Error(
+      `SnapSort: framework-owned container "${container.name}" requires callbacks.${String(callback)} to ${operation}. Update framework state synchronously in that callback; SnapSort will not mutate framework-owned DOM.`,
+    );
+  }
+  return new Error(
+    `SnapSort: container "${container.name}" requires callbacks.${String(callback)} to ${operation}.`,
+  );
+}
+
+/** @internal Validate a persistent insertion before core changes its tree bookkeeping. */
+export function assertCanFireItemInsert(container: Container): void {
+  if (!container.callbacks?.onItemInsert) {
+    throw missingCallbackError(container, "onItemInsert", "insert an item");
+  }
+}
+
+/** @internal Validate a persistent removal before core changes its tree bookkeeping. */
+export function assertCanFireItemRemove(container: Container): void {
+  if (!container.callbacks?.onItemRemove) {
+    throw missingCallbackError(container, "onItemRemove", "remove an item");
+  }
+}
+
+/** @internal Validate a semantic move before core changes its tree bookkeeping. */
+export function assertCanFireItemMove(container: Container): void {
+  if (container.callbacks?.onItemMove || container.callbacks?.onItemInsert) return;
+  throw missingCallbackError(container, "onItemMove", "move an item");
+}
+
+/** @internal Framework state models must express swaps atomically. */
+export function assertCanFireItemSwap(container: Container): void {
+  if (container.callbacks?.onItemSwap) return;
+  if (container.domOwnership === "framework") {
+    throw missingCallbackError(container, "onItemSwap", "swap items");
+  }
+}
+
+/** @internal Validate ghost insertion before core changes ghost bookkeeping. */
+export function assertCanFireGhostInsert(container: Container): void {
+  if (!container.callbacks?.onGhostInsert) {
+    throw missingCallbackError(container, "onGhostInsert", "render a drag ghost");
+  }
+}
+
+/** @internal Validate ghost removal before core changes ghost bookkeeping. */
+export function assertCanFireGhostRemove(container: Container): void {
+  if (!container.callbacks?.onGhostRemove) {
+    throw missingCallbackError(container, "onGhostRemove", "remove a drag ghost");
+  }
+}
+
 export function fireItemInsert(
   container: Container,
   items: Item[],
@@ -78,10 +136,9 @@ export function fireItemInsert(
   session: DragSession | null,
   phase: MutationPhase = "commit",
 ): void {
+  assertCanFireItemInsert(container);
   const onInsert = container.callbacks?.onItemInsert;
-  if (!onInsert) {
-    throw new Error("Container callback onItemInsert is not defined");
-  }
+  if (!onInsert) return;
   const event: ItemInsertEvent = {
     session,
     item: items[0],
@@ -105,10 +162,9 @@ export function fireItemRemove(
   session: DragSession | null,
   phase: MutationPhase = "commit",
 ): void {
+  assertCanFireItemRemove(container);
   const onRemove = container.callbacks?.onItemRemove;
-  if (!onRemove) {
-    throw new Error("Container callback onItemRemove is not defined");
-  }
+  if (!onRemove) return;
   const event: ItemRemoveEvent = {
     session,
     item: items[0],
@@ -143,6 +199,7 @@ export function fireItemMove(
   phase: MutationPhase = "commit",
   origins: (Item | null)[] = items.map(() => null),
 ): void {
+  assertCanFireItemMove(to.container);
   const onMove = to.container.callbacks?.onItemMove;
   if (onMove) {
     const event: ItemMoveEvent = {
@@ -183,6 +240,7 @@ export function fireItemSwap(
   session: DragSession | null,
   phase: MutationPhase = "commit",
 ): void {
+  assertCanFireItemSwap(a.container);
   const onSwap = a.container.callbacks?.onItemSwap;
   if (onSwap) {
     const event: ItemSwapEvent = {
@@ -323,10 +381,9 @@ export function fireGhostInsert(
   kind: GhostInsertEvent["kind"],
   role: GhostInsertEvent["role"] = "target",
 ): void {
+  assertCanFireGhostInsert(container);
   const onInsert = container.callbacks?.onGhostInsert;
-  if (!onInsert) {
-    throw new Error("Container callback onGhostInsert is not defined");
-  }
+  if (!onInsert) return;
   const event: GhostInsertEvent = {
     session,
     kind,
@@ -356,10 +413,9 @@ export function fireGhostRemove(
   kind: GhostRemoveEvent["kind"],
   role: GhostRemoveEvent["role"] = "target",
 ): void {
+  assertCanFireGhostRemove(container);
   const onRemove = container.callbacks?.onGhostRemove;
-  if (!onRemove) {
-    throw new Error("Container callback onGhostRemove is not defined");
-  }
+  if (!onRemove) return;
   const event: GhostRemoveEvent = {
     session,
     kind,

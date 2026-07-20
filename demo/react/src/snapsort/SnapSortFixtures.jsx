@@ -36,12 +36,74 @@ function DemoItem({ children, className = "demo-item", itemId, metadata, ...prop
   );
 }
 
-function NumberedItems({ count, className = "demo-item row-item" }) {
-  return Array.from({ length: count }, (_, index) => index + 1).map((n) => (
-    <DemoItem className={className} itemId={`numbered-${count}-${n}`} key={n}>
-      <p>Item {n}</p>
-    </DemoItem>
-  ));
+function useFrameworkGhosts() {
+  const [ghosts, setGhosts] = useState([]);
+
+  const onGhostInsert = useCallback((event) => {
+    const listId = event.containerMetadata.frameworkList;
+    if (typeof listId !== "string") return;
+    setGhosts((current) => [
+      ...current.filter((entry) => entry.event.ghostItem !== event.ghostItem),
+      { event, listId },
+    ]);
+  }, []);
+
+  const onGhostRemove = useCallback((event) => {
+    setGhosts((current) =>
+      current.filter((entry) => entry.event.ghostItem !== event.ghostItem),
+    );
+  }, []);
+
+  const callbacks = useMemo(
+    () => ({
+      createGhost: () => undefined,
+      onGhostInsert,
+      onGhostRemove,
+    }),
+    [onGhostInsert, onGhostRemove],
+  );
+
+  const renderWithGhosts = useCallback(
+    (listId, items, getItemId, renderItem) => {
+      const rendered = items.map((item) => ({
+        id: getItemId(item),
+        node: renderItem(item),
+      }));
+      const listGhosts = ghosts
+        .filter((entry) => entry.listId === listId)
+        .sort((a, b) => a.event.index - b.event.index);
+
+      for (const entry of listGhosts) {
+        const draggedIds = new Set(entry.event.itemIds.map(String));
+        const coreIndex = Math.max(0, entry.event.index);
+        let currentCoreIndex = 0;
+        let index = rendered.length;
+        for (let candidateIndex = 0; candidateIndex < rendered.length; candidateIndex++) {
+          const candidate = rendered[candidateIndex];
+          if (draggedIds.has(String(candidate.id))) continue;
+          if (currentCoreIndex === coreIndex) {
+            index = candidateIndex;
+            break;
+          }
+          currentCoreIndex += 1;
+        }
+        rendered.splice(index, 0, {
+          id: `ghost-${entry.event.ghostItem.id}`,
+          node: (
+            <Ghost
+              className={entry.event.kind === "flow" ? "ghost" : ""}
+              event={entry.event}
+              key={`ghost-${entry.event.ghostItem.id}`}
+            />
+          ),
+        });
+      }
+      return rendered.map((entry) => entry.node);
+    },
+    [ghosts],
+  );
+
+  return { callbacks, renderWithGhosts };
 }
 
 const websiteLogoSliceCount = 6;
@@ -115,17 +177,42 @@ function updateWebsiteSidewaysSolved(containerElement) {
 
 export function SnapSortWebsiteCoreDemo() {
   const columnRefs = useRef(new Map());
+  const { callbacks: ghostCallbacks, renderWithGhosts } = useFrameworkGhosts();
+  const [sidewaysItems, setSidewaysItems] = useState(websiteSidewaysItems);
+  const [nestedZones, setNestedZones] = useState({
+    outer: [...websiteParentItems, "nested-group"],
+    inner: [...websiteNestedItems],
+  });
   const [multiContainers, setMultiContainers] = useState(
     cloneWebsiteMultiContainers,
   );
 
-  const handleSidewaysInsert = useCallback((event) => {
-    const containerElement = event.container.element;
-    const itemElement = event.item.element;
-    if (!containerElement || !itemElement) return;
+  const handleSidewaysMove = useCallback((event) => {
+    setSidewaysItems((current) => {
+      const moved = current.find((item) => item.id === event.itemId);
+      if (!moved) return current;
+      const next = current.filter((item) => item.id !== event.itemId);
+      next.splice(Math.max(0, Math.min(event.to.index, next.length)), 0, moved);
+      return next;
+    });
+    requestAnimationFrame(() => updateWebsiteSidewaysSolved(event.to.container.element));
+  }, []);
 
-    containerElement.insertBefore(itemElement, event.beforeElement);
-    requestAnimationFrame(() => updateWebsiteSidewaysSolved(containerElement));
+  const handleNestedMove = useCallback((event) => {
+    const target = event.to.containerMetadata.zone;
+    if (target !== "outer" && target !== "inner") return;
+    setNestedZones((current) => {
+      const next = {
+        outer: current.outer.filter((id) => id !== event.itemId),
+        inner: current.inner.filter((id) => id !== event.itemId),
+      };
+      next[target].splice(
+        Math.max(0, Math.min(event.to.index, next[target].length)),
+        0,
+        event.itemId,
+      );
+      return next;
+    });
   }, []);
 
   const moveMultiContainerState = useCallback(
@@ -233,12 +320,14 @@ export function SnapSortWebsiteCoreDemo() {
                     groupID: "core-sideways",
                     mainAxisAlign: "center",
                     callbacks: {
-                      onItemInsert: handleSidewaysInsert,
+                      ...ghostCallbacks,
+                      onItemMove: handleSidewaysMove,
                     },
                   }}
+                  metadata={{ frameworkList: "website-sideways" }}
                 >
-                  {websiteSidewaysItems.map((item) => (
-                    <Item key={item.id}>
+                  {renderWithGhosts("website-sideways", sidewaysItems, (item) => item.id, (item) => (
+                    <Item itemId={item.id} key={item.id}>
                       <div
                         className="logo-slice"
                         data-slice={item.slice}
@@ -256,33 +345,48 @@ export function SnapSortWebsiteCoreDemo() {
               <div className="core-demo-surface card">
                 <Container
                   className="basic-list bounded-demo-list"
-                  config={{ direction: "column", groupID: "core-nested" }}
+                  config={{
+                    direction: "column",
+                    groupID: "core-nested",
+                    callbacks: { ...ghostCallbacks, onItemMove: handleNestedMove },
+                  }}
+                  metadata={{ frameworkList: "website-nested-outer", zone: "outer" }}
                 >
-                  {websiteParentItems.map((item) => (
-                    <Item key={item}>
-                      <div className="basic-row handle-row">
-                        <WebsiteRowHandle />
-                        <span>{item}</span>
-                      </div>
-                    </Item>
-                  ))}
-                  <Container
-                    className="nested-list bounded-demo-list card shallow"
-                    config={{ direction: "column", groupID: "core-nested" }}
-                    locked={false}
-                  >
-                    <Handle className="demo-container-handle">
-                      <WebsiteGrip />
-                    </Handle>
-                    {websiteNestedItems.map((item) => (
-                      <Item key={item}>
-                        <div className="basic-row nested-row handle-row">
+                  {renderWithGhosts("website-nested-outer", nestedZones.outer, String, (item) =>
+                    item === "nested-group" ? (
+                      <Container
+                        className="nested-list bounded-demo-list card shallow"
+                        config={{
+                          direction: "column",
+                          groupID: "core-nested",
+                          callbacks: { ...ghostCallbacks, onItemMove: handleNestedMove },
+                        }}
+                        itemId="nested-group"
+                        key="nested-group"
+                        locked={false}
+                        metadata={{ frameworkList: "website-nested-inner", zone: "inner" }}
+                      >
+                        <Handle className="demo-container-handle">
+                          <WebsiteGrip />
+                        </Handle>
+                        {renderWithGhosts("website-nested-inner", nestedZones.inner, String, (child) => (
+                          <Item itemId={child} key={child}>
+                            <div className="basic-row nested-row handle-row">
+                              <WebsiteRowHandle />
+                              <span>{child}</span>
+                            </div>
+                          </Item>
+                        ))}
+                      </Container>
+                    ) : (
+                      <Item itemId={item} key={item}>
+                        <div className="basic-row handle-row">
                           <WebsiteRowHandle />
                           <span>{item}</span>
                         </div>
                       </Item>
-                    ))}
-                  </Container>
+                    ),
+                  )}
                 </Container>
               </div>
             </article>
@@ -310,18 +414,19 @@ export function SnapSortWebsiteCoreDemo() {
                         groupID: "core-multi-container",
                         name: column.id,
                         callbacks: {
+                          ...ghostCallbacks,
                           onItemMove: handleMultiContainerMove,
                         },
                       }}
                       key={column.id}
                       locked
-                      metadata={{ columnId: column.id }}
+                      metadata={{ columnId: column.id, frameworkList: `website-column-${column.id}` }}
                       ref={(container) => {
                         if (container) columnRefs.current.set(column.id, container);
                       }}
                     >
                       <h3>{column.title}</h3>
-                      {column.items.map((item) => (
+                      {renderWithGhosts(`website-column-${column.id}`, column.items, (item) => item.id, (item) => (
                         <Item itemId={item.id} key={item.id}>
                           <div className="basic-row compact-row multi-container-row">
                             <span>{item.label}</span>
@@ -368,12 +473,29 @@ export function DropSnapNestedDemo() {
         }
       : {};
 
-  const [verticalItems, setVerticalItems] = useState([1, 2, 3, 4]);
-  const [selectedVertical, setSelectedVertical] = useState(() => new Set());
-  const [nestedZones, setNestedZones] = useState(() => ({
-    inner: ["sub-a1", "sub-a2", "sub-a3"],
-    outer: ["item-1", "item-1-5", "nested-sub-group", "item-2", "item-3"],
+  const { callbacks: ghostCallbacks, renderWithGhosts } = useFrameworkGhosts();
+  const [fixtureLists, setFixtureLists] = useState(() => ({
+    vertical: ["vertical-1", "vertical-2", "vertical-3", "vertical-4"],
+    horizontal: Array.from({ length: 12 }, (_, index) => `horizontal-${index + 1}`),
+    double: Array.from({ length: 28 }, (_, index) => `double-${index + 1}`),
+    sizes: ["size-small", "size-medium", "size-wide", "size-tall", "size-large", "size-narrow", "size-extra-wide"],
+    "multi-area-1": ["multi-a", "multi-b", "multi-c"],
+    "multi-area-2": ["multi-x", "multi-y", "multi-z"],
+    "nested-outer": ["item-1", "item-1-5", "nested-sub-group", "item-2", "item-3"],
+    "nested-inner": ["sub-a1", "sub-a2", "sub-a3"],
+    "stretch-outer": ["stretch-task-1", "stretch-task-2", "stretch-sub-group", "stretch-task-3"],
+    "stretch-inner": ["stretch-sub-1", "stretch-sub-2", "stretch-sub-3"],
+    "compact-outer": ["compact-overview", "compact-components", "compact-usage", "compact-sub-group"],
+    "compact-inner": ["compact-container", "compact-item", "compact-handle"],
+    "drag-outer": ["drag-group-1", "drag-group-2", "drag-loose"],
+    "drag-group-1": ["drag-group-1-a", "drag-group-1-b"],
+    "drag-group-2": ["drag-group-2-a", "drag-group-2-b", "drag-group-2-c"],
+    "row-outer": ["row-r1", "row-sub-group", "row-r2", "row-r3"],
+    "row-inner": ["row-s1", "row-s2", "row-s3"],
+    "layers-outer": ["layer-header", "layer-hero", "layer-card-grid", "layer-footer"],
+    "layers-hero": ["layer-avatar", "layer-title", "layer-subtitle"],
   }));
+  const [selectedVertical, setSelectedVertical] = useState(() => new Set());
   const nestedLabels = {
     "item-1": "Item 1",
     "item-1-5": "Item 1.5",
@@ -383,41 +505,58 @@ export function DropSnapNestedDemo() {
     "sub-a2": "Sub A2",
     "sub-a3": "Sub A3",
   };
+  const itemLabels = {
+    "multi-a": "Item A", "multi-b": "Item B", "multi-c": "Item C",
+    "multi-x": "Item X", "multi-y": "Item Y", "multi-z": "Item Z",
+    "stretch-task-1": "Task 1", "stretch-task-2": "Task 2", "stretch-task-3": "Task 3",
+    "stretch-sub-1": "Sub task 1", "stretch-sub-2": "Sub task 2", "stretch-sub-3": "Sub task 3",
+    "compact-overview": "Overview", "compact-components": "Components", "compact-usage": "Usage",
+    "compact-container": "Container", "compact-item": "Item", "compact-handle": "Handle",
+    "drag-group-1-a": "Group 1 - A", "drag-group-1-b": "Group 1 - B",
+    "drag-group-2-a": "Group 2 - A", "drag-group-2-b": "Group 2 - B", "drag-group-2-c": "Group 2 - C",
+    "drag-loose": "Loose Item",
+    "row-r1": "R1", "row-r2": "R2", "row-r3": "R3",
+    "row-s1": "S1", "row-s2": "S2", "row-s3": "S3",
+    "layer-header": "Header", "layer-avatar": "Avatar", "layer-title": "Title",
+    "layer-subtitle": "Subtitle", "layer-card-grid": "Card Grid", "layer-footer": "Footer",
+  };
+  const sizes = {
+    "size-small": { label: "Small", width: 72, minHeight: 48 },
+    "size-medium": { label: "Medium", width: 128, minHeight: 72 },
+    "size-wide": { label: "Wide", width: 220, minHeight: 96 },
+    "size-tall": { label: "Tall", width: 92, minHeight: 156 },
+    "size-large": { label: "Large", width: 168, minHeight: 120 },
+    "size-narrow": { label: "Narrow", width: 56, minHeight: 64 },
+    "size-extra-wide": { label: "Extra Wide", width: 260, minHeight: 72 },
+  };
 
-  const handleVerticalMove = useCallback((event) => {
-    const movedItems = event.itemIds.map((id) =>
-      Number(String(id).replace("vertical-", "")),
-    );
-    if (movedItems.some((item) => !Number.isFinite(item))) return;
-    setVerticalItems((current) => {
-      const movedSet = new Set(movedItems);
-      const next = current.filter((item) => !movedSet.has(item));
-      next.splice(
-        Math.max(0, Math.min(event.to.index, next.length)),
+  const handleFixtureMove = useCallback((event) => {
+    const target = event.to.containerMetadata.frameworkList;
+    if (typeof target !== "string") return;
+    setFixtureLists((current) => {
+      if (!Array.isArray(current[target])) return current;
+      const movedIds = event.itemIds.map(String);
+      const movedSet = new Set(movedIds);
+      const next = Object.fromEntries(
+        Object.entries(current).map(([key, ids]) => [
+          key,
+          ids.filter((id) => !movedSet.has(id)),
+        ]),
+      );
+      const targetItems = next[target];
+      targetItems.splice(
+        Math.max(0, Math.min(event.to.index, targetItems.length)),
         0,
-        ...movedItems,
+        ...movedIds,
       );
       return next;
     });
   }, []);
 
-  const handleNestedMove = useCallback((event) => {
-    const itemId = String(event.itemId);
-    const targetZone = event.to.containerMetadata.zone;
-    if (targetZone !== "inner" && targetZone !== "outer") return;
-    setNestedZones((current) => {
-      const next = {
-        inner: current.inner.filter((id) => id !== itemId),
-        outer: current.outer.filter((id) => id !== itemId),
-      };
-      next[targetZone].splice(
-        Math.max(0, Math.min(event.to.index, next[targetZone].length)),
-        0,
-        itemId,
-      );
-      return next;
-    });
-  }, []);
+  const frameworkCallbacks = useMemo(
+    () => ({ ...ghostCallbacks, onItemMove: handleFixtureMove }),
+    [ghostCallbacks, handleFixtureMove],
+  );
 
   function toggleVerticalSelection(item, event) {
     setSelectedVertical((current) => {
@@ -427,6 +566,41 @@ export function DropSnapNestedDemo() {
       else next.add(item);
       return next;
     });
+  }
+
+  function renderDraggableNestedEntry(itemId) {
+    if (itemId === "drag-group-1" || itemId === "drag-group-2") {
+      return (
+        <Container
+          config={{
+            direction: "column",
+            groupID: "drag-nested-group",
+            callbacks: frameworkCallbacks,
+          }}
+          itemId={itemId}
+          key={itemId}
+          locked={false}
+          metadata={{ frameworkList: itemId }}
+        >
+          {renderWithGhosts(
+            itemId,
+            fixtureLists[itemId],
+            String,
+            renderDraggableNestedEntry,
+          )}
+        </Container>
+      );
+    }
+
+    return (
+      <DemoItem
+        className={itemId.startsWith("drag-group-") ? "demo-item sub-item" : "demo-item"}
+        itemId={itemId}
+        key={itemId}
+      >
+        <p>{itemLabels[itemId]}</p>
+      </DemoItem>
+    );
   }
 
   return (
@@ -439,16 +613,19 @@ export function DropSnapNestedDemo() {
               <article className="demo-cell wide horizontal-row-demo">
                 <h2>Vertical Column</h2>
                 <p className="demo-hint">Cmd/ctrl-click to multi-select, then drag any selected item.</p>
-                <Container config={{ direction: "column", groupID: "vertical-group", callbacks: { onItemMove: handleVerticalMove } }}>
-                  {verticalItems.map((item) => (
+                <Container
+                  config={{ direction: "column", groupID: "vertical-group", callbacks: frameworkCallbacks }}
+                  metadata={{ frameworkList: "vertical" }}
+                >
+                  {renderWithGhosts("vertical", fixtureLists.vertical, String, (itemId) => (
                     <DemoItem
-                      className={selectedVertical.has(item) ? "demo-item selected" : "demo-item"}
-                      itemId={`vertical-${item}`}
-                      key={item}
-                      onClick={(event) => toggleVerticalSelection(item, event)}
-                      selected={selectedVertical.has(item)}
+                      className={selectedVertical.has(itemId) ? "demo-item selected" : "demo-item"}
+                      itemId={itemId}
+                      key={itemId}
+                      onClick={(event) => toggleVerticalSelection(itemId, event)}
+                      selected={selectedVertical.has(itemId)}
                     >
-                      <p>Item {item}</p>
+                      <p>Item {itemId.replace("vertical-", "")}</p>
                     </DemoItem>
                   ))}
                 </Container>
@@ -456,45 +633,72 @@ export function DropSnapNestedDemo() {
 
               <article className="demo-cell">
                 <h2>Horizontal Row</h2>
-                <Container config={{ direction: "row", groupID: "wrap-row" }} locked>
-                  <NumberedItems count={12} />
+                <Container
+                  config={{ direction: "row", groupID: "wrap-row", callbacks: frameworkCallbacks }}
+                  locked
+                  metadata={{ frameworkList: "horizontal" }}
+                >
+                  {renderWithGhosts("horizontal", fixtureLists.horizontal, String, (itemId) => (
+                    <DemoItem className="demo-item row-item" itemId={itemId} key={itemId}>
+                      <p>Item {itemId.replace("horizontal-", "")}</p>
+                    </DemoItem>
+                  ))}
                 </Container>
               </article>
 
               <article className="demo-cell wide">
                 <h2>Horizontal Double Row</h2>
-                <Container config={{ direction: "row", groupID: "double-row-group" }}>
-                  <NumberedItems count={28} />
+                <Container
+                  config={{ direction: "row", groupID: "double-row-group", callbacks: frameworkCallbacks }}
+                  metadata={{ frameworkList: "double" }}
+                >
+                  {renderWithGhosts("double", fixtureLists.double, String, (itemId) => (
+                    <DemoItem className="demo-item row-item" itemId={itemId} key={itemId}>
+                      <p>Item {itemId.replace("double-", "")}</p>
+                    </DemoItem>
+                  ))}
                 </Container>
               </article>
 
               <article className="demo-cell wide size-demo">
                 <h2>Different Sizes</h2>
-                <Container config={{ direction: "row", groupID: "sizes-group" }}>
-                  <DemoItem className="demo-item size-item"><p style={{ width: 72, minHeight: 48 }}>Small</p></DemoItem>
-                  <DemoItem className="demo-item size-item"><p style={{ width: 128, minHeight: 72 }}>Medium</p></DemoItem>
-                  <DemoItem className="demo-item size-item"><p style={{ width: 220, minHeight: 96 }}>Wide</p></DemoItem>
-                  <DemoItem className="demo-item size-item"><p style={{ width: 92, minHeight: 156 }}>Tall</p></DemoItem>
-                  <DemoItem className="demo-item size-item"><p style={{ width: 168, minHeight: 120 }}>Large</p></DemoItem>
-                  <DemoItem className="demo-item size-item"><p style={{ width: 56, minHeight: 64 }}>Narrow</p></DemoItem>
-                  <DemoItem className="demo-item size-item"><p style={{ width: 260, minHeight: 72 }}>Extra Wide</p></DemoItem>
+                <Container
+                  config={{ direction: "row", groupID: "sizes-group", callbacks: frameworkCallbacks }}
+                  metadata={{ frameworkList: "sizes" }}
+                >
+                  {renderWithGhosts("sizes", fixtureLists.sizes, String, (itemId) => {
+                    const entry = sizes[itemId];
+                    return (
+                      <DemoItem className="demo-item size-item" itemId={itemId} key={itemId}>
+                        <p style={{ width: entry.width, minHeight: entry.minHeight }}>{entry.label}</p>
+                      </DemoItem>
+                    );
+                  })}
                 </Container>
               </article>
 
               <article className="demo-cell">
                 <h2>Multiple Drop Areas</h2>
                 <Container config={{ direction: "row", name: "multi-root", noDrop: true }} locked>
-                  <Container config={{ direction: "column", name: "multi-area-1" }} locked>
+                  <Container
+                    config={{ direction: "column", name: "multi-area-1", callbacks: frameworkCallbacks }}
+                    locked
+                    metadata={{ frameworkList: "multi-area-1" }}
+                  >
                     <h3>Area 1</h3>
-                    <DemoItem><p>Item A</p></DemoItem>
-                    <DemoItem><p>Item B</p></DemoItem>
-                    <DemoItem><p>Item C</p></DemoItem>
+                    {renderWithGhosts("multi-area-1", fixtureLists["multi-area-1"], String, (itemId) => (
+                      <DemoItem itemId={itemId} key={itemId}><p>{itemLabels[itemId]}</p></DemoItem>
+                    ))}
                   </Container>
-                  <Container config={{ direction: "column", name: "multi-area-2" }} locked>
+                  <Container
+                    config={{ direction: "column", name: "multi-area-2", callbacks: frameworkCallbacks }}
+                    locked
+                    metadata={{ frameworkList: "multi-area-2" }}
+                  >
                     <h3>Area 2</h3>
-                    <DemoItem><p>Item X</p></DemoItem>
-                    <DemoItem><p>Item Y</p></DemoItem>
-                    <DemoItem><p>Item Z</p></DemoItem>
+                    {renderWithGhosts("multi-area-2", fixtureLists["multi-area-2"], String, (itemId) => (
+                      <DemoItem itemId={itemId} key={itemId}><p>{itemLabels[itemId]}</p></DemoItem>
+                    ))}
                   </Container>
                 </Container>
               </article>
@@ -502,20 +706,20 @@ export function DropSnapNestedDemo() {
               <article className="demo-cell">
                 <h2>Nested Container</h2>
                 <Container
-                  config={{ direction: "column", groupID: "nested-group", callbacks: { onItemMove: handleNestedMove }, ...nestedAnimationConfig }}
+                  config={{ direction: "column", groupID: "nested-group", callbacks: frameworkCallbacks, ...nestedAnimationConfig }}
                   locked
-                  metadata={{ zone: "outer" }}
+                  metadata={{ frameworkList: "nested-outer" }}
                 >
-                  {nestedZones.outer.map((id) =>
+                  {renderWithGhosts("nested-outer", fixtureLists["nested-outer"], String, (id) =>
                     id === "nested-sub-group" ? (
                       <Container
-                        config={{ direction: "column", groupID: "nested-group", callbacks: { onItemMove: handleNestedMove }, ...nestedAnimationConfig }}
+                        config={{ direction: "column", groupID: "nested-group", callbacks: frameworkCallbacks, ...nestedAnimationConfig }}
                         itemId={id}
                         key={id}
                         locked={lockNestedChild}
-                        metadata={{ zone: "inner" }}
+                        metadata={{ frameworkList: "nested-inner" }}
                       >
-                        {nestedZones.inner.map((childId) => (
+                        {renderWithGhosts("nested-inner", fixtureLists["nested-inner"], String, (childId) => (
                           <DemoItem className="demo-item sub-item" itemId={childId} key={childId}>
                             <p>{nestedLabels[childId]}</p>
                           </DemoItem>
@@ -531,76 +735,148 @@ export function DropSnapNestedDemo() {
               <article className="demo-cell stretch-nested-demo">
                 <h2>Stretch Nested</h2>
                 <p className="demo-hint">Items fill their container (100% width); the nested list is narrower.</p>
-                <Container className="stretch-list" config={{ direction: "column", wrap: "nowrap", stretchItems: true, groupID: "stretch-nested", ...nestedAnimationConfig }} locked>
-                  <DemoItem className="demo-item stretch-item" itemId="stretch-task-1"><p>Task 1</p></DemoItem>
-                  <DemoItem className="demo-item stretch-item" itemId="stretch-task-2"><p>Task 2</p></DemoItem>
-                  <Container className="stretch-sublist" config={{ direction: "column", wrap: "nowrap", stretchItems: true, groupID: "stretch-nested", ...nestedAnimationConfig }} itemId="stretch-sub-group">
-                    {[1, 2, 3].map((item) => (
-                      <DemoItem className="demo-item stretch-item" itemId={`stretch-sub-${item}`} key={item}><p>Sub task {item}</p></DemoItem>
-                    ))}
-                  </Container>
-                  <DemoItem className="demo-item stretch-item" itemId="stretch-task-3"><p>Task 3</p></DemoItem>
+                <Container
+                  className="stretch-list"
+                  config={{ direction: "column", wrap: "nowrap", stretchItems: true, groupID: "stretch-nested", callbacks: frameworkCallbacks, ...nestedAnimationConfig }}
+                  locked
+                  metadata={{ frameworkList: "stretch-outer" }}
+                >
+                  {renderWithGhosts("stretch-outer", fixtureLists["stretch-outer"], String, (itemId) =>
+                    itemId === "stretch-sub-group" ? (
+                      <Container
+                        className="stretch-sublist"
+                        config={{ direction: "column", wrap: "nowrap", stretchItems: true, groupID: "stretch-nested", callbacks: frameworkCallbacks, ...nestedAnimationConfig }}
+                        itemId={itemId}
+                        key={itemId}
+                        metadata={{ frameworkList: "stretch-inner" }}
+                      >
+                        {renderWithGhosts("stretch-inner", fixtureLists["stretch-inner"], String, (childId) => (
+                          <DemoItem className="demo-item stretch-item" itemId={childId} key={childId}>
+                            <p>{itemLabels[childId]}</p>
+                          </DemoItem>
+                        ))}
+                      </Container>
+                    ) : (
+                      <DemoItem className="demo-item stretch-item" itemId={itemId} key={itemId}>
+                        <p>{itemLabels[itemId]}</p>
+                      </DemoItem>
+                    ),
+                  )}
                 </Container>
               </article>
 
               {showCompactNested ? (
                 <article className="demo-cell compact-nested-demo">
                   <h2>Compact Nested List</h2>
-                  <Container className="compact-basic-list" config={{ direction: "column", groupID: "compact-nested", ...nestedAnimationConfig }}>
-                    <DemoItem className="compact-item"><p>Overview</p></DemoItem>
-                    <DemoItem className="compact-item"><p>Components</p></DemoItem>
-                    <DemoItem className="compact-item"><p>Usage</p></DemoItem>
-                    <Container className="compact-nested-list" config={{ direction: "column", groupID: "compact-nested", ...nestedAnimationConfig }}>
-                      <DemoItem className="compact-item"><p>Container</p></DemoItem>
-                      <DemoItem className="compact-item"><p>Item</p></DemoItem>
-                      <DemoItem className="compact-item"><p>Handle</p></DemoItem>
-                    </Container>
+                  <Container
+                    className="compact-basic-list"
+                    config={{ direction: "column", groupID: "compact-nested", callbacks: frameworkCallbacks, ...nestedAnimationConfig }}
+                    metadata={{ frameworkList: "compact-outer" }}
+                  >
+                    {renderWithGhosts("compact-outer", fixtureLists["compact-outer"], String, (itemId) =>
+                      itemId === "compact-sub-group" ? (
+                        <Container
+                          className="compact-nested-list"
+                          config={{ direction: "column", groupID: "compact-nested", callbacks: frameworkCallbacks, ...nestedAnimationConfig }}
+                          itemId={itemId}
+                          key={itemId}
+                          metadata={{ frameworkList: "compact-inner" }}
+                        >
+                          {renderWithGhosts("compact-inner", fixtureLists["compact-inner"], String, (childId) => (
+                            <DemoItem className="compact-item" itemId={childId} key={childId}>
+                              <p>{itemLabels[childId]}</p>
+                            </DemoItem>
+                          ))}
+                        </Container>
+                      ) : (
+                        <DemoItem className="compact-item" itemId={itemId} key={itemId}>
+                          <p>{itemLabels[itemId]}</p>
+                        </DemoItem>
+                      ),
+                    )}
                   </Container>
                 </article>
               ) : null}
 
               <article className="demo-cell">
                 <h2>Draggable Sub-Containers</h2>
-                <Container config={{ direction: "column", groupID: "drag-nested-group" }} locked>
-                  <Container config={{ direction: "column", groupID: "drag-nested-group" }} itemId="drag-group-1" locked={false}>
-                    <DemoItem className="demo-item sub-item" itemId="drag-group-1-a"><p>Group 1 - A</p></DemoItem>
-                    <DemoItem className="demo-item sub-item" itemId="drag-group-1-b"><p>Group 1 - B</p></DemoItem>
-                  </Container>
-                  <Container config={{ direction: "column", groupID: "drag-nested-group" }} itemId="drag-group-2" locked={false}>
-                    <DemoItem className="demo-item sub-item" itemId="drag-group-2-a"><p>Group 2 - A</p></DemoItem>
-                    <DemoItem className="demo-item sub-item" itemId="drag-group-2-b"><p>Group 2 - B</p></DemoItem>
-                    <DemoItem className="demo-item sub-item" itemId="drag-group-2-c"><p>Group 2 - C</p></DemoItem>
-                  </Container>
-                  <DemoItem itemId="drag-loose"><p>Loose Item</p></DemoItem>
+                <Container
+                  config={{ direction: "column", groupID: "drag-nested-group", callbacks: frameworkCallbacks }}
+                  locked
+                  metadata={{ frameworkList: "drag-outer" }}
+                >
+                  {renderWithGhosts(
+                    "drag-outer",
+                    fixtureLists["drag-outer"],
+                    String,
+                    renderDraggableNestedEntry,
+                  )}
                 </Container>
               </article>
 
               <article className="demo-cell">
                 <h2>Nested Row Groups</h2>
-                <Container config={{ direction: "row", groupID: "nested-row-group" }} locked>
-                  <DemoItem className="demo-item row-item"><p>R1</p></DemoItem>
-                  <Container config={{ direction: "row", groupID: "nested-row-group" }} locked={false}>
-                    <DemoItem className="demo-item row-item sub-item"><p>S1</p></DemoItem>
-                    <DemoItem className="demo-item row-item sub-item"><p>S2</p></DemoItem>
-                    <DemoItem className="demo-item row-item sub-item"><p>S3</p></DemoItem>
-                  </Container>
-                  <DemoItem className="demo-item row-item"><p>R2</p></DemoItem>
-                  <DemoItem className="demo-item row-item"><p>R3</p></DemoItem>
+                <Container
+                  config={{ direction: "row", groupID: "nested-row-group", callbacks: frameworkCallbacks }}
+                  locked
+                  metadata={{ frameworkList: "row-outer" }}
+                >
+                  {renderWithGhosts("row-outer", fixtureLists["row-outer"], String, (itemId) =>
+                    itemId === "row-sub-group" ? (
+                      <Container
+                        config={{ direction: "row", groupID: "nested-row-group", callbacks: frameworkCallbacks }}
+                        itemId={itemId}
+                        key={itemId}
+                        locked={false}
+                        metadata={{ frameworkList: "row-inner" }}
+                      >
+                        {renderWithGhosts("row-inner", fixtureLists["row-inner"], String, (childId) => (
+                          <DemoItem className="demo-item row-item sub-item" itemId={childId} key={childId}>
+                            <p>{itemLabels[childId]}</p>
+                          </DemoItem>
+                        ))}
+                      </Container>
+                    ) : (
+                      <DemoItem className="demo-item row-item" itemId={itemId} key={itemId}>
+                        <p>{itemLabels[itemId]}</p>
+                      </DemoItem>
+                    ),
+                  )}
                 </Container>
               </article>
 
               <article className="demo-cell">
                 <h2>Layers Panel</h2>
-                <Container config={{ direction: "column", groupID: "layers" }} locked>
-                  <DemoItem className="layer-item"><div className="layer-row"><span className="layer-icon">&#x25FB;</span><span>Header</span></div></DemoItem>
-                  <Container config={{ direction: "column", groupID: "layers" }} locked={false}>
-                    <div className="group-label">Hero Section</div>
-                    <DemoItem className="layer-item"><div className="layer-row"><span className="layer-icon">&#x25CB;</span><span>Avatar</span></div></DemoItem>
-                    <DemoItem className="layer-item"><div className="layer-row"><span className="layer-icon">T</span><span>Title</span></div></DemoItem>
-                    <DemoItem className="layer-item"><div className="layer-row"><span className="layer-icon">T</span><span>Subtitle</span></div></DemoItem>
-                  </Container>
-                  <DemoItem className="layer-item"><div className="layer-row"><span className="layer-icon">&#x25FB;</span><span>Card Grid</span></div></DemoItem>
-                  <DemoItem className="layer-item"><div className="layer-row"><span className="layer-icon">&#x25FB;</span><span>Footer</span></div></DemoItem>
+                <Container
+                  config={{ direction: "column", groupID: "layers", callbacks: frameworkCallbacks }}
+                  locked
+                  metadata={{ frameworkList: "layers-outer" }}
+                >
+                  {renderWithGhosts("layers-outer", fixtureLists["layers-outer"], String, (itemId) =>
+                    itemId === "layer-hero" ? (
+                      <Container
+                        config={{ direction: "column", groupID: "layers", callbacks: frameworkCallbacks }}
+                        itemId={itemId}
+                        key={itemId}
+                        locked={false}
+                        metadata={{ frameworkList: "layers-hero" }}
+                      >
+                        <div className="group-label">Hero Section</div>
+                        {renderWithGhosts("layers-hero", fixtureLists["layers-hero"], String, (childId) => (
+                          <DemoItem className="layer-item" itemId={childId} key={childId}>
+                            <div className="layer-row">
+                              <span className="layer-icon">{childId === "layer-avatar" ? "○" : "T"}</span>
+                              <span>{itemLabels[childId]}</span>
+                            </div>
+                          </DemoItem>
+                        ))}
+                      </Container>
+                    ) : (
+                      <DemoItem className="layer-item" itemId={itemId} key={itemId}>
+                        <div className="layer-row"><span className="layer-icon">&#x25FB;</span><span>{itemLabels[itemId]}</span></div>
+                      </DemoItem>
+                    ),
+                  )}
                 </Container>
               </article>
             </div>
@@ -651,6 +927,14 @@ const progressiveExamples = [
   },
 ];
 
+function cloneProgressiveExamples() {
+  return progressiveExamples.map((example) => ({
+    ...example,
+    answerTiles: example.answerTiles.map((tile) => ({ ...tile })),
+    bankTiles: example.bankTiles.map((tile) => ({ ...tile })),
+  }));
+}
+
 function cloneColumns() {
   return initialColumns.map((column) => ({
     ...column,
@@ -660,7 +944,14 @@ function cloneColumns() {
 
 export function SnapSortComponentsDemo() {
   const containerRefs = useRef(new Map());
+  const {
+    callbacks: progressiveGhostCallbacks,
+    renderWithGhosts: renderProgressiveWithGhosts,
+  } = useFrameworkGhosts();
   const [columns, setColumns] = useState(cloneColumns);
+  const [progressiveExampleState, setProgressiveExampleState] = useState(
+    cloneProgressiveExamples,
+  );
   const [nextItemNumber, setNextItemNumber] = useState(7);
   const [ghostEntry, setGhostEntry] = useState(null);
   const [boardVersion, setBoardVersion] = useState(0);
@@ -771,6 +1062,58 @@ export function SnapSortComponentsDemo() {
       handleMove,
       handleRemove,
     ],
+  );
+
+  const handleProgressiveMove = useCallback((event) => {
+    const exampleId = event.to.containerMetadata.exampleId;
+    const targetZone = event.to.containerMetadata.zone;
+    if (
+      typeof exampleId !== "string" ||
+      (targetZone !== "answer" && targetZone !== "bank")
+    ) {
+      return;
+    }
+
+    setProgressiveExampleState((current) =>
+      current.map((example) => {
+        if (example.id !== exampleId) return example;
+
+        const movedIds = event.itemIds.map(String);
+        const tilesById = new Map(
+          [...example.answerTiles, ...example.bankTiles].map((tile) => [
+            tile.id,
+            tile,
+          ]),
+        );
+        const movedTiles = movedIds
+          .map((itemId) => tilesById.get(itemId))
+          .filter(Boolean);
+        if (movedTiles.length !== movedIds.length) return example;
+
+        const movedIdSet = new Set(movedIds);
+        const answerTiles = example.answerTiles.filter(
+          (tile) => !movedIdSet.has(tile.id),
+        );
+        const bankTiles = example.bankTiles.filter(
+          (tile) => !movedIdSet.has(tile.id),
+        );
+        const targetTiles = targetZone === "answer" ? answerTiles : bankTiles;
+        targetTiles.splice(
+          Math.max(0, Math.min(event.to.index, targetTiles.length)),
+          0,
+          ...movedTiles,
+        );
+        return { ...example, answerTiles, bankTiles };
+      }),
+    );
+  }, []);
+
+  const progressiveCallbacks = useMemo(
+    () => ({
+      ...progressiveGhostCallbacks,
+      onItemMove: handleProgressiveMove,
+    }),
+    [handleProgressiveMove, progressiveGhostCallbacks],
   );
 
   const renderedColumnItems = useCallback(
@@ -1017,7 +1360,7 @@ export function SnapSortComponentsDemo() {
               locked
               metadata={{ boardId: "progressive-components" }}
             >
-              {progressiveExamples.map((example) => (
+              {progressiveExampleState.map((example) => (
                 <Container
                   className="progressive-example"
                   config={{ direction: "column", mode: "progressive", name: `progressive-example-${example.id}`, noDrop: true }}
@@ -1035,15 +1378,25 @@ export function SnapSortComponentsDemo() {
                       groupID: `progressive-${example.id}`,
                       dropArea: true,
                       animation: { reorder: snapSortCubicAnimation, drop: snapSortCubicAnimation },
+                      callbacks: progressiveCallbacks,
                     }}
                     locked
-                    metadata={{ zone: "answer", exampleId: example.id }}
+                    metadata={{
+                      zone: "answer",
+                      exampleId: example.id,
+                      frameworkList: `progressive-${example.id}-answer`,
+                    }}
                   >
-                    {example.answerTiles.map((tile) => (
-                      <Item className="sentence-tile-wrapper" itemId={tile.id} key={tile.id}>
-                        <button className="sentence-tile" type="button">{tile.text}</button>
-                      </Item>
-                    ))}
+                    {renderProgressiveWithGhosts(
+                      `progressive-${example.id}-answer`,
+                      example.answerTiles,
+                      (tile) => tile.id,
+                      (tile) => (
+                        <Item className="sentence-tile-wrapper" itemId={tile.id} key={tile.id}>
+                          <button className="sentence-tile" type="button">{tile.text}</button>
+                        </Item>
+                      ),
+                    )}
                   </Container>
                   <Container
                     className="sentence-bank-line"
@@ -1054,15 +1407,25 @@ export function SnapSortComponentsDemo() {
                       groupID: `progressive-${example.id}`,
                       dropArea: true,
                       animation: { reorder: snapSortCubicAnimation, drop: snapSortCubicAnimation },
+                      callbacks: progressiveCallbacks,
                     }}
                     locked
-                    metadata={{ zone: "bank", exampleId: example.id }}
+                    metadata={{
+                      zone: "bank",
+                      exampleId: example.id,
+                      frameworkList: `progressive-${example.id}-bank`,
+                    }}
                   >
-                    {example.bankTiles.map((tile) => (
-                      <Item className="sentence-tile-wrapper" itemId={tile.id} key={tile.id}>
-                        <button className="sentence-tile muted" type="button">{tile.text}</button>
-                      </Item>
-                    ))}
+                    {renderProgressiveWithGhosts(
+                      `progressive-${example.id}-bank`,
+                      example.bankTiles,
+                      (tile) => tile.id,
+                      (tile) => (
+                        <Item className="sentence-tile-wrapper" itemId={tile.id} key={tile.id}>
+                          <button className="sentence-tile muted" type="button">{tile.text}</button>
+                        </Item>
+                      ),
+                    )}
                   </Container>
                 </Container>
               ))}
@@ -1478,6 +1841,7 @@ function cloneInsertionColumns() {
 }
 
 export function SnapSortInsertionDemo() {
+  const { callbacks: ghostCallbacks, renderWithGhosts } = useFrameworkGhosts();
   const [columns, setColumns] = useState(cloneInsertionColumns);
   const pendingRemovedItem = useRef(null);
   const itemCount = columns.reduce(
@@ -1500,6 +1864,7 @@ export function SnapSortInsertionDemo() {
 
   const callbacks = useMemo(
     () => ({
+      ...ghostCallbacks,
       onItemMove: (event) => {
         const itemId = event.itemId;
         const targetColumnId = event.to.containerMetadata.columnId;
@@ -1532,7 +1897,7 @@ export function SnapSortInsertionDemo() {
         });
       },
     }),
-    [removeItemById],
+    [ghostCallbacks, removeItemById],
   );
 
   const reset = () => {
@@ -1592,23 +1957,31 @@ export function SnapSortInsertionDemo() {
               }}
               key={column.id}
               locked
-              metadata={{ columnId: column.id }}
+              metadata={{
+                columnId: column.id,
+                frameworkList: `insertion-${column.id}`,
+              }}
             >
               <div className="list-header">
                 <h2>{column.title}</h2>
                 <span>{column.items.length}</span>
               </div>
-              {column.items.map((item) => (
-                <Item className="insertion-card" itemId={item.id} key={item.id}>
-                  <span className={`file-icon ${item.kind === "folder" ? "folder-icon" : ""}`} aria-hidden="true">
-                    {item.kind === "folder" ? "folder" : "description"}
-                  </span>
-                  <div className="card-copy">
-                    <strong>{item.title}</strong>
-                    <span>{item.detail}</span>
-                  </div>
-                </Item>
-              ))}
+              {renderWithGhosts(
+                `insertion-${column.id}`,
+                column.items,
+                (item) => item.id,
+                (item) => (
+                  <Item className="insertion-card" itemId={item.id} key={item.id}>
+                    <span className={`file-icon ${item.kind === "folder" ? "folder-icon" : ""}`} aria-hidden="true">
+                      {item.kind === "folder" ? "folder" : "description"}
+                    </span>
+                    <div className="card-copy">
+                      <strong>{item.title}</strong>
+                      <span>{item.detail}</span>
+                    </div>
+                  </Item>
+                ),
+              )}
             </Container>
           ))}
         </Container>

@@ -270,6 +270,17 @@ test.describe("SnapSort gallery — new drag primitives", () => {
           );
           expect(appearances[1]).toEqual(appearances[0]);
           ghostRelease = await rect(pointerGhost);
+          const expectedPointer = {
+            x: center(targetStart).x + 32,
+            y: center(targetStart).y - 24,
+          };
+          expect(
+            Math.hypot(
+              center(ghostRelease).x - expectedPointer.x,
+              center(ghostRelease).y - expectedPointer.y,
+            ),
+          ).toBeLessThan(3);
+          expect(centerDistance(ghostRelease, sourceStart)).toBeGreaterThan(50);
         },
         afterDrop: async () => {
           await expect

@@ -172,7 +172,7 @@ export interface GhostEventBase {
   original: Item;
   originalItemId: ItemId;
   originalMetadata: ItemSnapshotMetadata;
-  /** The full dragged run this ghost represents, ordered. `original === items[0]` (single-item case: length 1). */
+  /** The full dragged run this ghost represents, ordered. For a multi-item flow run, `original` is the member represented by this anchor; the single-item case is `items[0]`. */
   items: Item[];
   itemIds: ItemId[];
   ghostItem: Item;

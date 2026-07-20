@@ -14,6 +14,13 @@ import type { DragSession } from "./session";
 export interface DragLifecycleStrategy {
   readonly ghostKind: GhostKind;
 
+  /**
+   * Validate the callbacks/resources required by the initial drag state.
+   * Runs after `onDragStart` (so `dropEffect` is final) but before the
+   * session is marked active or any dragging attributes are written.
+   */
+  validateStart?(session: DragSession): void;
+
   /** WRITE_1 work specific to starting a drag
    * (ghost creation, detaching the item, styling). */
   dragStart(session: DragSession): void | Promise<void>;
@@ -54,4 +61,10 @@ export interface DragLifecycleStrategy {
   /** WRITE_1 work for dropping: remove the ghost/marker
    * and move the item to its final position. */
   drop(session: DragSession): void;
+
+  /**
+   * End an active drag after a lifecycle/callback failure. Implementations
+   * only need this when ordinary `drop()` would still commit a mutation.
+   */
+  cancel?(session: DragSession): void;
 }

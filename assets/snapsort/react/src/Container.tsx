@@ -11,7 +11,10 @@ import {
 } from "react";
 import {
   Container as ContainerObject,
+  defaultCallbacks,
+  type ContainerCallbacks,
   type ContainerConfig,
+  type GhostCreateEvent,
   type Item,
 } from "@snap-engine/snapsort";
 import { flushSync } from "react-dom";
@@ -35,6 +38,47 @@ export interface ContainerProps
   metadata?: Record<string, unknown>;
 }
 
+function frameworkCallbacks(
+  inheritedCallbacks: ContainerCallbacks | undefined,
+  configuredCallbacks: ContainerCallbacks | undefined,
+  flushMutation: (mutation: () => void) => void,
+): ContainerCallbacks {
+  const callbacks: ContainerCallbacks = {
+    ...inheritedCallbacks,
+    ...configuredCallbacks,
+  };
+
+  // An injected core container may still carry the Vanilla defaults. Strip
+  // only those exact functions so legitimate preconfigured framework
+  // callbacks survive adoption by the React adapter.
+  if (callbacks.onItemInsert === defaultCallbacks.onItemInsert) {
+    delete callbacks.onItemInsert;
+  }
+  if (callbacks.onItemRemove === defaultCallbacks.onItemRemove) {
+    delete callbacks.onItemRemove;
+  }
+  if (callbacks.onGhostInsert === defaultCallbacks.onGhostInsert) {
+    delete callbacks.onGhostInsert;
+  }
+  if (callbacks.onGhostRemove === defaultCallbacks.onGhostRemove) {
+    delete callbacks.onGhostRemove;
+  }
+  if (callbacks.createGhost === defaultCallbacks.createGhost) {
+    delete callbacks.createGhost;
+  }
+
+  const createGhost = callbacks.createGhost;
+  return {
+    ...callbacks,
+    // React always owns ghost DOM. Preserve the documented notification
+    // callback, but never pass a returned HTMLElement back to core.
+    createGhost: (event: GhostCreateEvent) => {
+      createGhost?.(event);
+    },
+    flushMutation,
+  };
+}
+
 export const Container = forwardRef<ContainerObject, ContainerProps>(
   function SnapSortContainer(
     {
@@ -56,16 +100,9 @@ export const Container = forwardRef<ContainerObject, ContainerProps>(
     const containerDomRef = useRef<HTMLDivElement>(null);
     const ownsContainerRef = useRef(containerObject == null);
     const containerRef = useRef<ContainerObject | null>(containerObject);
-    if (!containerRef.current) {
-      containerRef.current = new ContainerObject(engine, parentContainer, {
-        ...config,
-      });
-    }
-    const container = containerRef.current;
-    const resolvedItemId =
-      itemId ?? (typeof metadata.itemId === "string" ? metadata.itemId : undefined);
-    const direction = config.direction ?? "column";
-    const mainAxisAlign = config.mainAxisAlign ?? "start";
+    const inheritedCallbacksRef = useRef<ContainerCallbacks | undefined>(
+      containerObject?.callbacks,
+    );
     const flushCommittedMutation = useSnapSortAwaitMutation();
     const flushMutation = useCallback(
       (mutation: () => void) => {
@@ -77,6 +114,29 @@ export const Container = forwardRef<ContainerObject, ContainerProps>(
       },
       [flushCommittedMutation],
     );
+    const callbacks = frameworkCallbacks(
+      inheritedCallbacksRef.current,
+      config.callbacks,
+      flushMutation,
+    );
+    const resolvedMode = config.mode ?? containerObject?.mode ?? "euclidean";
+    if (resolvedMode === "swap" && !callbacks.onItemSwap) {
+      throw new Error(
+        "SnapSort Container: swap mode in the React adapter requires callbacks.onItemSwap so React state can commit the pairwise exchange atomically.",
+      );
+    }
+    if (!containerRef.current) {
+      containerRef.current = new ContainerObject(engine, parentContainer, {
+        ...config,
+        domOwnership: "framework",
+        callbacks,
+      });
+    }
+    const container = containerRef.current;
+    const resolvedItemId =
+      itemId ?? (typeof metadata.itemId === "string" ? metadata.itemId : undefined);
+    const direction = config.direction ?? "column";
+    const mainAxisAlign = config.mainAxisAlign ?? "start";
     container.itemId = resolvedItemId;
     container.locked = locked;
     container.selected = selected;
@@ -88,13 +148,8 @@ export const Container = forwardRef<ContainerObject, ContainerProps>(
     container.config.animation = config.animation ?? container.config.animation;
     container.config.disableFlip =
       config.disableFlip ?? container.config.disableFlip;
-    container.config.callbacks = {
-      ...container.config.callbacks,
-      ...config.callbacks,
-      // Commit the actual consumer mutation before SnapSort reads final
-      // geometry and installs FLIP's inverse transform.
-      flushMutation,
-    };
+    container.config.domOwnership = "framework";
+    container.config.callbacks = callbacks;
     container.direction = direction;
     container.mainAxisAlign = mainAxisAlign;
     container.wrap = config.wrap ?? "auto";
@@ -120,7 +175,7 @@ export const Container = forwardRef<ContainerObject, ContainerProps>(
       }
       return () => {
         if (ownsContainerRef.current) {
-          container.destroy();
+          container.destroy(false);
         }
       };
     }, [container, parentContainer]);

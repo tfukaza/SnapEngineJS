@@ -1,7 +1,8 @@
 <script lang="ts">
   import { Container, Handle, Item } from "@snap-engine/snapsort-svelte";
-  import type { ContainerConfig } from "@snap-engine/snapsort";
+  import type { ContainerConfig, ItemMoveEvent } from "@snap-engine/snapsort";
   import SnapSortContextBoundary from "../SnapSortContextBoundary.svelte";
+  import { moveEntries, moveEntriesAcrossLists } from "./listState";
 
   type CustomizableMockupTheme = {
     id: string;
@@ -11,7 +12,19 @@
 
   type CustomizableMockupType = "list" | "words" | "tasks" | "nested" | "editor" | "files";
 
+  type CustomizableMockupRow = {
+    id: string;
+    label: string;
+    meta: string;
+  };
+
+  type CustomizableMockupWord = {
+    id: string;
+    label: string;
+  };
+
   type CustomizableMockupTask = {
+    id: string;
     title: string;
     tag: string;
     progress: string;
@@ -19,22 +32,42 @@
   };
 
   type CustomizableMockupNestedItem = {
+    id: string;
     label: string;
     meta: string;
   };
 
   type CustomizableMockupField = {
+    id: string;
     label: string;
     type: "radio" | "checkbox";
-    options: string[];
+    options: CustomizableMockupOption[];
+  };
+
+  type CustomizableMockupOption = {
+    id: string;
+    label: string;
   };
 
   type CustomizableMockupFile = {
     id: string;
     label: string;
     kind: "folder" | "file";
-    depth: number;
+    parentId?: string;
     active?: boolean;
+  };
+
+  type NestedShowcaseEntry =
+    | { kind: "row"; row: CustomizableMockupNestedItem; id: string }
+    | { kind: "child-group"; id: "child-group" };
+
+  type CustomizableThemeState = CustomizableMockupTheme & {
+    rows: CustomizableMockupRow[];
+    words: CustomizableMockupWord[];
+    tasks: CustomizableMockupTask[];
+    nestedLists: { root: NestedShowcaseEntry[]; child: NestedShowcaseEntry[] };
+    fields: CustomizableMockupField[];
+    fileLists: Record<string, CustomizableMockupFile[]>;
   };
 
   let customizableScrollScene: HTMLElement | undefined = $state();
@@ -75,66 +108,116 @@
     requestAnimationFrame(updateCustomizableProgress);
   });
 
-  const customizableMockupThemes: CustomizableMockupTheme[] = [
+  const customizableMockupThemeDefinitions: CustomizableMockupTheme[] = [
     { id: "retro", label: "Retro", demoOrder: ["editor", "list", "files", "words", "nested", "tasks"] },
     { id: "default", label: "SnapDesign", demoOrder: ["list", "words", "tasks", "nested", "editor", "files"] },
     { id: "terminal", label: "Terminal", demoOrder: ["files", "tasks", "nested", "list", "editor", "words"] },
     { id: "elegant", label: "Elegant", demoOrder: ["words", "nested", "editor", "tasks", "files", "list"] },
   ];
-  const customizableMockupRows = [
-    { label: "Spec pass", meta: "01" },
-    { label: "Mockup QA", meta: "02" },
-    { label: "Ship note", meta: "03" },
+  const customizableMockupRows: CustomizableMockupRow[] = [
+    { id: "row-spec-pass", label: "Spec pass", meta: "01" },
+    { id: "row-mockup-qa", label: "Mockup QA", meta: "02" },
+    { id: "row-ship-note", label: "Ship note", meta: "03" },
   ];
-  const customizableMockupWords = ["Drag", "words", "into", "place"];
+  const customizableMockupWords: CustomizableMockupWord[] = [
+    { id: "word-drag", label: "Drag" },
+    { id: "word-words", label: "words" },
+    { id: "word-into", label: "into" },
+    { id: "word-place", label: "place" },
+  ];
   const customizableMockupCards: CustomizableMockupTask[] = [
-    { title: "Review motion", tag: "UX", progress: "68%", started: "Jul 1" },
-    { title: "Ship polish", tag: "UI", progress: "42%", started: "Jul 3" },
+    { id: "task-review-motion", title: "Review motion", tag: "UX", progress: "68%", started: "Jul 1" },
+    { id: "task-ship-polish", title: "Ship polish", tag: "UI", progress: "42%", started: "Jul 3" },
   ];
   const customizableMockupNested: {
     parent: CustomizableMockupNestedItem[];
     child: CustomizableMockupNestedItem[];
   } = {
     parent: [
-      { label: "Section", meta: "3" },
-      { label: "Controls", meta: "5" },
+      { id: "nested-section", label: "Section", meta: "3" },
+      { id: "nested-controls", label: "Controls", meta: "5" },
     ],
     child: [
-      { label: "Text input", meta: "Aa" },
-      { label: "Select menu", meta: "v" },
+      { id: "nested-text-input", label: "Text input", meta: "Aa" },
+      { id: "nested-select-menu", label: "Select menu", meta: "v" },
     ],
   };
-  // Heterogeneous: the nested child Container sits as a trailing sibling
-  // among the parent's plain rows -- `entry` renders each position's
-  // Item/Container itself. The same for every theme (the mockup data isn't
-  // themed), so this is a plain constant, not a per-theme derivation.
-  type NestedShowcaseEntry =
-    | { kind: "row"; row: CustomizableMockupNestedItem }
-    | { kind: "child-group" };
   const nestedShowcaseEntries: NestedShowcaseEntry[] = [
-    ...customizableMockupNested.parent.map((row): NestedShowcaseEntry => ({ kind: "row", row })),
-    { kind: "child-group" },
+    ...customizableMockupNested.parent.map((row): NestedShowcaseEntry => ({
+      kind: "row",
+      row,
+      id: row.id,
+    })),
+    { kind: "child-group", id: "child-group" },
   ];
   const customizableMockupFields: CustomizableMockupField[] = [
     {
+      id: "field-satisfaction",
       label: "Satisfaction",
       type: "radio",
-      options: ["Great", "Okay", "Poor"],
+      options: [
+        { id: "option-great", label: "Great" },
+        { id: "option-okay", label: "Okay" },
+        { id: "option-poor", label: "Poor" },
+      ],
     },
     {
+      id: "field-follow-up",
       label: "Follow up",
       type: "checkbox",
-      options: ["Email", "Phone"],
+      options: [
+        { id: "option-email", label: "Email" },
+        { id: "option-phone", label: "Phone" },
+      ],
     },
   ];
   const customizableMockupFiles: CustomizableMockupFile[] = [
-    { id: "src", label: "src", kind: "folder", depth: 0 },
-    { id: "routes", label: "routes", kind: "folder", depth: 1 },
-    { id: "page", label: "+page.svelte", kind: "file", depth: 2, active: true },
-    { id: "theme", label: "theme.scss", kind: "file", depth: 1 },
-    { id: "pkg", label: "package.json", kind: "file", depth: 0 },
+    { id: "src", label: "src", kind: "folder" },
+    { id: "routes", label: "routes", kind: "folder", parentId: "src" },
+    { id: "page", label: "+page.svelte", kind: "file", parentId: "routes", active: true },
+    { id: "theme", label: "theme.scss", kind: "file", parentId: "src" },
+    { id: "pkg", label: "package.json", kind: "file" },
   ];
-  const emptyMockupFiles: CustomizableMockupFile[] = [];
+
+  function createThemeState(theme: CustomizableMockupTheme): CustomizableThemeState {
+    const fileContainerIds = [
+      "root",
+      ...customizableMockupFiles
+        .filter((file) => file.kind === "folder")
+        .map((file) => file.id),
+    ];
+
+    return {
+      ...theme,
+      rows: customizableMockupRows.map((row) => ({ ...row })),
+      words: customizableMockupWords.map((word) => ({ ...word })),
+      tasks: customizableMockupCards.map((task) => ({ ...task })),
+      nestedLists: {
+        root: nestedShowcaseEntries.map((entry) =>
+          entry.kind === "row" ? { ...entry, row: { ...entry.row } } : { ...entry },
+        ),
+        child: customizableMockupNested.child.map((row) => ({
+          kind: "row" as const,
+          row: { ...row },
+          id: row.id,
+        })),
+      },
+      fields: customizableMockupFields.map((field) => ({
+        ...field,
+        options: field.options.map((option) => ({ ...option })),
+      })),
+      fileLists: Object.fromEntries(fileContainerIds.map((containerId) => [
+        containerId,
+        customizableMockupFiles
+          .filter((file) => (file.parentId ?? "root") === containerId)
+          .map((file) => ({ ...file })),
+      ])),
+    };
+  }
+
+  let customizableMockupThemes = $state(
+    customizableMockupThemeDefinitions.map(createThemeState),
+  );
 
   type GalleryKanbanCard = {
     id: string;
@@ -152,7 +235,7 @@
     cards: GalleryKanbanCard[];
   };
 
-  const galleryKanban: GalleryKanbanColumn[] = [
+  let galleryKanban: GalleryKanbanColumn[] = $state([
     {
       id: "gk-todo",
       title: "To Do",
@@ -216,10 +299,181 @@
         },
       ],
     },
-  ];
+  ]);
+
+  function updateTheme(
+    themeId: string,
+    update: (theme: CustomizableThemeState) => CustomizableThemeState,
+  ) {
+    customizableMockupThemes = customizableMockupThemes.map((theme) =>
+      theme.id === themeId ? update(theme) : theme,
+    );
+  }
+
+  function handleRowsMove(themeId: string, event: ItemMoveEvent) {
+    updateTheme(themeId, (theme) => ({
+      ...theme,
+      rows: moveEntries(theme.rows, event, (row) => row.id),
+    }));
+  }
+
+  function handleWordsMove(themeId: string, event: ItemMoveEvent) {
+    updateTheme(themeId, (theme) => ({
+      ...theme,
+      words: moveEntries(theme.words, event, (word) => word.id),
+    }));
+  }
+
+  function handleTasksMove(themeId: string, event: ItemMoveEvent) {
+    updateTheme(themeId, (theme) => ({
+      ...theme,
+      tasks: moveEntries(theme.tasks, event, (task) => task.id),
+    }));
+  }
+
+  function handleNestedMove(themeId: string, event: ItemMoveEvent) {
+    const targetListId = event.to.containerMetadata.listId;
+    if (targetListId !== "root" && targetListId !== "child") return;
+    updateTheme(themeId, (theme) => ({
+      ...theme,
+      nestedLists: moveEntriesAcrossLists(
+        theme.nestedLists,
+        event,
+        targetListId,
+        (entry: NestedShowcaseEntry) => entry.id,
+      ),
+    }));
+  }
+
+  function handleFieldsMove(themeId: string, event: ItemMoveEvent) {
+    updateTheme(themeId, (theme) => ({
+      ...theme,
+      fields: moveEntries(theme.fields, event, (field) => field.id),
+    }));
+  }
+
+  function handleOptionsMove(themeId: string, fieldId: string, event: ItemMoveEvent) {
+    updateTheme(themeId, (theme) => ({
+      ...theme,
+      fields: theme.fields.map((field) =>
+        field.id === fieldId
+          ? { ...field, options: moveEntries(field.options, event, (option) => option.id) }
+          : field,
+      ),
+    }));
+  }
+
+  function handleFilesMove(themeId: string, event: ItemMoveEvent) {
+    const targetListId = event.to.containerMetadata.listId;
+    if (typeof targetListId !== "string") return;
+    updateTheme(themeId, (theme) => {
+      if (!Object.hasOwn(theme.fileLists, targetListId)) return theme;
+      return {
+        ...theme,
+        fileLists: moveEntriesAcrossLists(
+          theme.fileLists,
+          event,
+          targetListId,
+          (file: CustomizableMockupFile) => file.id,
+        ),
+      };
+    });
+  }
+
+  function handleKanbanMove(event: ItemMoveEvent) {
+    const targetColumnId = event.to.containerMetadata.columnId;
+    if (typeof targetColumnId !== "string") return;
+    const ids = (event.itemIds.length > 0 ? event.itemIds : [event.itemId]).map(String);
+    const idsToMove = new Set(ids);
+    const cardsById = new Map(
+      galleryKanban.flatMap((column) => column.cards.map((card) => [card.id, card] as const)),
+    );
+    const moved = ids.flatMap((id) => {
+      const card = cardsById.get(id);
+      return card ? [card] : [];
+    });
+    if (moved.length === 0) return;
+
+    const withoutMoved = galleryKanban.map((column) => ({
+      ...column,
+      cards: column.cards.filter((card) => !idsToMove.has(card.id)),
+    }));
+    galleryKanban = withoutMoved.map((column) => {
+      if (column.id !== targetColumnId) return column;
+      const cards = column.cards.slice();
+      const index = Math.max(0, Math.min(event.to.index, cards.length));
+      cards.splice(index, 0, ...moved);
+      return { ...column, cards };
+    });
+  }
 </script>
 
 <svelte:window onscroll={updateCustomizableProgress} onresize={updateCustomizableProgress} />
+
+{#snippet fileTree(
+  theme: CustomizableThemeState,
+  containerId: string,
+  folder: CustomizableMockupFile | null,
+  depth: number,
+)}
+  <Container
+    className={folder
+      ? `customizable-mini-tree-folder depth-${depth}${folder.active ? " active" : ""}`
+      : "customizable-mini-files"}
+    locked={folder === null}
+    itemId={folder?.id}
+    metadata={{
+      themeId: theme.id,
+      listId: containerId,
+      insertionDepth: folder ? depth + 1 : 0,
+      insertionMarkerInsetLeft: 6 + (folder ? depth + 1 : 0) * 9,
+      insertionMarkerInsetRight: 6,
+    }}
+    config={{
+      direction: "column",
+      groupID: `customizable-${theme.id}-files`,
+      name: `customizable-${theme.id}-files-${containerId}`,
+      mode: "insertion",
+      callbacks: { onItemMove: (event) => handleFilesMove(theme.id, event) },
+      ...getCustomizableThemeConfig(theme.id),
+    }}
+    items={theme.fileLists[containerId] ?? []}
+    getItemId={(file) => file.id}
+    data-snapsort-demo="customizable-files"
+    data-list-id={`customizable-${theme.id}-files-${containerId}`}
+    data-order={(theme.fileLists[containerId] ?? []).map((file) => file.id).join(",")}
+  >
+    {#snippet before()}
+      {#if folder}
+        <div
+          class="customizable-mini-tree-row folder"
+          style={`--depth: ${depth};`}
+        >
+          <span class="customizable-mini-indent" aria-hidden="true"></span>
+          <span class="customizable-mini-chevron open" aria-hidden="true"></span>
+          <span class="customizable-mini-tree-icon folder" aria-hidden="true"></span>
+          <strong>{folder.label}</strong>
+        </div>
+      {/if}
+    {/snippet}
+    {#snippet entry(file)}
+      {#if file.kind === "folder"}
+        {@render fileTree(theme, file.id, file, folder ? depth + 1 : 0)}
+      {:else}
+        <Item
+          itemId={file.id}
+          className={`customizable-mini-tree-row file depth-${folder ? depth + 1 : 0}${file.active ? " active" : ""}`}
+          style={`--depth: ${folder ? depth + 1 : 0};`}
+        >
+          <span class="customizable-mini-indent" aria-hidden="true"></span>
+          <span class="customizable-mini-chevron-spacer" aria-hidden="true"></span>
+          <span class="customizable-mini-tree-icon file" aria-hidden="true"></span>
+          <strong>{file.label}</strong>
+        </Item>
+      {/if}
+    {/snippet}
+  </Container>
+{/snippet}
 
 <div class="feature-card-section">
         <div class="feature-card-grid">
@@ -246,7 +500,12 @@
               <div class="customizable-demo-scale">
               <div class="customizable-theme-rail">
                 {#each customizableMockupThemes as theme, themeIndex (theme.id)}
-                  <div class="customizable-surface" data-theme={theme.id}>
+                  <div
+                    class="customizable-surface"
+                    data-theme={theme.id}
+                    data-snapsort-demo="customizable"
+                    data-list-id={`customizable-${theme.id}`}
+                  >
                     <div
                       class="customizable-motion-frame"
                       style={`--theme-offset: ${getCustomizableThemeOffset(themeIndex).toFixed(2)}px;`}
@@ -267,16 +526,21 @@
                       {/if}
                       <Container
                         className="customizable-mini-list"
+                        metadata={{ themeId: theme.id, listId: "rows" }}
                         config={{
                           direction: "column",
                           groupID: `customizable-${theme.id}-list`,
+                          callbacks: { onItemMove: (event) => handleRowsMove(theme.id, event) },
                           ...getCustomizableThemeConfig(theme.id),
                         }}
-                        items={customizableMockupRows}
-                        getItemId={(row) => row.label}
+                        items={theme.rows}
+                        getItemId={(row) => row.id}
+                        data-snapsort-demo="customizable-list"
+                        data-list-id={`customizable-${theme.id}-list`}
+                        data-order={theme.rows.map((row) => row.id).join(",")}
                       >
                         {#snippet entry(row)}
-                          <Item itemId={row.label}>
+                          <Item itemId={row.id}>
                             <div class="customizable-mini-row">
                               <span class="customizable-mini-handle" aria-hidden="true">
                                 <span class="customizable-mini-grip">
@@ -306,18 +570,23 @@
                       {/if}
                       <Container
                         className="customizable-mini-words"
+                        metadata={{ themeId: theme.id, listId: "words" }}
                         config={{
                           direction: "row",
                           groupID: `customizable-${theme.id}-words`,
                           mode: "progressive",
+                          callbacks: { onItemMove: (event) => handleWordsMove(theme.id, event) },
                           ...getCustomizableThemeConfig(theme.id),
                         }}
-                        items={customizableMockupWords}
-                        getItemId={(word) => word}
+                        items={theme.words}
+                        getItemId={(word) => word.id}
+                        data-snapsort-demo="customizable-words"
+                        data-list-id={`customizable-${theme.id}-words`}
+                        data-order={theme.words.map((word) => word.id).join(",")}
                       >
                         {#snippet entry(word)}
-                          <Item itemId={word}>
-                            <span class="customizable-mini-word">{word}</span>
+                          <Item itemId={word.id}>
+                            <span class="customizable-mini-word">{word.label}</span>
                           </Item>
                         {/snippet}
                       </Container>
@@ -336,16 +605,21 @@
                       {/if}
                       <Container
                         className="customizable-mini-board"
+                        metadata={{ themeId: theme.id, listId: "tasks" }}
                         config={{
                           direction: "column",
                           groupID: `customizable-${theme.id}-tasks`,
+                          callbacks: { onItemMove: (event) => handleTasksMove(theme.id, event) },
                           ...getCustomizableThemeConfig(theme.id),
                         }}
-                        items={customizableMockupCards}
-                        getItemId={(card) => card.title}
+                        items={theme.tasks}
+                        getItemId={(card) => card.id}
+                        data-snapsort-demo="customizable-tasks"
+                        data-list-id={`customizable-${theme.id}-tasks`}
+                        data-order={theme.tasks.map((task) => task.id).join(",")}
                       >
                         {#snippet entry(card)}
-                          <Item itemId={card.title}>
+                          <Item itemId={card.id}>
                             <div class="customizable-mini-card">
                               <div class="customizable-mini-card-head">
                                 <span class="customizable-mini-handle task" aria-hidden="true">
@@ -380,17 +654,22 @@
                       {/if}
                       <Container
                         className="customizable-mini-nested"
+                        metadata={{ themeId: theme.id, listId: "root" }}
                         config={{
                           direction: "column",
                           groupID: `customizable-${theme.id}-nested`,
+                          callbacks: { onItemMove: (event) => handleNestedMove(theme.id, event) },
                           ...getCustomizableThemeConfig(theme.id),
                         }}
-                        items={nestedShowcaseEntries}
-                        getItemId={(e) => (e.kind === "row" ? `parent-${e.row.label}` : `child-group-${theme.id}`)}
+                        items={theme.nestedLists.root}
+                        getItemId={(entry) => entry.id}
+                        data-snapsort-demo="customizable-nested"
+                        data-list-id={`customizable-${theme.id}-nested-root`}
+                        data-order={theme.nestedLists.root.map((entry) => entry.id).join(",")}
                       >
                         {#snippet entry(e)}
                           {#if e.kind === "row"}
-                            <Item itemId={`parent-${e.row.label}`}>
+                            <Item itemId={e.id}>
                               <div class="customizable-mini-row">
                                 <Handle className="customizable-mini-handle">
                                   <span class="customizable-mini-grip" aria-hidden="true">
@@ -407,30 +686,37 @@
                           {:else}
                             <Container
                               className="customizable-mini-nested-child"
+                              metadata={{ themeId: theme.id, listId: "child" }}
                               config={{
                                 direction: "column",
                                 groupID: `customizable-${theme.id}-nested`,
+                                callbacks: { onItemMove: (event) => handleNestedMove(theme.id, event) },
                                 ...getCustomizableThemeConfig(theme.id),
                               }}
-                              itemId={`child-group-${theme.id}`}
-                              items={customizableMockupNested.child}
-                              getItemId={(row) => row.label}
+                              itemId={e.id}
+                              items={theme.nestedLists.child}
+                              getItemId={(entry) => entry.id}
+                              data-snapsort-demo="customizable-nested"
+                              data-list-id={`customizable-${theme.id}-nested-child`}
+                              data-order={theme.nestedLists.child.map((entry) => entry.id).join(",")}
                             >
-                              {#snippet entry(row)}
-                                <Item itemId={row.label}>
-                                  <div class="customizable-mini-row nested">
-                                    <Handle className="customizable-mini-handle">
-                                      <span class="customizable-mini-grip" aria-hidden="true">
-                                        <i></i><i></i><i></i><i></i>
+                              {#snippet entry(child)}
+                                {#if child.kind === "row"}
+                                  <Item itemId={child.id}>
+                                    <div class="customizable-mini-row nested">
+                                      <Handle className="customizable-mini-handle">
+                                        <span class="customizable-mini-grip" aria-hidden="true">
+                                          <i></i><i></i><i></i><i></i>
+                                        </span>
+                                      </Handle>
+                                      <span class="customizable-mini-row-main">
+                                        <span class="customizable-mini-row-text">{child.row.label}</span>
+                                        <span class="customizable-mini-row-sub">Nested item</span>
                                       </span>
-                                    </Handle>
-                                    <span class="customizable-mini-row-main">
-                                      <span class="customizable-mini-row-text">{row.label}</span>
-                                      <span class="customizable-mini-row-sub">Nested item</span>
-                                    </span>
-                                    <span class="customizable-mini-meta">{row.meta}</span>
-                                  </div>
-                                </Item>
+                                      <span class="customizable-mini-meta">{child.row.meta}</span>
+                                    </div>
+                                  </Item>
+                                {/if}
                               {/snippet}
                             </Container>
                           {/if}
@@ -452,16 +738,21 @@
                       <div class="customizable-mini-editor-canvas">
                         <Container
                           className="customizable-mini-editor"
+                          metadata={{ themeId: theme.id, listId: "fields" }}
                           config={{
                             direction: "column",
                             groupID: `customizable-${theme.id}-editor`,
+                            callbacks: { onItemMove: (event) => handleFieldsMove(theme.id, event) },
                             ...getCustomizableThemeConfig(theme.id),
                           }}
-                          items={customizableMockupFields}
-                          getItemId={(field) => field.label}
+                          items={theme.fields}
+                          getItemId={(field) => field.id}
+                          data-snapsort-demo="customizable-editor"
+                          data-list-id={`customizable-${theme.id}-editor`}
+                          data-order={theme.fields.map((field) => field.id).join(",")}
                         >
                           {#snippet entry(field)}
-                            <Item itemId={field.label}>
+                            <Item itemId={field.id}>
                               <div class="customizable-mini-field">
                                 <Handle className="customizable-mini-field-handle">
                                   <span class="customizable-mini-grip" aria-hidden="true">
@@ -476,23 +767,30 @@
                                   <SnapSortContextBoundary>
                                     <Container
                                       className="customizable-mini-options"
+                                      metadata={{ themeId: theme.id, listId: field.id }}
                                       config={{
                                         direction: "column",
-                                        groupID: `customizable-${theme.id}-editor-${field.label}`,
+                                        groupID: `customizable-${theme.id}-editor-${field.id}`,
                                         mode: "progressive",
+                                        callbacks: {
+                                          onItemMove: (event) => handleOptionsMove(theme.id, field.id, event),
+                                        },
                                         ...getCustomizableThemeConfig(theme.id),
                                       }}
                                       items={field.options}
-                                      getItemId={(option) => option}
+                                      getItemId={(option) => option.id}
+                                      data-snapsort-demo="customizable-options"
+                                      data-list-id={`customizable-${theme.id}-editor-${field.id}`}
+                                      data-order={field.options.map((option) => option.id).join(",")}
                                     >
                                       {#snippet entry(option)}
-                                        <Item itemId={option}>
+                                        <Item itemId={option.id}>
                                           <span class="customizable-mini-option" class:checkbox={field.type === "checkbox"}>
                                             <Handle className="customizable-mini-option-handle">
                                               <span class="customizable-mini-option-grip" aria-hidden="true"></span>
                                             </Handle>
                                             <i></i>
-                                            <span>{option}</span>
+                                            <span>{option.label}</span>
                                             <button type="button" tabindex="-1" aria-label="Remove option">x</button>
                                           </span>
                                         </Item>
@@ -521,76 +819,7 @@
                           <i></i>
                         </div>
                       {/if}
-                      <Container
-                        className="customizable-mini-files"
-                        locked={true}
-                        metadata={{
-                          containerId: `customizable-${theme.id}-files-root`,
-                          insertionDepth: 0,
-                          insertionMarkerInsetLeft: 6,
-                          insertionMarkerInsetRight: 6,
-                        }}
-                        config={{
-                          direction: "column",
-                          groupID: `customizable-${theme.id}-files`,
-                          name: `customizable-${theme.id}-files-root`,
-                          mode: "insertion",
-                          ...getCustomizableThemeConfig(theme.id),
-                        }}
-                        items={customizableMockupFiles}
-                        getItemId={(file) => file.id}
-                      >
-                        {#snippet entry(file)}
-                          {#if file.kind === "folder"}
-                            <Container
-                              className={`customizable-mini-tree-folder depth-${file.depth}${file.active ? " active" : ""}`}
-                              locked={false}
-                              itemId={file.id}
-                              metadata={{
-                                containerId: file.id,
-                                insertionDepth: file.depth + 1,
-                                insertionMarkerInsetLeft: 6 + (file.depth + 1) * 9,
-                                insertionMarkerInsetRight: 6,
-                              }}
-                              config={{
-                                direction: "column",
-                                groupID: `customizable-${theme.id}-files`,
-                                name: `customizable-${theme.id}-files-${file.id}`,
-                                mode: "insertion",
-                                ...getCustomizableThemeConfig(theme.id),
-                              }}
-                              items={emptyMockupFiles}
-                              getItemId={(child) => child.id}
-                            >
-                              {#snippet before()}
-                                <div
-                                  class="customizable-mini-tree-row folder"
-                                  style={`--depth: ${file.depth};`}
-                                >
-                                  <span class="customizable-mini-indent" aria-hidden="true"></span>
-                                  <span class="customizable-mini-chevron open" aria-hidden="true"></span>
-                                  <span class="customizable-mini-tree-icon folder" aria-hidden="true"></span>
-                                  <strong>{file.label}</strong>
-                                </div>
-                              {/snippet}
-                              {#snippet entry()}
-                                <!-- Leaf folder mockup: no sortable children. -->
-                              {/snippet}
-                            </Container>
-                          {:else}
-                            <Item
-                              itemId={file.id}
-                              className={`customizable-mini-tree-row file depth-${file.depth}${file.active ? " active" : ""}`}
-                              style={`--depth: ${file.depth};`}
-                            >
-                              <span class="customizable-mini-indent" aria-hidden="true"></span>
-                              <span class="customizable-mini-chevron-spacer" aria-hidden="true"></span>
-                              <span class="customizable-mini-tree-icon file" aria-hidden="true"></span>
-                              <strong>{file.label}</strong>
-                            </Item>
-                          {/if}
-                        {/snippet}
-                      </Container>
+                      {@render fileTree(theme, "root", null, 0)}
                     </div>
                       </div>
                     </div>
@@ -638,19 +867,27 @@
                     locked={true}
                     items={galleryKanban}
                     getItemId={(column) => column.id}
+                    data-snapsort-demo="closing-kanban"
+                    data-list-id="closing-kanban-root"
+                    data-order={galleryKanban.map((column) => column.id).join(",")}
                   >
                     {#snippet entry(column)}
                       <Container
                         className="gk-column"
+                        metadata={{ columnId: column.id }}
                         config={{
                           direction: "column",
                           groupID: "closing-kanban",
                           name: column.id,
+                          callbacks: { onItemMove: handleKanbanMove },
                         }}
                         locked={true}
                         itemId={column.id}
                         items={column.cards}
                         getItemId={(card) => card.id}
+                        data-snapsort-demo="closing-kanban"
+                        data-list-id={`closing-kanban-${column.id}`}
+                        data-order={column.cards.map((card) => card.id).join(",")}
                       >
                         {#snippet before()}
                           <div class="gk-column-head">

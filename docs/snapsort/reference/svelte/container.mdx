@@ -13,18 +13,31 @@ frameworkKey: container
 
 `Container` wraps a core SnapSort container and provides it to descendant `Item` and nested `Container` components through Svelte context.
 
+Svelte owns the rendered collection. Supply a synchronous state mutation
+callback for every persistent operation the container accepts; the adapter
+does not fall back to SnapSort's Vanilla DOM callbacks.
+
 ```svelte
 <script lang="ts">
   import { Container, Item } from "@snap-engine/snapsort-svelte";
+  import type { ItemMoveEvent } from "@snap-engine/snapsort";
 
-  const tasks = [
+  let tasks = $state([
     { id: "design", label: "Design" },
     { id: "build", label: "Build" },
-  ];
+  ]);
+
+  function onItemMove(event: ItemMoveEvent) {
+    const task = tasks.find((entry) => entry.id === event.itemId);
+    if (!task) return;
+    const next = tasks.filter((entry) => entry.id !== event.itemId);
+    next.splice(Math.max(0, Math.min(event.to.index, next.length)), 0, task);
+    tasks = next;
+  }
 </script>
 
 <Container
-  config={{ direction: "column", groupID: "tasks" }}
+  config={{ direction: "column", groupID: "tasks", callbacks: { onItemMove } }}
   items={tasks}
   getItemId={(task) => task.id}
 >
@@ -88,7 +101,7 @@ type ContainerProps<T> = {
 | `disableFlip` | `false` | Disables FLIP movement animation. |
 | `noDrop` | `false` | Prevents the container from being a drop target. Useful for root layout containers. |
 | `dropArea` | `false` | Treats the container as an explicit drop area for collision filtering. |
-| `callbacks` | Default DOM callbacks | Hooks for DOM, framework state, and custom ghost behavior. |
+| `callbacks` | No persistent mutation default | Required framework-state callbacks plus lifecycle and validation hooks. |
 
 Mode is resolved from the root container when a drag starts, so nested containers in one drag tree should use the same mode.
 
@@ -97,20 +110,22 @@ Mode is resolved from the root container when a drag starts, so nested container
 | Callback | When it runs |
 |----------|--------------|
 | `onItemMove(event)` | An item moves to a new container or index. Preferred for state-backed lists because it includes both `from` and `to`. |
-| `onItemSwap(event)` | Swap mode commits a pairwise slot exchange. Falls back to two `onItemMove` events when undefined. |
+| `onItemSwap(event)` | Swap mode commits a pairwise slot exchange. Required for swap mode in the Svelte adapter. |
 | `onItemInsert(event)` | An item is inserted into a container; this is the lower-level fallback for `onItemMove`. |
 | `onItemRemove(event)` | An item is removed through `removeItem(id)`. |
 | `onDragStart(event)` | A drag is starting. Return `false` to veto it. |
 | `onDragEnd(event)` | A drag has ended and its mutation has committed. |
 | `onDropTargetChange(event)` | The prospective drop container or index changed. Fires on the root container. |
 | `canDrop(event)` | Resolves whether this container accepts the current drag. Keep it cheap. |
-| `onGhostInsert(event)` | A ghost item or insertion marker is inserted or moved. |
-| `onGhostRemove(event)` | A ghost item or insertion marker is removed. |
-| `createGhost(event)` | Creates a marker-kind ghost for insertion or swap mode. |
+| `onGhostInsert(event)` | Optional notification after the Svelte adapter inserts or moves its framework-owned ghost entry. |
+| `onGhostRemove(event)` | Optional notification after the Svelte adapter removes its framework-owned ghost entry. |
+| `createGhost(event)` | Core/Vanilla hook. Unsupported by the Svelte adapter; customize framework-owned ghosts with the `ghost` snippet. |
 | `flushMutation(mutation)` | Runs a structural callback inside the adapter's synchronous Svelte commit. Supplied automatically. |
 | `awaitMutation()` | Deprecated compatibility callback. |
 
-For state-backed lists, update your Svelte arrays in `onItemMove` or `onItemSwap`. The adapter uses `flushSync`, allowing SnapSort to read final DOM geometry before paint.
+Update Svelte arrays synchronously in `onItemMove` or `onItemSwap`. The adapter
+uses `flushSync`, allowing SnapSort to read final DOM geometry before paint.
+Missing callbacks fail clearly instead of mutating framework-rendered DOM.
 
 ## Bindable Core Object
 
@@ -119,12 +134,23 @@ Use `bind:container` when buttons, keyboard handlers, or other controls need the
 ```svelte
 <script lang="ts">
   import { Container, Item } from "@snap-engine/snapsort-svelte";
-  import type { Container as SnapSortContainer } from "@snap-engine/snapsort";
+  import type { Container as SnapSortContainer, ItemMoveEvent } from "@snap-engine/snapsort";
 
   let source: SnapSortContainer | undefined = $state();
   let target: SnapSortContainer | undefined = $state();
   let sourceCards = $state([{ id: "card-1", label: "Card 1" }]);
   let targetCards = $state<{ id: string; label: string }[]>([]);
+
+  function onItemMove(event: ItemMoveEvent) {
+    const card = [...sourceCards, ...targetCards].find((entry) => entry.id === event.itemId);
+    if (!card) return;
+    sourceCards = sourceCards.filter((entry) => entry.id !== event.itemId);
+    targetCards = targetCards.filter((entry) => entry.id !== event.itemId);
+    const targetList = event.to.container === target ? targetCards : sourceCards;
+    targetList.splice(Math.max(0, Math.min(event.to.index, targetList.length)), 0, card);
+    if (event.to.container === target) targetCards = targetList;
+    else sourceCards = targetList;
+  }
 
   function moveToTarget(id: string) {
     if (!source || !target) return;
@@ -134,7 +160,7 @@ Use `bind:container` when buttons, keyboard handlers, or other controls need the
 
 <Container
   bind:container={source}
-  config={{ direction: "column", groupID: "cards" }}
+  config={{ direction: "column", groupID: "cards", callbacks: { onItemMove } }}
   items={sourceCards}
   getItemId={(card) => card.id}
 >
@@ -147,7 +173,7 @@ Use `bind:container` when buttons, keyboard handlers, or other controls need the
 
 <Container
   bind:container={target}
-  config={{ direction: "column", groupID: "cards" }}
+  config={{ direction: "column", groupID: "cards", callbacks: { onItemMove } }}
   items={targetCards}
   getItemId={(card) => card.id}
 >
@@ -173,10 +199,10 @@ Use `bind:container` when buttons, keyboard handlers, or other controls need the
 
 ## Custom Ghost
 
-Use a `ghost` snippet with `Ghost` to customize the flow spacer in euclidean or progressive mode.
+Use a `ghost` snippet with `Ghost` to customize every framework-owned ghost kind: flow spacers, insertion markers, and swap pointers.
 
 ```svelte
-<Container config={{ mode: "progressive", direction: "row" }} items={tiles}>
+<Container config={{ mode: "progressive", direction: "row", callbacks: { onItemMove } }} items={tiles}>
   {#snippet entry(tile)}
     <Item itemId={tile.id}>{tile.text}</Item>
   {/snippet}

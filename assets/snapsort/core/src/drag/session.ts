@@ -2,7 +2,11 @@ import type { AnimationObject } from "@snap-engine/core/animation";
 import type { dragStartProp, dragProp } from "@snap-engine/core";
 import type { Container } from "../container";
 import type { Item } from "../item";
-import { findHoveredItem, type DropCandidate } from "../algorithm";
+import {
+  findHoveredItem,
+  resetDropSnapshotDebugDump,
+  type DropCandidate,
+} from "../algorithm";
 import type { DragLocation, DropEffect, GhostRect, GhostRole } from "../events";
 import {
   fireDragItemEnter,
@@ -28,6 +32,17 @@ export interface GroupDimensions {
   maxH: number;
   sumW: number;
   sumH: number;
+}
+
+function reportDragSessionError(error: unknown): void {
+  const reportedError =
+    error instanceof Error ? error : new Error(String(error));
+  const reportError = globalThis.reportError;
+  if (typeof reportError === "function") {
+    reportError(reportedError);
+    return;
+  }
+  console.error(reportedError);
 }
 
 /**
@@ -65,6 +80,8 @@ export class DragSession {
   readonly groupVisualOffsets: Map<Item, { x: number; y: number }> = new Map();
   readonly strategy: SortStrategy;
   status: DragSessionStatus = "pending";
+  /** @internal True when a lifecycle is dropping only to unwind a failed drag. */
+  cancelled = false;
 
   /**
    * What committing this drag should do to source data. Defaults to `"move"`.
@@ -184,7 +201,10 @@ export class DragSession {
     this.pressedItem = clones[pressedIndex === -1 ? 0 : pressedIndex];
 
     // Retarget the input pointer so drag/dragEnd now dispatch to the clone.
-    this.root.engine.input.setPointerDragOwner(this.pointerId, this.pressedItem);
+    this.root.engine.input.setPointerDragOwner(
+      this.pointerId,
+      this.pressedItem,
+    );
   }
 
   /** The run head — lowest original index, first element of `items`. Used as the singular `item` in backwards-compatible event fields. */
@@ -202,7 +222,11 @@ export class DragSession {
     let maxH = 0;
     let sumW = 0;
     let sumH = 0;
-    let prevBox: { width: number; height: number; margin: { top: number; bottom: number; left: number; right: number } } | null = null;
+    let prevBox: {
+      width: number;
+      height: number;
+      margin: { top: number; bottom: number; left: number; right: number };
+    } | null = null;
     for (const member of this.items) {
       const box = member.dragSnapshot?.box;
       if (!box) continue;
@@ -225,7 +249,8 @@ export class DragSession {
   begin(prop: dragStartProp): void {
     const item = this.pressedItem;
     const root = this.root;
-    const source = this.sources[this.items.indexOf(this.pressedItem)] ?? this.sources[0];
+    const source =
+      this.sources[this.items.indexOf(this.pressedItem)] ?? this.sources[0];
 
     item.schedule(
       () => {
@@ -245,32 +270,48 @@ export class DragSession {
     item.schedule(
       async () => {
         const primary = this.primaryItem;
-        const vetoed =
-          root.callbacks?.onDragStart?.({
-            session: this,
-            item: primary,
-            itemId: primary.resolvedItemId,
-            itemMetadata: primary.metadata,
-            items: this.items,
-            itemIds: this.items.map((i) => i.resolvedItemId),
-            itemsMetadata: this.items.map((i) => i.metadata),
-            element: primary.element,
-            source: this.sources[0],
-            sources: this.sources,
-          }) === false;
+        let vetoed = false;
+        try {
+          vetoed =
+            root.callbacks?.onDragStart?.({
+              session: this,
+              item: primary,
+              itemId: primary.resolvedItemId,
+              itemMetadata: primary.metadata,
+              items: this.items,
+              itemIds: this.items.map((i) => i.resolvedItemId),
+              itemsMetadata: this.items.map((i) => i.metadata),
+              element: primary.element,
+              source: this.sources[0],
+              sources: this.sources,
+            }) === false;
+          if (!vetoed) {
+            this.strategy.lifecycle.validateStart?.(this);
+          }
+        } catch (error) {
+          this.#endBeforeActivation(error);
+          return;
+        }
         if (vetoed) {
-          this.status = "ended";
-          root.dragSession = null;
+          this.#endBeforeActivation();
           return;
         }
 
-        this.status = "active";
-        for (const member of this.items) {
-          if (member.element) {
-            member.element.dataset.snapsortDragging = "true";
+        try {
+          this.status = "active";
+          await this.strategy.lifecycle.dragStart(this);
+          if (this.#isEnded()) {
+            this.#clearSessionState();
+            return;
           }
+          for (const member of this.items) {
+            if (member.element) {
+              member.element.dataset.snapsortDragging = "true";
+            }
+          }
+        } catch (error) {
+          this.#cancelAfterError(error);
         }
-        await this.strategy.lifecycle.dragStart(this);
       },
       { stage: "WRITE_1" },
     );
@@ -280,13 +321,146 @@ export class DragSession {
     const item = this.primaryItem;
     item.schedule(
       async () => {
-        this.pointer = { x: prop.position.x, y: prop.position.y };
-        await this.updateDropTarget();
-        await this.strategy.lifecycle.dragMove(this);
+        if (this.status !== "active") return;
+        try {
+          this.pointer = { x: prop.position.x, y: prop.position.y };
+          await this.updateDropTarget();
+          await this.strategy.lifecycle.dragMove(this);
+        } catch (error) {
+          this.#cancelAfterError(error);
+        }
       },
       { stage: "WRITE_1", queueId: `drag-${item.id}` },
     );
     this.root.queueReadTree("READ_2", `drag-${item.id}`);
+  }
+
+  #endBeforeActivation(error?: unknown): void {
+    if (error !== undefined) {
+      reportDragSessionError(error);
+    }
+    this.#clearSessionState();
+  }
+
+  #isEnded(): boolean {
+    return this.status === "ended";
+  }
+
+  #cancelAfterError(error: unknown): void {
+    reportDragSessionError(error);
+    if (this.status === "dropping" || this.status === "ended") return;
+
+    this.cancelled = true;
+    this.status = "dropping";
+    this.dragTransformSyncAnimation?.cancel();
+    this.dragTransformSyncAnimation = null;
+    // Copy handoffs need their copy cleanup path to retire transient clones;
+    // every other lifecycle can unwind as a no-op drop.
+    if (!this.handoffOrigins) {
+      this.dropEffect = "none";
+    }
+
+    try {
+      const lifecycle = this.strategy.lifecycle;
+      if (lifecycle.cancel) {
+        lifecycle.cancel(this);
+      } else {
+        lifecycle.drop(this);
+      }
+    } catch (cleanupError) {
+      reportDragSessionError(cleanupError);
+      this.#forceEndAfterError();
+    }
+  }
+
+  /** @internal Ensure a throwing scheduled drop callback cannot strand state. */
+  scheduleDropFinalizer(): void {
+    // Consumer callbacks can throw again while the scheduled drop unwinds.
+    // A later-stage watchdog guarantees the session and visual flags do not
+    // remain stuck even when that cleanup task aborts early.
+    this.root.schedule(
+      () => {
+        if (this.status !== "ended") {
+          this.#forceEndAfterError();
+        }
+      },
+      {
+        stage: "WRITE_3",
+        queueId: `drag-error-finalize-${this.pressedItem.id}`,
+      },
+    );
+  }
+
+  #clearSessionState(): void {
+    this.status = "ended";
+    if (this.root.dragSession === this) {
+      this.root.dragSession = null;
+    }
+    this.root.clearDragSnapshotTree();
+    const members = new Set([...this.items, ...(this.handoffOrigins ?? [])]);
+    for (const member of members) {
+      if (member.element) {
+        delete member.element.dataset.snapsortDragging;
+      }
+      resetDropSnapshotDebugDump(member);
+    }
+  }
+
+  #forceEndAfterError(): void {
+    const isCopyHandoff = this.handoffOrigins !== null;
+    const members = [...this.items];
+
+    for (const member of members) {
+      if (member.element) {
+        delete member.element.dataset.snapsortDragging;
+      }
+      member.style = {
+        cursor: "grab",
+        position: "relative",
+        zIndex: "",
+        top: "",
+        left: "",
+        width: "",
+        height: "",
+      };
+      member.transformMode = "none";
+      member.transformOrigin = null;
+      member.writeDom();
+      member.writeTransform();
+    }
+
+    for (const ghost of this.flowGhostRun) {
+      ghost.destroy(false);
+    }
+    this.flowGhostRun.length = 0;
+    for (const ghost of this.ghosts.values()) {
+      ghost.destroy(false);
+    }
+    this.ghosts.clear();
+    this.pendingGhostTarget = null;
+
+    if (isCopyHandoff) {
+      for (const member of members) {
+        member.destroy(false);
+      }
+    } else {
+      members.forEach((member, i) => {
+        if (member.parent) return;
+        const source = this.sources[i];
+        if (!source) return;
+        member.attachItemToContainer(
+          source.container,
+          member,
+          Math.min(source.index, source.container.itemOrderedList.length),
+        );
+      });
+    }
+
+    this.hoveredItem = null;
+    this.dragCoordinateParent.clear();
+    this.dragLayoutPosition.clear();
+    this.groupVisualOffsets.clear();
+    this.#clearSessionState();
   }
 
   /**
@@ -325,7 +499,9 @@ export class DragSession {
 
     const ghostSource = lifecycle.currentGhostLocation(this);
     const targetIndex =
-      target.container != null ? lifecycle.translateTargetIndex(this, target) : -1;
+      target.container != null
+        ? lifecycle.translateTargetIndex(this, target)
+        : -1;
     const targetContainer = target.container as unknown as Container;
 
     this.updateHoveredItem(targetContainer);

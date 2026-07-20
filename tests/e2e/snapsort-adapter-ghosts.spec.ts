@@ -26,6 +26,15 @@ async function itemByText(container: Locator, text: string): Promise<Locator> {
   return container.locator(".snapsort-item", { hasText: text }).first();
 }
 
+async function insertionListByHeading(
+  page: Page,
+  heading: string,
+): Promise<Locator> {
+  return page.locator(".insertion-list", {
+    has: page.locator("h2", { hasText: heading }),
+  });
+}
+
 test.describe("SnapSort adapter-rendered ghost entries (items mode)", () => {
   test.beforeEach(async ({ page }) => {
     await page.goto("/?demo=drop_snap_nested", { waitUntil: "networkidle" });
@@ -173,5 +182,50 @@ test.describe("SnapSort adapter-rendered ghost entries (items mode)", () => {
     await page.waitForTimeout(250);
     await expect(area1.locator(".snapsort-item")).toHaveCount(3);
     await expect(area2.locator(".snapsort-item")).toHaveCount(3);
+  });
+
+  test("insertion marker has exactly one framework owner across repeated container crossings", async ({
+    page,
+  }) => {
+    await page.goto("/?demo=snapsort_insertion", { waitUntil: "networkidle" });
+    const project = await insertionListByHeading(page, "Project");
+    const source = await insertionListByHeading(page, "Source");
+    const dragged = await itemByText(project, "README.md");
+    const start = center(await rect(dragged));
+    const projectTarget = center(
+      await rect(await itemByText(project, "package.json")),
+    );
+    const sourceTarget = center(
+      await rect(await itemByText(source, "Item.svelte")),
+    );
+    const allMarkers = page.locator('[data-snapsort-ghost-entry="marker"]');
+
+    await page.mouse.move(start.x, start.y);
+    await page.mouse.down();
+    await page.mouse.move(start.x + 4, start.y + 4);
+    await page.waitForTimeout(80);
+    await expect(allMarkers).toHaveCount(1);
+
+    for (const target of [sourceTarget, projectTarget, sourceTarget]) {
+      await page.mouse.move(target.x, target.y, { steps: 16 });
+      await page.waitForTimeout(80);
+      await expect(allMarkers).toHaveCount(1);
+      const expectedOwner = target === sourceTarget ? source : project;
+      const departedOwner = target === sourceTarget ? project : source;
+      await expect(
+        expectedOwner.locator('[data-snapsort-ghost-entry="marker"]'),
+      ).toHaveCount(1);
+      await expect(
+        departedOwner.locator('[data-snapsort-ghost-entry="marker"]'),
+      ).toHaveCount(0);
+    }
+
+    await page.mouse.up();
+    await page.waitForTimeout(250);
+    await expect(allMarkers).toHaveCount(0);
+    await expect(await itemByText(project, "README.md")).toHaveCount(0);
+    await expect(await itemByText(source, "README.md")).toHaveCount(1);
+    await expect(project.locator(":scope > .snapsort-item")).toHaveCount(3);
+    await expect(source.locator(":scope > .snapsort-item")).toHaveCount(4);
   });
 });

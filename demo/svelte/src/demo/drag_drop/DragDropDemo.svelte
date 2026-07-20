@@ -2,6 +2,7 @@
     import { Engine } from "@snap-engine/asset-base-svelte";
     import { Container, Item } from "@snap-engine/snapsort-svelte";
     import type { Engine as EngineClass } from "@snap-engine/core";
+    import type { ItemMoveEvent } from "@snap-engine/snapsort";
 
     let engineComponent: Engine | null = null;
     let engineInstance: EngineClass | null = $state(null);
@@ -67,26 +68,57 @@
         debugMode = enabled;
     }
 
-    const verticalItems = [1, 2, 3, 4];
-    const horizontalItems = [1, 2, 3, 4];
-    const doubleRowItems = Array.from({ length: 28 }, (_, i) => i + 1);
-    const sizedItems = [
+    let verticalItems = $state([1, 2, 3, 4]);
+    let horizontalItems = $state([1, 2, 3, 4]);
+    let doubleRowItems = $state(Array.from({ length: 28 }, (_, i) => i + 1));
+    let sizedItems = $state([
         { label: "Small", width: 60 },
         { label: "Medium", width: 100 },
         { label: "Large", width: 140 },
         { label: "Tall", width: 60 },
         { label: "Short", width: 30 },
-    ];
-    const areaItems = {
+    ]);
+    let areaItems = $state({
         area1: ["Item A", "Item B", "Item C"],
         area2: ["Item X", "Item Y", "Item Z"],
-    };
+    });
     const areaZones = ["area1", "area2"] as const;
-    const rowAreaItems = {
+    let rowAreaItems = $state({
         area1: ["Item A", "Item B", "Item C"],
         area2: ["Item X", "Item Y", "Item Z"],
-    };
+    });
     const rowAreaZones = ["area1", "area2"] as const;
+
+    function reorder<T>(items: T[], itemId: string, index: number, id: (item: T) => string) {
+        const moved = items.find((item) => id(item) === itemId);
+        if (moved === undefined) return items;
+        const next = items.filter((item) => id(item) !== itemId);
+        next.splice(Math.max(0, Math.min(index, next.length)), 0, moved);
+        return next;
+    }
+
+    function handleFlatMove(event: ItemMoveEvent) {
+        const list = event.to.containerMetadata.list;
+        if (list === "vertical") verticalItems = reorder(verticalItems, event.itemId, event.to.index, (n) => `vertical-${n}`);
+        if (list === "horizontal") horizontalItems = reorder(horizontalItems, event.itemId, event.to.index, (n) => `horizontal-${n}`);
+        if (list === "double") doubleRowItems = reorder(doubleRowItems, event.itemId, event.to.index, (n) => `double-row-${n}`);
+        if (list === "sizes") sizedItems = reorder(sizedItems, event.itemId, event.to.index, (entry) => entry.label);
+    }
+
+    function moveAreaItem(event: ItemMoveEvent, row: boolean) {
+        const target = event.to.containerMetadata.area;
+        if (target !== "area1" && target !== "area2") return;
+        const lists = row ? rowAreaItems : areaItems;
+        const moved = [...lists.area1, ...lists.area2].find((label) => label === event.itemId);
+        if (!moved) return;
+        const next = {
+            area1: lists.area1.filter((label) => label !== event.itemId),
+            area2: lists.area2.filter((label) => label !== event.itemId),
+        };
+        next[target].splice(Math.max(0, Math.min(event.to.index, next[target].length)), 0, moved);
+        if (row) rowAreaItems = next;
+        else areaItems = next;
+    }
 </script>
 
 <div class="page-layout">
@@ -98,7 +130,8 @@
         <h3>Vertical Column</h3>
         <div class="container-wrapper">
             <Container
-                config={{ direction: "column", groupID: "vertical-group" }}
+                config={{ direction: "column", groupID: "vertical-group", callbacks: { onItemMove: handleFlatMove } }}
+                metadata={{ list: "vertical" }}
                 items={verticalItems}
                 getItemId={(n) => `vertical-${n}`}
             >
@@ -114,7 +147,8 @@
         <h3>Horizontal Row</h3>
         <div class="container-wrapper" style="min-height: 60px;">
             <Container
-                config={{ direction: "row", groupID: "horizontal-group" }}
+                config={{ direction: "row", groupID: "horizontal-group", callbacks: { onItemMove: handleFlatMove } }}
+                metadata={{ list: "horizontal" }}
                 items={horizontalItems}
                 getItemId={(n) => `horizontal-${n}`}
             >
@@ -130,7 +164,8 @@
         <h3>Horizontal Double Row</h3>
         <div class="container-wrapper">
             <Container
-                config={{ direction: "row", groupID: "double-row-group" }}
+                config={{ direction: "row", groupID: "double-row-group", callbacks: { onItemMove: handleFlatMove } }}
+                metadata={{ list: "double" }}
                 items={doubleRowItems}
                 getItemId={(n) => `double-row-${n}`}
             >
@@ -146,7 +181,8 @@
         <h3>Different Sizes</h3>
         <div class="container-wrapper">
             <Container
-                config={{ direction: "row", groupID: "sizes-group" }}
+                config={{ direction: "row", groupID: "sizes-group", callbacks: { onItemMove: handleFlatMove } }}
+                metadata={{ list: "sizes" }}
                 items={sizedItems}
                 getItemId={(entry) => entry.label}
             >
@@ -172,14 +208,15 @@
                 {#snippet entry(zone)}
                     <Container
                         itemId={`multi-${zone}`}
-                        config={{ direction: "column", name: `multi-${zone}` }}
+                        config={{ direction: "column", name: `multi-${zone}`, callbacks: { onItemMove: (event) => moveAreaItem(event, false) } }}
+                        metadata={{ area: zone }}
                         locked={true}
                         items={areaItems[zone]}
-                        getItemId={(label) => `${zone}-${label}`}
+                        getItemId={(label) => label}
                     >
                         {#snippet before()}<h4>{zone === "area1" ? "Area 1" : "Area 2"}</h4>{/snippet}
                         {#snippet entry(label)}
-                            <Item itemId={`${zone}-${label}`} className="demo-item"><p>{label}</p></Item>
+                            <Item itemId={label} className="demo-item"><p>{label}</p></Item>
                         {/snippet}
                     </Container>
                 {/snippet}
@@ -192,7 +229,7 @@
         <h3>Multiple Drop Areas (Row)</h3>
         <div class="areas-wrapper-row">
             <Container
-                config={{ direction: "column", name: "multi-row-root" }}
+                config={{ direction: "column", name: "multi-row-root", noDrop: true }}
                 locked={true}
                 items={rowAreaZones}
                 getItemId={(zone) => `multi-row-${zone}`}
@@ -200,14 +237,15 @@
                 {#snippet entry(zone)}
                     <Container
                         itemId={`multi-row-${zone}`}
-                        config={{ direction: "row", name: `multi-row-${zone}` }}
+                        config={{ direction: "row", name: `multi-row-${zone}`, callbacks: { onItemMove: (event) => moveAreaItem(event, true) } }}
+                        metadata={{ area: zone }}
                         locked={true}
                         items={rowAreaItems[zone]}
-                        getItemId={(label) => `row-${zone}-${label}`}
+                        getItemId={(label) => label}
                     >
                         {#snippet before()}<h4>{zone === "area1" ? "Area 1" : "Area 2"}</h4>{/snippet}
                         {#snippet entry(label)}
-                            <Item itemId={`row-${zone}-${label}`} className="demo-item"><p>{label}</p></Item>
+                            <Item itemId={label} className="demo-item"><p>{label}</p></Item>
                         {/snippet}
                     </Container>
                 {/snippet}

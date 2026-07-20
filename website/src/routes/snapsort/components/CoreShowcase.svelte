@@ -8,6 +8,7 @@
     ItemMoveEvent,
   } from "@snap-engine/snapsort";
   import CustomizableShowcase from "./CustomizableShowcase.svelte";
+  import { moveEntries, moveEntriesAcrossLists } from "./listState";
 
   type MultiContainerItem = {
     id: string;
@@ -33,14 +34,14 @@
 
   let sidewaysSolved = $state(false);
 
-  const sortableItems = [
+  let sortableItems = $state([
     "Drag any",
     "item up",
     "or down",
     "and drop",
     "them in",
     "place",
-  ];
+  ]);
   const skeletonDemoTitles = [
     "Sortable list",
     "Sideways list",
@@ -57,27 +58,15 @@
     x: `${slice * -logoSliceWidth}px`,
   })));
 
-  function updateSidewaysSolved(containerElement: HTMLElement | null | undefined) {
-    if (!containerElement) return;
-
-    const order = Array.from(containerElement.querySelectorAll<HTMLElement>(".logo-slice"))
-      .map((slice) => Number(slice.dataset.slice));
-
-    sidewaysSolved =
-      order.length === logoSliceCount &&
-      order.every((slice, index) => slice === index);
+  function handleSortableMove(event: ItemMoveEvent) {
+    sortableItems = moveEntries(sortableItems, event, (label) => label);
   }
 
   function handleSidewaysMove(event: ItemMoveEvent) {
-    const itemId = event.itemId;
-    const moved = sidewaysItems.find((item) => item.id === itemId);
-    if (!moved) return;
-
-    const nextItems = sidewaysItems.filter((item) => item.id !== itemId);
-    nextItems.splice(Math.max(0, Math.min(event.to.index, nextItems.length)), 0, moved);
-    sidewaysItems = nextItems;
-
-    requestAnimationFrame(() => updateSidewaysSolved(event.to.container.element));
+    sidewaysItems = moveEntries(sidewaysItems, event, (item) => item.id);
+    sidewaysSolved =
+      sidewaysItems.length === logoSliceCount &&
+      sidewaysItems.every((item, index) => item.slice === index);
   }
   const nestedItems = ["Item 1", "Item 2", "Item 3"];
   const nestedChildren = ["Item 4", "Item 5", "Item 6"];
@@ -87,19 +76,31 @@
   // Heterogeneous: a nested Container sits as a sibling among plain Items,
   // which `item` (content-only, wrapped in an adapter Item) can't express --
   // `entry` renders the Item/Container itself per position.
-  type NestedEntry = { kind: "item"; id: string; label: string } | { kind: "group" };
+  type NestedEntry =
+    | { kind: "item"; id: string; label: string }
+    | { kind: "group"; id: "nested-group" };
   const nestedEntries: NestedEntry[] = [
     ...nestedItems.map((label): NestedEntry => ({ kind: "item", id: label, label })),
-    { kind: "group" },
+    { kind: "group", id: "nested-group" },
   ];
+  let nestedLists = $state({
+    root: nestedEntries,
+    child: nestedChildren.map((label): NestedEntry => ({ kind: "item", id: label, label })),
+  });
 
-  type InsertEntry = { kind: "item"; id: string; label: string } | { kind: "group" };
+  type InsertEntry =
+    | { kind: "item"; id: string; label: string }
+    | { kind: "group"; id: "insert-group" };
   const insertEntries: InsertEntry[] = [
     { kind: "item", id: insertItems[0], label: insertItems[0] },
-    { kind: "group" },
+    { kind: "group", id: "insert-group" },
     ...insertItems.slice(1).map((label): InsertEntry => ({ kind: "item", id: label, label })),
   ];
-  const multiRowItems = [
+  let insertLists = $state({
+    root: insertEntries,
+    child: insertNestedItems.map((label): InsertEntry => ({ kind: "item", id: label, label })),
+  });
+  let multiRowItems = $state([
     "This",
     "demo",
     "has",
@@ -117,7 +118,7 @@
   ].map((label, index) => ({
     id: `multi-row-${index}`,
     label,
-  }));
+  })));
   let multiContainers: MultiContainerColumn[] = $state([
     {
       id: "left",
@@ -139,6 +140,32 @@
       ],
     },
   ]);
+
+  function handleNestedMove(event: ItemMoveEvent) {
+    const targetListId = event.to.containerMetadata.listId;
+    if (targetListId !== "root" && targetListId !== "child") return;
+    nestedLists = moveEntriesAcrossLists(
+      nestedLists,
+      event,
+      targetListId,
+      (entry: NestedEntry) => entry.id,
+    );
+  }
+
+  function handleInsertMove(event: ItemMoveEvent) {
+    const targetListId = event.to.containerMetadata.listId;
+    if (targetListId !== "root" && targetListId !== "child") return;
+    insertLists = moveEntriesAcrossLists(
+      insertLists,
+      event,
+      targetListId,
+      (entry: InsertEntry) => entry.id,
+    );
+  }
+
+  function handleMultiRowMove(event: ItemMoveEvent) {
+    multiRowItems = moveEntries(multiRowItems, event, (item) => item.id);
+  }
 
   function moveMultiContainerState(itemId: string, targetColumnId: string, targetIndex: number) {
     let movedItem: MultiContainerItem | null = null;
@@ -166,11 +193,31 @@
   }
 
   function handleMultiContainerMove(event: ItemMoveEvent) {
-    const itemId = event.itemId;
     const targetColumnId = event.to.containerMetadata.columnId;
-    if (typeof itemId !== "string" || typeof targetColumnId !== "string") return;
+    if (typeof targetColumnId !== "string") return;
 
-    moveMultiContainerState(itemId, targetColumnId, event.to.index);
+    const ids = (event.itemIds.length > 0 ? event.itemIds : [event.itemId]).map(String);
+    const idsToMove = new Set(ids);
+    const itemsById = new Map(
+      multiContainers.flatMap((column) => column.items.map((item) => [item.id, item] as const)),
+    );
+    const movedItems = ids.flatMap((id) => {
+      const item = itemsById.get(id);
+      return item ? [item] : [];
+    });
+    if (movedItems.length === 0) return;
+
+    const withoutMovedItems = multiContainers.map((column) => ({
+      ...column,
+      items: column.items.filter((item) => !idsToMove.has(item.id)),
+    }));
+    multiContainers = withoutMovedItems.map((column) => {
+      if (column.id !== targetColumnId) return column;
+      const items = column.items.slice();
+      const destinationIndex = Math.max(0, Math.min(event.to.index, items.length));
+      items.splice(destinationIndex, 0, ...movedItems);
+      return { ...column, items };
+    });
   }
 
   function moveItemToOppositeColumn(itemId: string) {
@@ -400,9 +447,16 @@
         <div class="core-demo-surface card">
           <Container
             className="basic-list sortable-list"
-            config={{ direction: "column", groupID: "core-sortable" }}
+            config={{
+              direction: "column",
+              groupID: "core-sortable",
+              callbacks: { onItemMove: handleSortableMove },
+            }}
             items={sortableItems}
             getItemId={(label) => label}
+            data-snapsort-demo="sortable"
+            data-list-id="core-sortable"
+            data-order={sortableItems.join(",")}
           >
             {#snippet entry(label)}
               <Item itemId={label}>
@@ -428,6 +482,9 @@
             }}
             items={sidewaysItems}
             getItemId={(item) => item.id}
+            data-snapsort-demo="sideways"
+            data-list-id="core-sideways"
+            data-order={sidewaysItems.map((item) => item.id).join(",")}
           >
             {#snippet entry(item)}
               <Item itemId={item.id}>
@@ -448,9 +505,17 @@
         <div class="core-demo-surface card">
           <Container
             className="basic-list bounded-demo-list"
-            config={{ direction: "column", groupID: "core-nested" }}
-            items={nestedEntries}
-            getItemId={(e) => (e.kind === "item" ? e.id : "nested-group")}
+            metadata={{ listId: "root" }}
+            config={{
+              direction: "column",
+              groupID: "core-nested",
+              callbacks: { onItemMove: handleNestedMove },
+            }}
+            items={nestedLists.root}
+            getItemId={(entry) => entry.id}
+            data-snapsort-demo="nested"
+            data-list-id="core-nested-root"
+            data-order={nestedLists.root.map((entry) => entry.id).join(",")}
           >
             {#snippet entry(e)}
               {#if e.kind === "item"}
@@ -467,11 +532,19 @@
               {:else}
                 <Container
                   className="nested-list bounded-demo-list card shallow"
-                  config={{ direction: "column", groupID: "core-nested" }}
+                  metadata={{ listId: "child" }}
+                  config={{
+                    direction: "column",
+                    groupID: "core-nested",
+                    callbacks: { onItemMove: handleNestedMove },
+                  }}
                   locked={false}
                   itemId="nested-group"
-                  items={nestedChildren}
-                  getItemId={(label) => label}
+                  items={nestedLists.child}
+                  getItemId={(entry) => entry.id}
+                  data-snapsort-demo="nested"
+                  data-list-id="core-nested-child"
+                  data-order={nestedLists.child.map((entry) => entry.id).join(",")}
                 >
                   {#snippet before()}
                     <Handle className="demo-container-handle">
@@ -480,17 +553,19 @@
                       </span>
                     </Handle>
                   {/snippet}
-                  {#snippet entry(label)}
-                    <Item itemId={label}>
-                      <div class="basic-row nested-row handle-row">
-                        <Handle className="demo-row-handle">
-                          <span class="demo-grip" aria-hidden="true">
-                            <i></i><i></i><i></i><i></i>
-                          </span>
-                        </Handle>
-                        <span>{label}</span>
-                      </div>
-                    </Item>
+                  {#snippet entry(child)}
+                    {#if child.kind === "item"}
+                      <Item itemId={child.id}>
+                        <div class="basic-row nested-row handle-row">
+                          <Handle className="demo-row-handle">
+                            <span class="demo-grip" aria-hidden="true">
+                              <i></i><i></i><i></i><i></i>
+                            </span>
+                          </Handle>
+                          <span>{child.label}</span>
+                        </div>
+                      </Item>
+                    {/if}
                   {/snippet}
                 </Container>
               {/if}
@@ -504,9 +579,18 @@
         <div class="core-demo-surface card">
           <Container
             className="basic-list insertion-list bounded-demo-list"
-            config={{ direction: "column", groupID: "core-insert", mode: "insertion" }}
-            items={insertEntries}
-            getItemId={(e) => (e.kind === "item" ? e.id : "insert-group")}
+            metadata={{ listId: "root" }}
+            config={{
+              direction: "column",
+              groupID: "core-insert",
+              mode: "insertion",
+              callbacks: { onItemMove: handleInsertMove },
+            }}
+            items={insertLists.root}
+            getItemId={(entry) => entry.id}
+            data-snapsort-demo="insert"
+            data-list-id="core-insert-root"
+            data-order={insertLists.root.map((entry) => entry.id).join(",")}
           >
             {#snippet entry(e)}
               {#if e.kind === "item"}
@@ -523,11 +607,20 @@
               {:else}
                 <Container
                   className="nested-list nested-insertion-list insertion-list bounded-demo-list card shallow"
-                  config={{ direction: "column", groupID: "core-insert", mode: "insertion" }}
+                  metadata={{ listId: "child" }}
+                  config={{
+                    direction: "column",
+                    groupID: "core-insert",
+                    mode: "insertion",
+                    callbacks: { onItemMove: handleInsertMove },
+                  }}
                   locked={false}
                   itemId="insert-group"
-                  items={insertNestedItems}
-                  getItemId={(label) => label}
+                  items={insertLists.child}
+                  getItemId={(entry) => entry.id}
+                  data-snapsort-demo="insert"
+                  data-list-id="core-insert-child"
+                  data-order={insertLists.child.map((entry) => entry.id).join(",")}
                 >
                   {#snippet before()}
                     <Handle className="demo-container-handle">
@@ -536,17 +629,19 @@
                       </span>
                     </Handle>
                   {/snippet}
-                  {#snippet entry(label)}
-                    <Item itemId={label}>
-                      <div class="basic-row nested-row handle-row">
-                        <Handle className="demo-row-handle">
-                          <span class="demo-grip" aria-hidden="true">
-                            <i></i><i></i><i></i><i></i>
-                          </span>
-                        </Handle>
-                        <span>{label}</span>
-                      </div>
-                    </Item>
+                  {#snippet entry(child)}
+                    {#if child.kind === "item"}
+                      <Item itemId={child.id}>
+                        <div class="basic-row nested-row handle-row">
+                          <Handle className="demo-row-handle">
+                            <span class="demo-grip" aria-hidden="true">
+                              <i></i><i></i><i></i><i></i>
+                            </span>
+                          </Handle>
+                          <span>{child.label}</span>
+                        </div>
+                      </Item>
+                    {/if}
                   {/snippet}
                 </Container>
               {/if}
@@ -560,9 +655,17 @@
         <div class="core-demo-surface card">
           <Container
             className="multi-row-list"
-            config={{ direction: "row", groupID: "core-multi-row", mode: "progressive" }}
+            config={{
+              direction: "row",
+              groupID: "core-multi-row",
+              mode: "progressive",
+              callbacks: { onItemMove: handleMultiRowMove },
+            }}
             items={multiRowItems}
             getItemId={(item) => item.id}
+            data-snapsort-demo="multi-row"
+            data-list-id="core-multi-row"
+            data-order={multiRowItems.map((item) => item.id).join(",")}
           >
             {#snippet entry(item)}
               <Item itemId={item.id}>
@@ -584,6 +687,9 @@
             locked={true}
             items={multiContainers}
             getItemId={(column) => column.id}
+            data-snapsort-demo="multi-container"
+            data-list-id="core-multi-root"
+            data-order={multiContainers.map((column) => column.id).join(",")}
           >
             {#snippet entry(column)}
               <Container
@@ -600,6 +706,9 @@
                 locked={true}
                 items={column.items}
                 getItemId={(item) => item.id}
+                data-snapsort-demo="multi-container"
+                data-list-id={`core-multi-${column.id}`}
+                data-order={column.items.map((item) => item.id).join(",")}
               >
                 {#snippet before()}
                   <h4>{column.title}</h4>

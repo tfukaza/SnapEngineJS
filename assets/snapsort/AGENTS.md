@@ -86,13 +86,25 @@ Sort mode is really two orthogonal choices, each resolved once per drag from the
 Created on `dragStart` and stored at `root.dragSession`; holds pointer/offset/start, the live ghost item, `pendingGhostTarget`, the resolved `SortStrategy`, and `status` (`pending → active → dropping → ended`). All per-drag state that used to live as `#private` fields on the dragged item now lives here so drag lifecycle strategies (separate classes) can read/write it without needing access to `Item`'s private fields. `items`/`sources` represent the ordered multi-item drag run; selection is consumer-owned through each item's `selected` property.
 
 ### Mutator (`mutation.ts`)
-Every `ContainerCallbacks` invocation goes through one of the `fire*` functions here (`fireItemInsert`, `fireItemRemove`, `fireItemMove`, `fireGhostInsert`, `fireGhostRemove`, `fireCreateGhost`, `fireAwaitMutation`). `fireItemMove` fires `onItemMove` on the destination container if defined, else falls back to `fireItemInsert` (today's default DOM behavior is insert-only — a plain `insertBefore` inherently moves the node). Default DOM callback implementations (`defaultCallbacks`) also live here.
+Every `ContainerCallbacks` invocation goes through one of the `fire*` functions here (`fireItemInsert`, `fireItemRemove`, `fireItemMove`, `fireGhostInsert`, `fireGhostRemove`, `fireCreateGhost`, `fireAwaitMutation`). `fireItemMove` fires `onItemMove` on the destination container if defined, else falls back to `fireItemInsert`. The default callback implementations in this module mutate DOM and are exclusively the Vanilla/core integration. Framework adapters must not install or inherit them: Svelte/React state is the single source of truth, structural callbacks must synchronously update that state, and the framework must render the resulting item/ghost structure.
 
 ### Callbacks (`events.ts`)
 - Primitives: `onItemInsert`, `onItemRemove`, `onGhostInsert`, `onGhostRemove`, `createGhost` (was `createItemGhost`; dispatches on `event.kind: "flow" | "marker"`), synchronous `flushMutation`; `awaitMutation` is deprecated.
 - Semantic: `onItemMove` (preferred — carries `from`/`to` `DragLocation`s).
 - Lifecycle: `onDragStart` (return `false` to veto before any state changes), `onDragEnd`, `onDropTargetChange` (fires only when the prospective container/index actually changes).
 - Validation: `canDrop` — consulted once per container per drop-target resolution (not per candidate slot); must be cheap.
+
+### Framework adapter ownership
+
+- Never structurally mutate framework-rendered nodes with `insertBefore`,
+  `appendChild`, `remove`, or equivalent DOM APIs.
+- Every framework-owned destination that can commit a persistent move supplies
+  `onItemMove` (or the lower-level `onItemInsert`); swap mode supplies
+  `onItemSwap`. Imperative remove support supplies `onItemRemove`.
+- Callbacks update Svelte/React state synchronously. Adapter-provided
+  `flushMutation` commits the framework render before SnapSort reads geometry.
+- Svelte owns its ghost entries inside `Container`; React consumers own ghost
+  state and render `Ghost` as documented. Vanilla core retains DOM callbacks.
 
 ## Key Concepts
 

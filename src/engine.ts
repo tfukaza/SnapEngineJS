@@ -12,6 +12,16 @@ export interface EngineConfig {}
 
 const DEFAULT_ENGINE_CONFIG: EngineConfig = {};
 
+function reportFrameTaskError(error: unknown): void {
+  const reportedError =
+    error instanceof Error ? error : new Error(String(error));
+  if (typeof globalThis.reportError === "function") {
+    globalThis.reportError(reportedError);
+    return;
+  }
+  console.error(reportedError);
+}
+
 /**
  * Available engine event types that can be subscribed to.
  */
@@ -362,7 +372,14 @@ class Engine {
           continue;
         }
         for (const callback of objectEntry.callback) {
-          await callback();
+          try {
+            await callback();
+          } catch (error) {
+            // One bad integration callback must not reject the shared frame
+            // pipeline and permanently stop every engine's animation loop.
+            // Surface the error globally, then continue with queued cleanup.
+            reportFrameTaskError(error);
+          }
         }
       }
     }

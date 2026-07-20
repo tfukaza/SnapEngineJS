@@ -18,7 +18,6 @@
     DragItemHoverEvent,
     DragStartEvent,
     DropTargetChangeEvent,
-    GhostCreateEvent,
     GhostInsertEvent,
     Item as SortItem,
     ItemMoveEvent,
@@ -222,11 +221,11 @@
     cards: KanbanCard[];
   };
 
-  const kanbanColumns: KanbanColumn[] = [
-    { id: "kanban-todo", title: "To Do", target: "kanban-review", cards: kanbanTodo },
-    { id: "kanban-review", title: "Review", target: "kanban-done", cards: kanbanReview },
-    { id: "kanban-done", title: "Done", target: "kanban-todo", cards: kanbanDone },
-  ];
+  let kanbanColumns: KanbanColumn[] = $state([
+    { id: "kanban-todo", title: "To Do", target: "kanban-review", cards: [...kanbanTodo] },
+    { id: "kanban-review", title: "Review", target: "kanban-done", cards: [...kanbanReview] },
+    { id: "kanban-done", title: "Done", target: "kanban-todo", cards: [...kanbanDone] },
+  ]);
 
   const sentenceWords: SentenceTile[] = [
     { id: "sw-1", text: "あり" },
@@ -378,11 +377,6 @@
   }
 
   function handleEditorOptionMove(event: ItemMoveEvent) {
-    if (event.item.isGhost) {
-      event.to.container.element?.insertBefore(event.item.element!, event.beforeElement);
-      return;
-    }
-
     const fieldId = event.to.containerMetadata.fieldId;
     const optionId = event.itemId;
     if (typeof fieldId !== "string" || typeof optionId !== "string") return;
@@ -390,10 +384,41 @@
     reorderEditorOption(fieldId, optionId, event.to.index);
   }
 
-  function handleEditorOptionRemove(event: ItemRemoveEvent) {
-    if (event.item.isGhost) {
-      event.item.element?.remove();
-    }
+  function handleEditorFieldMove(event: ItemMoveEvent) {
+    const field = editorFields.find((candidate) => candidate.id === event.itemId);
+    if (!field) return;
+    const next = editorFields.filter((candidate) => candidate.id !== event.itemId);
+    next.splice(Math.max(0, Math.min(event.to.index, next.length)), 0, field);
+    editorFields = next;
+  }
+
+  function handleTodoMove(event: ItemMoveEvent) {
+    const todo = todoItems.find((candidate) => candidate.id === event.itemId);
+    if (!todo) return;
+    const next = todoItems.filter((candidate) => candidate.id !== event.itemId);
+    next.splice(Math.max(0, Math.min(event.to.index, next.length)), 0, todo);
+    todoItems = next;
+  }
+
+  function handleKanbanMove(event: ItemMoveEvent) {
+    const targetColumnId = event.to.containerMetadata.columnId;
+    if (typeof targetColumnId !== "string") return;
+    let moved: KanbanCard | undefined;
+    const withoutMoved = kanbanColumns.map((column) => {
+      const card = column.cards.find((candidate) => candidate.id === event.itemId);
+      if (card) moved = card;
+      return {
+        ...column,
+        cards: column.cards.filter((candidate) => candidate.id !== event.itemId),
+      };
+    });
+    if (!moved) return;
+    kanbanColumns = withoutMoved.map((column) => {
+      if (column.id !== targetColumnId) return column;
+      const cards = column.cards.slice();
+      cards.splice(Math.max(0, Math.min(event.to.index, cards.length)), 0, moved!);
+      return { ...column, cards };
+    });
   }
 
   function sentenceContainerForZone(zone: SentenceZone) {
@@ -662,9 +687,14 @@
     trashTasks = next;
   }
 
+  function handleTrashBinMove(event: ItemMoveEvent) {
+    trashTasks = trashTasks.filter((task) => task.id !== event.itemId);
+  }
+
   function handleTrashDragEnd(event: DragEndEvent) {
+    const shouldDelete = trashHovered || event.destination?.containerMetadata.role === "trash";
     trashHovered = false;
-    if (event.destination?.containerMetadata.role !== "trash") return;
+    if (!shouldDelete) return;
     const taskId = event.itemId;
     trashTasks = trashTasks.filter((task) => task.id !== taskId);
   }
@@ -712,17 +742,8 @@
     }
   }
 
-  function createSwapGhost(event: GhostCreateEvent): HTMLElement | void {
-    if (event.role !== "pointer") return;
-    const originalTile = event.original.element?.querySelector<HTMLElement>(
-      ".swap-tile",
-    );
-    if (!originalTile) return;
-
-    const ghostTile = originalTile.cloneNode(true) as HTMLElement;
-    ghostTile.classList.remove("swap-tile-hovered");
-    ghostTile.classList.add("swap-tile-ghost");
-    return ghostTile;
+  function swapGhostTile(event: GhostInsertEvent) {
+    return swapTiles.find((tile) => tile.id === event.originalItemId);
   }
 </script>
 
@@ -988,7 +1009,7 @@
         </div>
         <div class="project-list">
           <Container
-            config={{ direction: "column", groupID: "project-list" }}
+            config={{ direction: "column", groupID: "project-list", callbacks: { onItemMove: handleTodoMove } }}
             items={todoItems}
             getItemId={(todo) => todo.id}
           >
@@ -1038,9 +1059,12 @@
                 config={{
                   direction: "column",
                   name: column.id,
+                  groupID: "kanban-cards",
+                  callbacks: { onItemMove: handleKanbanMove },
                   ...({ onClickAction: { action: "moveTo", target: column.target } } as object),
                 }}
                 locked={true}
+                metadata={{ columnId: column.id }}
                 items={column.cards}
                 getItemId={(card) => card.id}
               >
@@ -1404,6 +1428,7 @@
                       groupID: "trash-demo",
                       name: "trash-bin",
                       dropArea: true,
+                      callbacks: { onItemMove: handleTrashBinMove },
                     }}
                     locked={true}
                     metadata={{ role: "trash" }}
@@ -1456,7 +1481,6 @@
                 onItemSwap: handleSwapCommit,
                 onDragItemEnter: handleSwapHoverEnter,
                 onDragItemLeave: handleSwapHoverLeave,
-                createGhost: createSwapGhost,
               },
             }}
             locked={true}
@@ -1481,6 +1505,21 @@
                   <span class="swap-tile-label">{tile.label}</span>
                 </div>
               </Item>
+            {/snippet}
+            {#snippet ghost(event)}
+              {@const tile = swapGhostTile(event)}
+              {#if tile}
+                <Ghost
+                  {event}
+                  className="swap-tile card swap-tile-ghost"
+                  style={`--tile-color: ${tile.color};`}
+                >
+                    <span class="swap-tile-grip" aria-hidden="true">
+                      <i></i><i></i><i></i><i></i><i></i><i></i>
+                    </span>
+                    <span class="swap-tile-label">{tile.label}</span>
+                </Ghost>
+              {/if}
             {/snippet}
           </Container>
         </div>
@@ -1513,7 +1552,7 @@
             </div>
             <Container
               className="editor-field-list"
-              config={{ direction: "column", groupID: "editor-fields" }}
+              config={{ direction: "column", groupID: "editor-fields", callbacks: { onItemMove: handleEditorFieldMove } }}
               items={editorFields}
               getItemId={(field) => field.id}
             >
@@ -1549,7 +1588,6 @@
                               name: `editor-options-${field.id}`,
                               callbacks: {
                                 onItemMove: handleEditorOptionMove,
-                                onItemRemove: handleEditorOptionRemove,
                               },
                             }}
                             locked={true}
@@ -1618,7 +1656,6 @@
                               name: `editor-options-${field.id}`,
                               callbacks: {
                                 onItemMove: handleEditorOptionMove,
-                                onItemRemove: handleEditorOptionRemove,
                               },
                             }}
                             locked={true}
@@ -1687,7 +1724,6 @@
                               name: `editor-options-${field.id}`,
                               callbacks: {
                                 onItemMove: handleEditorOptionMove,
-                                onItemRemove: handleEditorOptionRemove,
                               },
                             }}
                             locked={true}
@@ -2251,7 +2287,7 @@
     padding: 0;
   }
 
-  .swap-tile {
+  .swap-workspace :global(.swap-tile) {
     --tile-color: #999;
     --card-color: var(--color-background-tint);
     position: relative;
@@ -2272,11 +2308,11 @@
     box-sizing: border-box;
   }
 
-  .swap-tile:active {
+  .swap-workspace :global(.swap-tile:active) {
     cursor: grabbing;
   }
 
-  .swap-tile-grip {
+  .swap-workspace :global(.swap-tile-grip) {
     position: absolute;
     left: clamp(1rem, 2vw, 1.45rem);
     top: 50%;
@@ -2288,7 +2324,7 @@
     transform: translateY(-50%);
   }
 
-  .swap-tile-grip i {
+  .swap-workspace :global(.swap-tile-grip i) {
     display: block;
     width: 0.28rem;
     height: 0.28rem;
@@ -2296,7 +2332,7 @@
     background: #9ca3a8;
   }
 
-  .swap-tile-label {
+  .swap-workspace :global(.swap-tile-label) {
     position: relative;
     z-index: 1;
     color: inherit;
@@ -2304,7 +2340,7 @@
     line-height: 1;
   }
 
-  .swap-tile-hovered {
+  .swap-workspace :global(.swap-tile-hovered) {
     outline: 3px solid color-mix(in srgb, var(--tile-color) 68%, #232526);
     outline-offset: 2px;
   }
@@ -2313,7 +2349,7 @@
     opacity: 0.35;
   }
 
-  .swap-tile-ghost {
+  .swap-workspace :global(.swap-tile-ghost) {
     pointer-events: none;
   }
 

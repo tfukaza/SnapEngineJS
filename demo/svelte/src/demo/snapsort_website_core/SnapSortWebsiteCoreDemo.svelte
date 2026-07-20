@@ -24,17 +24,17 @@
     x: `${slice * -logoSliceWidth}px`,
   })));
   const parentItems = ["Item 1", "Item 2", "Item 3"];
-  const nestedItems = ["Item 4", "Item 5", "Item 6"];
+  let nestedItems = $state(["Item 4", "Item 5", "Item 6"]);
   const gripDots = Array.from({ length: 6 }, (_, index) => index);
 
   // Heterogeneous: the nested child Container sits as a trailing sibling
   // among the parent's plain rows -- `entry` renders each position's
   // Item/Container itself.
   type NestedEntry = { kind: "item"; label: string } | { kind: "group" };
-  const nestedEntries: NestedEntry[] = [
+  let nestedEntries: NestedEntry[] = $state([
     ...parentItems.map((label): NestedEntry => ({ kind: "item", label })),
     { kind: "group" },
-  ];
+  ]);
 
   let sidewaysSolved = $state(false);
   let multiContainers: MultiContainerColumn[] = $state([
@@ -119,6 +119,45 @@
     moveMultiContainerState(itemId, targetColumnId, event.to.index);
   }
 
+  function handleNestedMove(event: ItemMoveEvent) {
+    const itemId = event.itemId;
+    const targetList = event.to.containerMetadata.list;
+    if (typeof itemId !== "string" || (targetList !== "outer" && targetList !== "inner")) return;
+
+    let moved: NestedEntry | string | undefined;
+    const outerIndex = nestedEntries.findIndex((entry) =>
+      entry.kind === "item" ? entry.label === itemId : itemId === "nested-group",
+    );
+    if (outerIndex !== -1) {
+      const candidate = nestedEntries[outerIndex];
+      if (targetList === "inner" && candidate.kind === "group") return;
+      moved = candidate;
+      nestedEntries = nestedEntries.filter((_, index) => index !== outerIndex);
+    } else {
+      const innerIndex = nestedItems.indexOf(itemId);
+      if (innerIndex !== -1) {
+        moved = nestedItems[innerIndex];
+        nestedItems = nestedItems.filter((_, index) => index !== innerIndex);
+      }
+    }
+    if (moved === undefined) return;
+
+    if (targetList === "inner") {
+      const label = typeof moved === "string" ? moved : moved.label;
+      const next = nestedItems.filter((label) => label !== itemId);
+      next.splice(Math.max(0, Math.min(event.to.index, next.length)), 0, label);
+      nestedItems = next;
+      return;
+    }
+
+    const entry = typeof moved === "string" ? { kind: "item" as const, label: moved } : moved;
+    const next = nestedEntries.filter((candidate) =>
+      candidate.kind === "item" ? candidate.label !== itemId : itemId !== "nested-group",
+    );
+    next.splice(Math.max(0, Math.min(event.to.index, next.length)), 0, entry);
+    nestedEntries = next;
+  }
+
   function moveItemToOppositeColumn(itemId: string) {
     const sourceColumnIndex = multiContainers.findIndex((column) =>
       column.items.some((item) => item.id === itemId),
@@ -191,7 +230,8 @@
           <div class="core-demo-surface card">
             <Container
               className="basic-list bounded-demo-list"
-              config={{ direction: "column", groupID: "core-nested" }}
+              config={{ direction: "column", groupID: "core-nested", callbacks: { onItemMove: handleNestedMove } }}
+              metadata={{ list: "outer" }}
               items={nestedEntries}
               getItemId={(e) => (e.kind === "item" ? e.label : "nested-group")}
             >
@@ -213,7 +253,8 @@
                   <Container
                     itemId="nested-group"
                     className="nested-list bounded-demo-list card shallow"
-                    config={{ direction: "column", groupID: "core-nested" }}
+                    config={{ direction: "column", groupID: "core-nested", callbacks: { onItemMove: handleNestedMove } }}
+                    metadata={{ list: "inner" }}
                     locked={false}
                     items={nestedItems}
                     getItemId={(label) => label}

@@ -18,6 +18,12 @@ export interface ContainerAnimations {
 }
 
 export interface ContainerConfig {
+  /**
+   * @internal DOM structure is owned either by the core Vanilla defaults or
+   * by a framework adapter. Framework adapters set this unconditionally so
+   * omitted callbacks can never fall through to direct DOM mutation.
+   */
+  domOwnership?: "core" | "framework";
   /** Which built-in drop-target/lifecycle strategy pair to use for this tree. Default `"euclidean"`. */
   mode?: SortMode;
   /** Advanced: a custom strategy pair, overriding `mode`. Lets consumers plug in their own drop-target resolution and/or drag lifecycle. */
@@ -38,6 +44,7 @@ export interface ContainerConfig {
 }
 
 const defaultConfig: ContainerConfig = {
+  domOwnership: "core",
   mode: "euclidean",
   groupID: "default-group",
   direction: "column",
@@ -61,13 +68,18 @@ export class Container extends Item {
   constructor(engine: any, parent: Container | null, config?: ContainerConfig) {
     super(engine, parent);
     this.locked = true;
+    const domOwnership = config?.domOwnership ?? defaultConfig.domOwnership;
     this.#config = {
       ...defaultConfig,
       ...(config || {}),
-      callbacks: {
-        ...defaultConfig.callbacks,
-        ...(config?.callbacks || {}),
-      },
+      domOwnership,
+      callbacks:
+        domOwnership === "framework"
+          ? { ...(config?.callbacks || {}) }
+          : {
+              ...defaultConfig.callbacks,
+              ...(config?.callbacks || {}),
+            },
     };
 
     if (!this.#config.name) {
@@ -89,6 +101,11 @@ export class Container extends Item {
 
   get groupID() {
     return this.#config.groupID;
+  }
+
+  /** @internal */
+  get domOwnership() {
+    return this.#config.domOwnership ?? "core";
   }
 
   get name() {
@@ -167,12 +184,12 @@ export class Container extends Item {
     return this.#config;
   }
 
-  destroy() {
+  destroy(removeElement: boolean = true) {
     if (this.global.data["dragAndDropContainers"]) {
       this.global.data["dragAndDropContainers"] = this.global.data[
         "dragAndDropContainers"
       ].filter((c: Container) => c !== this);
     }
-    super.destroy();
+    super.destroy(removeElement);
   }
 }

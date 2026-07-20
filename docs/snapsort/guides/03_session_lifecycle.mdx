@@ -139,9 +139,11 @@ The example below renders two containers from the same application-owned data. D
 ```
 ```tsx framework=React
 import { useCallback, useRef, useState } from "react";
-import { Engine, Container, Item } from "@snap-engine/snapsort-react";
+import { Engine, Container, Ghost, Item } from "@snap-engine/snapsort-react";
 import type {
   Container as SnapSortContainer,
+  GhostInsertEvent,
+  GhostRemoveEvent,
   ItemMoveEvent,
 } from "@snap-engine/snapsort";
 
@@ -156,9 +158,14 @@ const initialColumns = [
   },
   { id: "done", title: "Done", items: [] },
 ];
+type Task = (typeof initialColumns)[number]["items"][number];
+type RenderEntry =
+  | { kind: "task"; task: Task }
+  | { kind: "ghost"; event: GhostInsertEvent };
 
 export function TaskBoard() {
   const [columns, setColumns] = useState(initialColumns);
+  const [ghost, setGhost] = useState<GhostInsertEvent | null>(null);
   const todo = useRef<SnapSortContainer>(null);
   const done = useRef<SnapSortContainer>(null);
 
@@ -182,6 +189,28 @@ export function TaskBoard() {
     });
   }, []);
 
+  const onGhostRemove = useCallback((event: GhostRemoveEvent) => {
+    setGhost((current) =>
+      current?.ghostItem === event.ghostItem ? null : current,
+    );
+  }, []);
+
+  function renderColumnEntries(column: (typeof initialColumns)[number]) {
+    const entries: RenderEntry[] = column.items.map((task) => ({ kind: "task", task }));
+    if (ghost?.containerMetadata.columnId === column.id) {
+      const originalIndex = column.items.findIndex(
+        (task) => task.id === ghost.originalItemId,
+      );
+      const coreIndex = Math.max(0, Math.min(ghost.index, entries.length));
+      entries.splice(
+        originalIndex !== -1 && originalIndex <= coreIndex ? coreIndex + 1 : coreIndex,
+        0,
+        { kind: "ghost", event: ghost },
+      );
+    }
+    return entries;
+  }
+
   function moveToOtherColumn(itemId: string, sourceId: string) {
     const source = sourceId === "todo" ? todo.current : done.current;
     const target = sourceId === "todo" ? done.current : todo.current;
@@ -198,19 +227,30 @@ export function TaskBoard() {
           <Container
             ref={column.id === "todo" ? todo : done}
             metadata={{ columnId: column.id }}
-            config={{ direction: "column", callbacks: { onItemMove } }}
+            config={{
+              direction: "column",
+              callbacks: {
+                onItemMove,
+                onGhostInsert: setGhost,
+                onGhostRemove,
+              },
+            }}
           >
-            {column.items.map((task) => (
-              <Item key={task.id} itemId={task.id}>
-                <span>{task.label}</span>
-                <button
-                  type="button"
-                  onClick={() => moveToOtherColumn(task.id, column.id)}
-                >
-                  Move
-                </button>
-              </Item>
-            ))}
+            {renderColumnEntries(column).map((entry) =>
+              entry.kind === "ghost" ? (
+                <Ghost key={`ghost-${entry.event.ghostItem.id}`} event={entry.event} />
+              ) : (
+                <Item key={entry.task.id} itemId={entry.task.id}>
+                  <span>{entry.task.label}</span>
+                  <button
+                    type="button"
+                    onClick={() => moveToOtherColumn(entry.task.id, column.id)}
+                  >
+                    Move
+                  </button>
+                </Item>
+              ),
+            )}
           </Container>
         </section>
       ))}

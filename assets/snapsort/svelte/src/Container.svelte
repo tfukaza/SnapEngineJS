@@ -1,8 +1,6 @@
 <script lang="ts" generics="T">
   import {
     Container as SnapSortContainer,
-    // Item as SnapSortItem,
-    defaultCallbacks,
   } from "@snap-engine/snapsort";
   import type {
     ContainerCallbacks,
@@ -61,54 +59,55 @@
   }
   const renderEntry: Snippet<[T]> = initial.entrySnippet;
 
-  if (
-    !initial.config.strategy &&
-    (initial.config.mode === undefined ||
-      initial.config.mode === "euclidean" ||
-      initial.config.mode === "progressive") &&
-    (initial.config.callbacks?.createGhost ||
-      initial.config.callbacks?.onGhostInsert ||
-      initial.config.callbacks?.onGhostRemove)
-  ) {
-    console.warn(
-      "SnapSort Container: ghost callbacks (createGhost/onGhostInsert/onGhostRemove) passed " +
-        "to the Svelte adapter only fire for marker-kind ghosts (insertion/swap) — flow-mode ghost " +
-        "entries are rendered by the adapter itself in items mode. Use the `ghost` snippet to " +
-        "customize flow-ghost content instead.",
-    );
+  function validateFrameworkConfig(value: ContainerConfig): void {
+    if (value.callbacks?.createGhost) {
+      throw new Error(
+        "SnapSort Container: callbacks.createGhost cannot be used with the Svelte adapter because Svelte owns ghost DOM. Use the `ghost` snippet to customize ghost content.",
+      );
+    }
+    if (value.mode === "swap" && !value.callbacks?.onItemSwap) {
+      throw new Error(
+        "SnapSort Container: swap mode in the Svelte adapter requires callbacks.onItemSwap so Svelte state can commit the pairwise exchange atomically.",
+      );
+    }
   }
+  validateFrameworkConfig(initial.config);
 
   interface GhostEntryState {
     event: GhostInsertEvent;
   }
   let ghostEntries = $state<GhostEntryState[]>([]);
 
-  function isFlowTargetGhost(event: { kind: string; role: string }): boolean {
-    return event.kind === "flow" && event.role === "target";
+  function handleFrameworkCreateGhost(_event: GhostCreateEvent): void {
+    // Returning void marks this ghost as framework-managed in core. Its DOM
+    // node is created by the keyed entry below for every ghost kind/role.
   }
 
-  function handleItemsModeCreateGhost(event: GhostCreateEvent): HTMLElement | void {
-    if (isFlowTargetGhost(event)) return undefined; // adapter renders the entry itself
-    return (config.callbacks?.createGhost ?? defaultCallbacks.createGhost)(event) ?? undefined;
+  function handleFrameworkGhostInsert(event: GhostInsertEvent): void {
+    ghostEntries = [
+      ...ghostEntries.filter((g) => g.event.ghostItem !== event.ghostItem),
+      { event },
+    ];
+    config.callbacks?.onGhostInsert?.(event);
   }
 
-  function handleItemsModeGhostInsert(event: GhostInsertEvent): void {
-    if (isFlowTargetGhost(event)) {
-      ghostEntries = [
-        ...ghostEntries.filter((g) => g.event.ghostItem !== event.ghostItem),
-        { event },
-      ];
-      return;
-    }
-    (config.callbacks?.onGhostInsert ?? defaultCallbacks.onGhostInsert)(event);
+  function handleFrameworkGhostRemove(event: GhostRemoveEvent): void {
+    ghostEntries = ghostEntries.filter((g) => g.event.ghostItem !== event.ghostItem);
+    config.callbacks?.onGhostRemove?.(event);
   }
 
-  function handleItemsModeGhostRemove(event: GhostRemoveEvent): void {
-    if (isFlowTargetGhost(event)) {
-      ghostEntries = ghostEntries.filter((g) => g.event.ghostItem !== event.ghostItem);
-      return;
-    }
-    (config.callbacks?.onGhostRemove ?? defaultCallbacks.onGhostRemove)(event);
+  function frameworkCallbacks(
+    consumerCallbacks: ContainerCallbacks | undefined,
+  ): ContainerCallbacks {
+    return {
+      ...consumerCallbacks,
+      createGhost: handleFrameworkCreateGhost,
+      onGhostInsert: handleFrameworkGhostInsert,
+      onGhostRemove: handleFrameworkGhostRemove,
+      // Commit the state mutation before core advances to its final geometry
+      // read and inverse-transform write in this rendering opportunity.
+      flushMutation: (mutation) => flushSync(mutation),
+    };
   }
 
   type RenderedEntry =
@@ -144,19 +143,10 @@
     return result;
   });
 
-  const callbacks: ContainerCallbacks = {
-    ...initial.config.callbacks,
-    createGhost: handleItemsModeCreateGhost,
-    onGhostInsert: handleItemsModeGhostInsert,
-    onGhostRemove: handleItemsModeGhostRemove,
-    // Commit the state mutation before core advances to its final geometry
-    // read and inverse-transform write in this rendering opportunity.
-    flushMutation: (mutation) => flushSync(mutation),
-  };
-
   let itemContainer: SnapSortContainer = new SnapSortContainer(engine, parentContainer, {
     ...initial.config,
-    callbacks,
+    domOwnership: "framework",
+    callbacks: frameworkCallbacks(initial.config.callbacks),
   });
   itemContainer.itemId = initial.itemId;
   itemContainer.locked = initial.locked;
@@ -179,6 +169,7 @@
   setContext("item", itemContainer);
 
   $effect(() => {
+    validateFrameworkConfig(config);
     itemContainer.itemId = itemId;
     itemContainer.locked = locked;
     itemContainer.selected = selected;
@@ -189,6 +180,8 @@
     itemContainer.stretchItems = config.stretchItems ?? false;
     itemContainer.dropArea = config.dropArea ?? false;
     itemContainer.noDrop = config.noDrop ?? false;
+    itemContainer.config.domOwnership = "framework";
+    itemContainer.config.callbacks = frameworkCallbacks(config.callbacks);
   });
 
   onMount(() => {
@@ -199,7 +192,7 @@
   });
 
   onDestroy(() => {
-    itemContainer.destroy();
+    itemContainer.destroy(false);
   });
 </script>
 

@@ -13,13 +13,31 @@ frameworkKey: container
 
 `Container` wraps a core SnapSort container and provides it to descendant `Item` and nested `Container` components through React context.
 
-```tsx
-import { Container, Item } from "@snap-engine/snapsort-react";
+React owns the rendered collection. Supply synchronous state and ghost
+callbacks for every structural operation the container accepts; the adapter
+does not fall back to SnapSort's Vanilla DOM callbacks.
 
-<Container config={{ direction: "column", groupID: "tasks" }}>
-  <Item itemId="task-1">Task 1</Item>
+```tsx
+import { Container, Ghost, Item } from "@snap-engine/snapsort-react";
+
+<Container
+  config={{ direction: "column", groupID: "tasks", callbacks }}
+>
+  {renderedEntries.map((entry) =>
+    entry.kind === "ghost" ? (
+      <Ghost key={entry.id} event={entry.event} />
+    ) : (
+      <Item key={entry.task.id} itemId={entry.task.id}>{entry.task.label}</Item>
+    ),
+  )}
 </Container>
 ```
+
+Here `callbacks.onItemMove` synchronously updates the task array,
+`onGhostInsert`/`onGhostRemove` update the temporary ghost entry, and
+`renderedEntries` merges that ghost into the React-rendered list. See
+[Setup](/docs/snapsort/introduction/01_setup) for the complete single-list
+implementation.
 
 ## Props
 
@@ -65,7 +83,7 @@ type ContainerProps = {
 | `disableFlip` | `false` | Disables FLIP movement animation. |
 | `noDrop` | `false` | Prevents the container from being a drop target. Useful for root layout containers. |
 | `dropArea` | `false` | Treats the container as an explicit drop area for collision filtering. |
-| `callbacks` | Default DOM callbacks | Hooks for DOM, framework state, and custom ghost behavior. |
+| `callbacks` | No persistent mutation default | Required framework-state/ghost callbacks plus lifecycle and validation hooks. |
 
 Mode is resolved from the root container when a drag starts, so nested containers in one drag tree should use the same mode.
 
@@ -74,20 +92,24 @@ Mode is resolved from the root container when a drag starts, so nested container
 | Callback | When it runs |
 |----------|--------------|
 | `onItemMove(event)` | An item moves to a new container or index. Preferred for state-backed lists because it includes both `from` and `to`. |
-| `onItemSwap(event)` | Swap mode commits a pairwise slot exchange. Falls back to two `onItemMove` events when undefined. |
+| `onItemSwap(event)` | Swap mode commits a pairwise slot exchange. Required for swap mode in the React adapter. |
 | `onItemInsert(event)` | An item is inserted into a container; this is the lower-level fallback for `onItemMove`. |
 | `onItemRemove(event)` | An item is removed through `removeItem(id)`. |
 | `onDragStart(event)` | A drag is starting. Return `false` to veto it. |
 | `onDragEnd(event)` | A drag has ended and its mutation has committed. |
 | `onDropTargetChange(event)` | The prospective drop container or index changed. Fires on the root container. |
 | `canDrop(event)` | Resolves whether this container accepts the current drag. Keep it cheap. |
-| `onGhostInsert(event)` | A ghost item or insertion marker is inserted or moved. |
-| `onGhostRemove(event)` | A ghost item or insertion marker is removed. |
-| `createGhost(event)` | Creates a flow ghost or insertion/swap marker. |
+| `onGhostInsert(event)` | A ghost item or insertion marker is inserted or moved. Required for interactive React containers; store the event and render `Ghost`. |
+| `onGhostRemove(event)` | A ghost item or insertion marker is removed. Required for interactive React containers; remove the matching rendered ghost. |
+| `createGhost(event)` | Notification hook only in React. Returned DOM nodes are ignored because React owns ghost DOM. |
 | `flushMutation(mutation)` | Runs a structural callback inside React's synchronous commit. Supplied automatically. |
 | `awaitMutation()` | Deprecated compatibility callback. |
 
-For state-backed lists, update React state synchronously in `onItemMove` or `onItemSwap`. The adapter wraps structural callbacks in `flushSync`, allowing SnapSort to read committed DOM before paint. Do not defer these updates with transitions, timers, animation frames, or promises.
+Update React state synchronously in `onItemMove` or `onItemSwap`. The adapter
+wraps structural callbacks in `flushSync`, allowing SnapSort to read committed
+DOM before paint. Do not defer these updates with transitions, timers,
+animation frames, or promises. Missing callbacks fail clearly instead of
+mutating framework-rendered DOM.
 
 ## Imperative Ref
 
@@ -109,15 +131,19 @@ export function ClickMove() {
 
   return (
     <>
-      <Container ref={source} config={{ direction: "column", groupID: "cards" }}>
-        <Item itemId="card-1">
-          <button type="button" onClick={() => moveToTarget("card-1")}>Move card</button>
-        </Item>
+      <Container ref={source} config={{ direction: "column", groupID: "cards", callbacks }}>
+        {renderedSourceEntries}
       </Container>
-      <Container ref={target} config={{ direction: "column", groupID: "cards" }} />
+      <Container ref={target} config={{ direction: "column", groupID: "cards", callbacks }}>
+        {renderedTargetEntries}
+      </Container>
     </>
   );
 }
 ```
+
+The omitted `callbacks` and rendered-entry construction are the same
+state/ghost pattern shown in Setup. Imperative and pointer moves both commit
+through `onItemMove`; `moveItem` never authorizes direct DOM mutation.
 
 The ref exposes `moveItem`, `removeItem`, `numberOfItems`, `groupID`, `direction`, `mainAxisAlign`, `dropArea`, `mode`, `config`, `callbacks`, and `dragSession` from the core container.

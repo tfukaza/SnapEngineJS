@@ -12,6 +12,11 @@ import {
   determineInsertionDropTarget,
   determineProgressiveDropTarget,
 } from "../../assets/snapsort/core/src/algorithm";
+import { Container as SnapSortContainer } from "../../assets/snapsort/core/src/container";
+import {
+  assertCanFireItemMove,
+  assertCanFireItemSwap,
+} from "../../assets/snapsort/core/src/mutation";
 import {
   makeContainerSnapshot,
   makeItemSnapshot,
@@ -20,6 +25,48 @@ import {
 } from "../helpers/layout-grid";
 
 type Rect = { x: number; y: number; width: number; height: number };
+
+test("framework container ownership never inherits Vanilla DOM callbacks", () => {
+  let nextId = 0;
+  const engine = {
+    global: {
+      data: {},
+      queue: {},
+      createId: () => `ownership-test-${++nextId}`,
+      registerObject: () => {},
+    },
+    input: {
+      subscribeGlobalCursorEvent: () => {},
+      unsubscribeGlobalCursorEvent: () => {},
+    },
+  };
+  const onItemMove = () => {};
+
+  const vanilla = new SnapSortContainer(engine, null);
+  const framework = new SnapSortContainer(engine, null, {
+    domOwnership: "framework",
+    callbacks: { onItemMove },
+  });
+  const frameworkWithoutMutation = new SnapSortContainer(engine, null, {
+    domOwnership: "framework",
+  });
+
+  expect(vanilla.callbacks?.onItemInsert).toBeDefined();
+  expect(vanilla.callbacks?.onGhostInsert).toBeDefined();
+  expect(framework.callbacks?.onItemMove).toBe(onItemMove);
+  expect(framework.callbacks?.onItemInsert).toBeUndefined();
+  expect(framework.callbacks?.onItemRemove).toBeUndefined();
+  expect(framework.callbacks?.createGhost).toBeUndefined();
+  expect(framework.callbacks?.onGhostInsert).toBeUndefined();
+  expect(framework.callbacks?.onGhostRemove).toBeUndefined();
+  expect(() => assertCanFireItemMove(frameworkWithoutMutation)).toThrow(
+    /framework-owned container.*callbacks\.onItemMove/,
+  );
+  expect(() => assertCanFireItemSwap(framework)).toThrow(
+    /framework-owned container.*callbacks\.onItemSwap/,
+  );
+  expect(() => assertCanFireItemSwap(vanilla)).not.toThrow();
+});
 type Box = Rect & {
   scaleX: number;
   scaleY: number;
@@ -4604,7 +4651,7 @@ test.describe("Snapsort drag-start snapshot layout", () => {
       .toEqual(["Sub A1", "Sub A2", "Sub A3", "Item 1"]);
   });
 
-  test("updates framework state when SnapSort DOM insert callbacks reorder an array list", async ({
+  test("updates framework state when SnapSort move callbacks reorder an array list", async ({
     page,
   }) => {
     await page.goto("/?demo=snapsort_components", {

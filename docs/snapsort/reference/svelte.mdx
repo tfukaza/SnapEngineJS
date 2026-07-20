@@ -11,6 +11,12 @@ sectionOrder: 2
 
 The Svelte package wraps SnapSort's core objects in Svelte 5 components. Use this page when Svelte owns the DOM and SnapSort should provide drag, drop, ordering, and animation behavior.
 
+Svelte state is the sole source of truth for persistent item order. The adapter
+does not install SnapSort's Vanilla DOM callbacks. Every destination that can
+accept a move must synchronously update `$state` in `onItemMove` (or
+`onItemInsert`), and swap mode must provide `onItemSwap`. Never call structural
+DOM APIs from these callbacks.
+
 ## Install
 
 ```bash
@@ -61,11 +67,13 @@ Every container is created from the same `Container` component; pick its drag be
 | `"insertion"` | File trees, outlines, and other drop-marker UIs where the placeholder is a line instead of a full item. |
 
 `Item` never needs a mode — the same `Item` works under a container of any mode.
+In these abbreviated examples, `tasks`, `words`, and `sections` are `$state`
+arrays and `onItemMove` synchronously updates the corresponding array.
 
 ```svelte
 <Container
-  config={{ direction: "column", groupID: "tasks" }}
-  items={[{ id: "task-1", label: "Task 1" }]}
+  config={{ direction: "column", groupID: "tasks", callbacks: { onItemMove } }}
+  items={tasks}
 >
   {#snippet entry(task)}
     <Item itemId={task.id}>{task.label}</Item>
@@ -73,8 +81,8 @@ Every container is created from the same `Container` component; pick its drag be
 </Container>
 
 <Container
-  config={{ mode: "progressive", direction: "row", groupID: "sentence" }}
-  items={[{ id: "word-1", label: "hello" }]}
+  config={{ mode: "progressive", direction: "row", groupID: "sentence", callbacks: { onItemMove } }}
+  items={words}
 >
   {#snippet entry(word)}
     <Item itemId={word.id}>{word.label}</Item>
@@ -82,8 +90,8 @@ Every container is created from the same `Container` component; pick its drag be
 </Container>
 
 <Container
-  config={{ mode: "insertion", direction: "column", groupID: "outline" }}
-  items={[{ id: "section-1", label: "Section 1" }]}
+  config={{ mode: "insertion", direction: "column", groupID: "outline", callbacks: { onItemMove } }}
+  items={sections}
 >
   {#snippet entry(section)}
     <Item itemId={section.id}>{section.label}</Item>
@@ -105,17 +113,26 @@ Pass `items`, `getItemId`, and an `entry` snippet. Each `entry` must render exac
 <script lang="ts">
   import { Engine } from "@snap-engine/asset-base-svelte";
   import { Container, Ghost, Handle, Item } from "@snap-engine/snapsort-svelte";
+  import type { ItemMoveEvent } from "@snap-engine/snapsort";
 
-  const tasks = [
+  let tasks = $state([
     { id: "design", label: "Design" },
     { id: "build", label: "Build" },
     { id: "ship", label: "Ship" },
-  ];
+  ]);
+
+  function onItemMove(event: ItemMoveEvent) {
+    const task = tasks.find((entry) => entry.id === event.itemId);
+    if (!task) return;
+    const next = tasks.filter((entry) => entry.id !== event.itemId);
+    next.splice(Math.max(0, Math.min(event.to.index, next.length)), 0, task);
+    tasks = next;
+  }
 </script>
 
 <Engine id="tasks">
   <Container
-    config={{ direction: "column", groupID: "tasks" }}
+    config={{ direction: "column", groupID: "tasks", callbacks: { onItemMove } }}
     items={tasks}
     getItemId={(task) => task.id}
   >
@@ -133,13 +150,15 @@ Pass `items`, `getItemId`, and an `entry` snippet. Each `entry` must render exac
 
 ## State Backed Lists
 
-When Svelte owns the list data, update your arrays from `callbacks.onItemMove` and provide `callbacks.awaitMutation: tick`. SnapSort calls the mutation callback, waits for `awaitMutation`, then reads final DOM geometry for FLIP and drop animation.
+Update arrays synchronously from `callbacks.onItemMove`. The adapter wraps the
+callback in Svelte's `flushSync`, so the framework commits the DOM before
+SnapSort reads final geometry for FLIP and drop animation. Do not provide
+`tick`, a promise, a timer, or an animation-frame callback for this work.
 
 `onItemMove` is preferred over the lower-level `onItemInsert` whenever a drop is really "move this item from one position to another" — it hands you both the source and destination as one event instead of making you reconstruct the move from an insert alone.
 
 ```svelte
 <script lang="ts">
-  import { tick } from "svelte";
   import { Engine } from "@snap-engine/asset-base-svelte";
   import { Container, Item } from "@snap-engine/snapsort-svelte";
   import type { ItemMoveEvent } from "@snap-engine/snapsort";
@@ -211,7 +230,6 @@ When Svelte owns the list data, update your arrays from `callbacks.onItemMove` a
           groupID: "tasks",
           callbacks: {
             onItemMove: handleItemMove,
-            awaitMutation: tick,
           },
         }}
         locked={true}
@@ -241,10 +259,24 @@ Use `bind:container` when buttons, keyboard handlers, or other non-drag controls
 <script lang="ts">
   import { Engine } from "@snap-engine/asset-base-svelte";
   import { Container, Item } from "@snap-engine/snapsort-svelte";
-  import type { Container as SnapSortContainer } from "@snap-engine/snapsort";
+  import type { Container as SnapSortContainer, ItemMoveEvent } from "@snap-engine/snapsort";
 
   let source: SnapSortContainer | undefined = $state();
   let target: SnapSortContainer | undefined = $state();
+  let sourceCards = $state([{ id: "card-1", label: "Card 1" }]);
+  let targetCards = $state<{ id: string; label: string }[]>([]);
+
+  function onItemMove(event: ItemMoveEvent) {
+    const card = [...sourceCards, ...targetCards].find((entry) => entry.id === event.itemId);
+    const targetListId = event.to.containerMetadata.listId;
+    if (!card || (targetListId !== "source" && targetListId !== "target")) return;
+    sourceCards = sourceCards.filter((entry) => entry.id !== event.itemId);
+    targetCards = targetCards.filter((entry) => entry.id !== event.itemId);
+    const list = targetListId === "source" ? sourceCards : targetCards;
+    list.splice(Math.max(0, Math.min(event.to.index, list.length)), 0, card);
+    if (targetListId === "source") sourceCards = list;
+    else targetCards = list;
+  }
 
   function moveToTarget(id: string) {
     if (!source || !target) return;
@@ -253,19 +285,32 @@ Use `bind:container` when buttons, keyboard handlers, or other non-drag controls
 </script>
 
 <Engine id="click-move">
-  <Container bind:container={source} config={{ direction: "column", groupID: "cards" }}>
-    <Item itemId="card-1">
-      <button type="button" onclick={() => moveToTarget("card-1")}>
-        Move card
-      </button>
-    </Item>
+  <Container
+    bind:container={source}
+    config={{ direction: "column", groupID: "cards", callbacks: { onItemMove } }}
+    metadata={{ listId: "source" }}
+    items={sourceCards}
+  >
+    {#snippet entry(card)}
+      <Item itemId={card.id}>
+        <button type="button" onclick={() => moveToTarget(card.id)}>Move card</button>
+      </Item>
+    {/snippet}
   </Container>
 
-  <Container bind:container={target} config={{ direction: "column", groupID: "cards" }} />
+  <Container
+    bind:container={target}
+    config={{ direction: "column", groupID: "cards", callbacks: { onItemMove } }}
+    metadata={{ listId: "target" }}
+    items={targetCards}
+  >
+    {#snippet entry(card)}<Item itemId={card.id}>{card.label}</Item>{/snippet}
+  </Container>
 </Engine>
 ```
 
-When your list is backed by Svelte state, use the same `onItemMove` (or `onItemInsert`) and `awaitMutation` pattern so imperative moves and drag moves update the rendered arrays the same way.
+Use the same synchronous `onItemMove` (or `onItemInsert`) state update so
+imperative moves and drag moves render through Svelte in exactly the same way.
 
 ### Bindable Container API
 
@@ -321,13 +366,13 @@ type ContainerProps = {
 | `className` | `""` | Extra class string applied to the rendered element. |
 | `metadata` | `{}` | Metadata assigned to the container object and exposed in callback events. |
 
-Container renders a `div` with `snapsort-container` plus a mode-specific class: `snapsort-mode-euclidean`, `snapsort-mode-progressive`, or `snapsort-mode-insertion`.
+Container renders a `div` with `snapsort-container` plus a mode-specific class.
 
 ### Config
 
 | Option | Default | Description |
 |--------|---------|-------------|
-| `mode` | `"euclidean"` | Drag/drop mode for this tree: `"euclidean"`, `"progressive"`, or `"insertion"`. |
+| `mode` | `"euclidean"` | Drag/drop mode for this tree: `"euclidean"`, `"progressive"`, `"insertion"`, or `"swap"`. |
 | `strategy` | Resolved from `mode` | Advanced: a custom `{ dropTarget, lifecycle }` strategy pair, overriding `mode`. |
 | `direction` | `"column"` | Main layout direction: `"column"` or `"row"`. |
 | `groupID` | `"default-group"` | Containers with the same group can exchange items. |
@@ -337,13 +382,14 @@ Container renders a `div` with `snapsort-container` plus a mode-specific class: 
 | `disableFlip` | `false` | Disables FLIP movement animation. |
 | `noDrop` | `false` | Prevents the container from being a drop target. Useful for root layout containers. |
 | `dropArea` | `false` | Treats the container as an explicit drop area for collision filtering. |
-| `callbacks` | Default DOM callbacks | Hooks for DOM, framework state, and custom ghost behavior. |
+| `callbacks` | No persistent mutation default | Required state callbacks plus lifecycle and validation hooks. The Svelte adapter never installs Vanilla DOM mutation callbacks. |
 
 ### Callbacks
 
 | Callback | When it runs |
 |----------|--------------|
 | `onItemMove(event)` | SnapSort moves an item to a new container/index. Preferred over `onItemInsert` for state-backed lists — carries both `from` and `to` locations. Falls back to `onItemInsert` on the destination container when not defined. |
+| `onItemSwap(event)` | Commits a pairwise exchange. Required for swap mode in the Svelte adapter. |
 | `onItemInsert(event)` | SnapSort inserts an item into a container (the primitive `onItemMove` falls back to). |
 | `onItemRemove(event)` | SnapSort removes an item through `removeItem(id)`. |
 | `onDragStart(event)` | A drag is starting, before any ghost/state changes. Return `false` to veto the drag. |
@@ -352,15 +398,18 @@ Container renders a `div` with `snapsort-container` plus a mode-specific class: 
 | `canDrop(event)` | Consulted while resolving candidates for this container; return `false` to reject drops into it for the current drag. Evaluated once per container per resolution, not once per candidate slot — keep it cheap. |
 | `onGhostInsert(event)` | SnapSort inserts or moves a ghost item or insertion marker. |
 | `onGhostRemove(event)` | SnapSort removes a ghost item or insertion marker. |
-| `createGhost(event)` | SnapSort needs a ghost/marker element. `event.kind` is `"flow"` (euclidean/progressive) or `"marker"` (insertion). Return an element, `null`, or `void`. |
-| `awaitMutation()` | SnapSort waits for framework-owned DOM updates before reading final layout. Use `tick` for Svelte state updates. |
+| `createGhost(event)` | Core/Vanilla hook. Unsupported by the Svelte adapter; use the `ghost` snippet instead. |
+| `flushMutation(mutation)` | Runs structural callbacks inside Svelte's synchronous commit. Supplied automatically by the adapter. |
+| `awaitMutation()` | Deprecated compatibility callback. Do not use it for framework state updates. |
 
 ## Ghost
 
-`Ghost` renders the framework-owned flow spacer used by custom `ghost` snippets. It binds `event.ghostItem.element`, preserves the spacer footprint, and renders `#spacer` with `data-snapsort-ghost-entry`.
+`Ghost` renders framework-owned flow spacers, insertion markers, and swap
+pointer ghosts used by custom `ghost` snippets. It binds
+`event.ghostItem.element` and applies the geometry for `event.kind`/`event.role`.
 
 ```svelte
-<Container config={{ mode: "progressive", direction: "row" }} items={tiles}>
+<Container config={{ mode: "progressive", direction: "row", callbacks: { onItemMove } }} items={tiles}>
   {#snippet entry(tile)}
     <Item itemId={tile.id}>{tile.text}</Item>
   {/snippet}

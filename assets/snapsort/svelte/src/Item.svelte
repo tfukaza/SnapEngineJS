@@ -67,7 +67,7 @@
 
   onDestroy(() => {
     if (ownsItem) {
-      itemObject.destroy();
+      itemObject.destroy(false);
     }
   });
 </script>
@@ -75,6 +75,7 @@
 <div
   {...divProps}
   class={mergedClass}
+  data-snapsort-item-id={itemObject.resolvedItemId}
   bind:this={itemObject.element}
   {style}
 >

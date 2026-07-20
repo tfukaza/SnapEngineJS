@@ -3,6 +3,9 @@ import type { Item } from "../item";
 import { resetDropSnapshotDebugDump, type DropCandidate } from "../algorithm";
 import type { DragLocation, GhostRect, GhostRole } from "../events";
 import {
+  assertCanFireGhostInsert,
+  assertCanFireGhostRemove,
+  assertCanFireItemMove,
   fireGhostInsert,
   fireGhostRemove,
   fireMutation,
@@ -64,6 +67,19 @@ async function moveGhost(
   const item = session.primaryItem;
   let ghostItem = session.ghostItem;
   if (!ghostRect || !container.element) return;
+  if (session.dropEffect !== "none") {
+    assertCanFireItemMove(container);
+  }
+  assertCanFireGhostInsert(container);
+  assertCanFireGhostRemove(container);
+
+  const previousTarget =
+    ghostItem && session.pendingGhostTarget?.ghostItem === ghostItem
+      ? session.pendingGhostTarget
+      : null;
+  if (previousTarget?.container && previousTarget.container !== container) {
+    assertCanFireGhostRemove(previousTarget.container);
+  }
 
   const firstRect = ghostItem?.element?.isConnected
     ? ghostItem.element.getBoundingClientRect()
@@ -74,6 +90,21 @@ async function moveGhost(
     if (!ghostItem) return;
   }
   session.ghostItem = ghostItem;
+
+  // Framework adapters keep ghost entries in per-container state. Clear the
+  // previous owner before rendering the same marker under a new container;
+  // otherwise both frameworks try to bind one ghost Item to two DOM nodes.
+  if (previousTarget?.container && previousTarget.container !== container) {
+    fireGhostRemove(
+      previousTarget.container,
+      item,
+      ghostItem,
+      session,
+      "marker",
+    );
+    await settleMutation();
+  }
+
   session.pendingGhostTarget = { ghostItem, container, index, ghostRect };
 
   if (!ghostItem.element && !ghostItem.frameworkManagedGhostElement) {
@@ -82,7 +113,16 @@ async function moveGhost(
 
   // The marker is intentionally never attached to the container's item list
   // (see module doc); it always "appends" from the DOM's perspective.
-  fireGhostInsert(container, item, ghostItem, index, null, ghostRect, session, "marker");
+  fireGhostInsert(
+    container,
+    item,
+    ghostItem,
+    index,
+    null,
+    ghostRect,
+    session,
+    "marker",
+  );
   await settleMutation();
 
   // Core-created markers own their DOM element and are positioned/animated
@@ -117,12 +157,22 @@ async function removeGhost(
   if (!ghostItem) return;
 
   if (previousTarget?.container) {
-    fireGhostRemove(previousTarget.container, item, ghostItem, session, "marker", role);
+    fireGhostRemove(
+      previousTarget.container,
+      item,
+      ghostItem,
+      session,
+      "marker",
+      role,
+    );
     await settleMutation();
   } else {
     // No known container to route onGhostRemove through (e.g. drag ended
-    // before a target was ever resolved) — fall back to a direct removal.
-    ghostItem.element?.remove();
+    // before a target was ever resolved). Only core-owned DOM can be removed
+    // directly; framework-owned DOM always remains with the adapter.
+    if (!ghostItem.frameworkManagedGhostElement) {
+      ghostItem.element?.remove();
+    }
   }
   ghostItem.destroy(!ghostItem.frameworkManagedGhostElement);
   session.ghosts.delete(role);
@@ -140,6 +190,7 @@ function drop(session: DragSession): void {
         session.pendingGhostTarget?.ghostItem === ghostItem
           ? session.pendingGhostTarget
           : null;
+      const commitTarget = session.cancelled ? null : pendingGhostTarget;
 
       for (const member of items) {
         if (member.element) {
@@ -151,19 +202,19 @@ function drop(session: DragSession): void {
       await removeGhost(session);
 
       let destination: DragLocation | null = null;
-      if (pendingGhostTarget?.container) {
-        const destinationContainer = pendingGhostTarget.container;
+      if (commitTarget?.container) {
+        const destinationContainer = commitTarget.container;
         destination = {
           container: destinationContainer,
           containerMetadata: destinationContainer.metadata,
-          index: pendingGhostTarget.index,
+          index: commitTarget.index,
         };
 
         if (session.dropEffect === "move") {
           item.moveItemsToContainer(
             destinationContainer,
             items,
-            pendingGhostTarget.index,
+            commitTarget.index,
             session,
           );
           await settleMutation();
@@ -184,7 +235,7 @@ function drop(session: DragSession): void {
             items.map(() => null),
             destinationContainer,
             items,
-            pendingGhostTarget.index,
+            commitTarget.index,
             session,
             items,
           );
@@ -216,12 +267,25 @@ function drop(session: DragSession): void {
         });
       });
     },
-    { stage: "WRITE_1", queueId: `drag-end-insertion-${session.pressedItem.id}` },
+    {
+      stage: "WRITE_1",
+      queueId: `drag-end-insertion-${session.pressedItem.id}`,
+    },
   );
 }
 
 export class InsertionMarkerLifecycle implements DragLifecycleStrategy {
   readonly ghostKind = "marker" as const;
+
+  validateStart(session: DragSession): void {
+    const pressedIndex = session.items.indexOf(session.pressedItem);
+    const source = session.sources[pressedIndex] ?? session.sources[0];
+    if (session.dropEffect !== "none") {
+      assertCanFireItemMove(source.container);
+    }
+    assertCanFireGhostInsert(source.container);
+    assertCanFireGhostRemove(source.container);
+  }
 
   async dragStart(session: DragSession): Promise<void> {
     await session.updateDropTarget();
@@ -265,6 +329,7 @@ export class InsertionMarkerLifecycle implements DragLifecycleStrategy {
   }
 
   drop(session: DragSession): void {
+    session.scheduleDropFinalizer();
     drop(session);
   }
 }

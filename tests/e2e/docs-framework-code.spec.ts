@@ -63,7 +63,7 @@ test("raw Markdown selects one framework without damaging fenced code", async ({
   expect(svelteMarkdown).not.toContain("framework=Svelte");
   expect(svelteMarkdown).not.toContain("\nproject: snapsort\n");
   expect(svelteMarkdown).toContain(
-    "](/docs/snapsort/guides/03_state_backed_lists.md?framework=svelte)",
+    "](/docs/snapsort/guides/03_session_lifecycle.md?framework=svelte)",
   );
 
   const reactResponse = await request.get(

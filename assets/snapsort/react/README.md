@@ -33,7 +33,9 @@ SnapEngine reads final geometry and writes FLIP's inverse transform.
 Promise-returning mutation waits cannot guarantee a pre-paint FLIP inversion.
 
 Use a stable `itemId` for every rendered item and update application arrays in
-`onItemMove`; SnapSort does not own React state. `Ghost` renders a flow-mode
-placeholder from a `GhostInsertEvent` and must be removed from state when the
-matching `onGhostRemove` fires. All components forward standard HTML `div`
+`onItemMove`; SnapSort does not own React state and the adapter never falls
+back to Vanilla DOM mutation. A move without the required state callback is an
+integration error. Do not call structural DOM APIs from a callback. `Ghost`
+renders a flow-mode placeholder from a `GhostInsertEvent` and must be removed
+from state when the matching `onGhostRemove` fires. All components forward standard HTML `div`
 attributes, and consumer `style` values override structural defaults.

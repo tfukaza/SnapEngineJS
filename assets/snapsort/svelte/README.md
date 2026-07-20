@@ -22,13 +22,28 @@ npm install @snap-engine/core @snap-engine/asset-base-svelte @snap-engine/snapso
 ## Usage
 
 ```svelte
-<script>
+<script lang="ts">
   import { Container, Ghost, Item, Handle } from "@snap-engine/snapsort-svelte";
+  import type { ItemMoveEvent } from "@snap-engine/snapsort";
+
+  let words = $state([{ id: "word-1", text: "hello" }]);
+
+  function onItemMove(event: ItemMoveEvent) {
+    const moved = words.find((word) => word.id === event.itemId);
+    if (!moved) return;
+    const next = words.filter((word) => word.id !== event.itemId);
+    next.splice(Math.max(0, Math.min(event.to.index, next.length)), 0, moved);
+    words = next;
+  }
 </script>
 
 <Container
-  config={{ mode: "progressive", groupID: "sentence" }}
-  items={[{ id: "word-1", text: "hello" }]}
+  config={{
+    mode: "progressive",
+    groupID: "sentence",
+    callbacks: { onItemMove },
+  }}
+  items={words}
 >
   {#snippet entry(word)}
     <Item itemId={word.id}>{word.text}</Item>
@@ -50,7 +65,9 @@ adapter automatically runs each structural mutation inside Svelte's
 and writes FLIP's inverse transform. No `tick()` callback is required.
 
 Use a stable `itemId` for every entry and update application arrays in
-`onItemMove`; SnapSort does not own Svelte state. Components forward normal
-`div` attributes. The only component subpaths are `Container.svelte`,
+`onItemMove`; SnapSort does not own Svelte state and the adapter never falls
+back to Vanilla DOM mutation. A move without the required state callback is an
+integration error. Do not call structural DOM APIs from a callback. Components
+forward normal `div` attributes. The only component subpaths are `Container.svelte`,
 `Item.svelte`, `Ghost.svelte`, and `Handle.svelte`; select placement behavior
 with `config.mode`.

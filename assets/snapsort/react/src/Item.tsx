@@ -68,7 +68,7 @@ export const Item = forwardRef<ItemObject, ItemProps>(function SnapSortItem(
     }
     return () => {
       if (ownsItemRef.current) {
-        item.destroy();
+        item.destroy(false);
       }
     };
   }, [container, item]);
@@ -79,6 +79,7 @@ export const Item = forwardRef<ItemObject, ItemProps>(function SnapSortItem(
         {...divProps}
         ref={setItemElement}
         className={`snapsort-item ${className}`.trim()}
+        data-snapsort-item-id={item.resolvedItemId}
         style={{
           alignItems: "center",
           boxSizing: "border-box",

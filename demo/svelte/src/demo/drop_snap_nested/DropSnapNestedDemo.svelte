@@ -85,10 +85,11 @@
   // Multi-item drag proof: cmd/ctrl-click toggles selection within a list;
   // dragging any selected item drags the whole selected set together.
   let selectedVertical = $state<Set<number>>(new Set());
+  let verticalItems = $state([1, 2, 3, 4]);
 
   // Migrated to the items+snippet Container API (with a custom `ghost`
   // snippet) as the Stage 2 adapter-ergonomics proof of concept.
-  const doubleRowItems = Array.from({ length: 28 }, (_, index) => index + 1);
+  let doubleRowItems = $state(Array.from({ length: 28 }, (_, index) => index + 1));
 
   // Cross-container items-mode surface: proves the adapter's per-container
   // ghostEntries state doesn't leak a stale ghost into the area a run
@@ -137,9 +138,9 @@
     setMultiAreaList(targetArea, targetList);
   }
 
-  const horizontalRowItems = Array.from({ length: 12 }, (_, index) => index + 1);
+  let horizontalRowItems = $state(Array.from({ length: 12 }, (_, index) => index + 1));
 
-  const sizedItems = [
+  let sizedItems = $state([
     { label: "Small", width: 72, minHeight: 48 },
     { label: "Medium", width: 128, minHeight: 72 },
     { label: "Wide", width: 220, minHeight: 96 },
@@ -147,60 +148,60 @@
     { label: "Large", width: 168, minHeight: 120 },
     { label: "Narrow", width: 56, minHeight: 64 },
     { label: "Extra Wide", width: 260, minHeight: 72 },
-  ];
+  ]);
 
   type NestedGroupEntry = { kind: "item"; label: string } | { kind: "group" };
-  const nestedGroupEntries: NestedGroupEntry[] = [
+  let nestedGroupEntries: NestedGroupEntry[] = $state([
     { kind: "item", label: "Item 1" },
     { kind: "item", label: "Item 1.5" },
     { kind: "group" },
     { kind: "item", label: "Item 2" },
     { kind: "item", label: "Item 3" },
-  ];
-  const nestedGroupChildren = ["Sub A1", "Sub A2", "Sub A3"];
+  ]);
+  let nestedGroupChildren = $state(["Sub A1", "Sub A2", "Sub A3"]);
 
   // Stretch demo: items are genuinely 100% width (align-self: stretch), so
   // the containers declare `stretchItems` and the layout engine re-sizes
   // drop entries to each destination — the nested sub-list is markedly
   // narrower than its parent.
   type StretchEntry = { kind: "item"; label: string } | { kind: "group" };
-  const stretchEntries: StretchEntry[] = [
+  let stretchEntries: StretchEntry[] = $state([
     { kind: "item", label: "Task 1" },
     { kind: "item", label: "Task 2" },
     { kind: "group" },
     { kind: "item", label: "Task 3" },
-  ];
-  const stretchGroupChildren = ["Sub task 1", "Sub task 2", "Sub task 3"];
+  ]);
+  let stretchGroupChildren = $state(["Sub task 1", "Sub task 2", "Sub task 3"]);
 
   type CompactEntry = { kind: "item"; label: string } | { kind: "group" };
-  const compactEntries: CompactEntry[] = [
+  let compactEntries: CompactEntry[] = $state([
     { kind: "item", label: "Overview" },
     { kind: "item", label: "Components" },
     { kind: "item", label: "Usage" },
     { kind: "group" },
-  ];
-  const compactGroupChildren = ["Container", "Item", "Handle"];
+  ]);
+  let compactGroupChildren = $state(["Container", "Item", "Handle"]);
 
   type DragNestedEntry = { kind: "group"; id: string; labels: string[] } | { kind: "item"; label: string };
-  const dragNestedEntries: DragNestedEntry[] = [
+  let dragNestedEntries: DragNestedEntry[] = $state([
     { kind: "group", id: "group-1", labels: ["Group 1 - A", "Group 1 - B"] },
     { kind: "group", id: "group-2", labels: ["Group 2 - A", "Group 2 - B", "Group 2 - C"] },
     { kind: "item", label: "Loose Item" },
-  ];
+  ]);
 
   type NestedRowEntry = { kind: "item"; label: string } | { kind: "group" };
-  const nestedRowEntries: NestedRowEntry[] = [
+  let nestedRowEntries: NestedRowEntry[] = $state([
     { kind: "item", label: "R1" },
     { kind: "group" },
     { kind: "item", label: "R2" },
     { kind: "item", label: "R3" },
-  ];
-  const nestedRowChildren = ["S1", "S2", "S3"];
+  ]);
+  let nestedRowChildren = $state(["S1", "S2", "S3"]);
 
   type LayerEntry =
     | { kind: "leaf"; id: string; icon: string; name: string }
     | { kind: "group"; id: string; label: string; children: { icon: string; name: string }[] };
-  const layerEntries: LayerEntry[] = [
+  let layerEntries: LayerEntry[] = $state([
     { kind: "leaf", id: "header", icon: "◻", name: "Header" },
     {
       kind: "group",
@@ -214,7 +215,138 @@
     },
     { kind: "leaf", id: "card-grid", icon: "◻", name: "Card Grid" },
     { kind: "leaf", id: "footer", icon: "◻", name: "Footer" },
-  ];
+  ]);
+
+  type FrameworkList = {
+    id: string;
+    getItems: () => unknown[];
+    setItems: (items: unknown[]) => void;
+    getItemId: (item: unknown) => string;
+    prepareItem?: (item: unknown, itemId: string) => unknown | undefined;
+  };
+
+  function moveFrameworkItem(event: ItemMoveEvent, lists: FrameworkList[]) {
+    const targetListId = event.to.containerMetadata.frameworkList;
+    const target = lists.find((list) => list.id === targetListId) ??
+      (lists.length === 1 ? lists[0] : undefined);
+    if (!target) return;
+
+    const movedIds = event.itemIds.map(String);
+    const movedSet = new Set(movedIds);
+    const preparedItems: unknown[] = [];
+    for (const itemId of movedIds) {
+      let moved: unknown;
+      for (const list of lists) {
+        moved = list.getItems().find((item) => list.getItemId(item) === itemId);
+        if (moved !== undefined) break;
+      }
+      if (moved === undefined) continue;
+      const prepared = target.prepareItem ? target.prepareItem(moved, itemId) : moved;
+      if (prepared === undefined) return;
+      preparedItems.push(prepared);
+    }
+    if (preparedItems.length === 0) return;
+
+    for (const list of lists) {
+      const current = list.getItems();
+      if (!current.some((item) => movedSet.has(list.getItemId(item)))) continue;
+      list.setItems(current.filter((item) => !movedSet.has(list.getItemId(item))));
+    }
+    const next = target.getItems().filter((item) => !movedSet.has(target.getItemId(item)));
+    const index = Math.max(0, Math.min(event.to.index, next.length));
+    next.splice(index, 0, ...preparedItems);
+    target.setItems(next);
+  }
+
+  function flatList<T>(
+    id: string,
+    getItems: () => T[],
+    setItems: (items: T[]) => void,
+    getItemId: (item: T) => string,
+    prepareItem?: (item: unknown, itemId: string) => T | undefined,
+  ): FrameworkList {
+    return {
+      id,
+      getItems: () => getItems(),
+      setItems: (items) => setItems(items as T[]),
+      getItemId: (item) => getItemId(item as T),
+      prepareItem,
+    };
+  }
+
+  function handleVerticalMove(event: ItemMoveEvent) {
+    moveFrameworkItem(event, [flatList("vertical", () => verticalItems, (items) => verticalItems = items, (item) => `vertical-${item}`)]);
+  }
+
+  function handleHorizontalMove(event: ItemMoveEvent) {
+    moveFrameworkItem(event, [flatList("horizontal", () => horizontalRowItems, (items) => horizontalRowItems = items, (item) => `wrap-row-${item}`)]);
+  }
+
+  function handleDoubleRowMove(event: ItemMoveEvent) {
+    moveFrameworkItem(event, [flatList("double", () => doubleRowItems, (items) => doubleRowItems = items, (item) => `double-row-${item}`)]);
+  }
+
+  function handleSizedMove(event: ItemMoveEvent) {
+    moveFrameworkItem(event, [flatList("sizes", () => sizedItems, (items) => sizedItems = items, (item) => item.label)]);
+  }
+
+  function handleNestedGroupMove(event: ItemMoveEvent) {
+    moveFrameworkItem(event, [
+      flatList("nested-outer", () => nestedGroupEntries, (items) => nestedGroupEntries = items, (item) => item.kind === "item" ? item.label : "nested-sub-group", (item) => typeof item === "string" ? { kind: "item", label: item } : item as NestedGroupEntry),
+      flatList("nested-inner", () => nestedGroupChildren, (items) => nestedGroupChildren = items, String, (item) => typeof item === "string" ? item : (item as NestedGroupEntry).kind === "item" ? (item as { kind: "item"; label: string }).label : undefined),
+    ]);
+  }
+
+  function handleStretchMove(event: ItemMoveEvent) {
+    moveFrameworkItem(event, [
+      flatList("stretch-outer", () => stretchEntries, (items) => stretchEntries = items, (item) => item.kind === "item" ? item.label : "stretch-sub-group", (item) => typeof item === "string" ? { kind: "item", label: item } : item as StretchEntry),
+      flatList("stretch-inner", () => stretchGroupChildren, (items) => stretchGroupChildren = items, String, (item) => typeof item === "string" ? item : (item as StretchEntry).kind === "item" ? (item as { kind: "item"; label: string }).label : undefined),
+    ]);
+  }
+
+  function handleCompactMove(event: ItemMoveEvent) {
+    moveFrameworkItem(event, [
+      flatList("compact-outer", () => compactEntries, (items) => compactEntries = items, (item) => item.kind === "item" ? item.label : "compact-sub-group", (item) => typeof item === "string" ? { kind: "item", label: item } : item as CompactEntry),
+      flatList("compact-inner", () => compactGroupChildren, (items) => compactGroupChildren = items, String, (item) => typeof item === "string" ? item : (item as CompactEntry).kind === "item" ? (item as { kind: "item"; label: string }).label : undefined),
+    ]);
+  }
+
+  function setDragNestedChildren(groupId: string, labels: string[]) {
+    dragNestedEntries = dragNestedEntries.map((entry) =>
+      entry.kind === "group" && entry.id === groupId ? { ...entry, labels } : entry,
+    );
+  }
+
+  function handleDragNestedMove(event: ItemMoveEvent) {
+    moveFrameworkItem(event, [
+      flatList("drag-outer", () => dragNestedEntries, (items) => dragNestedEntries = items, (item) => item.kind === "group" ? item.id : item.label, (item) => typeof item === "string" ? { kind: "item", label: item } : item as DragNestedEntry),
+      ...dragNestedEntries.filter((entry) => entry.kind === "group").map((entry) =>
+        flatList(`drag-${entry.id}`, () => entry.labels, (items) => setDragNestedChildren(entry.id, items), String, (item) => typeof item === "string" ? item : (item as DragNestedEntry).kind === "item" ? (item as { kind: "item"; label: string }).label : undefined),
+      ),
+    ]);
+  }
+
+  function handleNestedRowMove(event: ItemMoveEvent) {
+    moveFrameworkItem(event, [
+      flatList("row-outer", () => nestedRowEntries, (items) => nestedRowEntries = items, (item) => item.kind === "item" ? item.label : "nested-row-sub-group", (item) => typeof item === "string" ? { kind: "item", label: item } : item as NestedRowEntry),
+      flatList("row-inner", () => nestedRowChildren, (items) => nestedRowChildren = items, String, (item) => typeof item === "string" ? item : (item as NestedRowEntry).kind === "item" ? (item as { kind: "item"; label: string }).label : undefined),
+    ]);
+  }
+
+  function setLayerChildren(groupId: string, children: { icon: string; name: string }[]) {
+    layerEntries = layerEntries.map((entry) =>
+      entry.kind === "group" && entry.id === groupId ? { ...entry, children } : entry,
+    );
+  }
+
+  function handleLayerMove(event: ItemMoveEvent) {
+    moveFrameworkItem(event, [
+      flatList("layers-outer", () => layerEntries, (items) => layerEntries = items, (item) => item.id, (item, itemId) => "kind" in (item as object) ? item as LayerEntry : { kind: "leaf", id: itemId, ...(item as { icon: string; name: string }) }),
+      ...layerEntries.filter((entry) => entry.kind === "group").map((entry) =>
+        flatList(`layers-${entry.id}`, () => entry.children, (items) => setLayerChildren(entry.id, items), (item) => item.name, (item) => "kind" in (item as object) ? (item as LayerEntry).kind === "leaf" ? { icon: (item as Extract<LayerEntry, { kind: "leaf" }>).icon, name: (item as Extract<LayerEntry, { kind: "leaf" }>).name } : undefined : item as { icon: string; name: string }),
+      ),
+    ]);
+  }
 
   function toggleVerticalSelection(n: number, event: MouseEvent) {
     if (event.metaKey || event.ctrlKey) {
@@ -242,8 +374,9 @@
             <h2>Vertical Column</h2>
             <p class="demo-hint">Cmd/ctrl-click to multi-select, then drag any selected item.</p>
             <Container
-              config={{ direction: "column", groupID: "vertical-group" }}
-              items={[1, 2, 3, 4]}
+              config={{ direction: "column", groupID: "vertical-group", callbacks: { onItemMove: handleVerticalMove } }}
+              metadata={{ frameworkList: "vertical" }}
+              items={verticalItems}
               getItemId={(n) => `vertical-${n}`}
             >
               {#snippet entry(n)}
@@ -262,7 +395,8 @@
           <article class="demo-cell">
             <h2>Horizontal Row</h2>
             <Container
-              config={{ direction: "row", groupID: "wrap-row" }}
+              config={{ direction: "row", groupID: "wrap-row", callbacks: { onItemMove: handleHorizontalMove } }}
+              metadata={{ frameworkList: "horizontal" }}
               locked={true}
               items={horizontalRowItems}
               getItemId={(n) => `wrap-row-${n}`}
@@ -276,7 +410,8 @@
           <article class="demo-cell wide">
             <h2>Horizontal Double Row</h2>
             <Container
-              config={{ direction: "row", groupID: "double-row-group" }}
+              config={{ direction: "row", groupID: "double-row-group", callbacks: { onItemMove: handleDoubleRowMove } }}
+              metadata={{ frameworkList: "double" }}
               items={doubleRowItems}
               getItemId={(n) => `double-row-${n}`}
             >
@@ -294,7 +429,8 @@
           <article class="demo-cell wide size-demo">
             <h2>Different Sizes</h2>
             <Container
-              config={{ direction: "row", groupID: "sizes-group" }}
+              config={{ direction: "row", groupID: "sizes-group", callbacks: { onItemMove: handleSizedMove } }}
+              metadata={{ frameworkList: "sizes" }}
               items={sizedItems}
               getItemId={(entry) => entry.label}
             >
@@ -335,7 +471,8 @@
           <article class="demo-cell">
             <h2>Nested Container</h2>
             <Container
-              config={{ direction: "column", groupID: "nested-group", ...nestedAnimationConfig }}
+              config={{ direction: "column", groupID: "nested-group", callbacks: { onItemMove: handleNestedGroupMove }, ...nestedAnimationConfig }}
+              metadata={{ frameworkList: "nested-outer" }}
               locked={true}
               items={nestedGroupEntries}
               getItemId={(e) => (e.kind === "item" ? e.label : "nested-sub-group")}
@@ -346,7 +483,8 @@
                 {:else}
                   <Container
                     itemId="nested-sub-group"
-                    config={{ direction: "column", groupID: "nested-group", ...nestedAnimationConfig }}
+                    config={{ direction: "column", groupID: "nested-group", callbacks: { onItemMove: handleNestedGroupMove }, ...nestedAnimationConfig }}
+                    metadata={{ frameworkList: "nested-inner" }}
                     locked={lockNestedChild}
                     items={nestedGroupChildren}
                     getItemId={(label) => label}
@@ -365,7 +503,8 @@
             <p class="demo-hint">Items fill their container (100% width); the nested list is narrower.</p>
             <Container
               className="stretch-list"
-              config={{ direction: "column", wrap: "nowrap", stretchItems: true, groupID: "stretch-nested", ...nestedAnimationConfig }}
+              config={{ direction: "column", wrap: "nowrap", stretchItems: true, groupID: "stretch-nested", callbacks: { onItemMove: handleStretchMove }, ...nestedAnimationConfig }}
+              metadata={{ frameworkList: "stretch-outer" }}
               locked={true}
               items={stretchEntries}
               getItemId={(e) => (e.kind === "item" ? e.label : "stretch-sub-group")}
@@ -377,7 +516,8 @@
                   <Container
                     itemId="stretch-sub-group"
                     className="stretch-sublist"
-                    config={{ direction: "column", wrap: "nowrap", stretchItems: true, groupID: "stretch-nested", ...nestedAnimationConfig }}
+                    config={{ direction: "column", wrap: "nowrap", stretchItems: true, groupID: "stretch-nested", callbacks: { onItemMove: handleStretchMove }, ...nestedAnimationConfig }}
+                    metadata={{ frameworkList: "stretch-inner" }}
                     items={stretchGroupChildren}
                     getItemId={(label) => label}
                   >
@@ -395,7 +535,8 @@
               <h2>Compact Nested List</h2>
               <Container
                 className="compact-basic-list"
-                config={{ direction: "column", groupID: "compact-nested", ...nestedAnimationConfig }}
+                config={{ direction: "column", groupID: "compact-nested", callbacks: { onItemMove: handleCompactMove }, ...nestedAnimationConfig }}
+                metadata={{ frameworkList: "compact-outer" }}
                 items={compactEntries}
                 getItemId={(e) => (e.kind === "item" ? e.label : "compact-sub-group")}
               >
@@ -406,7 +547,8 @@
                     <Container
                       itemId="compact-sub-group"
                       className="compact-nested-list"
-                      config={{ direction: "column", groupID: "compact-nested", ...nestedAnimationConfig }}
+                      config={{ direction: "column", groupID: "compact-nested", callbacks: { onItemMove: handleCompactMove }, ...nestedAnimationConfig }}
+                      metadata={{ frameworkList: "compact-inner" }}
                       items={compactGroupChildren}
                       getItemId={(label) => label}
                     >
@@ -423,7 +565,8 @@
           <article class="demo-cell">
             <h2>Draggable Sub-Containers</h2>
             <Container
-              config={{ direction: "column", groupID: "drag-nested-group" }}
+              config={{ direction: "column", groupID: "drag-nested-group", callbacks: { onItemMove: handleDragNestedMove } }}
+              metadata={{ frameworkList: "drag-outer" }}
               locked={true}
               items={dragNestedEntries}
               getItemId={(e) => (e.kind === "group" ? e.id : e.label)}
@@ -432,7 +575,8 @@
                 {#if e.kind === "group"}
                   <Container
                     itemId={e.id}
-                    config={{ direction: "column", groupID: "drag-nested-group" }}
+                    config={{ direction: "column", groupID: "drag-nested-group", callbacks: { onItemMove: handleDragNestedMove } }}
+                    metadata={{ frameworkList: `drag-${e.id}` }}
                     locked={false}
                     items={e.labels}
                     getItemId={(label) => label}
@@ -451,7 +595,8 @@
           <article class="demo-cell">
             <h2>Nested Row Groups</h2>
             <Container
-              config={{ direction: "row", groupID: "nested-row-group" }}
+              config={{ direction: "row", groupID: "nested-row-group", callbacks: { onItemMove: handleNestedRowMove } }}
+              metadata={{ frameworkList: "row-outer" }}
               locked={true}
               items={nestedRowEntries}
               getItemId={(e) => (e.kind === "item" ? e.label : "nested-row-sub-group")}
@@ -462,7 +607,8 @@
                 {:else}
                   <Container
                     itemId="nested-row-sub-group"
-                    config={{ direction: "row", groupID: "nested-row-group" }}
+                    config={{ direction: "row", groupID: "nested-row-group", callbacks: { onItemMove: handleNestedRowMove } }}
+                    metadata={{ frameworkList: "row-inner" }}
                     locked={false}
                     items={nestedRowChildren}
                     getItemId={(label) => label}
@@ -479,7 +625,8 @@
           <article class="demo-cell">
             <h2>Layers Panel</h2>
             <Container
-              config={{ direction: "column", groupID: "layers" }}
+              config={{ direction: "column", groupID: "layers", callbacks: { onItemMove: handleLayerMove } }}
+              metadata={{ frameworkList: "layers-outer" }}
               locked={true}
               items={layerEntries}
               getItemId={(e) => e.id}
@@ -495,7 +642,8 @@
                 {:else}
                   <Container
                     itemId={e.id}
-                    config={{ direction: "column", groupID: "layers" }}
+                    config={{ direction: "column", groupID: "layers", callbacks: { onItemMove: handleLayerMove } }}
+                    metadata={{ frameworkList: `layers-${e.id}` }}
                     locked={false}
                     items={e.children}
                     getItemId={(child) => child.name}

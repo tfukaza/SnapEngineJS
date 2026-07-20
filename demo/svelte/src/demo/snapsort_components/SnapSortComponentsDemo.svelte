@@ -69,7 +69,7 @@
         timing_function: "cubic-bezier(0.2, 0, 0, 1)",
       };
 
-  const progressiveExamples: ProgressiveExample[] = [
+  let progressiveExamples: ProgressiveExample[] = $state([
     {
       id: "morning-brief",
       prompt: "Build the sentence: The product designer rewrote the onboarding checklist.",
@@ -114,7 +114,7 @@
         { id: "wide-tiles-bank-without-overflowing", text: "without overflowing" },
       ],
     },
-  ];
+  ]);
 
   let nextItemNumber = $state(7);
   let columns = $state<DemoColumn[]>(structuredClone(initialColumns));
@@ -125,6 +125,28 @@
 
   function cloneInitialColumns() {
     return structuredClone(initialColumns);
+  }
+
+  function handleProgressiveMove(event: ItemMoveEvent) {
+    const exampleId = event.to.containerMetadata.exampleId;
+    const targetZone = event.to.containerMetadata.zone;
+    if (
+      typeof exampleId !== "string" ||
+      (targetZone !== "answer" && targetZone !== "bank")
+    ) return;
+
+    progressiveExamples = progressiveExamples.map((example) => {
+      if (example.id !== exampleId) return example;
+      const moved = [...example.answerTiles, ...example.bankTiles].find(
+        (tile) => tile.id === event.itemId,
+      );
+      if (!moved) return example;
+      const answerTiles = example.answerTiles.filter((tile) => tile.id !== event.itemId);
+      const bankTiles = example.bankTiles.filter((tile) => tile.id !== event.itemId);
+      const target = targetZone === "answer" ? answerTiles : bankTiles;
+      target.splice(Math.max(0, Math.min(event.to.index, target.length)), 0, moved);
+      return { ...example, answerTiles, bankTiles };
+    });
   }
 
   function createItem(): DemoItem {
@@ -488,6 +510,7 @@
                         reorder: snapSortCubicAnimation,
                         drop: snapSortCubicAnimation,
                       },
+                      callbacks: { onItemMove: handleProgressiveMove },
                     }}
                     locked={true}
                     metadata={{ zone: "answer", exampleId: example.id }}
@@ -515,6 +538,7 @@
                         reorder: snapSortCubicAnimation,
                         drop: snapSortCubicAnimation,
                       },
+                      callbacks: { onItemMove: handleProgressiveMove },
                     }}
                     locked={true}
                     metadata={{ zone: "bank", exampleId: example.id }}

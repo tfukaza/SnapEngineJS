@@ -12,6 +12,7 @@ const testMatch = [
   "snapsort-drag-snapshot.spec.ts",
   "snapsort-duolingo.spec.ts",
   "snapsort-adapter-ghosts.spec.ts",
+  "snapsort-fail-safe.spec.ts",
   "snapsort-insertion-copy.spec.ts",
 ];
 

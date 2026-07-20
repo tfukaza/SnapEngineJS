@@ -3,7 +3,6 @@
   import { Container } from "@snap-engine/snapsort-svelte";
   import type {
     ContainerCallbacks,
-    GhostCreateEvent,
     ItemMoveEvent,
   } from "@snap-engine/snapsort";
   import FileTreeNode from "./FileTreeNode.svelte";
@@ -159,14 +158,6 @@
   }
 
   function handleMove(event: ItemMoveEvent) {
-    if (event.item.isGhost) {
-      event.to.container.element?.insertBefore(
-        event.item.element!,
-        event.beforeElement,
-      );
-      return;
-    }
-
     const nodeId = event.itemId;
     const containerId = event.to.containerMetadata.containerId;
     if (typeof nodeId !== "string" || typeof containerId !== "string") return;
@@ -176,28 +167,6 @@
     if (containsNode(extracted.node, containerId)) return;
 
     tree = insertNode(extracted.nodes, containerId, event.to.index, extracted.node);
-  }
-
-  function createFileTreeGhost(event: GhostCreateEvent): HTMLElement {
-    const ghostElement = document.createElement("div");
-    const ghostRect = event.ghostRect;
-    const insetLeft = ghostRect?.insetLeft ?? 0;
-    const insetRight = ghostRect?.insetRight ?? 0;
-    const width = ghostRect
-      ? Math.max(0, ghostRect.width - insetLeft - insetRight)
-      : 0;
-
-    ghostElement.dataset.snapsortGhost = "insertion";
-    ghostElement.style.position = "absolute";
-    ghostElement.style.width = `${width}px`;
-    ghostElement.style.height = "0px";
-    ghostElement.style.margin = "0";
-    ghostElement.style.borderTop = "3px solid currentColor";
-    ghostElement.style.color = "rgb(37, 99, 235)";
-    ghostElement.style.pointerEvents = "none";
-    ghostElement.style.boxSizing = "border-box";
-
-    return ghostElement;
   }
 
   function reset() {
@@ -219,7 +188,6 @@
 
   const callbacks: ContainerCallbacks = {
     onItemMove: handleMove,
-    createGhost: createFileTreeGhost,
   };
 </script>
 

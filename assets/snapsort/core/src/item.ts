@@ -20,6 +20,11 @@ import type {
   GhostRole,
 } from "./events";
 import {
+  assertCanFireGhostInsert,
+  assertCanFireGhostRemove,
+  assertCanFireItemInsert,
+  assertCanFireItemMove,
+  assertCanFireItemRemove,
   fireCreateGhost,
   fireGhostInsert,
   fireGhostRemove,
@@ -1431,6 +1436,8 @@ export class Item extends ElementObject {
       const adjustedIndex = adjustedIndexFor(liveItems);
       if (isAlreadyInPlace(liveItems, adjustedIndex)) return;
 
+      assertCanFireItemMove(container);
+
       const froms: DragLocation[] = liveItems.map((member) => {
         const fromContainer = member.container;
         return {
@@ -1518,6 +1525,7 @@ export class Item extends ElementObject {
     index: number,
     session: DragSession | null = null,
   ) {
+    assertCanFireItemInsert(container);
     this.attachItemToContainer(container, item, index);
     this.#insertItemElement(container, item, index, session);
   }
@@ -1558,6 +1566,7 @@ export class Item extends ElementObject {
     session: DragSession | null,
     origins: (Item | null)[] = items.map(() => null),
   ) {
+    assertCanFireItemMove(container);
     let attachedCount = 0;
     items.forEach((member, i) => {
       // Skip container attach for cloned items for now.
@@ -1593,6 +1602,8 @@ export class Item extends ElementObject {
     kind: GhostKind,
     role: GhostRole = "target",
   ) {
+    assertCanFireGhostInsert(container);
+    assertCanFireGhostRemove(container);
     this.attachItemToContainer(container, ghostItem, index);
     this.#insertGhostElement(
       original,
@@ -1631,6 +1642,7 @@ export class Item extends ElementObject {
     item: Item,
     session: DragSession | null = null,
   ) {
+    assertCanFireItemRemove(container);
     this.detachItemFromContainer(container, item);
     fireItemRemove(container, [item], session);
   }
@@ -1644,6 +1656,7 @@ export class Item extends ElementObject {
     kind: GhostKind,
     role: GhostRole = "target",
   ) {
+    assertCanFireGhostRemove(container);
     this.detachItemFromContainer(container, ghostItem);
     fireGhostRemove(container, original, ghostItem, session, kind, role);
   }
