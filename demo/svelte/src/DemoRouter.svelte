@@ -3,6 +3,7 @@
   import AnimationVariableBenchPage from "./demo/animation/VariableBenchPage.svelte";
   import DragInputPage from "./demo/input/Drag.svelte";
   import NodeUiPage from "./demo/node_ui_demo/NodeUIDemo.svelte";
+  import NodeUiCameraPage from "./demo/node_ui_camera/NodeUICameraDemo.svelte";
   import DropSnapNestedPage from "./demo/drop_snap_nested/DropSnapNestedDemo.svelte";
   import SnapSortComponentsPage from "./demo/snapsort_components/SnapSortComponentsDemo.svelte";
   import SnapSortFileExplorerPage from "./demo/snapsort_file_explorer/SnapSortFileExplorerDemo.svelte";
@@ -54,6 +55,11 @@
       path: "/snapline",
       legacyPaths: ["/node-ui"],
       legacyDemoValues: ["snapline", "node_ui"],
+    },
+    {
+      label: "SnapLine Camera",
+      path: "/snapline-camera",
+      legacyDemoValues: ["snapline_camera"],
     },
     {
       label: "SnapSort",
@@ -256,6 +262,8 @@
       <CameraControlPage />
     {:else if selectedPath === "/snapline"}
       <NodeUiPage />
+    {:else if selectedPath === "/snapline-camera"}
+      <NodeUiCameraPage />
     {:else if selectedPath === "/snapsort"}
       <DropSnapNestedPage bind:this={dropSnapNestedPageRef} />
     {:else if selectedPath === "/snapsort-components"}

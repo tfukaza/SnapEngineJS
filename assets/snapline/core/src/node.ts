@@ -169,6 +169,11 @@ class NodeComponent extends ElementObject {
       return;
     }
 
+    // Disable camera control from the very first pointer event: waiting for
+    // the drag-start threshold lets the camera pan by one move event before
+    // onDragStart runs. onUp / onDragEnd re-enable it.
+    this.global.data.allowCameraControl = false;
+
     this._hasMoved = false;
     if (this.global.data.select?.includes(this) == false) {
       for (const node of [...this.global.data.select]) {
@@ -179,9 +184,6 @@ class NodeComponent extends ElementObject {
   }
 
   onDragStart(prop: dragStartProp): void {
-    // Disable camera control while dragging
-    this.global.data.allowCameraControl = false;
-
     for (const node of this.global.data.select ?? []) {
       node.setStartPositions();
       node._mouseDownX = prop.start.x;
@@ -240,6 +242,8 @@ class NodeComponent extends ElementObject {
   }
 
   onUp(_prop: pointerUpProp) {
+    this.global.data.allowCameraControl = true;
+
     if (this._hasMoved == false) {
       for (const node of [...(this.global.data.select ?? [])]) {
         node.setSelected(false);

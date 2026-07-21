@@ -310,6 +310,10 @@ class ConnectorComponent extends ElementObject {
   }
 
   startDragOutLine(prop: pointerDownProp): void {
+    // Disable camera control while dragging a connection, mirroring node
+    // drags: without this, drawing a line under a Camera also pans the canvas.
+    this.global.data.allowCameraControl = false;
+
     let newLine = this.createLine();
     newLine.setLineEnd(prop.position.x, prop.position.y);
     newLine.setLineStartAtConnector();
@@ -504,6 +508,9 @@ class ConnectorComponent extends ElementObject {
   }
 
   _endLineDragCleanup() {
+    // Re-enable camera control after the line drag ends (see startDragOutLine).
+    this.global.data.allowCameraControl = true;
+
     this.#state = ConnectorState.IDLE;
     this.event.input.drag = null;
     this.event.input.dragEnd = null;
