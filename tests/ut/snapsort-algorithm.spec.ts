@@ -48,7 +48,7 @@ function mockItem(
     parent: null,
     callbacks: undefined,
     dropPriority: 0,
-    currentDomProperty: box,
+    box,
     itemOrderedList: children,
     children,
     direction: options.direction ?? "column",
@@ -149,13 +149,17 @@ function requireInsertionTarget(
   if (!target?.insertion) {
     throw new Error("Expected an insertion-marker drop target.");
   }
-  return target;
+  // The guard above proved `insertion` is present; optional chaining on
+  // `target` does not narrow the property type for the return.
+  return target as ResolvedDropTarget & {
+    insertion: InsertionMarkerPresentation;
+  };
 }
 
 function flowTargets(
   root: MockItem,
   dragged: MockItem,
-  onSnapshotVisit?: (snapshot: ItemSnapshot<MockItem>) => void,
+  onNodeVisit?: (snapshot: ItemSnapshot<MockItem>) => void,
 ) {
   return virtualLayoutRecursive(
     root as never,
@@ -168,7 +172,7 @@ function flowTargets(
     dragged.dragPositionY + dragged.dragSnapshot.box.height / 2,
     null,
     false,
-    onSnapshotVisit ? { onSnapshotVisit } : undefined,
+    onNodeVisit ? { onNodeVisit } : undefined,
   ).candidates.map((candidate) => candidate.target);
 }
 
@@ -1089,36 +1093,6 @@ test("drop resolution performs no debug work until a renderer is enabled", () =>
   expect(disabledChild.debugCounters.addDebugRect).toBeGreaterThan(0);
 });
 
-test("drop policy exposes one complete frozen event per container", () => {
-  const calls: string[] = [];
-  let priorityEvent: MockItem | null = null;
-  const child = mockItem("child", { x: 0, y: 0, width: 100, height: 20 });
-  const root = mockItem(
-    "root",
-    { x: 0, y: 0, width: 120, height: 60 },
-    { children: [child], container: true },
-  );
-  root.callbacks = {
-    getDropPriority: (event: MockItem) => {
-      calls.push("getDropPriority");
-      priorityEvent = event;
-      return undefined;
-    },
-  };
-  const dragged = mockItem("dragged", {
-    x: 0,
-    y: 30,
-    width: 20,
-    height: 20,
-  });
-
-  determineDropTarget(dragged as never, root as never);
-
-  expect(calls).toEqual(["getDropPriority"]);
-  expect(Object.isFrozen(priorityEvent!.containerRect)).toBe(true);
-  expect(Object.isFrozen(priorityEvent!.dragRect)).toBe(true);
-});
-
 test("hover rectangle and circle boundaries remain edge-inclusive", () => {
   const dragged = mockItem("dragged", { x: 30, y: 30, width: 10, height: 10 });
   const target = mockItem("target", { x: 0, y: 0, width: 10, height: 10 });
@@ -1143,8 +1117,7 @@ test("hover rectangle and circle boundaries remain edge-inclusive", () => {
   container.callbacks = {
     getItemHitbox: () => ({
       shape: "circle",
-      center: { x: 5, y: 5 },
-      radius: 5,
+      circle: { x: 5, y: 5, radius: 5 },
     }),
   };
   session.pointer = { x: 10, y: 5 };

@@ -1,5 +1,6 @@
 import { expect, test } from "@playwright/test";
 import { NodeMirror } from "../../assets/snapline/src";
+import { ZERO_EDGES, type ElementBox } from "../../src/geometry";
 import {
   createEngineHarness,
   installObserverStubs,
@@ -30,24 +31,19 @@ class StubbedNode extends NodeMirror {
   measuredWidth = 0;
   measuredHeight = 0;
 
-  readDom(_config?: unknown, _stage?: unknown): any {
-    return {
-      width: this.measuredWidth,
-      height: this.measuredHeight,
+  readDom(_config?: unknown, _stage?: unknown): ElementBox {
+    const rect = {
       x: 0,
       y: 0,
-      marginTop: 0,
-      marginBottom: 0,
-      marginLeft: 0,
-      marginRight: 0,
-      paddingTop: 0,
-      paddingBottom: 0,
-      paddingLeft: 0,
-      paddingRight: 0,
-      borderTop: 0,
-      borderBottom: 0,
-      borderLeft: 0,
-      borderRight: 0,
+      width: this.measuredWidth,
+      height: this.measuredHeight,
+    };
+    return {
+      ...rect,
+      screen: rect,
+      margin: ZERO_EDGES,
+      padding: ZERO_EDGES,
+      border: ZERO_EDGES,
     };
   }
 }
@@ -107,5 +103,41 @@ test("outside a gesture, a measurement still reconciles the collision box", () =
   expect(node.hitBox.height).toBe(140);
 
   node.destroy(false);
+  restoreObservers();
+});
+
+test("a scaled node's collision box keeps its unscaled local size", () => {
+  const restoreObservers = installObserverStubs();
+  const { engine, global } = createEngineHarness();
+  // A real DOM read: core measures the rendered rect and computed style.
+  const windowDescriptor = Object.getOwnPropertyDescriptor(globalThis, "window");
+  Object.defineProperty(globalThis, "window", {
+    configurable: true,
+    value: {
+      getComputedStyle: () => ({ transformOrigin: "0px 0px" }),
+    },
+  });
+  const node = new NodeMirror(engine, null);
+  // 180x100 in CSS, rendered at 2x by the node's own transform.
+  const element = {
+    style: { transform: "translate3d(0px, 0px, 0px) scale(2, 2)" },
+    getBoundingClientRect: () => ({ left: 0, top: 0, width: 360, height: 200 }),
+  };
+  node.element = element as unknown as HTMLElement;
+  node.worldTransform = { x: 0, y: 0, scaleX: 2, scaleY: 2 };
+
+  node.remeasureDomGeometry();
+  drain(global, "READ_1");
+
+  // The collider scales with its node, so its local size must be unscaled.
+  expect([node.hitBox.width, node.hitBox.height]).toEqual([180, 100]);
+  expect([node.hitBox.worldWidth, node.hitBox.worldHeight]).toEqual([360, 200]);
+
+  node.destroy(false);
+  if (windowDescriptor) {
+    Object.defineProperty(globalThis, "window", windowDescriptor);
+  } else {
+    delete (globalThis as Record<string, unknown>).window;
+  }
   restoreObservers();
 });

@@ -2,16 +2,18 @@ import { expect, test } from "@playwright/test";
 import { BaseObject, CoreObject, ElementObject } from "../../src/object";
 import {
   CircleCollider,
-  circlesIntersect,
   CollisionEngine,
+  PointCollider,
+  RectCollider,
+} from "../../src/collision";
+import {
+  circlesIntersect,
   distanceToRect,
   pointIntersectsCircle,
   pointIntersectsRect,
-  PointCollider,
   rectIntersectsCircle,
-  RectCollider,
   rectsIntersect,
-} from "../../src/collision";
+} from "../../src/geometry";
 
 test.describe("allocation-free collision geometry", () => {
   const rect = { x: 10, y: 20, width: 30, height: 40 };
@@ -107,31 +109,21 @@ function positionOf(transform: { x: number; y: number }) {
 }
 
 test.describe("BaseObject transforms", () => {
-  test("keeps CoreObject root world and local transforms in sync", () => {
-    const engine = createEngine();
-    const object = new CoreObject(engine);
-
-    object.worldTransform = { x: 12, y: 24, scaleX: 2, scaleY: 3 };
-
-    expect(positionOf(object.localTransform)).toEqual([12, 24]);
-    expect(object.localTransform.scaleX).toBe(2);
-    expect(object.localTransform.scaleY).toBe(3);
-    expect(object.transform.getWorld()).toBe(object.worldTransform);
-  });
-
   test("keeps root world and local transforms in sync", () => {
     const engine = createEngine();
-    const object = new BaseObject(engine);
+    for (const Kind of [CoreObject, BaseObject]) {
+      const object = new Kind(engine);
 
-    object.worldTransform = { x: 10, y: 20, scaleX: 2, scaleY: 3 };
+      object.worldTransform = { x: 10, y: 20, scaleX: 2, scaleY: 3 };
 
-    expect(object.localTransform.x).toBe(10);
-    expect(object.localTransform.y).toBe(20);
-    expect(object.localTransform.scaleX).toBe(2);
-    expect(object.localTransform.scaleY).toBe(3);
+      expect(positionOf(object.localTransform), Kind.name).toEqual([10, 20]);
+      expect(object.localTransform.scaleX).toBe(2);
+      expect(object.localTransform.scaleY).toBe(3);
+      expect(object.transform.getWorld()).toBe(object.worldTransform);
 
-    object.localTransform = { x: 30, y: 40 };
-    expect(positionOf(object.worldTransform)).toEqual([30, 40]);
+      object.localTransform = { x: 30, y: 40 };
+      expect(positionOf(object.worldTransform), Kind.name).toEqual([30, 40]);
+    }
   });
 
   test("composes child transforms through parent position and scale", () => {
@@ -427,6 +419,32 @@ test.describe("Collider transforms", () => {
     expect(collider.worldTop).toBe(240);
     expect(collider.worldBottom).toBe(320);
   });
+
+  test("world bounds anchor x/y at the top-left corner for every shape", () => {
+    const engine = createEngine();
+    const parent = new BaseObject(engine);
+    const circle = new CircleCollider(engine, parent, 10, 20, 15);
+    const mirrored = new RectCollider(engine, parent, 0, 0, 30, 40);
+    parent.worldTransform = { x: 100, y: 200, scaleX: -1, scaleY: 1 };
+
+    expect(circle.getWorldBoundsSnapshot()).toEqual({
+      x: 75,
+      y: 205,
+      width: 30,
+      height: 30,
+      left: 75,
+      top: 205,
+      right: 105,
+      bottom: 235,
+      center: { x: 90, y: 220 },
+      radius: 15,
+    });
+    const rect = mirrored.getWorldBoundsSnapshot();
+    expect([rect.x, rect.y, rect.width, rect.height]).toEqual([
+      70, 200, 30, 40,
+    ]);
+    expect(rect.center).toEqual({ x: 85, y: 220 });
+  });
 });
 
 // Spies writeTransform so the cascade can be tested without a real DOM element
@@ -443,9 +461,13 @@ test.describe("ElementObject writeTransformRecursive", () => {
     const engine = createEngine();
     const parent = new WriteSpyObject(engine);
     const directChild = new WriteSpyObject(engine);
+    const directGrandchild = new WriteSpyObject(engine);
     const noneChild = new WriteSpyObject(engine);
+    const noneGrandchild = new WriteSpyObject(engine);
     parent.appendChild(directChild);
+    directChild.appendChild(directGrandchild);
     parent.appendChild(noneChild);
+    noneChild.appendChild(noneGrandchild);
     noneChild.transformMode = "none";
     const collider = new RectCollider(engine, parent, 0, 0, 10, 10);
     parent.addCollider(collider);
@@ -459,23 +481,10 @@ test.describe("ElementObject writeTransformRecursive", () => {
 
     expect(parent.writeCount).toBe(1);
     expect(directChild.writeCount).toBe(1);
-    expect(noneChild.writeCount).toBe(0); // none-mode pruned (with its subtree)
-  });
-
-  test("recurses through nested direct-mode children", () => {
-    const engine = createEngine();
-    const parent = new WriteSpyObject(engine);
-    const child = new WriteSpyObject(engine);
-    const grandchild = new WriteSpyObject(engine);
-    parent.appendChild(child);
-    child.appendChild(grandchild);
-
-    engine.global.currentStage = "WRITE_2";
-    parent.writeTransformRecursive();
-
-    expect(parent.writeCount).toBe(1);
-    expect(child.writeCount).toBe(1);
-    expect(grandchild.writeCount).toBe(1);
+    expect(directGrandchild.writeCount).toBe(1);
+    // A none-mode child is pruned together with its subtree.
+    expect(noneChild.writeCount).toBe(0);
+    expect(noneGrandchild.writeCount).toBe(0);
   });
 
   test("throws when invoked during a read stage", () => {
